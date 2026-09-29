@@ -8,5 +8,5 @@ public sealed record HouseObservation(string EventId, DateTimeOffset ObservedAt,
 public sealed record GardenSnapshot(DateTimeOffset ObservedAt, Actor Actor, Address? Address,
     string? TargetId, string? TargetName, uint? HousingObjectId, short? FurnitureIndex,
     bool PlantingMenuOpen, uint[] SelectedItemIds, TargetDetails? TargetDetails = null);
-public sealed record TargetDetails(uint DataId, uint EntityId, string Kind, float X, float Y, float Z);
+public sealed record TargetDetails(uint DataId, uint EntityId, string Kind, float X, float Y, float Z, uint? EventArgument = null, ushort? TimelineState = null);
 public sealed record Diagnostic(DateTimeOffset ObservedAt, string Kind, object Data);

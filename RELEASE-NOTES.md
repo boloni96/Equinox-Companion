@@ -1,3 +1,12 @@
+# Version 0.1.2.0
+
+- During opt-in recording, copy garden EventObj argument and timeline state from the supported client struct. These are raw diagnostic values, not decoded bed IDs.
+- Observe SelectString list click/select events near a recently targeted garden object. Record the selected menu label, index, event type, and candidate target. Menu selection alone does not confirm action success.
+- Menu listener is read-only and removed on plugin disposal. Menu capture is limited to the garden object base ID observed in testing, valid indices, and bounded queues.
+- No website updates or automatic gameplay. Patch/bed mapping and watering success remain under investigation.
+
+Validation: API 15 Release build, no warnings/errors; existing 22 checks pass. New native/menu diagnostics require in-game validation.
+
 # Version 0.1.1.0
 
 - Copy garden context when a game log arrives, before the next framework update can clear it.
