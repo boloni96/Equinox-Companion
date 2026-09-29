@@ -33,6 +33,9 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IAddonLifecycle Addons { get; private set; } = null!;
     [PluginService] internal static IPluginLog Log { get; private set; } = null!;
 
+    private static readonly string[] GardenMenus = ["HousingGardening", "SelectString", "SelectIconString", "ContextMenu", "SelectYesno"];
+    private static readonly AddonEvent[] MenuEvents = [AddonEvent.PostSetup, AddonEvent.PostRefresh, AddonEvent.PreReceiveEvent, AddonEvent.PreFinalize];
+    private int menuObservations;
     private readonly Configuration config;
     private readonly ObservationGate gate = new();
     private readonly List<Diagnostic> diagnostics = [];
@@ -61,7 +64,7 @@ public sealed class Plugin : IDalamudPlugin
         Pi.UiBuilder.OpenConfigUi += Open;
         Framework.Update += Update;
         Chat.LogMessage += OnLog;
-        Addons.RegisterListener(AddonEvent.PreReceiveEvent, "SelectString", OnGardenMenu);
+        foreach (var menuEvent in MenuEvents) Addons.RegisterListener(menuEvent, GardenMenus, OnGardenMenu);
     }
 
     private void Open() => visible = true;
@@ -173,31 +176,53 @@ public sealed class Plugin : IDalamudPlugin
 
     private unsafe void OnGardenMenu(AddonEvent type, AddonArgs args)
     {
-        // Observe the existing game menu; never modify or dispatch a UI event.
+        // Copy only garden-associated menus. Never modify or dispatch a UI event.
         if (!recording || faulted || menuMessages.Count >= 128 ||
-            !Player.IsLoaded || Conditions[ConditionFlag.BetweenAreas] || Conditions[ConditionFlag.BetweenAreas51] ||
-            args is not AddonReceiveEventArgs received || received.AtkEventData == 0) return;
-        var eventType = (AtkEventType)received.AtkEventType;
-        if (eventType is not (AtkEventType.ListItemClick or AtkEventType.ListItemSelect)) return;
+            !Player.IsLoaded || Conditions[ConditionFlag.BetweenAreas] || Conditions[ConditionFlag.BetweenAreas51]) return;
         var now = DateTimeOffset.UtcNow;
         var candidate = Volatile.Read(ref capturedContext)?.CandidateAt(now);
         if (candidate?.TargetDetails?.DataId != 2003757 || candidate.Actor.ContentId != Player.ContentId.ToString(CultureInfo.InvariantCulture)) return;
+        var received = args as AddonReceiveEventArgs;
+        var eventType = received is null ? (AtkEventType?)null : (AtkEventType)received.AtkEventType;
+        // Hover/motion noise isn't evidence of an action.
+        if (eventType is AtkEventType.MouseMove or AtkEventType.MouseOver or AtkEventType.MouseOut
+            or AtkEventType.ListItemRollOver or AtkEventType.ListItemRollOut) return;
         try
         {
-            var addon = (AddonSelectString*)args.Addon.Address;
+            var addon = (AtkUnitBase*)args.Addon.Address;
             if (addon == null) return;
-            var index = ((AtkEventData*)received.AtkEventData)->ListItemData.SelectedIndex;
-            var count = addon->PopupMenu.EntryCount;
-            if (index < 0 || count < 1 || count > 32 || index >= count || addon->PopupMenu.EntryNames == null) return;
-            var label = addon->PopupMenu.EntryNames[index].ToString();
-            if (label.Length > 160) label = label[..160];
-            menuMessages.Enqueue(new(now, "garden.menuSelectionCandidate", new {
-                eventType = eventType.ToString(), eventParam = received.EventParam,
-                selectedIndex = index, selectedLabel = label, candidateTarget = candidate,
+            int? index = null;
+            if (received is not null && received.AtkEventData != 0 &&
+                eventType is AtkEventType.ListItemClick or AtkEventType.ListItemSelect)
+                index = ((AtkEventData*)received.AtkEventData)->ListItemData.SelectedIndex;
+            var values = new List<object>();
+            if (addon->AtkValues != null && type != AddonEvent.PreFinalize)
+                for (var i = 0; i < Math.Min((int)addon->AtkValuesCount, 64); i++)
+                {
+                    var value = addon->AtkValues[i];
+                    var valueType = (int)value.Type & 15;
+                    object? copied = valueType switch {
+                        2 => value.Bool, 3 => value.Int, 5 => value.UInt,
+                        8 or 10 => CopyMenuText(value.String.Value), _ => null
+                    };
+                    if (copied is not null) values.Add(new { index = i, type = value.Type.ToString(), value = copied });
+                }
+            menuMessages.Enqueue(new(now, "garden.menuObservation", new {
+                addon = args.AddonName, lifecycle = type.ToString(),
+                eventType = eventType?.ToString(), eventParam = received?.EventParam,
+                selectedIndexCandidate = index, values, candidateTarget = candidate,
                 confirmedAction = false, confirmedBed = false
             }));
         }
         catch (Exception ex) { Log.Error(ex, "Could not copy garden menu diagnostic"); }
+    }
+
+    private static unsafe string? CopyMenuText(byte* value)
+    {
+        if (value == null) return null;
+        var length = 0;
+        while (length < 512 && value[length] != 0) length++;
+        return System.Text.Encoding.UTF8.GetString(new ReadOnlySpan<byte>(value, length));
     }
 
     private void OnLog(ILogMessage message)
@@ -213,7 +238,7 @@ public sealed class Plugin : IDalamudPlugin
 
     private void DrainMessages()
     {
-        while (menuMessages.TryDequeue(out var menu)) if (recording) AddDiagnostic(menu);
+        while (menuMessages.TryDequeue(out var menu)) if (recording) { menuObservations++; AddDiagnostic(menu); }
         while (messages.TryDequeue(out var message))
         {
             if (!recording) continue;
@@ -241,7 +266,7 @@ public sealed class Plugin : IDalamudPlugin
 
     private void StartRecording()
     {
-        diagnostics.Clear(); recentSignals.Clear(); messages.Clear(); menuMessages.Clear(); lastSnapshotKey = "";
+        diagnostics.Clear(); recentSignals.Clear(); menuObservations = 0; messages.Clear(); menuMessages.Clear(); lastSnapshotKey = "";
         Volatile.Write(ref capturedContext, null); snapshot = null; nextSample = default;
         recordingUntil = DateTimeOffset.UtcNow.AddMinutes(5); recording = true; exportPath = null;
     }
@@ -256,7 +281,7 @@ public sealed class Plugin : IDalamudPlugin
             Directory.CreateDirectory(dir);
             exportPath = Path.Combine(dir, $"equinox-test-{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.json");
             File.WriteAllText(exportPath, JsonSerializer.Serialize(new {
-                schemaVersion = 2, pluginVersion = "0.1.2.0", exportedAt = DateTimeOffset.UtcNow,
+                schemaVersion = 2, pluginVersion = "0.1.3.0", exportedAt = DateTimeOffset.UtcNow,
                 mode = "local-diagnostics", gardeningConfirmed = false,
                 houseObservations = config.Houses, diagnostics
             }, json));
@@ -270,7 +295,7 @@ public sealed class Plugin : IDalamudPlugin
         ImGui.SetNextWindowSize(new Vector2(660, 480), ImGuiCond.FirstUseEver);
         if (ImGui.Begin("Equinox Companion · garden test", ref visible))
         {
-            ImGui.TextWrapped("Local test version 0.1.2.0 — website sync is not connected yet.");
+            ImGui.TextWrapped("Local test version 0.1.3.0 — website sync is not connected yet.");
             ImGui.Separator(); ImGui.TextWrapped(status);
             ImGui.TextWrapped($"House observations saved: {config.Houses.Count}");
             ImGui.TextWrapped("Opening the plugin inside a house records 'observed inside', not a new entry. No demolition reset is claimed.");
@@ -290,7 +315,7 @@ public sealed class Plugin : IDalamudPlugin
                 ImGui.Text($"Recording · {Math.Max(0, (int)(recordingUntil - DateTimeOffset.UtcNow).TotalSeconds)}s remaining");
                 if (ImGui.Button("Stop recording")) StopRecording();
             }
-            ImGui.Text($"Diagnostic records: {diagnostics.Count}/2000");
+            ImGui.Text($"Diagnostic records: {diagnostics.Count}/2000 · Menu observations: {menuObservations}");
             if (snapshot is not null)
             {
                 ImGui.TextWrapped($"Target: {snapshot.TargetName ?? "none"} · furniture index: {snapshot.FurnitureIndex?.ToString() ?? "unknown"}");
@@ -313,7 +338,7 @@ public sealed class Plugin : IDalamudPlugin
     {
         StopRecording();
         Chat.LogMessage -= OnLog;
-        Addons.UnregisterListener(AddonEvent.PreReceiveEvent, "SelectString", OnGardenMenu);
+        foreach (var menuEvent in MenuEvents) Addons.UnregisterListener(menuEvent, GardenMenus, OnGardenMenu);
         Framework.Update -= Update;
         Pi.UiBuilder.Draw -= Draw;
         Pi.UiBuilder.OpenMainUi -= Open;

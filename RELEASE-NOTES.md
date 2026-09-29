@@ -1,3 +1,14 @@
+# Version 0.1.3.0
+
+The 0.1.2.0 SelectString-only listener produced no menu records during manual testing. This diagnostic update broadens observation to HousingGardening, SelectString, SelectIconString, ContextMenu and SelectYesno, including setup, refresh, receive-event and finalize notifications.
+
+- Record bounded text/numeric menu values and event parameters without requiring a valid popup-list index. Do not cast other menus to SelectString.
+- Only collect while recording near a fresh garden target; skip pointer/vector values and hover noise. Opening or selecting a menu is not classified as successful watering.
+- Display a menu observation count so the next test can be short.
+- No gameplay actions, network sync, or changes to website data.
+
+Validation: API 15 Release build with zero warnings/errors; existing 22 tests pass. Menu capture still requires in-game verification, including compatibility with confirmation plugins.
+
 # Version 0.1.2.0
 
 - During opt-in recording, copy garden EventObj argument and timeline state from the supported client struct. These are raw diagnostic values, not decoded bed IDs.
