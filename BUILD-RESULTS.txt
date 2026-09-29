@@ -1,5 +1,5 @@
-Version 0.1.3.0
+Version 0.1.4.0
 .NET 10 / Dalamud API 15
 Release build: 0 warnings, 0 errors
-22 existing checks passed
-Broader menu diagnostics: in-game validation pending
+31 automated checks passed
+Native callback capture: in-game validation pending

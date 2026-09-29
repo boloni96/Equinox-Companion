@@ -42,3 +42,14 @@ Check("healthy crop is not watering proof", GardenSignals.Classify(4017), "crop.
 Check("immature removal is not harvest", GardenSignals.Classify(4025), "crop.removed");
 Check("items alone are not harvest proof", GardenSignals.Classify(751), "item.received");
 Check("unknown log cannot create garden action", GardenSignals.Classify(603), "unclassified");
+
+var menu = new GardenMenu(1, time, Sample(0, "bed-a"), "1st Bed, 1st Patch", ["Fertilize Crop", "Tend Crop", "Remove Crop", "Quit"]);
+Check("resolve submitted tend option", menu.OptionAt(1), "Tend Crop");
+Check("quit stays quit", menu.OptionAt(3), "Quit");
+Check("negative callback is not tend", menu.OptionAt(-1), null);
+Check("out of range callback stays unknown", menu.OptionAt(4), null);
+Check("missing callback stays unknown", menu.OptionAt(null), null);
+Check("different bed cannot inherit menu", menu.Matches(time.AddSeconds(1), Sample(1000, "bed-b")).ToString(), "False");
+Check("matching bed can use menu", menu.Matches(time.AddSeconds(1), Sample(1000, "bed-a")).ToString(), "True");
+Check("expired menu cannot match", menu.Matches(time.AddSeconds(61), Sample(61000, "bed-a")).ToString(), "False");
+Check("different property cannot inherit menu", menu.Matches(time.AddSeconds(1), Sample(1000, "bed-a", address with { HouseId = "other" })).ToString(), "False");

@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Numerics;
 using System.Text.Json;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Hooking;
 using Dalamud.Game.Addon.Lifecycle;
 using Dalamud.Game.Addon.Lifecycle.AddonArgTypes;
 using Dalamud.Game.ClientState.Objects.Enums;
@@ -30,12 +31,18 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static ICommandManager Commands { get; private set; } = null!;
     [PluginService] internal static ITargetManager Targets { get; private set; } = null!;
     [PluginService] internal static IChatGui Chat { get; private set; } = null!;
+    [PluginService] internal static IGameInteropProvider Interop { get; private set; } = null!;
     [PluginService] internal static IAddonLifecycle Addons { get; private set; } = null!;
     [PluginService] internal static IPluginLog Log { get; private set; } = null!;
 
     private static readonly string[] GardenMenus = ["HousingGardening", "SelectString", "SelectIconString", "ContextMenu", "SelectYesno"];
     private static readonly AddonEvent[] MenuEvents = [AddonEvent.PostSetup, AddonEvent.PostRefresh, AddonEvent.PreReceiveEvent, AddonEvent.PreFinalize];
     private int menuObservations;
+    private GardenMenu? activeGardenMenu;
+    private unsafe delegate byte FireCallbackDelegate(AtkUnitBase* addon, uint count, AtkValue* values, byte close);
+    private Hook<FireCallbackDelegate>? callbackHook;
+    private string callbackStatus = "Not initialized";
+    private string lastSubmittedOption = "None recorded";
     private readonly Configuration config;
     private readonly ObservationGate gate = new();
     private readonly List<Diagnostic> diagnostics = [];
@@ -55,8 +62,15 @@ public sealed class Plugin : IDalamudPlugin
     private string? exportPath;
     private bool faulted;
 
-    public Plugin()
+    public unsafe Plugin()
     {
+        try
+        {
+            callbackHook = Interop.HookFromAddress<FireCallbackDelegate>(
+                AtkUnitBase.MemberFunctionPointers.FireCallback, ObserveCallback);
+            callbackStatus = "Ready (active only during recording)";
+        }
+        catch (Exception ex) { callbackStatus = "Unavailable; see /xllog"; Log.Error(ex, "Garden callback observer unavailable"); }
         config = Pi.GetPluginConfig() as Configuration ?? new();
         Commands.AddHandler("/equinox", new CommandInfo(OnCommand) { HelpMessage = "Open Equinox Companion test recorder." });
         Pi.UiBuilder.Draw += Draw;
@@ -99,7 +113,7 @@ public sealed class Plugin : IDalamudPlugin
         if (recording && now >= recordingUntil) StopRecording();
         if (Conditions[ConditionFlag.BetweenAreas] || Conditions[ConditionFlag.BetweenAreas51])
         {
-            snapshot = null; Volatile.Write(ref capturedContext, null); messages.Clear(); menuMessages.Clear(); status = "Waiting for the area to finish loading."; return;
+            snapshot = null; Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); messages.Clear(); menuMessages.Clear(); status = "Waiting for the area to finish loading."; return;
         }
         if (now < nextSample) return;
         nextSample = now.AddMilliseconds(recording ? 50 : 250);
@@ -109,13 +123,13 @@ public sealed class Plugin : IDalamudPlugin
             if (manager == null || manager->CurrentTerritory == null)
             {
                 // Ordinary non-housing zone. A transient load must not create a visit.
-                snapshot = null; Volatile.Write(ref capturedContext, null);
+                snapshot = null; Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null);
                 if (Client.TerritoryType != 0) gate.Observe("outside", now);
                 status = "No housing territory loaded.";
                 DrainMessages();
                 return;
             }
-            if (!manager->CurrentTerritory->IsLoaded()) { Volatile.Write(ref capturedContext, null); messages.Clear(); menuMessages.Clear(); return; }
+            if (!manager->CurrentTerritory->IsLoaded()) { Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); messages.Clear(); menuMessages.Clear(); return; }
             var type = manager->GetCurrentHousingTerritoryType();
             var inside = type == HousingTerritoryType.Indoor;
             var address = AddressOf(inside ? manager->GetCurrentIndoorHouseId() : manager->GetCurrentHouseId());
@@ -191,6 +205,34 @@ public sealed class Plugin : IDalamudPlugin
         {
             var addon = (AtkUnitBase*)args.Addon.Address;
             if (addon == null) return;
+            if (args.AddonName == "SelectString")
+            {
+                if (type == AddonEvent.PreFinalize) Volatile.Write(ref activeGardenMenu, null);
+                else if (type is AddonEvent.PostSetup or AddonEvent.PostRefresh)
+                {
+                    Volatile.Write(ref activeGardenMenu, null);
+                    if (addon->AtkValues != null && addon->AtkValuesCount > 7 &&
+                        ((int)addon->AtkValues[5].Type & 15) == 3)
+                    {
+                        var count = addon->AtkValues[5].Int;
+                        var titleType = (int)addon->AtkValues[2].Type & 15;
+                        if (count is > 0 and <= 16 && 7 + count <= addon->AtkValuesCount && titleType is 8 or 10)
+                        {
+                            var title = CopyMenuText(addon->AtkValues[2].String.Value) ?? "";
+                            var options = new string[count];
+                            var valid = true;
+                            for (var j = 0; j < count; j++)
+                            {
+                                var optionType = (int)addon->AtkValues[7 + j].Type & 15;
+                                if (optionType is not (8 or 10)) { valid = false; break; }
+                                options[j] = CopyMenuText(addon->AtkValues[7 + j].String.Value) ?? "";
+                            }
+                            if (valid) Volatile.Write(ref activeGardenMenu,
+                                new((nint)addon, now, candidate, title, options));
+                        }
+                    }
+                }
+            }
             int? index = null;
             if (received is not null && received.AtkEventData != 0 &&
                 eventType is AtkEventType.ListItemClick or AtkEventType.ListItemSelect)
@@ -223,6 +265,41 @@ public sealed class Plugin : IDalamudPlugin
         var length = 0;
         while (length < 512 && value[length] != 0) length++;
         return System.Text.Encoding.UTF8.GetString(new ReadOnlySpan<byte>(value, length));
+    }
+
+    private unsafe byte ObserveCallback(AtkUnitBase* addon, uint count, AtkValue* values, byte close)
+    {
+        // Forward the original callback exactly once with untouched arguments and return value.
+        // No game action is initiated here. Only an already-open garden menu is observed.
+        try
+        {
+            var menu = Volatile.Read(ref activeGardenMenu);
+            var now = DateTimeOffset.UtcNow;
+            if (recording && !faulted && menu is not null && menu.AddonAddress == (nint)addon &&
+                count is > 0 and <= 16 && values != null && menuMessages.Count < 128 &&
+                Player.IsLoaded && menu.Target.Actor.ContentId == Player.ContentId.ToString(CultureInfo.InvariantCulture) &&
+                !Conditions[ConditionFlag.BetweenAreas] && !Conditions[ConditionFlag.BetweenAreas51] &&
+                menu.Matches(now, Volatile.Read(ref capturedContext)?.CandidateAt(now)))
+            {
+                var copied = new int?[(int)count];
+                for (var i = 0; i < count; i++)
+                {
+                    var valueType = (int)values[i].Type & 15;
+                    if (valueType == 3) copied[i] = values[i].Int;
+                    else if (valueType == 5 && values[i].UInt <= int.MaxValue) copied[i] = (int)values[i].UInt;
+                }
+                var option = menu.OptionAt(copied[0]);
+                menuMessages.Enqueue(new(now, "garden.callbackObservation", new {
+                    menuTitle = menu.Title, options = menu.Options, arguments = copied,
+                    selectedOptionCandidate = option, close = close != 0,
+                    candidateTarget = menu.Target, confirmedAction = false,
+                    note = "Submitted option is not proof of successful execution."
+                }));
+                lastSubmittedOption = $"{menu.Title}: {option ?? "unresolved (see export)"}";
+            }
+        }
+        catch (Exception ex) { Log.Error(ex, "Could not copy garden callback diagnostic"); }
+        return callbackHook!.Original(addon, count, values, close);
     }
 
     private void OnLog(ILogMessage message)
@@ -267,11 +344,13 @@ public sealed class Plugin : IDalamudPlugin
     private void StartRecording()
     {
         diagnostics.Clear(); recentSignals.Clear(); menuObservations = 0; messages.Clear(); menuMessages.Clear(); lastSnapshotKey = "";
-        Volatile.Write(ref capturedContext, null); snapshot = null; nextSample = default;
+        Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); snapshot = null; nextSample = default;
+        lastSubmittedOption = "None recorded";
+        callbackHook?.Enable();
         recordingUntil = DateTimeOffset.UtcNow.AddMinutes(5); recording = true; exportPath = null;
     }
 
-    private void StopRecording() { recording = false; Volatile.Write(ref capturedContext, null); messages.Clear(); menuMessages.Clear(); lastSnapshotKey = ""; }
+    private void StopRecording() { recording = false; callbackHook?.Disable(); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); messages.Clear(); menuMessages.Clear(); lastSnapshotKey = ""; }
 
     private void Export()
     {
@@ -281,7 +360,7 @@ public sealed class Plugin : IDalamudPlugin
             Directory.CreateDirectory(dir);
             exportPath = Path.Combine(dir, $"equinox-test-{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.json");
             File.WriteAllText(exportPath, JsonSerializer.Serialize(new {
-                schemaVersion = 2, pluginVersion = "0.1.3.0", exportedAt = DateTimeOffset.UtcNow,
+                schemaVersion = 2, pluginVersion = "0.1.4.0", exportedAt = DateTimeOffset.UtcNow,
                 mode = "local-diagnostics", gardeningConfirmed = false,
                 houseObservations = config.Houses, diagnostics
             }, json));
@@ -295,7 +374,7 @@ public sealed class Plugin : IDalamudPlugin
         ImGui.SetNextWindowSize(new Vector2(660, 480), ImGuiCond.FirstUseEver);
         if (ImGui.Begin("Equinox Companion · garden test", ref visible))
         {
-            ImGui.TextWrapped("Local test version 0.1.3.0 — website sync is not connected yet.");
+            ImGui.TextWrapped("Local test version 0.1.4.0 — website sync is not connected yet.");
             ImGui.Separator(); ImGui.TextWrapped(status);
             ImGui.TextWrapped($"House observations saved: {config.Houses.Count}");
             ImGui.TextWrapped("Opening the plugin inside a house records 'observed inside', not a new entry. No demolition reset is claimed.");
@@ -321,6 +400,8 @@ public sealed class Plugin : IDalamudPlugin
                 ImGui.TextWrapped($"Target: {snapshot.TargetName ?? "none"} · furniture index: {snapshot.FurnitureIndex?.ToString() ?? "unknown"}");
                 ImGui.TextWrapped($"Planting menu: {snapshot.PlantingMenuOpen} · item IDs: {string.Join(", ", snapshot.SelectedItemIds)}");
             }
+            ImGui.TextWrapped($"Action observer: {callbackStatus}");
+            ImGui.TextWrapped($"Last submitted option (unverified): {lastSubmittedOption}");
             foreach (var signal in recentSignals) ImGui.TextWrapped(signal);
             if (ImGui.Button("Export test JSON")) Export();
             if (exportPath is not null)
@@ -337,6 +418,7 @@ public sealed class Plugin : IDalamudPlugin
     public void Dispose()
     {
         StopRecording();
+        callbackHook?.Dispose();
         Chat.LogMessage -= OnLog;
         foreach (var menuEvent in MenuEvents) Addons.UnregisterListener(menuEvent, GardenMenus, OnGardenMenu);
         Framework.Update -= Update;

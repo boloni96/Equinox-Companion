@@ -1,3 +1,13 @@
+# Version 0.1.4.0
+
+- Observe AtkUnitBase.FireCallback while recording, using the API 15 client-struct function pointer. Forward original arguments and return value unchanged; never initiate a callback.
+- Limit diagnostic capture to an active SelectString garden menu with matching actor, property, recent target, addon address, bounded arguments, and a one-minute menu expiry.
+- Preserve menu options and title; export numeric callback arguments and the first-argument option candidate. Submitted options do not yet confirm successful watering.
+- Show observer availability and last submitted option. Disable observation on stop and dispose the hook on unload.
+- Keep website sync disabled pending in-game validation.
+
+Validation: Release build has zero warnings/errors; 31 automated checks pass. Native callback capture and Yes compatibility require the next in-game sample.
+
 # Version 0.1.3.0
 
 The 0.1.2.0 SelectString-only listener produced no menu records during manual testing. This diagnostic update broadens observation to HousingGardening, SelectString, SelectIconString, ContextMenu and SelectYesno, including setup, refresh, receive-event and finalize notifications.
