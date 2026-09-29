@@ -20,20 +20,27 @@ verified garden-slot mapping, or demolition-reset confirmation in this version.
 Garden events are explicitly unconfirmed candidates. The recorder does not
 perform game actions, collect player chat text, or send data online.
 
-## Install the test build on Windows
+## Install from GitHub through Dalamud
 
-1. Extract the download to a permanent folder, for example
-   `C:\EquinoxCompanion`. Keep all files in the `plugin` folder together.
-2. Start FFXIV through XIVLauncher with Dalamud enabled.
-3. Open Dalamud settings (`/xlsettings`). Under **Experimental**, add the full
-   path to `plugin\EquinoxCompanion.dll` under **Dev Plugin Locations**, then save.
-   Labels may differ slightly across Dalamud releases.
-4. Open `/xlplugins`, find Equinox Companion in the development plugins area,
-   and enable it. Type `/equinox` to open its window.
+The first published GitHub release must exist before this link works.
 
-This is a development DLL, not a custom-repository URL. Do not put its filesystem
-path in Custom Plugin Repositories. If Dalamud reports an API mismatch, stop and
-rebuild for the installed API; do not override its compatibility check.
+1. In FFXIV, open `/xlsettings` → **Experimental → Custom Plugin Repositories**.
+2. Add and enable this repository URL, then save:
+
+```text
+https://github.com/boloni96/Equinox-Companion/releases/latest/download/repo.json
+```
+
+3. Open `/xlplugins`, search for **Equinox Companion (Test)**, and install it.
+4. Type `/equinox` to open the plugin.
+
+Dalamud downloads the plugin from GitHub. No local DLL path is needed. Keep this
+same repository link for updates. Penumbra is not involved.
+
+If you loaded the old development DLL, disable/remove its Dev Plugin Locations
+entry before installing the GitHub copy. Keep your plugin configuration.
+If Dalamud reports an API mismatch, stop and report it; do not override the
+compatibility check.
 
 ## First test
 

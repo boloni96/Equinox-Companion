@@ -1,0 +1,6 @@
+**/bin/
+**/obj/
+.vs/
+exports/
+release/
+__pycache__/

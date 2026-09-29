@@ -1,6 +1,13 @@
 name: Publish Dalamud plugin
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'scripts/**'
+      - '.github/workflows/release.yml'
   workflow_dispatch:
 
 permissions:

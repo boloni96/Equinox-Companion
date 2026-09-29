@@ -1,7 +1,7 @@
 # GitHub custom repository setup
 
-Prepared for `boloni96/Equinox-Companion`. This repository does not exist yet
-as part of this preparation; no release or install URL is live yet.
+Prepared for `boloni96/Equinox-Companion`. The source layout is prepared for this repository. The install URL becomes
+available after the first successful Publish Dalamud plugin workflow run.
 
 ## One-time setup
 
@@ -50,3 +50,5 @@ Dalamud API may require updating the SDK, code and packaging API check first.
 
 The package generator was tested locally against the compiled 0.1.0.0 build.
 The GitHub Actions workflow has not yet run in GitHub.
+
+Source/workflow changes pushed to main also start the release workflow.
