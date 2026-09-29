@@ -29,7 +29,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly Configuration config;
     private readonly ObservationGate gate = new();
     private readonly List<Diagnostic> diagnostics = [];
-    private readonly ConcurrentQueue<(DateTimeOffset At, uint Id, int?[] Parameters)> messages = new();
+    private readonly ConcurrentQueue<(DateTimeOffset At, uint Id, int?[] Parameters, GardenContext? Context)> messages = new();
     private readonly JsonSerializerOptions json = new() { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
     private bool visible = true;
     private volatile bool recording;
@@ -37,6 +37,8 @@ public sealed class Plugin : IDalamudPlugin
     private DateTimeOffset nextSample;
     private ulong character;
     private GardenSnapshot? snapshot;
+    private GardenContext? capturedContext;
+    private readonly List<string> recentSignals = [];
     private string lastSnapshotKey = "";
     private string status = "Waiting for your character.";
     private string? exportPath;
@@ -72,8 +74,7 @@ public sealed class Plugin : IDalamudPlugin
     {
         if (faulted) return;
         var now = DateTimeOffset.UtcNow;
-        if (now < nextSample) return;
-        nextSample = now.AddMilliseconds(250);
+        
         if (!Player.IsLoaded || Player.ContentId == 0)
         {
             character = 0; gate.Reset(); snapshot = null; StopRecording();
@@ -86,21 +87,23 @@ public sealed class Plugin : IDalamudPlugin
         if (recording && now >= recordingUntil) StopRecording();
         if (Conditions[ConditionFlag.BetweenAreas] || Conditions[ConditionFlag.BetweenAreas51])
         {
-            snapshot = null; messages.Clear(); status = "Waiting for the area to finish loading."; return;
+            snapshot = null; Volatile.Write(ref capturedContext, null); messages.Clear(); status = "Waiting for the area to finish loading."; return;
         }
+        if (now < nextSample) return;
+        nextSample = now.AddMilliseconds(recording ? 50 : 250);
         try
         {
             var manager = HousingManager.Instance();
             if (manager == null || manager->CurrentTerritory == null)
             {
                 // Ordinary non-housing zone. A transient load must not create a visit.
-                snapshot = null;
+                snapshot = null; Volatile.Write(ref capturedContext, null);
                 if (Client.TerritoryType != 0) gate.Observe("outside", now);
                 status = "No housing territory loaded.";
-                DrainMessages(now, null);
+                DrainMessages();
                 return;
             }
-            if (!manager->CurrentTerritory->IsLoaded()) return;
+            if (!manager->CurrentTerritory->IsLoaded()) { Volatile.Write(ref capturedContext, null); messages.Clear(); return; }
             var type = manager->GetCurrentHousingTerritoryType();
             var inside = type == HousingTerritoryType.Indoor;
             var address = AddressOf(inside ? manager->GetCurrentIndoorHouseId() : manager->GetCurrentHouseId());
@@ -133,13 +136,16 @@ public sealed class Plugin : IDalamudPlugin
             var planting = plant != null && plant->IsAgentActive();
             uint[] items = planting ? [plant->SelectedItems[0].ItemId, plant->SelectedItems[1].ItemId] : [];
             snapshot = new(now, actor, address, target?.GameObjectId.ToString("X16"),
-                target?.Name.ToString(), objectId, furnitureIndex, planting, items);
+                target?.Name.ToString(), objectId, furnitureIndex, planting, items,
+                target is null ? null : new(target.BaseId, target.EntityId, target.ObjectKind.ToString(),
+                    target.Position.X, target.Position.Y, target.Position.Z));
+            Volatile.Write(ref capturedContext, GardenContext.Capture(Volatile.Read(ref capturedContext), snapshot));
             if (recording)
             {
-                var key = JsonSerializer.Serialize(new { address, snapshot.TargetId, objectId, furnitureIndex, planting, items });
+                var key = JsonSerializer.Serialize(new { address, snapshot.TargetId, snapshot.TargetDetails, objectId, furnitureIndex, planting, items });
                 if (key != lastSnapshotKey) { lastSnapshotKey = key; AddDiagnostic(new(now, "garden.context", snapshot)); }
             }
-            DrainMessages(now, snapshot);
+            DrainMessages();
         }
         catch (Exception ex)
         {
@@ -157,18 +163,28 @@ public sealed class Plugin : IDalamudPlugin
         var count = Math.Min((int)message.ParameterCount, 16);
         var parameters = new int?[count];
         for (var i = 0; i < count; i++) if (message.TryGetIntParameter(i, out var n)) parameters[i] = n;
-        messages.Enqueue((DateTimeOffset.UtcNow, message.LogMessageId, parameters));
+        messages.Enqueue((DateTimeOffset.UtcNow, message.LogMessageId, parameters, Volatile.Read(ref capturedContext)));
     }
 
-    private void DrainMessages(DateTimeOffset now, GardenSnapshot? context)
+    private void DrainMessages()
     {
         while (messages.TryDequeue(out var message))
-            if (recording && context is not null)
-                AddDiagnostic(new(message.At, "game.logCandidate", new {
-                    logMessageId = message.Id, parameters = message.Parameters,
-                    contextReadAt = now, context,
-                    confirmedAction = false, bedSlot = (int?)null
-                }));
+        {
+            if (!recording) continue;
+            var candidate = message.Context?.CandidateAt(message.At);
+            var signal = GardenSignals.Classify(message.Id);
+            AddDiagnostic(new(message.At, "game.logObservation", new {
+                logMessageId = message.Id, parameters = message.Parameters, signal,
+                context = message.Context?.Current, candidateTarget = candidate,
+                targetAssociation = candidate is null ? "unavailable" : "recent-context-only",
+                confirmedBed = false, bedSlot = (int?)null
+            }));
+            if (signal != "unclassified")
+            {
+                recentSignals.Add($"{message.At:HH:mm:ss} · {signal} · target {candidate?.TargetId ?? "unknown"}");
+                if (recentSignals.Count > 6) recentSignals.RemoveAt(0);
+            }
+        }
     }
 
     private void AddDiagnostic(Diagnostic item)
@@ -179,11 +195,12 @@ public sealed class Plugin : IDalamudPlugin
 
     private void StartRecording()
     {
-        diagnostics.Clear(); messages.Clear(); lastSnapshotKey = "";
+        diagnostics.Clear(); recentSignals.Clear(); messages.Clear(); lastSnapshotKey = "";
+        Volatile.Write(ref capturedContext, null); snapshot = null; nextSample = default;
         recordingUntil = DateTimeOffset.UtcNow.AddMinutes(5); recording = true; exportPath = null;
     }
 
-    private void StopRecording() { recording = false; messages.Clear(); lastSnapshotKey = ""; }
+    private void StopRecording() { recording = false; Volatile.Write(ref capturedContext, null); messages.Clear(); lastSnapshotKey = ""; }
 
     private void Export()
     {
@@ -193,7 +210,7 @@ public sealed class Plugin : IDalamudPlugin
             Directory.CreateDirectory(dir);
             exportPath = Path.Combine(dir, $"equinox-test-{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.json");
             File.WriteAllText(exportPath, JsonSerializer.Serialize(new {
-                schemaVersion = 1, pluginVersion = "0.1.0", exportedAt = DateTimeOffset.UtcNow,
+                schemaVersion = 2, pluginVersion = "0.1.1.0", exportedAt = DateTimeOffset.UtcNow,
                 mode = "local-diagnostics", gardeningConfirmed = false,
                 houseObservations = config.Houses, diagnostics
             }, json));
@@ -205,9 +222,9 @@ public sealed class Plugin : IDalamudPlugin
     {
         if (!visible) return;
         ImGui.SetNextWindowSize(new Vector2(660, 480), ImGuiCond.FirstUseEver);
-        if (ImGui.Begin("Equinox Companion · first test", ref visible))
+        if (ImGui.Begin("Equinox Companion · garden test", ref visible))
         {
-            ImGui.TextWrapped("Local test version 0.1.0 — website sync is not connected yet.");
+            ImGui.TextWrapped("Local test version 0.1.1.0 — website sync is not connected yet.");
             ImGui.Separator(); ImGui.TextWrapped(status);
             ImGui.TextWrapped($"House observations saved: {config.Houses.Count}");
             ImGui.TextWrapped("Opening the plugin inside a house records 'observed inside', not a new entry. No demolition reset is claimed.");
@@ -217,7 +234,7 @@ public sealed class Plugin : IDalamudPlugin
                 ImGui.TextWrapped($"Last: {last.Kind} · {last.Actor.Name} · {last.ObservedAt:u}");
             }
             ImGui.Separator();
-            ImGui.TextWrapped("Gardening test: start recording, then plant, tend, fertilize or harvest normally. This records candidate identifiers, not confirmed actions or bed numbers.");
+            ImGui.TextWrapped("Gardening test: start recording, then plant, tend, fertilize or harvest normally. Game signals are labeled below. Target associations and bed numbers are still unverified. Export before starting another test.");
             if (!recording)
             {
                 if (ImGui.Button("Start a 5-minute garden test") && Player.IsLoaded && !faulted) StartRecording();
@@ -233,6 +250,7 @@ public sealed class Plugin : IDalamudPlugin
                 ImGui.TextWrapped($"Target: {snapshot.TargetName ?? "none"} · furniture index: {snapshot.FurnitureIndex?.ToString() ?? "unknown"}");
                 ImGui.TextWrapped($"Planting menu: {snapshot.PlantingMenuOpen} · item IDs: {string.Join(", ", snapshot.SelectedItemIds)}");
             }
+            foreach (var signal in recentSignals) ImGui.TextWrapped(signal);
             if (ImGui.Button("Export test JSON")) Export();
             if (exportPath is not null)
             {

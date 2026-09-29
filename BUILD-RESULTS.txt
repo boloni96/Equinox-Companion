@@ -1,9 +1,5 @@
-Equinox Companion 0.1.0
-
-Build: succeeded, zero warnings, zero errors.
-SDK: .NET 10.0.401; Dalamud.NET.Sdk 15.0.0; API 15.
-References: official Dalamud latest.zip retrieved for this build.
-Transition logic: nine checks passed.
-Native observation/UI: not tested in FFXIV; requires Windows in-game test.
-Website automatic sync: not implemented or enabled in this version.
-Gardening actions/bed mapping: diagnostic candidates only, not confirmed.
+Version 0.1.1.0
+.NET 10 / Dalamud API 15
+Release build: 0 warnings, 0 errors
+22 automated checks passed
+In-game validation pending. No website synchronization.
