@@ -53,3 +53,48 @@ Check("different bed cannot inherit menu", menu.Matches(time.AddSeconds(1), Samp
 Check("matching bed can use menu", menu.Matches(time.AddSeconds(1), Sample(1000, "bed-a")).ToString(), "True");
 Check("expired menu cannot match", menu.Matches(time.AddSeconds(61), Sample(61000, "bed-a")).ToString(), "False");
 Check("different property cannot inherit menu", menu.Matches(time.AddSeconds(1), Sample(1000, "bed-a", address with { HouseId = "other" })).ToString(), "False");
+
+var intent = TendIntent.From(menu, "Tend Crop", time)!;
+Check("successful tend identifies bed", intent.Confirm(4017, time.AddMilliseconds(400), Sample(400, "bed-a"))?.Bed.ToString(), "1");
+Check("successful tend identifies patch", intent.Confirm(4017, time.AddMilliseconds(400), Sample(400, "bed-a"))?.Patch.ToString(), "1");
+Check("quit never creates intent", TendIntent.From(menu, "Quit", time)?.EventId, null);
+Check("unknown title does not invent bed", TendIntent.From(menu with { Title = "Unknown" }, "Tend Crop", time)?.EventId, null);
+Check("failure cannot confirm tend", intent.Confirm(4010, time.AddMilliseconds(400), Sample(400, "bed-a"))?.EventId, null);
+Check("wrong target cannot confirm", intent.Confirm(4017, time.AddMilliseconds(400), Sample(400, "bed-b"))?.EventId, null);
+Check("wrong house cannot confirm", intent.Confirm(4017, time.AddMilliseconds(400), Sample(400, "bed-a", address with { HouseId = "other" }))?.EventId, null);
+Check("wrong character cannot confirm", intent.Confirm(4017, time.AddMilliseconds(400), Sample(400, "bed-a") with { Actor = actor with { ContentId = "other" } })?.EventId, null);
+Check("stale intent cannot confirm", intent.Confirm(4017, time.AddSeconds(4), Sample(4000, "bed-a"))?.EventId, null);
+Check("earlier log cannot confirm", intent.Confirm(4017, time.AddMilliseconds(-1), Sample(0, "bed-a"))?.EventId, null);
+Check("missing target cannot confirm", intent.Confirm(4017, time.AddMilliseconds(400), null)?.EventId, null);
+Check("duplicate response has same dedupe key", intent.Confirm(4017, time.AddMilliseconds(450), Sample(450, "bed-a"))?.EventId, intent.EventId);
+
+// Optional private replay input; never copy player diagnostics into the repository.
+if (args.Length > 0)
+{
+    var opts = new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+    using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(args[0]));
+    TendIntent? pending = null;
+    var saved = new HashSet<string>();
+    var quits = 0;
+    foreach (var item in document.RootElement.GetProperty("diagnostics").EnumerateArray().OrderBy(x => x.GetProperty("observedAt").GetDateTimeOffset()))
+    {
+        var at = item.GetProperty("observedAt").GetDateTimeOffset();
+        var data = item.GetProperty("data");
+        var kind = item.GetProperty("kind").GetString();
+        if (kind == "garden.callbackObservation")
+        {
+            var target = System.Text.Json.JsonSerializer.Deserialize<GardenSnapshot>(data.GetProperty("candidateTarget").GetRawText(), opts)!;
+            var option = data.GetProperty("selectedOptionCandidate").GetString();
+            if (option == "Quit") quits++;
+            pending = TendIntent.From(new GardenMenu(1, at, target, data.GetProperty("menuTitle").GetString()!, []), option, at);
+        }
+        else if (kind == "game.logObservation")
+        {
+            var target = System.Text.Json.JsonSerializer.Deserialize<GardenSnapshot>(data.GetProperty("candidateTarget").GetRawText(), opts);
+            var result = pending?.Confirm(data.GetProperty("logMessageId").GetUInt32(), at, target);
+            if (result is not null) saved.Add(result.EventId);
+        }
+    }
+    Check("private replay: eight confirmed tends", saved.Count.ToString(), "8");
+    Check("private replay: three cancelled selections", quits.ToString(), "3");
+}

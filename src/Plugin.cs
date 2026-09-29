@@ -39,6 +39,9 @@ public sealed class Plugin : IDalamudPlugin
     private static readonly AddonEvent[] MenuEvents = [AddonEvent.PostSetup, AddonEvent.PostRefresh, AddonEvent.PreReceiveEvent, AddonEvent.PreFinalize];
     private int menuObservations;
     private GardenMenu? activeGardenMenu;
+    private TendIntent? pendingTend;
+    private Address? currentAddress;
+    private bool ObservingGardens => !faulted && (recording || config.TrackGardens);
     private unsafe delegate byte FireCallbackDelegate(AtkUnitBase* addon, uint count, AtkValue* values, byte close);
     private Hook<FireCallbackDelegate>? callbackHook;
     private string callbackStatus = "Not initialized";
@@ -47,7 +50,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly ObservationGate gate = new();
     private readonly List<Diagnostic> diagnostics = [];
     private readonly ConcurrentQueue<Diagnostic> menuMessages = new();
-    private readonly ConcurrentQueue<(DateTimeOffset At, uint Id, int?[] Parameters, GardenContext? Context)> messages = new();
+    private readonly ConcurrentQueue<(DateTimeOffset At, uint Id, int?[] Parameters, GardenContext? Context, TendIntent? Intent)> messages = new();
     private readonly JsonSerializerOptions json = new() { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
     private bool visible = true;
     private volatile bool recording;
@@ -68,10 +71,11 @@ public sealed class Plugin : IDalamudPlugin
         {
             callbackHook = Interop.HookFromAddress<FireCallbackDelegate>(
                 AtkUnitBase.MemberFunctionPointers.FireCallback, ObserveCallback);
-            callbackStatus = "Ready (active only during recording)";
+            callbackStatus = "Ready";
         }
         catch (Exception ex) { callbackStatus = "Unavailable; see /xllog"; Log.Error(ex, "Garden callback observer unavailable"); }
         config = Pi.GetPluginConfig() as Configuration ?? new();
+        if (config.TrackGardens) callbackHook?.Enable();
         Commands.AddHandler("/equinox", new CommandInfo(OnCommand) { HelpMessage = "Open Equinox Companion test recorder." });
         Pi.UiBuilder.Draw += Draw;
         Pi.UiBuilder.OpenMainUi += Open;
@@ -103,7 +107,7 @@ public sealed class Plugin : IDalamudPlugin
         
         if (!Player.IsLoaded || Player.ContentId == 0)
         {
-            character = 0; gate.Reset(); snapshot = null; StopRecording();
+            character = 0; currentAddress = null; gate.Reset(); snapshot = null; StopRecording();
             status = "Waiting for your character."; return;
         }
         if (character != Player.ContentId)
@@ -113,26 +117,27 @@ public sealed class Plugin : IDalamudPlugin
         if (recording && now >= recordingUntil) StopRecording();
         if (Conditions[ConditionFlag.BetweenAreas] || Conditions[ConditionFlag.BetweenAreas51])
         {
-            snapshot = null; Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); messages.Clear(); menuMessages.Clear(); status = "Waiting for the area to finish loading."; return;
+            snapshot = null; currentAddress = null; Volatile.Write(ref pendingTend, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); messages.Clear(); menuMessages.Clear(); status = "Waiting for the area to finish loading."; return;
         }
         if (now < nextSample) return;
-        nextSample = now.AddMilliseconds(recording ? 50 : 250);
+        nextSample = now.AddMilliseconds(ObservingGardens ? 50 : 250);
         try
         {
             var manager = HousingManager.Instance();
             if (manager == null || manager->CurrentTerritory == null)
             {
                 // Ordinary non-housing zone. A transient load must not create a visit.
-                snapshot = null; Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null);
+                snapshot = null; currentAddress = null; Volatile.Write(ref pendingTend, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null);
                 if (Client.TerritoryType != 0) gate.Observe("outside", now);
                 status = "No housing territory loaded.";
                 DrainMessages();
                 return;
             }
-            if (!manager->CurrentTerritory->IsLoaded()) { Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); messages.Clear(); menuMessages.Clear(); return; }
+            if (!manager->CurrentTerritory->IsLoaded()) { Volatile.Write(ref pendingTend, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); messages.Clear(); menuMessages.Clear(); return; }
             var type = manager->GetCurrentHousingTerritoryType();
             var inside = type == HousingTerritoryType.Indoor;
             var address = AddressOf(inside ? manager->GetCurrentIndoorHouseId() : manager->GetCurrentHouseId());
+            currentAddress = address;
             var actor = ReadActor();
             if (inside && address is not null)
             {
@@ -148,7 +153,7 @@ public sealed class Plugin : IDalamudPlugin
             status = address is null ? "Housing loaded; no complete property address yet." :
                 $"World {address.WorldId} · Territory {address.TerritoryTypeId} · Ward {address.Ward} · Plot {address.Plot}";
 
-            if (!recording) { snapshot = null; messages.Clear(); menuMessages.Clear(); return; }
+            if (!ObservingGardens) { snapshot = null; messages.Clear(); menuMessages.Clear(); return; }
 
             // This is candidate context, never a confirmed bed or successful action.
             uint? objectId = null; short? furnitureIndex = null;
@@ -191,7 +196,7 @@ public sealed class Plugin : IDalamudPlugin
     private unsafe void OnGardenMenu(AddonEvent type, AddonArgs args)
     {
         // Copy only garden-associated menus. Never modify or dispatch a UI event.
-        if (!recording || faulted || menuMessages.Count >= 128 ||
+        if (!ObservingGardens || menuMessages.Count >= 128 ||
             !Player.IsLoaded || Conditions[ConditionFlag.BetweenAreas] || Conditions[ConditionFlag.BetweenAreas51]) return;
         var now = DateTimeOffset.UtcNow;
         var candidate = Volatile.Read(ref capturedContext)?.CandidateAt(now);
@@ -275,7 +280,7 @@ public sealed class Plugin : IDalamudPlugin
         {
             var menu = Volatile.Read(ref activeGardenMenu);
             var now = DateTimeOffset.UtcNow;
-            if (recording && !faulted && menu is not null && menu.AddonAddress == (nint)addon &&
+            if (ObservingGardens && menu is not null && menu.AddonAddress == (nint)addon &&
                 count is > 0 and <= 16 && values != null && menuMessages.Count < 128 &&
                 Player.IsLoaded && menu.Target.Actor.ContentId == Player.ContentId.ToString(CultureInfo.InvariantCulture) &&
                 !Conditions[ConditionFlag.BetweenAreas] && !Conditions[ConditionFlag.BetweenAreas51] &&
@@ -289,6 +294,7 @@ public sealed class Plugin : IDalamudPlugin
                     else if (valueType == 5 && values[i].UInt <= int.MaxValue) copied[i] = (int)values[i].UInt;
                 }
                 var option = menu.OptionAt(copied[0]);
+                Volatile.Write(ref pendingTend, TendIntent.From(menu, option, now));
                 menuMessages.Enqueue(new(now, "garden.callbackObservation", new {
                     menuTitle = menu.Title, options = menu.Options, arguments = copied,
                     selectedOptionCandidate = option, close = close != 0,
@@ -306,11 +312,11 @@ public sealed class Plugin : IDalamudPlugin
     {
         // No chat text, string parameters, or game writes. Copy only numeric values
         // while the native message is valid; inspect housing later on the framework thread.
-        if (!recording || messages.Count >= 256) return;
+        if (!ObservingGardens || messages.Count >= 256) return;
         var count = Math.Min((int)message.ParameterCount, 16);
         var parameters = new int?[count];
         for (var i = 0; i < count; i++) if (message.TryGetIntParameter(i, out var n)) parameters[i] = n;
-        messages.Enqueue((DateTimeOffset.UtcNow, message.LogMessageId, parameters, Volatile.Read(ref capturedContext)));
+        messages.Enqueue((DateTimeOffset.UtcNow, message.LogMessageId, parameters, Volatile.Read(ref capturedContext), Volatile.Read(ref pendingTend)));
     }
 
     private void DrainMessages()
@@ -318,8 +324,15 @@ public sealed class Plugin : IDalamudPlugin
         while (menuMessages.TryDequeue(out var menu)) if (recording) { menuObservations++; AddDiagnostic(menu); }
         while (messages.TryDequeue(out var message))
         {
-            if (!recording) continue;
+            if (!ObservingGardens) continue;
             var candidate = message.Context?.CandidateAt(message.At);
+            var confirmed = message.Intent?.Confirm(message.Id, message.At, candidate);
+            if (confirmed is not null && !config.Tending.Any(x => x.EventId == confirmed.EventId))
+            {
+                config.Tending.Add(confirmed);
+                if (config.Tending.Count > 10000) config.Tending.RemoveRange(0, config.Tending.Count - 10000);
+                Pi.SavePluginConfig(config);
+            }
             var signal = GardenSignals.Classify(message.Id);
             AddDiagnostic(new(message.At, "game.logObservation", new {
                 logMessageId = message.Id, parameters = message.Parameters, signal,
@@ -337,6 +350,7 @@ public sealed class Plugin : IDalamudPlugin
 
     private void AddDiagnostic(Diagnostic item)
     {
+        if (!recording) return;
         if (diagnostics.Count >= 2000) { StopRecording(); status = "Recording limit reached. Export the test."; return; }
         diagnostics.Add(item);
     }
@@ -344,13 +358,13 @@ public sealed class Plugin : IDalamudPlugin
     private void StartRecording()
     {
         diagnostics.Clear(); recentSignals.Clear(); menuObservations = 0; messages.Clear(); menuMessages.Clear(); lastSnapshotKey = "";
-        Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); snapshot = null; nextSample = default;
+        Volatile.Write(ref pendingTend, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); snapshot = null; nextSample = default;
         lastSubmittedOption = "None recorded";
         callbackHook?.Enable();
         recordingUntil = DateTimeOffset.UtcNow.AddMinutes(5); recording = true; exportPath = null;
     }
 
-    private void StopRecording() { recording = false; callbackHook?.Disable(); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); messages.Clear(); menuMessages.Clear(); lastSnapshotKey = ""; }
+    private void StopRecording() { recording = false; if (!ObservingGardens) callbackHook?.Disable(); Volatile.Write(ref pendingTend, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); messages.Clear(); menuMessages.Clear(); lastSnapshotKey = ""; }
 
     private void Export()
     {
@@ -360,9 +374,9 @@ public sealed class Plugin : IDalamudPlugin
             Directory.CreateDirectory(dir);
             exportPath = Path.Combine(dir, $"equinox-test-{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.json");
             File.WriteAllText(exportPath, JsonSerializer.Serialize(new {
-                schemaVersion = 2, pluginVersion = "0.1.4.0", exportedAt = DateTimeOffset.UtcNow,
+                schemaVersion = 3, pluginVersion = "0.2.0.0", exportedAt = DateTimeOffset.UtcNow,
                 mode = "local-diagnostics", gardeningConfirmed = false,
-                houseObservations = config.Houses, diagnostics
+                houseObservations = config.Houses, confirmedTending = config.Tending, diagnostics
             }, json));
         }
         catch (Exception ex) { exportPath = null; status = "Export failed; see /xllog."; Log.Error(ex, "Equinox export failed"); }
@@ -372,19 +386,39 @@ public sealed class Plugin : IDalamudPlugin
     {
         if (!visible) return;
         ImGui.SetNextWindowSize(new Vector2(660, 480), ImGuiCond.FirstUseEver);
-        if (ImGui.Begin("Equinox Companion · garden test", ref visible))
+        if (ImGui.Begin("Equinox Companion", ref visible))
         {
-            ImGui.TextWrapped("Local test version 0.1.4.0 — website sync is not connected yet.");
+            ImGui.TextWrapped("Local tracking version 0.2.0.0 — website sync is not connected yet.");
             ImGui.Separator(); ImGui.TextWrapped(status);
-            ImGui.TextWrapped($"House observations saved: {config.Houses.Count}");
-            ImGui.TextWrapped("Opening the plugin inside a house records 'observed inside', not a new entry. No demolition reset is claimed.");
-            if (config.Houses.Count > 0)
+            if (ImGui.CollapsingHeader("Character house visits", ImGuiTreeNodeFlags.DefaultOpen))
             {
-                var last = config.Houses[^1];
-                ImGui.TextWrapped($"Last: {last.Kind} · {last.Actor.Name} · {last.ObservedAt:u}");
+                ImGui.TextWrapped("Touched means entered inside. Times are local. Houses listed here are observed visits, not an ownership roster.");
+                if (currentAddress is not null && Player.IsLoaded && !config.Houses.Any(h => h.Actor.ContentId == Player.ContentId.ToString(CultureInfo.InvariantCulture) && h.Address.HouseId == currentAddress.HouseId))
+                    ImGui.TextWrapped("Current property: no entry recorded for this character yet.");
+                foreach (var house in config.Houses.GroupBy(h => (h.Actor.ContentId, h.Address.HouseId)).OrderByDescending(g => g.Max(h => h.ObservedAt)))
+                {
+                    var last = house.OrderByDescending(h => h.ObservedAt).First();
+                    var entry = house.Where(h => h.Kind == "house.entered").OrderByDescending(h => h.ObservedAt).FirstOrDefault();
+                    var a = last.Address;
+                    ImGui.TextWrapped($"{last.Actor.Name} · World {a.WorldId} · Territory {a.TerritoryTypeId} · W{a.Ward} P{a.Plot} · Room {a.Room}");
+                    ImGui.TextWrapped(entry is null ? $"Observed inside {last.ObservedAt.ToLocalTime():g}; entry time unknown" : $"Touched: {entry.ObservedAt.ToLocalTime():g}");
+                }
+                ImGui.TextWrapped("No recorded entry means unknown. Entry observations do not confirm a demolition timer reset.");
             }
             ImGui.Separator();
-            ImGui.TextWrapped("Gardening test: start recording, then plant, tend, fertilize or harvest normally. Game signals are labeled below. Target associations and bed numbers are still unverified. Export before starting another test.");
+            var track = config.TrackGardens;
+            if (ImGui.Checkbox("Automatically save confirmed tending locally", ref track))
+            {
+                config.TrackGardens = track;
+                if (ObservingGardens) callbackHook?.Enable(); else StopRecording();
+                Pi.SavePluginConfig(config);
+            }
+            ImGui.TextWrapped("English garden menus supported. Confirmed tending is saved per house, patch and bed. Batch assignment, planting/harvest records and website sync are upcoming.");
+            ImGui.TextWrapped($"Saved tending records: {config.Tending.Count} (latest 10,000 retained)");
+            foreach (var tend in config.Tending.TakeLast(6).Reverse())
+                ImGui.TextWrapped($"{tend.ConfirmedAt.ToLocalTime():g} · {tend.Actor.Name} · W{tend.Address.Ward} P{tend.Address.Plot} · Patch {tend.Patch}, bed {tend.Bed}: tended");
+            ImGui.Separator();
+            ImGui.TextWrapped("Optional diagnostics: record your normal gardening routine, then export. Starting a test does not clear saved tending or house visits.");
             if (!recording)
             {
                 if (ImGui.Button("Start a 5-minute garden test") && Player.IsLoaded && !faulted) StartRecording();
@@ -418,6 +452,7 @@ public sealed class Plugin : IDalamudPlugin
     public void Dispose()
     {
         StopRecording();
+        callbackHook?.Disable();
         callbackHook?.Dispose();
         Chat.LogMessage -= OnLog;
         foreach (var menuEvent in MenuEvents) Addons.UnregisterListener(menuEvent, GardenMenus, OnGardenMenu);
