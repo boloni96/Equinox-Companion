@@ -1,13 +1,6 @@
 name: Publish Dalamud plugin
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'src/**'
-      - 'tests/**'
-      - 'scripts/**'
-      - '.github/workflows/release.yml'
   workflow_dispatch:
 
 permissions:
@@ -69,4 +62,16 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Draft upload failed; nothing has been published' }
           gh release edit $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --draft=false --latest
           if ($LASTEXITCODE -ne 0) { throw 'Publication failed; inspect the draft release' }
-          "Install URL: https://github.com/$env:GITHUB_REPOSITORY/releases/latest/download/repo.json" >> $env:GITHUB_STEP_SUMMARY
+      - name: Update the stable Dalamud repository list
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $endpoint = "repos/$env:GITHUB_REPOSITORY/contents/repo.json"
+          $sha = gh api "$endpoint`?ref=main" --jq '.sha'
+          if ($LASTEXITCODE -ne 0) { throw 'Could not read the current repository list' }
+          $content = [Convert]::ToBase64String([IO.File]::ReadAllBytes((Resolve-Path 'release/repo.json')))
+          @{ message = "Publish install feed for $env:RELEASE_TAG"; content = $content; sha = $sha; branch = 'main' } | ConvertTo-Json | Out-File feed-request.json -Encoding utf8
+          gh api --method PUT $endpoint --input feed-request.json
+          if ($LASTEXITCODE -ne 0) { throw 'Release published, but updating the install feed failed' }
+          "Install URL: https://raw.githubusercontent.com/$env:GITHUB_REPOSITORY/main/repo.json" >> $env:GITHUB_STEP_SUMMARY

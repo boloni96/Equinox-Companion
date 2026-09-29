@@ -22,13 +22,13 @@ perform game actions, collect player chat text, or send data online.
 
 ## Install from GitHub through Dalamud
 
-The first published GitHub release must exist before this link works.
+The test build is hosted directly in this repository.
 
 1. In FFXIV, open `/xlsettings` → **Experimental → Custom Plugin Repositories**.
 2. Add and enable this repository URL, then save:
 
 ```text
-https://github.com/boloni96/Equinox-Companion/releases/latest/download/repo.json
+https://raw.githubusercontent.com/boloni96/Equinox-Companion/main/repo.json
 ```
 
 3. Open `/xlplugins`, search for **Equinox Companion (Test)**, and install it.

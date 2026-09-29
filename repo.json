@@ -1,0 +1,29 @@
+[
+  {
+    "Author": "Boloni",
+    "Name": "Equinox Companion (Test)",
+    "InternalName": "EquinoxCompanion",
+    "AssemblyVersion": "0.1.0.0",
+    "Description": "Early local-only prototype. Records housing observations and opt-in gardening diagnostics. Website sync and confirmed gardening actions are not enabled.",
+    "ApplicableVersion": "any",
+    "Tags": [
+      "housing",
+      "gardening",
+      "journal"
+    ],
+    "DalamudApiLevel": 15,
+    "LoadRequiredState": 0,
+    "LoadSync": false,
+    "CanUnloadAsync": false,
+    "LoadPriority": 0,
+    "Punchline": "House observations and a local gardening recorder for Equinox Journal.",
+    "AcceptsFeedback": true,
+    "RepoUrl": "https://github.com/boloni96/Equinox-Companion",
+    "IsHide": false,
+    "IsTestingExclusive": false,
+    "DownloadLinkInstall": "https://raw.githubusercontent.com/boloni96/Equinox-Companion/main/dist/v0.1.0.0/EquinoxCompanion.zip",
+    "DownloadLinkUpdate": "https://raw.githubusercontent.com/boloni96/Equinox-Companion/main/dist/v0.1.0.0/EquinoxCompanion.zip",
+    "DownloadLinkTesting": "https://raw.githubusercontent.com/boloni96/Equinox-Companion/main/dist/v0.1.0.0/EquinoxCompanion.zip",
+    "LastUpdate": 1790718728
+  }
+]
