@@ -293,7 +293,13 @@ public sealed class Plugin : IDalamudPlugin
                     if (addon->AtkValues != null && addon->AtkValuesCount > 7 &&
                         ((int)addon->AtkValues[5].Type & 15) == 3)
                     {
-                        var count = addon->AtkValues[5].Int;
+                        string? first = null, second = null;
+                        if (addon->AtkValuesCount > 8)
+                        {
+                            if (((int)addon->AtkValues[7].Type & 15) is 8 or 10) first = CopyMenuText(addon->AtkValues[7].String.Value);
+                            if (((int)addon->AtkValues[8].Type & 15) is 8 or 10) second = CopyMenuText(addon->AtkValues[8].String.Value);
+                        }
+                        var count = GardenMenu.VisibleOptionCount(addon->AtkValues[5].Int, addon->AtkValuesCount - 7, first, second);
                         var titleType = (int)addon->AtkValues[2].Type & 15;
                         if (count is > 0 and <= 16 && 7 + count <= addon->AtkValuesCount && titleType is 8 or 10)
                         {
@@ -334,7 +340,7 @@ public sealed class Plugin : IDalamudPlugin
                     if (copied is not null) values.Add(new { index = i, type = value.Type.ToString(), value = copied });
                 }
             menuMessages.Enqueue(new(now, "garden.menuObservation", new {
-                addon = args.AddonName, lifecycle = type.ToString(),
+                addon = args.AddonName, lifecycle = type.ToString(), valueCount = addon->AtkValuesCount, resolvedMenu = Volatile.Read(ref activeGardenMenu)?.Title,
                 eventType = eventType?.ToString(), eventParam = received?.EventParam,
                 selectedIndexCandidate = index, values, candidateTarget = candidate,
                 confirmedAction = false, confirmedBed = false
@@ -609,7 +615,7 @@ public sealed class Plugin : IDalamudPlugin
             Directory.CreateDirectory(dir);
             exportPath = Path.Combine(dir, $"equinox-test-{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.json");
             File.WriteAllText(exportPath, JsonSerializer.Serialize(new {
-                schemaVersion = 3, pluginVersion = "0.4.0.2", exportedAt = DateTimeOffset.UtcNow,
+                schemaVersion = 3, pluginVersion = "0.4.0.3", exportedAt = DateTimeOffset.UtcNow,
                 mode = "local-diagnostics", gardeningConfirmed = false,
                 houseObservations = config.Houses, confirmedTending = config.Tending, confirmedPlanting = config.Planting, observedDetails = config.Discoveries, diagnostics
             }, json));
@@ -623,7 +629,7 @@ public sealed class Plugin : IDalamudPlugin
         ImGui.SetNextWindowSize(new Vector2(660, 480), ImGuiCond.FirstUseEver);
         if (ImGui.Begin("Equinox Companion", ref visible))
         {
-            ImGui.TextWrapped("Local tracking version 0.4.0.2 — optional website connection available.");
+            ImGui.TextWrapped("Local tracking version 0.4.0.3 — optional website connection available.");
             if (ImGui.CollapsingHeader("Website connection"))
             {
                 ImGui.TextWrapped("First deploy Journal V7.9.21, then open Game connection on the website and create a pairing key.");

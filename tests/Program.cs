@@ -156,3 +156,9 @@ cm.Add(matureMenu with {Title="2nd Bed, 1st Patch",OpenedAt=time.AddMilliseconds
 cm.Add(new CropChat(time,plantTarget,"Curiel Root\n"+CropChatMatcher.ReadyText));
 cm.Add(new CropChat(time.AddMilliseconds(200),plantTarget with {TargetId="next-bed"},"Royal Kukuru Bean\n"+CropChatMatcher.ReadyText));
 var rapid=cm.Drain(time.AddMilliseconds(600),Known);Check("rapid clicks remain separate",string.Join("|",rapid.Select(x=>$"{x.Bed}:{x.Crop.CropName}")),"1:Curiel Root|2:Royal Kukuru Bean");
+
+Check("mature menu stale count uses its two visible options",GardenMenu.VisibleOptionCount(4,2,"Harvest Crop","Quit").ToString(),"2");
+Check("mature menu extra slots are not interpreted",GardenMenu.VisibleOptionCount(4,16,"Harvest Crop","Quit").ToString(),"2");
+Check("growing menu preserves all option indices",GardenMenu.VisibleOptionCount(4,4,"Fertilize Crop","Tend Crop").ToString(),"4");
+Check("truncated growing menu rejected",GardenMenu.VisibleOptionCount(4,2,"Fertilize Crop","Tend Crop").ToString(),"0");
+Check("incomplete mature pair rejected",GardenMenu.VisibleOptionCount(4,1,"Harvest Crop",null).ToString(),"0");

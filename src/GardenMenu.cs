@@ -3,6 +3,12 @@ namespace EquinoxCompanion;
 public sealed record GardenMenu(nint AddonAddress, DateTimeOffset OpenedAt,
     GardenSnapshot Target, string Title, string[] Options)
 {
+    // Mature menus retain the growing menu's count metadata, but expose two choices.
+    public static int VisibleOptionCount(int declared, int available, string? first, string? second)
+    {
+        if (available >= 2 && first == "Harvest Crop" && second == "Quit") return 2;
+        return declared is > 0 and <= 16 && available >= declared ? declared : 0;
+    }
     public (int Patch, int Bed)? ReadyLocation()
     {
         if (Target.Address is null || Target.Address.Apartment || Target.Address.Workshop || Target.Address.Room != 0 ||
