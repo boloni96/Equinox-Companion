@@ -1,6 +1,4 @@
-Equinox Companion 0.2.0.0
-.NET 10 Release build against Dalamud API 15: success, zero warnings, zero errors.
-43 synthetic checks passed for house debounce, context retention, callback selection and tending correlation.
-Private diagnostic replay: eight confirmed tends, three Quit selections ignored.
-Live in-game validation of this release remains pending.
-Website deployed version could not be verified (public request blocked); no integration enabled.
+0.3.0.0: .NET 10 Release build against Dalamud API 15; zero warnings/errors.
+43 local observation checks passed.
+Journal integration: backend and browser tests passed with synthetic data.
+Live game-to-Cloudflare round trip pending after manual website deployment.

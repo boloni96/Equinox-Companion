@@ -1,10 +1,10 @@
 <Project Sdk="Dalamud.NET.Sdk/15.0.0">
   <PropertyGroup>
-    <Version>0.2.0.0</Version>
+    <Version>0.3.0.0</Version>
     <Author>Boloni</Author>
-    <Name>Equinox Companion (Test)</Name>
+    <Name>Equinox Companion</Name>
     <Punchline>House observations and a local gardening recorder for Equinox Journal.</Punchline>
-    <Description>Early local-only prototype. Records housing observations and opt-in gardening diagnostics. Website sync and confirmed gardening actions are not enabled.</Description>
+    <Description>Records house entries and confirmed tending locally, with optional paired sync to Equinox Journal. English garden menus supported.</Description>
     <Tags>housing;gardening;journal</Tags>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>

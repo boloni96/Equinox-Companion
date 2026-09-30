@@ -24,6 +24,7 @@ namespace EquinoxCompanion;
 public sealed class Plugin : IDalamudPlugin
 {
     [PluginService] internal static IDalamudPluginInterface Pi { get; private set; } = null!;
+    [PluginService] internal static IDataManager DataManager { get; private set; } = null!;
     [PluginService] internal static IFramework Framework { get; private set; } = null!;
     [PluginService] internal static IPlayerState Player { get; private set; } = null!;
     [PluginService] internal static IClientState Client { get; private set; } = null!;
@@ -64,6 +65,42 @@ public sealed class Plugin : IDalamudPlugin
     private string status = "Waiting for your character.";
     private string? exportPath;
     private bool faulted;
+    private readonly CompanionSync sync = new();
+    private Task<SyncResult>? syncTask;
+    private DateTimeOffset nextSync;
+    private string syncStatus = "Not paired. Local records only.";
+    private string pairingInput = "";
+    private int syncFailures;
+
+    private void UpdateSync(DateTimeOffset now)
+    {
+        if (syncTask?.IsCompleted == true)
+        {
+            if (syncTask.IsCompletedSuccessfully)
+            {
+                var result = syncTask.Result;
+                var ids = config.SentEvents.ToHashSet();
+                foreach (var id in result.Accepted) if (ids.Add(id)) config.SentEvents.Add(id);
+                var retained = config.Houses.Select(h => h.EventId).Concat(config.Tending.Select(t => t.EventId)).ToHashSet();
+                config.SentEvents.RemoveAll(id => !retained.Contains(id));
+                Pi.SavePluginConfig(config);
+                syncStatus = result.Status;
+                syncFailures = result.Retry ? Math.Min(syncFailures + 1, 5) : 0;
+                nextSync = now.AddSeconds(result.Retry ? Math.Min(600, 30 * (1 << syncFailures)) : 30);
+            }
+            else { syncStatus = "Sync paused after a connection error; local records are kept."; nextSync = now.AddMinutes(2); }
+            syncTask = null;
+        }
+        if (!config.SyncEnabled || config.PairingKey.Length != 64 || syncTask is not null || now < nextSync) return;
+        var sent = config.SentEvents.ToHashSet();
+        var events = config.Houses.Where(h => h.Kind == "house.entered" && !sent.Contains(h.EventId))
+            .Select(h => new SyncEvent(h.EventId, h.Kind, h.ObservedAt, WithWorldNames(h.Actor), WithAddressNames(h.Address)))
+            .Concat(config.Tending.Where(t => !sent.Contains(t.EventId)).Select(t => new SyncEvent(t.EventId, "garden.tended", t.ConfirmedAt, WithWorldNames(t.Actor), WithAddressNames(t.Address), t.Patch, t.Bed)))
+            .OrderBy(e => e.At).Take(50).ToArray();
+        if (events.Length == 0) { nextSync = now.AddSeconds(30); return; }
+        syncStatus = $"Sending {events.Length} events…";
+        syncTask = sync.Send(config.PairingKey, events);
+    }
 
     public unsafe Plugin()
     {
@@ -89,7 +126,13 @@ public sealed class Plugin : IDalamudPlugin
     private void OnCommand(string command, string args) => visible = !visible;
 
     private Actor ReadActor() => new(Player.ContentId.ToString(CultureInfo.InvariantCulture),
-        Player.CharacterName, Player.HomeWorld.RowId, Player.CurrentWorld.RowId);
+        Player.CharacterName, Player.HomeWorld.RowId, Player.CurrentWorld.RowId, WorldName(Player.HomeWorld.RowId), WorldName(Player.CurrentWorld.RowId));
+
+    private static string? WorldName(uint id) => DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().GetRowOrDefault(id)?.Name.ToString();
+    private static Actor WithWorldNames(Actor actor) => actor with { HomeWorldName = WorldName(actor.HomeWorldId), CurrentWorldName = WorldName(actor.CurrentWorldId) };
+
+    private static string? DistrictName(uint id) => DataManager.GetExcelSheet<Lumina.Excel.Sheets.TerritoryType>().GetRowOrDefault(id)?.PlaceName.Value.Name.ToString();
+    private static Address WithAddressNames(Address address) => address with { WorldName = WorldName(address.WorldId), DistrictName = DistrictName(address.TerritoryTypeId) };
 
     private static Address? AddressOf(HouseId id)
     {
@@ -97,13 +140,14 @@ public sealed class Plugin : IDalamudPlugin
         if (id.WardIndex >= 60 || (!id.IsApartment && id.PlotIndex >= 60)) return null;
         return new(id.Id.ToString("X16"), id.WorldId, id.TerritoryTypeId,
             id.WardIndex + 1, id.IsApartment ? 0 : id.PlotIndex + 1,
-            id.RoomNumber, id.IsApartment, id.IsWorkshop);
+            id.RoomNumber, id.IsApartment, id.IsWorkshop, WorldName(id.WorldId), DistrictName(id.TerritoryTypeId));
     }
 
     private unsafe void Update(IFramework framework)
     {
-        if (faulted) return;
         var now = DateTimeOffset.UtcNow;
+        UpdateSync(now);
+        if (faulted) return;
         
         if (!Player.IsLoaded || Player.ContentId == 0)
         {
@@ -374,7 +418,7 @@ public sealed class Plugin : IDalamudPlugin
             Directory.CreateDirectory(dir);
             exportPath = Path.Combine(dir, $"equinox-test-{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.json");
             File.WriteAllText(exportPath, JsonSerializer.Serialize(new {
-                schemaVersion = 3, pluginVersion = "0.2.0.0", exportedAt = DateTimeOffset.UtcNow,
+                schemaVersion = 3, pluginVersion = "0.3.0.0", exportedAt = DateTimeOffset.UtcNow,
                 mode = "local-diagnostics", gardeningConfirmed = false,
                 houseObservations = config.Houses, confirmedTending = config.Tending, diagnostics
             }, json));
@@ -388,7 +432,24 @@ public sealed class Plugin : IDalamudPlugin
         ImGui.SetNextWindowSize(new Vector2(660, 480), ImGuiCond.FirstUseEver);
         if (ImGui.Begin("Equinox Companion", ref visible))
         {
-            ImGui.TextWrapped("Local tracking version 0.2.0.0 — website sync is not connected yet.");
+            ImGui.TextWrapped("Local tracking version 0.3.0.0 — optional website connection available.");
+            if (ImGui.CollapsingHeader("Website connection"))
+            {
+                ImGui.TextWrapped("First deploy Journal V7.9.14, then open Game connection on the website and create a pairing key.");
+                ImGui.InputText("Pairing key", ref pairingInput, 128, ImGuiInputTextFlags.Password);
+                if (ImGui.Button("Save pairing key") && syncTask is null)
+                {
+                    var key = pairingInput.Trim();
+                    if (key.Length == 64 && key.All(c => char.IsAsciiHexDigit(c)))
+                    { config.PairingKey = key.ToLowerInvariant(); pairingInput = ""; config.SentEvents.Clear(); nextSync = default; Pi.SavePluginConfig(config); syncStatus = "Paired. Enable sync to send saved entries and tending."; }
+                    else syncStatus = "Paste the 64-character key from Game connection.";
+                }
+                var enabled = config.SyncEnabled;
+                if (ImGui.Checkbox("Sync confirmed actions to Equinox Journal", ref enabled))
+                { config.SyncEnabled = enabled; nextSync = default; Pi.SavePluginConfig(config); }
+                ImGui.TextWrapped(syncStatus);
+                ImGui.TextWrapped("Sends character identity, property address, entry and tending times. Pairing key is saved on this PC and is never included in test exports. Characters match automatically by name and home server. Unmatched houses and patches need linking once.");
+            }
             ImGui.Separator(); ImGui.TextWrapped(status);
             if (ImGui.CollapsingHeader("Character house visits", ImGuiTreeNodeFlags.DefaultOpen))
             {
@@ -399,8 +460,8 @@ public sealed class Plugin : IDalamudPlugin
                 {
                     var last = house.OrderByDescending(h => h.ObservedAt).First();
                     var entry = house.Where(h => h.Kind == "house.entered").OrderByDescending(h => h.ObservedAt).FirstOrDefault();
-                    var a = last.Address;
-                    ImGui.TextWrapped($"{last.Actor.Name} · World {a.WorldId} · Territory {a.TerritoryTypeId} · W{a.Ward} P{a.Plot} · Room {a.Room}");
+                    var a = WithAddressNames(last.Address);
+                    ImGui.TextWrapped($"{last.Actor.Name} · {a.WorldName ?? a.WorldId.ToString()} · {a.DistrictName ?? a.TerritoryTypeId.ToString()} · W{a.Ward} P{a.Plot} · Room {a.Room}");
                     ImGui.TextWrapped(entry is null ? $"Observed inside {last.ObservedAt.ToLocalTime():g}; entry time unknown" : $"Touched: {entry.ObservedAt.ToLocalTime():g}");
                 }
                 ImGui.TextWrapped("No recorded entry means unknown. Entry observations do not confirm a demolition timer reset.");
@@ -413,7 +474,7 @@ public sealed class Plugin : IDalamudPlugin
                 if (ObservingGardens) callbackHook?.Enable(); else StopRecording();
                 Pi.SavePluginConfig(config);
             }
-            ImGui.TextWrapped("English garden menus supported. Confirmed tending is saved per house, patch and bed. Batch assignment, planting/harvest records and website sync are upcoming.");
+            ImGui.TextWrapped("English garden menus supported. Confirmed tending is saved per house, patch and bed. Website matching preserves existing batches. Planting and harvest detection are upcoming.");
             ImGui.TextWrapped($"Saved tending records: {config.Tending.Count} (latest 10,000 retained)");
             foreach (var tend in config.Tending.TakeLast(6).Reverse())
                 ImGui.TextWrapped($"{tend.ConfirmedAt.ToLocalTime():g} · {tend.Actor.Name} · W{tend.Address.Ward} P{tend.Address.Plot} · Patch {tend.Patch}, bed {tend.Bed}: tended");
@@ -451,6 +512,7 @@ public sealed class Plugin : IDalamudPlugin
 
     public void Dispose()
     {
+        sync.Dispose();
         StopRecording();
         callbackHook?.Disable();
         callbackHook?.Dispose();

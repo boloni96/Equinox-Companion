@@ -1,10 +1,10 @@
 [
   {
     "Author": "Boloni",
-    "Name": "Equinox Companion (Test)",
+    "Name": "Equinox Companion",
     "InternalName": "EquinoxCompanion",
-    "AssemblyVersion": "0.2.0.0",
-    "Description": "Early local-only prototype. Records housing observations and opt-in gardening diagnostics. Website sync and confirmed gardening actions are not enabled.",
+    "AssemblyVersion": "0.3.0.0",
+    "Description": "Records house entries and confirmed tending locally, with optional paired sync to Equinox Journal. English garden menus supported.",
     "ApplicableVersion": "any",
     "Tags": [
       "housing",
@@ -21,9 +21,9 @@
     "RepoUrl": "https://github.com/boloni96/Equinox-Companion",
     "IsHide": false,
     "IsTestingExclusive": false,
-    "DownloadLinkInstall": "https://raw.githubusercontent.com/boloni96/Equinox-Companion/main/dist/v0.2.0.0/EquinoxCompanion.zip",
-    "DownloadLinkUpdate": "https://raw.githubusercontent.com/boloni96/Equinox-Companion/main/dist/v0.2.0.0/EquinoxCompanion.zip",
-    "DownloadLinkTesting": "https://raw.githubusercontent.com/boloni96/Equinox-Companion/main/dist/v0.2.0.0/EquinoxCompanion.zip",
-    "LastUpdate": 1790724745
+    "DownloadLinkInstall": "https://raw.githubusercontent.com/boloni96/Equinox-Companion/main/dist/v0.3.0.0/EquinoxCompanion.zip",
+    "DownloadLinkUpdate": "https://raw.githubusercontent.com/boloni96/Equinox-Companion/main/dist/v0.3.0.0/EquinoxCompanion.zip",
+    "DownloadLinkTesting": "https://raw.githubusercontent.com/boloni96/Equinox-Companion/main/dist/v0.3.0.0/EquinoxCompanion.zip",
+    "LastUpdate": 1790726433
   }
 ]

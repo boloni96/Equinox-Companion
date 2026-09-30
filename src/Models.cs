@@ -1,8 +1,8 @@
 namespace EquinoxCompanion;
 
-public sealed record Actor(string ContentId, string Name, uint HomeWorldId, uint CurrentWorldId);
+public sealed record Actor(string ContentId, string Name, uint HomeWorldId, uint CurrentWorldId, string? HomeWorldName = null, string? CurrentWorldName = null);
 public sealed record Address(string HouseId, ushort WorldId, ushort TerritoryTypeId,
-    int Ward, int Plot, int Room, bool Apartment, bool Workshop);
+    int Ward, int Plot, int Room, bool Apartment, bool Workshop, string? WorldName = null, string? DistrictName = null);
 public sealed record HouseObservation(string EventId, DateTimeOffset ObservedAt,
     string Kind, Actor Actor, Address Address);
 public sealed record GardenSnapshot(DateTimeOffset ObservedAt, Actor Actor, Address? Address,

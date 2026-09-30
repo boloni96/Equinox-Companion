@@ -1,9 +1,7 @@
-# 0.2.0.0
+# 0.3.0.0
 
-Automatic local tending is now available through the opt-in checkbox in /equinox. It stays active after a diagnostic recording ends and remembers successful tending across plugin reloads. English garden menus are currently required. Records are keyed by house, physical patch and bed; batch assignment awaits website integration.
+Optional paired sync to Equinox Journal V7.9.14. Uploads confirmed house entries and tending in bounded batches, retries failed connections and deduplicates successful receipts. No requests when no events are queued.
 
-Character house visits now list the last detected entry for each observed character/property. Starting inside a house is labeled separately because its entry time is unknown.
+Includes home/current server names and housing district names from game data for matching existing Journal records automatically. Name plus home server identifies a character; full address identifies a house. Physical garden patches are linked once in the website.
 
-Planner requirements are saved in ROADMAP.md for later implementation. Website sync, growth timers and planting/harvest tracking are not enabled in this release.
-
-Validation: Release build with zero warnings/errors; 43 synthetic checks; private replay produced eight confirmed tending records from eight successful selections and ignored three Quit selections. In-game validation of this build is still required.
+Existing local tracking remains available without sync. Pairing is opt-in and keys never appear in diagnostic exports. Planner, planting and harvest detection remain future work. See website setup guide before enabling sync.
