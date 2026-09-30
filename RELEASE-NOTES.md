@@ -1,3 +1,22 @@
+# 0.4.0.2 — mature crop names from game chat
+
+Deploy Journal V7.9.21 first, then update the plugin in Dalamud. The existing pairing key stays valid. V7.9.21 includes the V7.9.20 estate-name, FC-master and existing-character-details fixes.
+
+- Observe original game system messages containing the English text “This crop is ready to be harvested.” Pair the crop name with a nearby mature garden menu and the same character, estate and target.
+- Support combined name/status text, the name in the system sender field, or a separate known-item name within 750 ms before the status. Accept one unambiguous bed menu within two seconds, allowing text just before menu setup.
+- Names must match an English game item. Player chat and echo messages are excluded. Unmatched/ambiguous text never updates a bed. Recording captures only relevant ready-message diagnostics; raw chat is not sent to the website.
+- Sync garden.observed with crop name and ready state. Existing bed/batch and planting/watering times are kept. A differing recorded crop is saved in history and flagged on the garden map. Unknown planting dates remain unknown.
+- Repeat observations of the same crop are deduplicated locally; no new HTTP requests when the queue is empty. Existing upload batching, retries and website polling are unchanged.
+- This does not confirm planting, tending or harvesting. Growing-crop message formats are not added in this release. In-game recipe planning remains future work.
+
+## Test
+
+1. Deploy the V7.9.21 Cloudflare ZIP, then update Equinox Companion to 0.4.0.2. Leave the existing key and enable gardening tracking/sync.
+2. Start a diagnostic recording. Open a mature Curiel Root bed, let its system message appear, and cancel. Repeat for a Royal Kukuru Bean bed. No harvest needed.
+3. Wait one second, stop and export. Keep the website visible with automatic application enabled and close editing/connection dialogs. Allow about 45 seconds for upload and polling.
+4. Check exact crop, patch/bed and ready state; the old batch and planting/watering times should be unchanged. The plugin shows its latest matched crop/bed in its window.
+5. Send the diagnostic export if names do not arrive or any bed is wrong. Live channel/format verification is still required; automated tests use the supplied English message text and synthetic estate data.
+
 # 0.4.0.1 — existing journal details
 
 Deploy Journal V7.9.20 first. Existing pairing keys still work.

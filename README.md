@@ -1,6 +1,6 @@
 ## Current test release: 0.4.0.0
 
-Requires Equinox Journal V7.9.19 for the new event types. Deploy the website first, then update through the existing Dalamud custom repository. See RELEASE-NOTES.md for setup and the short in-game test.
+Requires Equinox Journal V7.9.21 for the new event types. Deploy the website first, then update through the existing Dalamud custom repository. See RELEASE-NOTES.md for setup and the short in-game test.
 
 # Equinox Companion
 

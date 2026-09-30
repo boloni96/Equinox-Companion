@@ -4,7 +4,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 namespace EquinoxCompanion;
 
-public sealed record SyncEvent(string Id, string Kind, DateTimeOffset At, Actor Actor, Address? Address, int? Patch = null, int? Bed = null, PlantDetails? Plant = null, HouseDetails? House = null, CharacterDetails? Character = null);
+public sealed record SyncEvent(string Id, string Kind, DateTimeOffset At, Actor Actor, Address? Address, int? Patch = null, int? Bed = null, PlantDetails? Plant = null, HouseDetails? House = null, CharacterDetails? Character = null, CropDetails? Crop = null);
 public sealed record SyncResult(string[] Accepted, string Status, bool Retry);
 public sealed class CompanionSync : IDisposable
 {

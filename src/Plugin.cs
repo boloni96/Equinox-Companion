@@ -13,6 +13,7 @@ using FFXIVClientStructs.FFXIV.Client.Game.Network;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using NativeEventObject = FFXIVClientStructs.FFXIV.Client.Game.Object.EventObject;
 using Dalamud.Game.Chat;
+using Dalamud.Game.Text;
 using Dalamud.Game.Command;
 using Dalamud.Game.ClientState.Conditions;
 using Dalamud.IoC;
@@ -70,6 +71,10 @@ public sealed class Plugin : IDalamudPlugin
     private DateTimeOffset nextSample;
     private ulong character;
     private readonly ConcurrentQueue<GardenMenu> readyMenus = new();
+    private readonly ConcurrentQueue<CropChat> cropChats = new();
+    private readonly CropChatMatcher cropMatcher = new();
+    private readonly Dictionary<string, bool> knownCropItems = new(StringComparer.Ordinal);
+    private string cropChatStatus = "Waiting for a mature-bed system message.";
     private GardenSnapshot? snapshot;
     private GardenContext? capturedContext;
     private readonly List<string> recentSignals = [];
@@ -109,7 +114,7 @@ public sealed class Plugin : IDalamudPlugin
             .Select(h => new SyncEvent(h.EventId, h.Kind, h.ObservedAt, WithWorldNames(h.Actor), WithAddressNames(h.Address)))
             .Concat(config.Tending.Where(t => !sent.Contains(t.EventId)).Select(t => new SyncEvent(t.EventId, "garden.tended", t.ConfirmedAt, WithWorldNames(t.Actor), WithAddressNames(t.Address), t.Patch, t.Bed)))
             .Concat(config.Planting.Where(t => !sent.Contains(t.EventId)).Select(t => new SyncEvent(t.EventId, "garden.planted", t.ConfirmedAt, WithWorldNames(t.Actor), WithAddressNames(t.Address), t.Patch, t.Bed, t.Plant)))
-            .Concat(config.Discoveries.Where(e => !sent.Contains(e.Id) && (e.Kind == "garden.ready" ? config.TrackGardens : e.Kind == "character.updated" ? config.SyncCharacterDetails : config.SyncHouseDetails)))
+            .Concat(config.Discoveries.Where(e => !sent.Contains(e.Id) && (e.Kind is "garden.ready" or "garden.observed" ? config.TrackGardens : e.Kind == "character.updated" ? config.SyncCharacterDetails : config.SyncHouseDetails)))
             .OrderBy(e => e.At).Take(50).ToArray();
         while (events.Length > 1 && JsonSerializer.SerializeToUtf8Bytes(new { events }, json).Length > 60000) events = events[..^1];
         if (events.Length == 0) { nextSync = now.AddSeconds(30); return; }
@@ -138,6 +143,7 @@ public sealed class Plugin : IDalamudPlugin
         Pi.UiBuilder.OpenConfigUi += Open;
         Framework.Update += Update;
         Chat.LogMessage += OnLog;
+        Chat.ChatMessage += OnGardenChat;
         foreach (var menuEvent in MenuEvents) Addons.RegisterListener(menuEvent, GardenMenus, OnGardenMenu);
     }
 
@@ -180,7 +186,7 @@ public sealed class Plugin : IDalamudPlugin
         if (recording && now >= recordingUntil) StopRecording();
         if (Conditions[ConditionFlag.BetweenAreas] || Conditions[ConditionFlag.BetweenAreas51])
         {
-            snapshot = null; currentAddress = null; Volatile.Write(ref pendingTend, null); Volatile.Write(ref pendingPlant, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); messages.Clear(); menuMessages.Clear(); readyMenus.Clear(); status = "Waiting for the area to finish loading."; return;
+            snapshot = null; currentAddress = null; Volatile.Write(ref pendingTend, null); Volatile.Write(ref pendingPlant, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); messages.Clear(); menuMessages.Clear(); readyMenus.Clear(); cropChats.Clear(); cropMatcher.Clear(); status = "Waiting for the area to finish loading."; return;
         }
         if (now >= nextDiscovery)
         {
@@ -201,7 +207,7 @@ public sealed class Plugin : IDalamudPlugin
                 DrainMessages();
                 return;
             }
-            if (!manager->CurrentTerritory->IsLoaded()) { Volatile.Write(ref pendingTend, null); Volatile.Write(ref pendingPlant, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); messages.Clear(); menuMessages.Clear(); readyMenus.Clear(); return; }
+            if (!manager->CurrentTerritory->IsLoaded()) { Volatile.Write(ref pendingTend, null); Volatile.Write(ref pendingPlant, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); messages.Clear(); menuMessages.Clear(); readyMenus.Clear(); cropChats.Clear(); cropMatcher.Clear(); return; }
             var type = manager->GetCurrentHousingTerritoryType();
             var inside = type == HousingTerritoryType.Indoor;
             var address = AddressOf(inside ? manager->GetCurrentIndoorHouseId() : manager->GetCurrentHouseId());
@@ -221,7 +227,7 @@ public sealed class Plugin : IDalamudPlugin
             status = address is null ? "Housing loaded; no complete property address yet." :
                 $"World {address.WorldId} · Territory {address.TerritoryTypeId} · Ward {address.Ward} · Plot {address.Plot}";
 
-            if (!ObservingGardens) { snapshot = null; messages.Clear(); menuMessages.Clear(); readyMenus.Clear(); return; }
+            if (!ObservingGardens) { snapshot = null; messages.Clear(); menuMessages.Clear(); readyMenus.Clear(); cropChats.Clear(); cropMatcher.Clear(); return; }
 
             // This is candidate context, never a confirmed bed or successful action.
             uint? objectId = null; short? furnitureIndex = null;
@@ -421,7 +427,7 @@ public sealed class Plugin : IDalamudPlugin
     private void KeepDiscovery(SyncEvent e)
     {
         var last = config.Discoveries.LastOrDefault(x => x.Kind == e.Kind && x.Actor.ContentId == e.Actor.ContentId && x.Address?.HouseId == e.Address?.HouseId && x.Patch == e.Patch && x.Bed == e.Bed);
-        if (last is not null && !(e.Kind == "garden.ready" && config.Planting.Any(p => p.Actor.ContentId == e.Actor.ContentId && p.Address.HouseId == e.Address?.HouseId && p.Patch == e.Patch && p.Bed == e.Bed && p.ConfirmedAt > last.At)) && JsonSerializer.Serialize(new { last.Actor, last.Address, last.House, last.Character }) == JsonSerializer.Serialize(new { e.Actor, e.Address, e.House, e.Character })) return;
+        if (last is not null && !(e.Kind is "garden.ready" or "garden.observed" && config.Planting.Any(p => p.Actor.ContentId == e.Actor.ContentId && p.Address.HouseId == e.Address?.HouseId && p.Patch == e.Patch && p.Bed == e.Bed && p.ConfirmedAt > last.At)) && JsonSerializer.Serialize(new { last.Actor, last.Address, last.House, last.Character, last.Crop }) == JsonSerializer.Serialize(new { e.Actor, e.Address, e.House, e.Character, e.Crop })) return;
         config.Discoveries.Add(e);
         if (config.Discoveries.Count > 2000) config.Discoveries.RemoveRange(0, config.Discoveries.Count - 2000);
         Pi.SavePluginConfig(config);
@@ -474,6 +480,32 @@ public sealed class Plugin : IDalamudPlugin
         }
     }
 
+    private void OnGardenChat(IHandleableChatMessage message)
+    {
+        if (!ObservingGardens || cropChats.Count >= 128 || !Player.IsLoaded ||
+            Conditions[ConditionFlag.BetweenAreas] || Conditions[ConditionFlag.BetweenAreas51] ||
+            message.LogKind is not (XivChatType.SystemMessage or XivChatType.GatheringSystemMessage or XivChatType.Notice)) return;
+        var now = DateTimeOffset.UtcNow;
+        var target = Volatile.Read(ref capturedContext)?.CandidateAt(now);
+        if (target?.TargetDetails?.DataId != 2003757 || target.Address is null || target.Actor.ContentId != Player.ContentId.ToString(CultureInfo.InvariantCulture)) return;
+        // A newly selected bed must not inherit the previous framework snapshot.
+        if (Targets.Target is { } current && current.GameObjectId.ToString("X16") != target.TargetId) return;
+        var text = message.OriginalMessage.ExtractText();
+        var sender = message.OriginalSender.ExtractText();
+        if (text.Length > 512 || sender.Length > 100) return;
+        cropChats.Enqueue(new(now, target, text, sender));
+        if (recording && text.Contains(CropChatMatcher.ReadyText, StringComparison.Ordinal) && menuMessages.Count < 128)
+            menuMessages.Enqueue(new(now, "garden.chatObservation", new { chatType = message.LogKind.ToString(), text, sender, candidateTarget = target }));
+    }
+
+    private bool IsKnownCropItem(string name)
+    {
+        if (knownCropItems.TryGetValue(name, out var known)) return known;
+        known = DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>(Dalamud.Game.ClientLanguage.English).Any(x => x.Name.ToString() == name);
+        if (knownCropItems.Count < 512) knownCropItems[name] = known;
+        return known;
+    }
+
     private void OnLog(ILogMessage message)
     {
         // No game writes. Copy numeric values for action matching
@@ -503,9 +535,19 @@ public sealed class Plugin : IDalamudPlugin
     private void DrainMessages()
     {
         while (readyMenus.TryDequeue(out var menu))
+        {
+            cropMatcher.Add(menu);
             if (menu.ReadyLocation() is { } location && menu.Target.Address is { } address)
                 KeepDiscovery(new(Guid.NewGuid().ToString("N"), "garden.ready", menu.OpenedAt,
                     WithWorldNames(menu.Target.Actor), WithAddressNames(address), location.Patch, location.Bed));
+        }
+        while (cropChats.TryDequeue(out var chat)) cropMatcher.Add(chat);
+        foreach (var observed in cropMatcher.Drain(DateTimeOffset.UtcNow, IsKnownCropItem))
+        {
+            KeepDiscovery(new(Guid.NewGuid().ToString("N"), "garden.observed", observed.At,
+                WithWorldNames(observed.Target.Actor), WithAddressNames(observed.Target.Address!), observed.Patch, observed.Bed, Crop: observed.Crop));
+            cropChatStatus = $"{observed.Crop.CropName} · patch {observed.Patch}, bed {observed.Bed} · ready to harvest";
+        }
         while (menuMessages.TryDequeue(out var menu)) if (recording) { menuObservations++; AddDiagnostic(menu); }
         while (messages.TryDequeue(out var message))
         {
@@ -550,14 +592,14 @@ public sealed class Plugin : IDalamudPlugin
 
     private void StartRecording()
     {
-        diagnostics.Clear(); recentSignals.Clear(); menuObservations = 0; messages.Clear(); menuMessages.Clear(); readyMenus.Clear(); lastSnapshotKey = "";
+        diagnostics.Clear(); recentSignals.Clear(); menuObservations = 0; messages.Clear(); menuMessages.Clear(); readyMenus.Clear(); cropChats.Clear(); cropMatcher.Clear(); lastSnapshotKey = "";
         Volatile.Write(ref pendingTend, null); Volatile.Write(ref pendingPlant, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); snapshot = null; nextSample = default;
         lastSubmittedOption = "None recorded";
         callbackHook?.Enable(); plantHook?.Enable();
         recordingUntil = DateTimeOffset.UtcNow.AddMinutes(5); recording = true; exportPath = null;
     }
 
-    private void StopRecording() { recording = false; if (!ObservingGardens) { callbackHook?.Disable(); plantHook?.Disable(); } Volatile.Write(ref pendingTend, null); Volatile.Write(ref pendingPlant, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); messages.Clear(); menuMessages.Clear(); readyMenus.Clear(); lastSnapshotKey = ""; }
+    private void StopRecording() { recording = false; if (!ObservingGardens) { callbackHook?.Disable(); plantHook?.Disable(); } Volatile.Write(ref pendingTend, null); Volatile.Write(ref pendingPlant, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); messages.Clear(); menuMessages.Clear(); readyMenus.Clear(); cropChats.Clear(); cropMatcher.Clear(); lastSnapshotKey = ""; }
 
     private void Export()
     {
@@ -567,7 +609,7 @@ public sealed class Plugin : IDalamudPlugin
             Directory.CreateDirectory(dir);
             exportPath = Path.Combine(dir, $"equinox-test-{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.json");
             File.WriteAllText(exportPath, JsonSerializer.Serialize(new {
-                schemaVersion = 3, pluginVersion = "0.4.0.1", exportedAt = DateTimeOffset.UtcNow,
+                schemaVersion = 3, pluginVersion = "0.4.0.2", exportedAt = DateTimeOffset.UtcNow,
                 mode = "local-diagnostics", gardeningConfirmed = false,
                 houseObservations = config.Houses, confirmedTending = config.Tending, confirmedPlanting = config.Planting, observedDetails = config.Discoveries, diagnostics
             }, json));
@@ -581,10 +623,10 @@ public sealed class Plugin : IDalamudPlugin
         ImGui.SetNextWindowSize(new Vector2(660, 480), ImGuiCond.FirstUseEver);
         if (ImGui.Begin("Equinox Companion", ref visible))
         {
-            ImGui.TextWrapped("Local tracking version 0.4.0.1 — optional website connection available.");
+            ImGui.TextWrapped("Local tracking version 0.4.0.2 — optional website connection available.");
             if (ImGui.CollapsingHeader("Website connection"))
             {
-                ImGui.TextWrapped("First deploy Journal V7.9.20, then open Game connection on the website and create a pairing key.");
+                ImGui.TextWrapped("First deploy Journal V7.9.21, then open Game connection on the website and create a pairing key.");
                 ImGui.InputText("Pairing key", ref pairingInput, 128, ImGuiInputTextFlags.Password);
                 if (ImGui.Button("Save pairing key") && syncTask is null)
                 {
@@ -604,6 +646,7 @@ public sealed class Plugin : IDalamudPlugin
             }
             ImGui.Separator(); ImGui.TextWrapped(status);
             ImGui.TextWrapped(discoveryStatus);
+            ImGui.TextWrapped(cropChatStatus);
             ImGui.TextWrapped($"Saved planting records: {config.Planting.Count}. Plant observer: {(plantHook is null ? "unavailable" : "ready")}");
             if (ImGui.CollapsingHeader("Character house visits", ImGuiTreeNodeFlags.DefaultOpen))
             {
@@ -682,6 +725,7 @@ public sealed class Plugin : IDalamudPlugin
         plantHook?.Disable(); plantHook?.Dispose();
         signboardHook?.Disable(); signboardHook?.Dispose();
         Chat.LogMessage -= OnLog;
+        Chat.ChatMessage -= OnGardenChat;
         foreach (var menuEvent in MenuEvents) Addons.UnregisterListener(menuEvent, GardenMenus, OnGardenMenu);
         Framework.Update -= Update;
         Pi.UiBuilder.Draw -= Draw;
