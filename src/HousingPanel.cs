@@ -39,7 +39,7 @@ public sealed partial class Plugin
             if (!string.IsNullOrWhiteSpace(housingSearch) && !(actor.Name + " " + location).Contains(housingSearch, StringComparison.OrdinalIgnoreCase)) continue;
             ImGui.PushID(actor.ContentId);
             var estates = config.Discoveries.Where(d => d.Kind == "house.discovered" && d.Actor.ContentId == actor.ContentId && d.Address is not null && d.House is not null)
-                .GroupBy(d => d.Address!.HouseId).Select(g => g.OrderByDescending(d => d.At).First()).OrderBy(d => d.House!.Type).ToArray();
+                .GroupBy(d => d.Address!.HouseId).Select(g => g.OrderByDescending(d => d.At).First()).OrderBy(d => HouseDisplayOrder(d.House!.Type)).ToArray();
             HousingBand? EstateBand(string type) => SummarizeBands(estates.Where(e => e.House!.Type == type)
                 .Select(e => HousingStatus.Band(HousingStatus.LastEligibleEntry(e, config.Discoveries, config.Houses), now)));
             var expanded = DrawSplitHeader(actor.Name + " · " + location + "###character", EstateBand("Private house"), EstateBand("Free Company house"),

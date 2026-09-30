@@ -1,3 +1,7 @@
+# 0.4.1.5 — consistent house order
+
+Private house appears before FC in both local and shared character details and name-bar hover tooltips. Header halves remain Private left, FC right.
+
 # 0.4.1.4 — persistent error diagnostics
 
 Automatic rolling local error history for upload/shared-list failures, observer errors and held-record reasons. Settings > Diagnostics offers a file path and a full diagnostic export including saved error history; no recording session needed. Logs keep about 2 MB across two files, suppress repeats for five minutes, and omit pairing keys, chat, raw exception messages and server bodies. Old incomplete queued records are diagnosed when sync checks them again. Earlier errors cannot be reconstructed.

@@ -1,3 +1,7 @@
+# 0.4.1.5 — consistent house order
+
+Explicit Private-before-FC display ordering replaces alphabetical or source ordering. Both local and shared tooltips follow their corresponding detail-list order. Release build passed with zero warnings and errors.
+
 # 0.4.1.4 — persistent error diagnostics
 
 Release build: zero warnings/errors. Gate suite verifies persistent error history, repeated-event suppression, rotation and nonfatal filesystem failures alongside existing sync/housing/garden checks. Error log uses fixed application descriptions and exception type names only. Diagnostic exports now report the actual plugin version and include up to 2,000 recent log lines. Native Diagnostics controls require an in-game check.

@@ -44,6 +44,7 @@ public sealed partial class Plugin
         HousingBand.Recent => Green, HousingBand.Warning => Orange, HousingBand.Urgent => Red,
         HousingBand.Overdue => Purple, HousingBand.Unknown => Grey, _ => new(.30f,.32f,.35f,1)
     };
+    private static int HouseDisplayOrder(string type) => type == "Private house" ? 0 : type == "Free Company house" ? 1 : 2;
     private static string BandLabel(HousingBand? band) => band switch {
         HousingBand.Recent => "Recent (0–7 days)", HousingBand.Warning => "8–30 days", HousingBand.Urgent => "31–45 days",
         HousingBand.Overdue => "DEMOLISHED? — estimate", HousingBand.Unknown => "Entry unknown / paused", _ => "No house recorded"
@@ -86,13 +87,14 @@ public sealed partial class Plugin
         {
             if (!string.IsNullOrWhiteSpace(sharedSearch) && !(c.Name+" "+c.World+" "+c.Dc+" "+c.Region).Contains(sharedSearch,StringComparison.OrdinalIgnoreCase)) continue;
             ImGui.PushID(c.Id);
+            var houses = c.Houses.OrderBy(h => HouseDisplayOrder(h.Type)).ToArray();
             HousingBand? Status(string type) => SummarizeBands(c.Houses.Where(h=>h.Type==type).Select(h=>h.Paused?HousingBand.Unknown:HousingStatus.Band(h.LastEntry,now)));
             if (DrawSplitHeader(c.Name+" · "+SharedLocation(c)+"###character",Status("Private house"),Status("Free Company house"),
-                c.Houses.Select(h=>EntryHover(h.Type,h.Ward,h.Plot,h.LastEntry,now,h.Paused))))
+                houses.Select(h=>EntryHover(h.Type,h.Ward,h.Plot,h.LastEntry,now,h.Paused))))
             {
                 ImGui.TextDisabled(c.World+" · "+c.Dc+" · "+c.Region+" · "+c.Account);
                 if(c.Houses.Length==0)ImGui.TextDisabled("No house recorded in the shared Journal.");
-                foreach(var h in c.Houses)
+                foreach(var h in houses)
                 {
                     var band=h.Paused?HousingBand.Unknown:HousingStatus.Band(h.LastEntry,now);
                     ImGui.TextColored(BandColour(band),$"[{(h.Type=="Private house"?"Private":"FC")}] {(string.IsNullOrWhiteSpace(h.Name)?"Estate name unknown":h.Name)} · {BandLabel(band)}");
