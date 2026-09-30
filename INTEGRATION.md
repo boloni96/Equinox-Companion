@@ -1,3 +1,9 @@
+## 0.4.0.0 additions
+
+Events: `character.updated` (no address), `house.discovered` (owned-estate-id evidence and optional confirmed FC/placard metadata), `garden.planted` (selected seed/soil + success response coordinates). Existing house.entered and garden.tended are unchanged. Plugin batches remain at most 50 events, conservatively under 60 KB including JSON formatting.
+
+Metadata is sampled locally every five seconds, recorded only when content changes, and shares the existing upload queue. No idle network heartbeat. Journal keeps custom content and existing batch labels, deduplicates houses by address, and pauses conflicting ownership/FC relocations for review. Highest combat job level controls existing character level gating; all jobs remain available in observed details.
+
 # Connection to Equinox Journal
 
 Baseline inspected: V7.9.10, specifically `site/assets/journal.js`,

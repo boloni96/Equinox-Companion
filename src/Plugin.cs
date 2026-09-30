@@ -8,6 +8,8 @@ using Dalamud.Game.Addon.Lifecycle;
 using Dalamud.Game.Addon.Lifecycle.AddonArgTypes;
 using Dalamud.Game.ClientState.Objects.Enums;
 using FFXIVClientStructs.FFXIV.Client.UI;
+using FFXIVClientStructs.FFXIV.Client.UI.Info;
+using FFXIVClientStructs.FFXIV.Client.Game.Network;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using NativeEventObject = FFXIVClientStructs.FFXIV.Client.Game.Object.EventObject;
 using Dalamud.Game.Chat;
@@ -41,6 +43,15 @@ public sealed class Plugin : IDalamudPlugin
     private int menuObservations;
     private GardenMenu? activeGardenMenu;
     private TendIntent? pendingTend;
+    private PlantIntent? pendingPlant;
+    private unsafe delegate void ConfirmPlantDelegate(AgentHousingPlant* agent);
+    private Hook<ConfirmPlantDelegate>? plantHook;
+    private unsafe delegate void SignboardDelegate(AgentHousingSignboard* agent, HousingSignboardPacket* packet);
+    private Hook<SignboardDelegate>? signboardHook;
+    private readonly ConcurrentQueue<PlacardDetails> placards = new();
+    private readonly Dictionary<string, PlacardDetails> estateNames = [];
+    private DateTimeOffset nextDiscovery;
+    private string discoveryStatus = "Open your FC member list once if its name is not loaded.";
     private Address? currentAddress;
     private bool ObservingGardens => !faulted && (recording || config.TrackGardens);
     private unsafe delegate byte FireCallbackDelegate(AtkUnitBase* addon, uint count, AtkValue* values, byte close);
@@ -51,7 +62,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly ObservationGate gate = new();
     private readonly List<Diagnostic> diagnostics = [];
     private readonly ConcurrentQueue<Diagnostic> menuMessages = new();
-    private readonly ConcurrentQueue<(DateTimeOffset At, uint Id, int?[] Parameters, GardenContext? Context, TendIntent? Intent)> messages = new();
+    private readonly ConcurrentQueue<(DateTimeOffset At, uint Id, int?[] Parameters, GardenContext? Context, TendIntent? Intent, PlantIntent? Plant)> messages = new();
     private readonly JsonSerializerOptions json = new() { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
     private bool visible = true;
     private volatile bool recording;
@@ -81,7 +92,7 @@ public sealed class Plugin : IDalamudPlugin
                 var result = syncTask.Result;
                 var ids = config.SentEvents.ToHashSet();
                 foreach (var id in result.Accepted) if (ids.Add(id)) config.SentEvents.Add(id);
-                var retained = config.Houses.Select(h => h.EventId).Concat(config.Tending.Select(t => t.EventId)).ToHashSet();
+                var retained = config.Houses.Select(h => h.EventId).Concat(config.Tending.Select(t => t.EventId)).Concat(config.Planting.Select(t => t.EventId)).Concat(config.Discoveries.Select(e => e.Id)).ToHashSet();
                 config.SentEvents.RemoveAll(id => !retained.Contains(id));
                 Pi.SavePluginConfig(config);
                 syncStatus = result.Status;
@@ -96,7 +107,10 @@ public sealed class Plugin : IDalamudPlugin
         var events = config.Houses.Where(h => h.Kind == "house.entered" && !sent.Contains(h.EventId))
             .Select(h => new SyncEvent(h.EventId, h.Kind, h.ObservedAt, WithWorldNames(h.Actor), WithAddressNames(h.Address)))
             .Concat(config.Tending.Where(t => !sent.Contains(t.EventId)).Select(t => new SyncEvent(t.EventId, "garden.tended", t.ConfirmedAt, WithWorldNames(t.Actor), WithAddressNames(t.Address), t.Patch, t.Bed)))
+            .Concat(config.Planting.Where(t => !sent.Contains(t.EventId)).Select(t => new SyncEvent(t.EventId, "garden.planted", t.ConfirmedAt, WithWorldNames(t.Actor), WithAddressNames(t.Address), t.Patch, t.Bed, t.Plant)))
+            .Concat(config.Discoveries.Where(e => !sent.Contains(e.Id) && (e.Kind == "character.updated" ? config.SyncCharacterDetails : config.SyncHouseDetails)))
             .OrderBy(e => e.At).Take(50).ToArray();
+        while (events.Length > 1 && JsonSerializer.SerializeToUtf8Bytes(new { events }, json).Length > 60000) events = events[..^1];
         if (events.Length == 0) { nextSync = now.AddSeconds(30); return; }
         syncStatus = $"Sending {events.Length} events…";
         syncTask = sync.Send(config.PairingKey, events);
@@ -112,7 +126,11 @@ public sealed class Plugin : IDalamudPlugin
         }
         catch (Exception ex) { callbackStatus = "Unavailable; see /xllog"; Log.Error(ex, "Garden callback observer unavailable"); }
         config = Pi.GetPluginConfig() as Configuration ?? new();
-        if (config.TrackGardens) callbackHook?.Enable();
+        try { plantHook = Interop.HookFromAddress<ConfirmPlantDelegate>(AgentHousingPlant.MemberFunctionPointers.ConfirmSeedAndSoilSelection, ObservePlantSelection); }
+        catch (Exception ex) { Log.Error(ex, "Plant selection observer unavailable"); }
+        try { signboardHook = Interop.HookFromAddress<SignboardDelegate>(AgentHousingSignboard.MemberFunctionPointers.ReadPacket, ObserveSignboard); signboardHook.Enable(); }
+        catch (Exception ex) { Log.Error(ex, "Estate placard observer unavailable"); }
+        if (config.TrackGardens) { callbackHook?.Enable(); plantHook?.Enable(); }
         Commands.AddHandler("/equinox", new CommandInfo(OnCommand) { HelpMessage = "Open Equinox Companion test recorder." });
         Pi.UiBuilder.Draw += Draw;
         Pi.UiBuilder.OpenMainUi += Open;
@@ -161,7 +179,12 @@ public sealed class Plugin : IDalamudPlugin
         if (recording && now >= recordingUntil) StopRecording();
         if (Conditions[ConditionFlag.BetweenAreas] || Conditions[ConditionFlag.BetweenAreas51])
         {
-            snapshot = null; currentAddress = null; Volatile.Write(ref pendingTend, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); messages.Clear(); menuMessages.Clear(); status = "Waiting for the area to finish loading."; return;
+            snapshot = null; currentAddress = null; Volatile.Write(ref pendingTend, null); Volatile.Write(ref pendingPlant, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); messages.Clear(); menuMessages.Clear(); status = "Waiting for the area to finish loading."; return;
+        }
+        if (now >= nextDiscovery)
+        {
+            nextDiscovery = now.AddSeconds(5);
+            try { ObserveDetails(now); } catch (Exception ex) { discoveryStatus = "Details not available yet; try opening your FC member list."; Log.Debug(ex, "Details observation deferred"); }
         }
         if (now < nextSample) return;
         nextSample = now.AddMilliseconds(ObservingGardens ? 50 : 250);
@@ -171,13 +194,13 @@ public sealed class Plugin : IDalamudPlugin
             if (manager == null || manager->CurrentTerritory == null)
             {
                 // Ordinary non-housing zone. A transient load must not create a visit.
-                snapshot = null; currentAddress = null; Volatile.Write(ref pendingTend, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null);
+                snapshot = null; currentAddress = null; Volatile.Write(ref pendingTend, null); Volatile.Write(ref pendingPlant, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null);
                 if (Client.TerritoryType != 0) gate.Observe("outside", now);
                 status = "No housing territory loaded.";
                 DrainMessages();
                 return;
             }
-            if (!manager->CurrentTerritory->IsLoaded()) { Volatile.Write(ref pendingTend, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); messages.Clear(); menuMessages.Clear(); return; }
+            if (!manager->CurrentTerritory->IsLoaded()) { Volatile.Write(ref pendingTend, null); Volatile.Write(ref pendingPlant, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); messages.Clear(); menuMessages.Clear(); return; }
             var type = manager->GetCurrentHousingTerritoryType();
             var inside = type == HousingTerritoryType.Indoor;
             var address = AddressOf(inside ? manager->GetCurrentIndoorHouseId() : manager->GetCurrentHouseId());
@@ -352,6 +375,99 @@ public sealed class Plugin : IDalamudPlugin
         return callbackHook!.Original(addon, count, values, close);
     }
 
+    private unsafe void ObservePlantSelection(AgentHousingPlant* agent)
+    {
+        try
+        {
+            Volatile.Write(ref pendingPlant, null);
+            var now = DateTimeOffset.UtcNow;
+            var target = Volatile.Read(ref capturedContext)?.CandidateAt(now);
+            if (ObservingGardens && agent != null && Player.IsLoaded && target?.Actor.ContentId == Player.ContentId.ToString(CultureInfo.InvariantCulture) &&
+                target.TargetDetails?.DataId == 2003757 && target.Address is not null && !Conditions[ConditionFlag.BetweenAreas] && !Conditions[ConditionFlag.BetweenAreas51])
+            {
+                var soil = agent->SelectedItems[0].ItemId; var seed = agent->SelectedItems[1].ItemId;
+                var sheet = DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>(Dalamud.Game.ClientLanguage.English);
+                var seedName = sheet.GetRowOrDefault(seed)?.Name.ToString(); var soilName = sheet.GetRowOrDefault(soil)?.Name.ToString();
+                if (seed != 0 && soil != 0 && !string.IsNullOrWhiteSpace(seedName) && !string.IsNullOrWhiteSpace(soilName))
+                    Volatile.Write(ref pendingPlant, new(Guid.NewGuid().ToString("N"), now, target, new(seed, seedName, soil, soilName)));
+            }
+        }
+        catch (Exception ex) { Log.Error(ex, "Could not copy plant selection"); }
+        plantHook!.Original(agent);
+    }
+
+    private unsafe void ObserveSignboard(AgentHousingSignboard* agent, HousingSignboardPacket* packet)
+    {
+        try
+        {
+            if (Player.IsLoaded && packet != null && placards.Count < 32)
+            {
+                var address = AddressOf(packet->HouseId);
+                if (address is not null && !address.Apartment && !address.Workshop && address.Room == 0 && packet->Size <= 2)
+                    placards.Enqueue(new(Player.ContentId.ToString(CultureInfo.InvariantCulture), address, packet->NameString,
+                        packet->Size switch { 0 => "Small", 1 => "Medium", _ => "Large" }, packet->EstateType));
+            }
+        }
+        catch (Exception ex) { Log.Error(ex, "Could not copy estate placard"); }
+        signboardHook!.Original(agent, packet);
+    }
+
+    private void KeepDiscovery(SyncEvent e)
+    {
+        var last = config.Discoveries.LastOrDefault(x => x.Kind == e.Kind && x.Actor.ContentId == e.Actor.ContentId && x.Address?.HouseId == e.Address?.HouseId);
+        if (last is not null && JsonSerializer.Serialize(new { last.Actor, last.Address, last.House, last.Character }) == JsonSerializer.Serialize(new { e.Actor, e.Address, e.House, e.Character })) return;
+        config.Discoveries.Add(e);
+        if (config.Discoveries.Count > 2000) config.Discoveries.RemoveRange(0, config.Discoveries.Count - 2000);
+        Pi.SavePluginConfig(config);
+    }
+
+    private unsafe void ObserveDetails(DateTimeOffset now)
+    {
+        var actor = ReadActor();
+        while (placards.TryDequeue(out var placard)) if (placard.CharacterId == actor.ContentId) estateNames[placard.Address.HouseId] = placard;
+        FreeCompanyDetails? fc = null;
+        var proxy = InfoProxyFreeCompany.Instance(); var members = InfoProxyFreeCompanyMember.Instance();
+        // The general FC proxy can show another FC. Require our character in the matching member list.
+        if (proxy != null && members != null && proxy->Id != 0 && proxy->Id == members->FreeCompanyId && proxy->HomeWorldId == actor.HomeWorldId &&
+            members->EntryCount is > 0 and <= 512 && members->CharData != null)
+        {
+            for (var i = 0; i < (int)members->EntryCount; i++)
+                if (members->CharData[i].ContentId == Player.ContentId && members->CharData[i].HomeWorld == actor.HomeWorldId)
+                    fc = new(proxy->Id.ToString(CultureInfo.InvariantCulture), proxy->NameString, members->CharData[i].FCTagString, proxy->HomeWorldId);
+        }
+        if (fc is not null && string.IsNullOrWhiteSpace(fc.Name)) fc = null;
+        var jobs = DataManager.GetExcelSheet<Lumina.Excel.Sheets.ClassJob>(Dalamud.Game.ClientLanguage.English)
+            .Where(j => j.RowId > 0 && j.ExpArrayIndex >= 0).Select(j => new JobDetails(j.RowId, j.Abbreviation.ToString(), Player.GetClassJobLevel(j))).Where(j => j.Level > 0).ToArray();
+        var jobName = DataManager.GetExcelSheet<Lumina.Excel.Sheets.ClassJob>(Dalamud.Game.ClientLanguage.English).GetRowOrDefault(Player.ClassJob.RowId)?.Abbreviation.ToString() ?? "";
+        var info = new CharacterDetails(Player.ClassJob.RowId, jobName, Player.Level, jobs.Select(j => j.Level).DefaultIfEmpty(Player.Level).Max(),
+            Player.Race.Value.Masculine.ToString(), Player.Tribe.Value.Masculine.ToString(), (Player.Sex == 0 ? "Male" : "Female"), jobs, fc, jobs.Where(j => j.Id < 8 || j.Id > 18).Select(j => j.Level).DefaultIfEmpty(0).Max());
+        KeepDiscovery(new(Guid.NewGuid().ToString("N"), "character.updated", now, actor, null, Character: info));
+        var manager = HousingManager.Instance();
+        if (manager == null || manager->CurrentTerritory == null || !manager->CurrentTerritory->IsLoaded()) return;
+        var type = manager->GetCurrentHousingTerritoryType();
+        var current = AddressOf(type == HousingTerritoryType.Indoor ? manager->GetCurrentIndoorHouseId() : manager->GetCurrentHouseId());
+        if (current is null || current.Room != 0 || current.Apartment || current.Workshop) return;
+        foreach (var estate in new[] { EstateType.FreeCompanyEstate, EstateType.PersonalEstate })
+        {
+            var owned = AddressOf(HousingManager.GetOwnedHouseId(estate));
+            if (owned is null || owned.HouseId != current.HouseId || owned.WorldId != actor.HomeWorldId || estate == EstateType.FreeCompanyEstate && fc is null) continue;
+            var size = "";
+            if (type == HousingTerritoryType.Outdoor && manager->OutdoorTerritory != null)
+            {
+                var plot = manager->OutdoorTerritory->Plots[current.Plot - 1];
+                if (plot.State == PlotState.OwnedEstate) size = plot.Size switch { PlotSize.Small => "Small", PlotSize.Medium => "Medium", PlotSize.Large => "Large", _ => "" };
+            }
+            if (size.Length == 0) size = config.Discoveries.LastOrDefault(x => x.Kind == "house.discovered" && x.Actor.ContentId == actor.ContentId && x.Address?.HouseId == current.HouseId)?.House?.Size ?? "";
+            estateNames.TryGetValue(current.HouseId, out var sign);
+            if (sign is not null && (sign.CharacterId != actor.ContentId || sign.EstateType != (byte)estate)) sign = null;
+            if (sign is not null) size = sign.Size;
+            var estateName = sign?.Name ?? config.Discoveries.LastOrDefault(x => x.Kind == "house.discovered" && x.Actor.ContentId == actor.ContentId && x.Address?.HouseId == current.HouseId)?.House?.EstateName ?? "";
+            var house = new HouseDetails(estate == EstateType.FreeCompanyEstate ? "Free Company house" : "Private house", size, "owned-estate-id", estate == EstateType.FreeCompanyEstate ? fc : null, estateName);
+            KeepDiscovery(new(Guid.NewGuid().ToString("N"), "house.discovered", now, actor, current, House: house));
+            discoveryStatus = estate == EstateType.FreeCompanyEstate ? $"FC estate detected: {fc!.Name} · W{current.Ward} P{current.Plot}" : $"Private estate detected: W{current.Ward} P{current.Plot}";
+        }
+    }
+
     private void OnLog(ILogMessage message)
     {
         // No chat text, string parameters, or game writes. Copy only numeric values
@@ -360,7 +476,7 @@ public sealed class Plugin : IDalamudPlugin
         var count = Math.Min((int)message.ParameterCount, 16);
         var parameters = new int?[count];
         for (var i = 0; i < count; i++) if (message.TryGetIntParameter(i, out var n)) parameters[i] = n;
-        messages.Enqueue((DateTimeOffset.UtcNow, message.LogMessageId, parameters, Volatile.Read(ref capturedContext), Volatile.Read(ref pendingTend)));
+        messages.Enqueue((DateTimeOffset.UtcNow, message.LogMessageId, parameters, Volatile.Read(ref capturedContext), Volatile.Read(ref pendingTend), Volatile.Read(ref pendingPlant)));
     }
 
     private void DrainMessages()
@@ -377,6 +493,14 @@ public sealed class Plugin : IDalamudPlugin
                 if (config.Tending.Count > 10000) config.Tending.RemoveRange(0, config.Tending.Count - 10000);
                 Pi.SavePluginConfig(config);
             }
+            var planted = message.Plant?.Confirm(message.Id, message.Parameters, message.At, candidate);
+            if (planted is not null && !config.Planting.Any(x => x.EventId == planted.EventId))
+            {
+                config.Planting.Add(planted);
+                if (config.Planting.Count > 10000) config.Planting.RemoveRange(0, config.Planting.Count - 10000);
+                Pi.SavePluginConfig(config);
+            }
+            if (message.Id is >= 4005 and <= 4009) Volatile.Write(ref pendingPlant, null);
             var signal = GardenSignals.Classify(message.Id);
             AddDiagnostic(new(message.At, "game.logObservation", new {
                 logMessageId = message.Id, parameters = message.Parameters, signal,
@@ -402,13 +526,13 @@ public sealed class Plugin : IDalamudPlugin
     private void StartRecording()
     {
         diagnostics.Clear(); recentSignals.Clear(); menuObservations = 0; messages.Clear(); menuMessages.Clear(); lastSnapshotKey = "";
-        Volatile.Write(ref pendingTend, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); snapshot = null; nextSample = default;
+        Volatile.Write(ref pendingTend, null); Volatile.Write(ref pendingPlant, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); snapshot = null; nextSample = default;
         lastSubmittedOption = "None recorded";
-        callbackHook?.Enable();
+        callbackHook?.Enable(); plantHook?.Enable();
         recordingUntil = DateTimeOffset.UtcNow.AddMinutes(5); recording = true; exportPath = null;
     }
 
-    private void StopRecording() { recording = false; if (!ObservingGardens) callbackHook?.Disable(); Volatile.Write(ref pendingTend, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); messages.Clear(); menuMessages.Clear(); lastSnapshotKey = ""; }
+    private void StopRecording() { recording = false; if (!ObservingGardens) { callbackHook?.Disable(); plantHook?.Disable(); } Volatile.Write(ref pendingTend, null); Volatile.Write(ref pendingPlant, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); messages.Clear(); menuMessages.Clear(); lastSnapshotKey = ""; }
 
     private void Export()
     {
@@ -418,9 +542,9 @@ public sealed class Plugin : IDalamudPlugin
             Directory.CreateDirectory(dir);
             exportPath = Path.Combine(dir, $"equinox-test-{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.json");
             File.WriteAllText(exportPath, JsonSerializer.Serialize(new {
-                schemaVersion = 3, pluginVersion = "0.3.0.0", exportedAt = DateTimeOffset.UtcNow,
+                schemaVersion = 3, pluginVersion = "0.4.0.0", exportedAt = DateTimeOffset.UtcNow,
                 mode = "local-diagnostics", gardeningConfirmed = false,
-                houseObservations = config.Houses, confirmedTending = config.Tending, diagnostics
+                houseObservations = config.Houses, confirmedTending = config.Tending, confirmedPlanting = config.Planting, observedDetails = config.Discoveries, diagnostics
             }, json));
         }
         catch (Exception ex) { exportPath = null; status = "Export failed; see /xllog."; Log.Error(ex, "Equinox export failed"); }
@@ -432,10 +556,10 @@ public sealed class Plugin : IDalamudPlugin
         ImGui.SetNextWindowSize(new Vector2(660, 480), ImGuiCond.FirstUseEver);
         if (ImGui.Begin("Equinox Companion", ref visible))
         {
-            ImGui.TextWrapped("Local tracking version 0.3.0.0 — optional website connection available.");
+            ImGui.TextWrapped("Local tracking version 0.4.0.0 — optional website connection available.");
             if (ImGui.CollapsingHeader("Website connection"))
             {
-                ImGui.TextWrapped("First deploy Journal V7.9.14, then open Game connection on the website and create a pairing key.");
+                ImGui.TextWrapped("First deploy Journal V7.9.19, then open Game connection on the website and create a pairing key.");
                 ImGui.InputText("Pairing key", ref pairingInput, 128, ImGuiInputTextFlags.Password);
                 if (ImGui.Button("Save pairing key") && syncTask is null)
                 {
@@ -447,10 +571,15 @@ public sealed class Plugin : IDalamudPlugin
                 var enabled = config.SyncEnabled;
                 if (ImGui.Checkbox("Sync confirmed actions to Equinox Journal", ref enabled))
                 { config.SyncEnabled = enabled; nextSync = default; Pi.SavePluginConfig(config); }
+                var characters = config.SyncCharacterDetails; var houses = config.SyncHouseDetails;
+                if (ImGui.Checkbox("Sync character and job details", ref characters)) { config.SyncCharacterDetails = characters; Pi.SavePluginConfig(config); }
+                if (ImGui.Checkbox("Discover/update owned private and FC houses", ref houses)) { config.SyncHouseDetails = houses; Pi.SavePluginConfig(config); }
                 ImGui.TextWrapped(syncStatus);
-                ImGui.TextWrapped("Sends character identity, property address, entry and tending times. Pairing key is saved on this PC and is never included in test exports. Characters match automatically by name and home server. Unmatched houses and patches need linking once.");
+                ImGui.TextWrapped("Sends character and job details, confirmed owned-estate and FC details, property addresses, planting and tending records, and entry times. Pairing key is saved on this PC and is never included in test exports. Characters match automatically by name and home server. Unmatched houses and patches need linking once.");
             }
             ImGui.Separator(); ImGui.TextWrapped(status);
+            ImGui.TextWrapped(discoveryStatus);
+            ImGui.TextWrapped($"Saved planting records: {config.Planting.Count}. Plant observer: {(plantHook is null ? "unavailable" : "ready")}");
             if (ImGui.CollapsingHeader("Character house visits", ImGuiTreeNodeFlags.DefaultOpen))
             {
                 ImGui.TextWrapped("Touched means entered inside. Times are local. Houses listed here are observed visits, not an ownership roster.");
@@ -466,15 +595,24 @@ public sealed class Plugin : IDalamudPlugin
                 }
                 ImGui.TextWrapped("No recorded entry means unknown. Entry observations do not confirm a demolition timer reset.");
             }
+            if (ImGui.CollapsingHeader("Detected character and estate details"))
+            {
+                var own = config.Discoveries.Where(x => x.Actor.ContentId == Player.ContentId.ToString(CultureInfo.InvariantCulture));
+                var details = own.LastOrDefault(x => x.Kind == "character.updated");
+                if (details?.Character is { } ch) ImGui.TextWrapped($"{details.Actor.Name} · {details.Actor.HomeWorldName} · {ch.JobName} Lv. {ch.Level} · highest combat level {ch.HighestBattleLevel}");
+                foreach (var h in own.Where(x => x.Kind == "house.discovered").GroupBy(x => x.Address!.HouseId).Select(g => g.Last()))
+                    ImGui.TextWrapped($"{h.House!.Type} · {h.House.EstateName} · {h.House.FreeCompany?.Name} · {h.House.Size} · W{h.Address!.Ward} P{h.Address.Plot}");
+                ImGui.TextWrapped("Open your estate placard to read its name and size. Open the FC member list with your character visible if FC details are missing. Only confirmed owned estate addresses are discovered.");
+            }
             ImGui.Separator();
             var track = config.TrackGardens;
-            if (ImGui.Checkbox("Automatically save confirmed tending locally", ref track))
+            if (ImGui.Checkbox("Automatically save confirmed planting and tending locally", ref track))
             {
                 config.TrackGardens = track;
-                if (ObservingGardens) callbackHook?.Enable(); else StopRecording();
+                if (ObservingGardens) { callbackHook?.Enable(); plantHook?.Enable(); } else StopRecording();
                 Pi.SavePluginConfig(config);
             }
-            ImGui.TextWrapped("English garden menus supported. Confirmed tending is saved per house, patch and bed. Website matching preserves existing batches. Planting and harvest detection are upcoming.");
+            ImGui.TextWrapped("English garden menus supported. Confirmed tending is saved per house, patch and bed. Website matching preserves existing batches. Planting records include the selected seed and soil plus a successful game response. Harvest syncing is not enabled.");
             ImGui.TextWrapped($"Saved tending records: {config.Tending.Count} (latest 10,000 retained)");
             foreach (var tend in config.Tending.TakeLast(6).Reverse())
                 ImGui.TextWrapped($"{tend.ConfirmedAt.ToLocalTime():g} · {tend.Actor.Name} · W{tend.Address.Ward} P{tend.Address.Plot} · Patch {tend.Patch}, bed {tend.Bed}: tended");
@@ -516,6 +654,8 @@ public sealed class Plugin : IDalamudPlugin
         StopRecording();
         callbackHook?.Disable();
         callbackHook?.Dispose();
+        plantHook?.Disable(); plantHook?.Dispose();
+        signboardHook?.Disable(); signboardHook?.Dispose();
         Chat.LogMessage -= OnLog;
         foreach (var menuEvent in MenuEvents) Addons.UnregisterListener(menuEvent, GardenMenus, OnGardenMenu);
         Framework.Update -= Update;

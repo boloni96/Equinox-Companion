@@ -98,3 +98,17 @@ if (args.Length > 0)
     Check("private replay: eight confirmed tends", saved.Count.ToString(), "8");
     Check("private replay: three cancelled selections", quits.ToString(), "3");
 }
+
+var plantTarget = Sample(0, "bed-a") with { TargetDetails = new(2003757, 1, "EventObj", 0, 0, 0) };
+var planting = new PlantIntent("plant-test", time, plantTarget, new(7731, "Mirror Apple Seeds", 7766, "Grade 3 Thanalan Topsoil"));
+Check("planting requires success response", planting.Confirm(4017, [1, 1], time.AddSeconds(1), plantTarget)?.EventId, null);
+Check("planting failed response never records", planting.Confirm(4005, [1, 1], time.AddSeconds(1), plantTarget)?.EventId, null);
+Check("planting exact success", planting.Confirm(4015, [2, 8], time.AddSeconds(1), plantTarget)?.Bed.ToString(), "8");
+Check("planting uses confirmed patch", planting.Confirm(4015, [2, 8], time.AddSeconds(1), plantTarget)?.Patch.ToString(), "2");
+Check("planting wrong target rejected", planting.Confirm(4015, [1, 1], time.AddSeconds(1), plantTarget with {TargetId="other"})?.EventId, null);
+Check("planting wrong character rejected", planting.Confirm(4015, [1, 1], time.AddSeconds(1), plantTarget with {Actor=actor with {ContentId="other"}})?.EventId, null);
+Check("planting wrong property rejected", planting.Confirm(4015, [1, 1], time.AddSeconds(1), plantTarget with {Address=address with {Plot=16}})?.EventId, null);
+Check("planting invalid bed rejected", planting.Confirm(4015, [1, 9], time.AddSeconds(1), plantTarget)?.EventId, null);
+Check("planting missing location rejected", planting.Confirm(4015, [], time.AddSeconds(1), plantTarget)?.EventId, null);
+Check("planting expired selection rejected", planting.Confirm(4015, [1, 1], time.AddSeconds(31), plantTarget)?.EventId, null);
+Check("planting no seed rejected", (planting with {Plant=planting.Plant with {SeedId=0}}).Confirm(4015, [1, 1], time.AddSeconds(1), plantTarget)?.EventId, null);

@@ -3,8 +3,8 @@
     "Author": "Boloni",
     "Name": "Equinox Companion",
     "InternalName": "EquinoxCompanion",
-    "AssemblyVersion": "0.3.0.0",
-    "Description": "Records house entries and confirmed tending locally, with optional paired sync to Equinox Journal. English garden menus supported.",
+    "AssemblyVersion": "0.4.0.0",
+    "Description": "Records house entries, confirmed planting and tending, and observed character/owned estate details. Optional paired sync to Equinox Journal V7.9.19. English garden menus supported.",
     "ApplicableVersion": "any",
     "Tags": [
       "housing",
@@ -16,14 +16,14 @@
     "LoadSync": false,
     "CanUnloadAsync": false,
     "LoadPriority": 0,
-    "Punchline": "House observations and a local gardening recorder for Equinox Journal.",
+    "Punchline": "Sync character details, owned estates, planting and tending to Equinox Journal.",
     "AcceptsFeedback": true,
     "RepoUrl": "https://github.com/boloni96/Equinox-Companion",
     "IsHide": false,
     "IsTestingExclusive": false,
-    "DownloadLinkInstall": "https://raw.githubusercontent.com/boloni96/Equinox-Companion/main/dist/v0.3.0.0/EquinoxCompanion.zip",
-    "DownloadLinkUpdate": "https://raw.githubusercontent.com/boloni96/Equinox-Companion/main/dist/v0.3.0.0/EquinoxCompanion.zip",
-    "DownloadLinkTesting": "https://raw.githubusercontent.com/boloni96/Equinox-Companion/main/dist/v0.3.0.0/EquinoxCompanion.zip",
-    "LastUpdate": 1790726433
+    "DownloadLinkInstall": "https://raw.githubusercontent.com/boloni96/Equinox-Companion/main/dist/v0.4.0.0/EquinoxCompanion.zip",
+    "DownloadLinkUpdate": "https://raw.githubusercontent.com/boloni96/Equinox-Companion/main/dist/v0.4.0.0/EquinoxCompanion.zip",
+    "DownloadLinkTesting": "https://raw.githubusercontent.com/boloni96/Equinox-Companion/main/dist/v0.4.0.0/EquinoxCompanion.zip",
+    "LastUpdate": 1790740269
   }
 ]

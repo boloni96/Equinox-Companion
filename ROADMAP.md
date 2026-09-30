@@ -1,3 +1,10 @@
+## Implemented in 0.4.0.0 (in-game validation pending)
+- Changed character/job snapshots.
+- Owned private/FC estate discovery and placard names.
+- Selected seed/soil plus confirmed planting response; per-bed website records.
+
+Follow-up research: see ALTOHOLIC-RESEARCH.md for event quest, collection reward and Fashion Report evidence. Gardening harvest/fertilizer sync and recipe guidance remain separate follow-ups.
+
 # Equinox gardening and house roadmap
 
 ## Shipped in 0.2.0.0

@@ -1,3 +1,7 @@
+## Current test release: 0.4.0.0
+
+Requires Equinox Journal V7.9.19 for the new event types. Deploy the website first, then update through the existing Dalamud custom repository. See RELEASE-NOTES.md for setup and the short in-game test.
+
 # Equinox Companion
 
 Dalamud API 15 plugin for local house-entry and gardening observations. Current version: 0.3.0.0.
