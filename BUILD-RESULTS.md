@@ -1,3 +1,7 @@
+# 0.4.1.1 — collapsed characters
+
+Both local and shared character headers now default to collapsed. Manual expansion still works; split house-status colours stay visible. Release build passed with zero warnings and errors. Native appearance requires in-game verification.
+
 # 0.4.1.0 — shared profiles, split house status, settings and local chat
 
 Requires Journal V7.9.23 for shared-profile downloads. Keep the existing pairing key on both installations. Includes the incomplete-character queue fix from 0.4.0.4 and supersedes the unpublished 0.4.0.5 colour-only package.

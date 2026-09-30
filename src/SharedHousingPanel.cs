@@ -58,7 +58,7 @@ public sealed partial class Plugin
         ImGui.PushStyleColor(ImGuiCol.HeaderHovered,new Vector4(1,1,1,.10f));
         ImGui.PushStyleColor(ImGuiCol.HeaderActive,new Vector4(1,1,1,.18f));
         ImGui.PushStyleColor(ImGuiCol.Text,Vector4.One);
-        var open = ImGui.CollapsingHeader(label,ImGuiTreeNodeFlags.DefaultOpen);
+        var open = ImGui.CollapsingHeader(label);
         ImGui.PopStyleColor(4);
         if (ImGui.IsItemHovered()) { ImGui.BeginTooltip();ImGui.TextUnformatted("Left / Private: "+BandLabel(privateBand));ImGui.TextUnformatted("Right / FC: "+BandLabel(fcBand));ImGui.EndTooltip(); }
         return open;

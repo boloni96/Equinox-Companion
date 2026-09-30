@@ -1,3 +1,7 @@
+# 0.4.1.1
+
+Character sections start collapsed in Characters & housing and every shared profile tab. Click a name bar to expand it; the split Private/FC status colours remain visible while collapsed.
+
 # 0.4.1.0
 
 Shared Journal profile tabs using the existing pairing key, independent Private/FC header colours, draggable tabs, Settings, optional local-only house-entry chat, and optional background shared-list refresh. Requires Journal V7.9.23 for the shared roster. Includes the previous queue fix; 0.4.0.5 was superseded before publication.
