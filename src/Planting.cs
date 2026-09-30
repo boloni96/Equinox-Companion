@@ -14,7 +14,7 @@ public sealed record PlantIntent(string EventId, DateTimeOffset At, GardenSnapsh
         return new(EventId, at, Target.Actor, Target.Address, parameters[0]!.Value, parameters[1]!.Value, Plant);
     }
 }
-public sealed record FreeCompanyDetails(string Id, string Name, string Tag, ushort WorldId);
+public sealed record FreeCompanyDetails(string Id, string Name, string Tag, ushort WorldId, string MasterName = "");
 public sealed record HouseDetails(string Type, string Size, string Evidence, FreeCompanyDetails? FreeCompany = null, string EstateName = "");
 public sealed record PlacardDetails(string CharacterId, Address Address, string Name, string Size, byte EstateType);
 public sealed record JobDetails(uint Id, string Name, int Level);

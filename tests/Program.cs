@@ -112,3 +112,10 @@ Check("planting invalid bed rejected", planting.Confirm(4015, [1, 9], time.AddSe
 Check("planting missing location rejected", planting.Confirm(4015, [], time.AddSeconds(1), plantTarget)?.EventId, null);
 Check("planting expired selection rejected", planting.Confirm(4015, [1, 1], time.AddSeconds(31), plantTarget)?.EventId, null);
 Check("planting no seed rejected", (planting with {Plant=planting.Plant with {SeedId=0}}).Confirm(4015, [1, 1], time.AddSeconds(1), plantTarget)?.EventId, null);
+var matureMenu = new GardenMenu(1,time,plantTarget,"8th Bed, 1st Patch",["Harvest Crop","Quit","",""]);
+Check("opening mature bed identifies bed without action",matureMenu.ReadyLocation()?.Bed.ToString(),"8");
+Check("opening mature bed identifies patch",matureMenu.ReadyLocation()?.Patch.ToString(),"1");
+Check("growing menu cannot mark ready",(matureMenu with {Options=["Tend Crop","Quit"]}).ReadyLocation()?.Bed.ToString(),null);
+Check("ambiguous menu cannot mark ready",(matureMenu with {Options=["Harvest Crop","Tend Crop"]}).ReadyLocation()?.Bed.ToString(),null);
+Check("unknown title cannot mark ready",(matureMenu with {Title="A different menu"}).ReadyLocation()?.Bed.ToString(),null);
+Check("nongarden target cannot mark ready",(matureMenu with {Target=plantTarget with {TargetDetails=null}}).ReadyLocation()?.Bed.ToString(),null);

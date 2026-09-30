@@ -69,6 +69,7 @@ public sealed class Plugin : IDalamudPlugin
     private DateTimeOffset recordingUntil;
     private DateTimeOffset nextSample;
     private ulong character;
+    private readonly ConcurrentQueue<GardenMenu> readyMenus = new();
     private GardenSnapshot? snapshot;
     private GardenContext? capturedContext;
     private readonly List<string> recentSignals = [];
@@ -108,7 +109,7 @@ public sealed class Plugin : IDalamudPlugin
             .Select(h => new SyncEvent(h.EventId, h.Kind, h.ObservedAt, WithWorldNames(h.Actor), WithAddressNames(h.Address)))
             .Concat(config.Tending.Where(t => !sent.Contains(t.EventId)).Select(t => new SyncEvent(t.EventId, "garden.tended", t.ConfirmedAt, WithWorldNames(t.Actor), WithAddressNames(t.Address), t.Patch, t.Bed)))
             .Concat(config.Planting.Where(t => !sent.Contains(t.EventId)).Select(t => new SyncEvent(t.EventId, "garden.planted", t.ConfirmedAt, WithWorldNames(t.Actor), WithAddressNames(t.Address), t.Patch, t.Bed, t.Plant)))
-            .Concat(config.Discoveries.Where(e => !sent.Contains(e.Id) && (e.Kind == "character.updated" ? config.SyncCharacterDetails : config.SyncHouseDetails)))
+            .Concat(config.Discoveries.Where(e => !sent.Contains(e.Id) && (e.Kind == "garden.ready" ? config.TrackGardens : e.Kind == "character.updated" ? config.SyncCharacterDetails : config.SyncHouseDetails)))
             .OrderBy(e => e.At).Take(50).ToArray();
         while (events.Length > 1 && JsonSerializer.SerializeToUtf8Bytes(new { events }, json).Length > 60000) events = events[..^1];
         if (events.Length == 0) { nextSync = now.AddSeconds(30); return; }
@@ -179,7 +180,7 @@ public sealed class Plugin : IDalamudPlugin
         if (recording && now >= recordingUntil) StopRecording();
         if (Conditions[ConditionFlag.BetweenAreas] || Conditions[ConditionFlag.BetweenAreas51])
         {
-            snapshot = null; currentAddress = null; Volatile.Write(ref pendingTend, null); Volatile.Write(ref pendingPlant, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); messages.Clear(); menuMessages.Clear(); status = "Waiting for the area to finish loading."; return;
+            snapshot = null; currentAddress = null; Volatile.Write(ref pendingTend, null); Volatile.Write(ref pendingPlant, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); messages.Clear(); menuMessages.Clear(); readyMenus.Clear(); status = "Waiting for the area to finish loading."; return;
         }
         if (now >= nextDiscovery)
         {
@@ -200,7 +201,7 @@ public sealed class Plugin : IDalamudPlugin
                 DrainMessages();
                 return;
             }
-            if (!manager->CurrentTerritory->IsLoaded()) { Volatile.Write(ref pendingTend, null); Volatile.Write(ref pendingPlant, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); messages.Clear(); menuMessages.Clear(); return; }
+            if (!manager->CurrentTerritory->IsLoaded()) { Volatile.Write(ref pendingTend, null); Volatile.Write(ref pendingPlant, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); messages.Clear(); menuMessages.Clear(); readyMenus.Clear(); return; }
             var type = manager->GetCurrentHousingTerritoryType();
             var inside = type == HousingTerritoryType.Indoor;
             var address = AddressOf(inside ? manager->GetCurrentIndoorHouseId() : manager->GetCurrentHouseId());
@@ -220,7 +221,7 @@ public sealed class Plugin : IDalamudPlugin
             status = address is null ? "Housing loaded; no complete property address yet." :
                 $"World {address.WorldId} · Territory {address.TerritoryTypeId} · Ward {address.Ward} · Plot {address.Plot}";
 
-            if (!ObservingGardens) { snapshot = null; messages.Clear(); menuMessages.Clear(); return; }
+            if (!ObservingGardens) { snapshot = null; messages.Clear(); menuMessages.Clear(); readyMenus.Clear(); return; }
 
             // This is candidate context, never a confirmed bed or successful action.
             uint? objectId = null; short? furnitureIndex = null;
@@ -296,11 +297,16 @@ public sealed class Plugin : IDalamudPlugin
                             for (var j = 0; j < count; j++)
                             {
                                 var optionType = (int)addon->AtkValues[7 + j].Type & 15;
+                                if (optionType is 0 or 1) { options[j] = ""; continue; }
                                 if (optionType is not (8 or 10)) { valid = false; break; }
                                 options[j] = CopyMenuText(addon->AtkValues[7 + j].String.Value) ?? "";
                             }
-                            if (valid) Volatile.Write(ref activeGardenMenu,
-                                new((nint)addon, now, candidate, title, options));
+                            if (valid)
+                            {
+                                var menu = new GardenMenu((nint)addon, now, candidate, title, options);
+                                Volatile.Write(ref activeGardenMenu, menu);
+                                if (menu.ReadyLocation() is not null && readyMenus.Count < 128) readyMenus.Enqueue(menu);
+                            }
                         }
                     }
                 }
@@ -414,8 +420,8 @@ public sealed class Plugin : IDalamudPlugin
 
     private void KeepDiscovery(SyncEvent e)
     {
-        var last = config.Discoveries.LastOrDefault(x => x.Kind == e.Kind && x.Actor.ContentId == e.Actor.ContentId && x.Address?.HouseId == e.Address?.HouseId);
-        if (last is not null && JsonSerializer.Serialize(new { last.Actor, last.Address, last.House, last.Character }) == JsonSerializer.Serialize(new { e.Actor, e.Address, e.House, e.Character })) return;
+        var last = config.Discoveries.LastOrDefault(x => x.Kind == e.Kind && x.Actor.ContentId == e.Actor.ContentId && x.Address?.HouseId == e.Address?.HouseId && x.Patch == e.Patch && x.Bed == e.Bed);
+        if (last is not null && !(e.Kind == "garden.ready" && config.Planting.Any(p => p.Actor.ContentId == e.Actor.ContentId && p.Address.HouseId == e.Address?.HouseId && p.Patch == e.Patch && p.Bed == e.Bed && p.ConfirmedAt > last.At)) && JsonSerializer.Serialize(new { last.Actor, last.Address, last.House, last.Character }) == JsonSerializer.Serialize(new { e.Actor, e.Address, e.House, e.Character })) return;
         config.Discoveries.Add(e);
         if (config.Discoveries.Count > 2000) config.Discoveries.RemoveRange(0, config.Discoveries.Count - 2000);
         Pi.SavePluginConfig(config);
@@ -433,7 +439,7 @@ public sealed class Plugin : IDalamudPlugin
         {
             for (var i = 0; i < (int)members->EntryCount; i++)
                 if (members->CharData[i].ContentId == Player.ContentId && members->CharData[i].HomeWorld == actor.HomeWorldId)
-                    fc = new(proxy->Id.ToString(CultureInfo.InvariantCulture), proxy->NameString, members->CharData[i].FCTagString, proxy->HomeWorldId);
+                    fc = new(proxy->Id.ToString(CultureInfo.InvariantCulture), proxy->NameString, members->CharData[i].FCTagString, proxy->HomeWorldId, proxy->MasterString);
         }
         if (fc is not null && string.IsNullOrWhiteSpace(fc.Name)) fc = null;
         var jobs = DataManager.GetExcelSheet<Lumina.Excel.Sheets.ClassJob>(Dalamud.Game.ClientLanguage.English)
@@ -470,17 +476,36 @@ public sealed class Plugin : IDalamudPlugin
 
     private void OnLog(ILogMessage message)
     {
-        // No chat text, string parameters, or game writes. Copy only numeric values
+        // No game writes. Copy numeric values for action matching
         // while the native message is valid; inspect housing later on the framework thread.
         if (!ObservingGardens || messages.Count >= 256) return;
         var count = Math.Min((int)message.ParameterCount, 16);
         var parameters = new int?[count];
         for (var i = 0; i < count; i++) if (message.TryGetIntParameter(i, out var n)) parameters[i] = n;
+        // Local diagnostic only: garden-system string arguments may identify an existing crop.
+        // Never collect player chat, format native messages, or upload diagnostic text.
+        var now = DateTimeOffset.UtcNow;
+        if (recording && message.LogMessageId is >= 4005 and <= 4025 && menuMessages.Count < 128 &&
+            Volatile.Read(ref capturedContext)?.CandidateAt(now)?.TargetDetails?.DataId == 2003757)
+        {
+            var textParameters = new string?[count];
+            for (var i = 0; i < count; i++)
+                if (message.TryGetStringParameter(i, out var value))
+                {
+                    var text = value.ToString();
+                    textParameters[i] = text.Length > 512 ? text[..512] : text;
+                }
+            menuMessages.Enqueue(new(now, "garden.logTextObservation", new { logMessageId = message.LogMessageId, textParameters, parameters }));
+        }
         messages.Enqueue((DateTimeOffset.UtcNow, message.LogMessageId, parameters, Volatile.Read(ref capturedContext), Volatile.Read(ref pendingTend), Volatile.Read(ref pendingPlant)));
     }
 
     private void DrainMessages()
     {
+        while (readyMenus.TryDequeue(out var menu))
+            if (menu.ReadyLocation() is { } location && menu.Target.Address is { } address)
+                KeepDiscovery(new(Guid.NewGuid().ToString("N"), "garden.ready", menu.OpenedAt,
+                    WithWorldNames(menu.Target.Actor), WithAddressNames(address), location.Patch, location.Bed));
         while (menuMessages.TryDequeue(out var menu)) if (recording) { menuObservations++; AddDiagnostic(menu); }
         while (messages.TryDequeue(out var message))
         {
@@ -525,14 +550,14 @@ public sealed class Plugin : IDalamudPlugin
 
     private void StartRecording()
     {
-        diagnostics.Clear(); recentSignals.Clear(); menuObservations = 0; messages.Clear(); menuMessages.Clear(); lastSnapshotKey = "";
+        diagnostics.Clear(); recentSignals.Clear(); menuObservations = 0; messages.Clear(); menuMessages.Clear(); readyMenus.Clear(); lastSnapshotKey = "";
         Volatile.Write(ref pendingTend, null); Volatile.Write(ref pendingPlant, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); snapshot = null; nextSample = default;
         lastSubmittedOption = "None recorded";
         callbackHook?.Enable(); plantHook?.Enable();
         recordingUntil = DateTimeOffset.UtcNow.AddMinutes(5); recording = true; exportPath = null;
     }
 
-    private void StopRecording() { recording = false; if (!ObservingGardens) { callbackHook?.Disable(); plantHook?.Disable(); } Volatile.Write(ref pendingTend, null); Volatile.Write(ref pendingPlant, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); messages.Clear(); menuMessages.Clear(); lastSnapshotKey = ""; }
+    private void StopRecording() { recording = false; if (!ObservingGardens) { callbackHook?.Disable(); plantHook?.Disable(); } Volatile.Write(ref pendingTend, null); Volatile.Write(ref pendingPlant, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); messages.Clear(); menuMessages.Clear(); readyMenus.Clear(); lastSnapshotKey = ""; }
 
     private void Export()
     {
@@ -542,7 +567,7 @@ public sealed class Plugin : IDalamudPlugin
             Directory.CreateDirectory(dir);
             exportPath = Path.Combine(dir, $"equinox-test-{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.json");
             File.WriteAllText(exportPath, JsonSerializer.Serialize(new {
-                schemaVersion = 3, pluginVersion = "0.4.0.0", exportedAt = DateTimeOffset.UtcNow,
+                schemaVersion = 3, pluginVersion = "0.4.0.1", exportedAt = DateTimeOffset.UtcNow,
                 mode = "local-diagnostics", gardeningConfirmed = false,
                 houseObservations = config.Houses, confirmedTending = config.Tending, confirmedPlanting = config.Planting, observedDetails = config.Discoveries, diagnostics
             }, json));
@@ -556,10 +581,10 @@ public sealed class Plugin : IDalamudPlugin
         ImGui.SetNextWindowSize(new Vector2(660, 480), ImGuiCond.FirstUseEver);
         if (ImGui.Begin("Equinox Companion", ref visible))
         {
-            ImGui.TextWrapped("Local tracking version 0.4.0.0 — optional website connection available.");
+            ImGui.TextWrapped("Local tracking version 0.4.0.1 — optional website connection available.");
             if (ImGui.CollapsingHeader("Website connection"))
             {
-                ImGui.TextWrapped("First deploy Journal V7.9.19, then open Game connection on the website and create a pairing key.");
+                ImGui.TextWrapped("First deploy Journal V7.9.20, then open Game connection on the website and create a pairing key.");
                 ImGui.InputText("Pairing key", ref pairingInput, 128, ImGuiInputTextFlags.Password);
                 if (ImGui.Button("Save pairing key") && syncTask is null)
                 {
