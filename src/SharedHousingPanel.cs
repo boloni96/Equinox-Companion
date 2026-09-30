@@ -75,6 +75,8 @@ public sealed partial class Plugin
         }
         return open;
     }
+    private bool CountsForCharacter(SharedCharacter c, SharedHouse h) =>
+        SharedHousingEligibility.CountsForCharacter(c, h, (config.SharedRoster?.People ?? []).SelectMany(p => p.Characters));
     private void DrawSharedPerson(SharedPerson person)
     {
         ImGui.PushID("shared-"+person.Id);
@@ -88,14 +90,17 @@ public sealed partial class Plugin
             if (!string.IsNullOrWhiteSpace(sharedSearch) && !(c.Name+" "+c.World+" "+c.Dc+" "+c.Region).Contains(sharedSearch,StringComparison.OrdinalIgnoreCase)) continue;
             ImGui.PushID(c.Id);
             var houses = c.Houses.OrderBy(h => HouseDisplayOrder(h.Type)).ToArray();
-            HousingBand? Status(string type) => SummarizeBands(c.Houses.Where(h=>h.Type==type).Select(h=>h.Paused?HousingBand.Unknown:HousingStatus.Band(h.LastEntry,now)));
+            var timerHouses = houses.Where(h => CountsForCharacter(c, h)).ToArray();
+            HousingBand? Status(string type) => SummarizeBands(timerHouses.Where(h=>h.Type==type).Select(h=>h.Paused?HousingBand.Unknown:HousingStatus.Band(h.LastEntry,now)));
             if (DrawSplitHeader(c.Name+" · "+SharedLocation(c)+"###character",Status("Private house"),Status("Free Company house"),
-                houses.Select(h=>EntryHover(h.Type,h.Ward,h.Plot,h.LastEntry,now,h.Paused))))
+                timerHouses.Select(h=>EntryHover(h.Type,h.Ward,h.Plot,h.LastEntry,now,h.Paused))))
             {
                 ImGui.TextDisabled(c.World+" · "+c.Dc+" · "+c.Region+" · "+c.Account);
                 if(c.Houses.Length==0)ImGui.TextDisabled("No house recorded in the shared Journal.");
                 foreach(var h in houses)
                 {
+                    var sharedPrivate = h.Type == "Private house" && !CountsForCharacter(c, h);
+                    if (sharedPrivate) ImGui.TextDisabled("Shared private house / ownership unconfirmed — your entry does not reset its timer.");
                     var band=h.Paused?HousingBand.Unknown:HousingStatus.Band(h.LastEntry,now);
                     ImGui.TextColored(BandColour(band),$"[{(h.Type=="Private house"?"Private":"FC")}] {(string.IsNullOrWhiteSpace(h.Name)?"Estate name unknown":h.Name)} · {BandLabel(band)}");
                     if(ImGui.IsItemHovered())

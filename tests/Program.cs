@@ -23,6 +23,15 @@ try
     Check("log write failure does not crash", (unavailable.WriteFailure is not null).ToString(), "True");
 }
 finally { Directory.Delete(errorDir, true); }
+var houseOwner = new SharedCharacter("owner", "Owner Example", "World A", "", "", "", []);
+var houseTenant = houseOwner with { Id = "tenant", Name = "Tenant Example" };
+var sharedPrivate = new SharedHouse("house", "", "Private house", "", "World A", "", 1, 1, "", houseOwner.Name, "", "", null, false);
+Check("shared private owner counts", SharedHousingEligibility.CountsForCharacter(houseOwner, sharedPrivate, [houseOwner, houseTenant]).ToString(), "True");
+Check("shared private tenant excluded", SharedHousingEligibility.CountsForCharacter(houseTenant, sharedPrivate, [houseOwner, houseTenant]).ToString(), "False");
+Check("unknown private owner excluded", SharedHousingEligibility.CountsForCharacter(houseOwner, sharedPrivate with { OwnerName = "" }, [houseOwner]).ToString(), "False");
+Check("other-world owner excluded", SharedHousingEligibility.CountsForCharacter(houseOwner with { World = "World B" }, sharedPrivate, [houseOwner]).ToString(), "False");
+Check("ambiguous private owner excluded", SharedHousingEligibility.CountsForCharacter(houseOwner, sharedPrivate, [houseOwner, houseOwner with { Id = "duplicate" }]).ToString(), "False");
+Check("linked FC member counts for bar", SharedHousingEligibility.CountsForCharacter(houseTenant, sharedPrivate with { Type = "Free Company house" }, [houseOwner, houseTenant]).ToString(), "True");
 Check("debounce initial location", gate.Observe("house-a", time), null);
 Check("startup inside is not entry", gate.Observe("house-a", time.AddSeconds(2)), "house.observedInside");
 Check("standing inside does not repeat", gate.Observe("house-a", time.AddSeconds(10)), null);

@@ -1,6 +1,6 @@
 <Project Sdk="Dalamud.NET.Sdk/15.0.0">
   <PropertyGroup>
-    <Version>0.4.1.5</Version>
+    <Version>0.4.1.6</Version>
     <Author>Boloni</Author>
     <Name>Equinox Companion</Name>
     <Punchline>Sync character details, owned estates, planting and tending to Equinox Journal.</Punchline>

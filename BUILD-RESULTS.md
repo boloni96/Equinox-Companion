@@ -1,3 +1,7 @@
+# 0.4.1.6 — exclude shared private houses from character timers
+
+Validated owner/tenant/unknown/ambiguous name/home-world cases and FC membership projection. Local owned-estate details require ownership evidence. Shared private details remain expanded-only. Release build and gate suite passed; native appearance needs an in-game check.
+
 # 0.4.1.5 — consistent house order
 
 Explicit Private-before-FC display ordering replaces alphabetical or source ordering. Both local and shared tooltips follow their corresponding detail-list order. Release build passed with zero warnings and errors.

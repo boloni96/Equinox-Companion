@@ -1,3 +1,7 @@
+# 0.4.1.6 — exclude shared private houses from character timers
+
+Shared private houses remain visible when expanded, but do not affect the character colour bar, name-bar tooltip or houses-first sorting. Private ownership requires a unique owner name plus home-world match in the shared roster; unconfirmed ownership is excluded. FC-member houses still count. No website update required.
+
 # 0.4.1.5 — consistent house order
 
 Private house appears before FC in both local and shared character details and name-bar hover tooltips. Header halves remain Private left, FC right.

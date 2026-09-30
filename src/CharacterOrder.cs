@@ -32,7 +32,7 @@ public sealed partial class Plugin
         var currentId = Player.ContentId.ToString(System.Globalization.CultureInfo.InvariantCulture);
         return ordered.OrderBy(a => a.ContentId == currentId ? 0 : 1).ToArray();
     }
-    private static bool HasSharedHouse(SharedCharacter c) => c.Houses.Any(h => h.Type is "Private house" or "Free Company house");
+    private bool HasSharedHouse(SharedCharacter c) => c.Houses.Any(h => CountsForCharacter(c, h));
     private SharedCharacter[] OrderedSharedCharacters(SharedPerson person, bool includeHidden = false)
     {
         var ordered = OrderCharacters("shared-" + person.Id, person.Characters, c => c.Id, HasSharedHouse, includeHidden);
