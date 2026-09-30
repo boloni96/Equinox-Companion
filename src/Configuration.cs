@@ -3,6 +3,9 @@ namespace EquinoxCompanion;
 [Serializable]
 public sealed class Configuration : IPluginConfiguration
 {
+    public bool HouseCharactersFirst { get; set; } = true;
+    public Dictionary<string, List<string>> HiddenCharacters { get; set; } = [];
+    public Dictionary<string, List<string>> CharacterOrders { get; set; } = [];
     public bool NotifyHouseEntries { get; set; }
     public bool RefreshSharedInBackground { get; set; }
     public SharedRoster? SharedRoster { get; set; }

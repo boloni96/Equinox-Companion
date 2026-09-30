@@ -638,6 +638,7 @@ public sealed partial class Plugin : IDalamudPlugin
         ImGui.SetNextWindowSize(new Vector2(660, 480), ImGuiCond.FirstUseEver);
         if (ImGui.Begin("Equinox Companion", ref visible))
         {
+            ImGui.TextDisabled($"Equinox Companion v{typeof(Plugin).Assembly.GetName().Version}");
             DrawSharedStatus();
             if (ImGui.BeginTabBar("CompanionSections", ImGuiTabBarFlags.Reorderable))
             {

@@ -1,3 +1,13 @@
+# 0.4.1.2
+
+- Hover any character name bar for each Private/FC house's last eligible recorded entry date, local time and UTC offset.
+- The logged-in character temporarily appears first in local/shared lists. Settings retains the chosen order, restored automatically on logout or character switch. Hidden characters remain hidden.
+- Running plugin version appears above the tabs.
+- Character bars show home server, data center and region, including while collapsed.
+- Characters with no recorded private or FC house remain visible at the bottom by default.
+- Settings > Character order provides per-list Up/Down ordering, reset, and an option to disable houses-first grouping for unrestricted ordering.
+- Hide characters from each list and restore them under Hidden characters. These preferences are local to this installation; records, tracking and website data are kept.
+
 # 0.4.1.1
 
 Character sections start collapsed in Characters & housing and every shared profile tab. Click a name bar to expand it; the split Private/FC status colours remain visible while collapsed.

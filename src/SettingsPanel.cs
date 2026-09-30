@@ -31,6 +31,8 @@ public sealed partial class Plugin
         { config.RefreshSharedInBackground=background;nextRosterRead=default;Pi.SavePluginConfig(config); }
         ImGui.TextWrapped("One shared-list check per minute while open, or also in the background if enabled. Game actions still upload only when there are pending records. Both plugins can use the same pairing key.");
         ImGui.Separator();
+        DrawCharacterOrderSettings();
+        ImGui.Separator();
         DrawConnection();
     }
 }

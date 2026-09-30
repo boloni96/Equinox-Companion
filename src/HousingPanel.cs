@@ -28,16 +28,10 @@ public sealed partial class Plugin
         ImGui.TextColored(Red, "31–45"); ImGui.SameLine();
         ImGui.TextColored(Purple, "45+ DEMOLISHED?");
         ImGui.TextWrapped("Based on recorded eligible entries. Hover an estate for details. Other players' visits and demolition suspensions may change the actual deadline.");
-        ImGui.TextDisabled("Name bar: left = Private | right = FC. Drag tabs to reorder.");
+        ImGui.TextDisabled("Name bar: left = Private | right = FC. Character order: Settings.");
         ImGui.InputText("Find character / server", ref housingSearch, 100);
-        var actors = config.Discoveries.Select(d => (d.At, d.Actor))
-            .Concat(config.Houses.Select(h => (At: h.ObservedAt, h.Actor)))
-            .Concat(config.Tending.Select(t => (At: t.ConfirmedAt, t.Actor)))
-            .Concat(config.Planting.Select(p => (At: p.ConfirmedAt, p.Actor)))
-            .Where(x => SyncValidation.ActorReady(x.Actor)).GroupBy(x => x.Actor.ContentId)
-            .Select(g => g.OrderByDescending(x => x.At).First().Actor)
-            .OrderBy(a => a.HomeWorldName).ThenBy(a => a.Name).ToArray();
-        if (actors.Length == 0) ImGui.TextWrapped("No characters recorded yet. Log in and play normally to add them here.");
+        var actors = OrderedLocalCharacters();
+        if (actors.Length == 0) ImGui.TextWrapped("No visible characters. Log in to record them, or restore hidden characters in Settings.");
         var now = DateTimeOffset.UtcNow;
         foreach (var actor in actors)
         {
@@ -48,7 +42,8 @@ public sealed partial class Plugin
                 .GroupBy(d => d.Address!.HouseId).Select(g => g.OrderByDescending(d => d.At).First()).OrderBy(d => d.House!.Type).ToArray();
             HousingBand? EstateBand(string type) => SummarizeBands(estates.Where(e => e.House!.Type == type)
                 .Select(e => HousingStatus.Band(HousingStatus.LastEligibleEntry(e, config.Discoveries, config.Houses), now)));
-            var expanded = DrawSplitHeader(actor.Name + " · " + (actor.HomeWorldName ?? WorldName(actor.HomeWorldId)), EstateBand("Private house"), EstateBand("Free Company house"));
+            var expanded = DrawSplitHeader(actor.Name + " · " + location + "###character", EstateBand("Private house"), EstateBand("Free Company house"),
+                estates.Select(e => EntryHover(e.House!.Type, e.Address!.Ward, e.Address.Plot, HousingStatus.LastEligibleEntry(e, config.Discoveries, config.Houses))));
             if (expanded)
             {
                 ImGui.TextDisabled(location);
