@@ -140,7 +140,7 @@ public sealed partial class Plugin : IDalamudPlugin
         try { signboardHook = Interop.HookFromAddress<SignboardDelegate>(AgentHousingSignboard.MemberFunctionPointers.ReadPacket, ObserveSignboard); signboardHook.Enable(); }
         catch (Exception ex) { Log.Error(ex, "Estate placard observer unavailable"); }
         if (config.TrackGardens) { callbackHook?.Enable(); plantHook?.Enable(); }
-        Commands.AddHandler("/equinox", new CommandInfo(OnCommand) { HelpMessage = "Open Equinox Companion test recorder." });
+        Commands.AddHandler("/equinox", new CommandInfo(OnCommand) { HelpMessage = "Open Equinox Companion, shared profiles, housing and settings." });
         Pi.UiBuilder.Draw += Draw;
         Pi.UiBuilder.OpenMainUi += Open;
         Pi.UiBuilder.OpenConfigUi += Open;
@@ -175,6 +175,8 @@ public sealed partial class Plugin : IDalamudPlugin
     {
         var now = DateTimeOffset.UtcNow;
         UpdateSync(now);
+        UpdateSharedRoster(now);
+        UpdateHouseNotices(now);
         if (faulted) return;
         
         if (!Player.IsLoaded || Player.ContentId == 0)
@@ -221,7 +223,9 @@ public sealed partial class Plugin : IDalamudPlugin
                 var kind = gate.Observe(address.HouseId, now);
                 if (kind is not null)
                 {
-                    config.Houses.Add(new(Guid.NewGuid().ToString("N"), now, kind, actor, address));
+                    var visit = new HouseObservation(Guid.NewGuid().ToString("N"), now, kind, actor, address);
+                    config.Houses.Add(visit);
+                    if (config.NotifyHouseEntries && kind == "house.entered") pendingHouseNotices.Add(visit);
                     if (config.Houses.Count > 500) config.Houses.RemoveRange(0, config.Houses.Count - 500);
                     Pi.SavePluginConfig(config);
                 }
@@ -620,7 +624,7 @@ public sealed partial class Plugin : IDalamudPlugin
             Directory.CreateDirectory(dir);
             exportPath = Path.Combine(dir, $"equinox-test-{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.json");
             File.WriteAllText(exportPath, JsonSerializer.Serialize(new {
-                schemaVersion = 3, pluginVersion = "0.4.0.4", exportedAt = DateTimeOffset.UtcNow,
+                schemaVersion = 3, pluginVersion = "0.4.1.0", exportedAt = DateTimeOffset.UtcNow,
                 mode = "local-diagnostics", gardeningConfirmed = false,
                 houseObservations = config.Houses, confirmedTending = config.Tending, confirmedPlanting = config.Planting, observedDetails = config.Discoveries, diagnostics
             }, json));
@@ -634,7 +638,8 @@ public sealed partial class Plugin : IDalamudPlugin
         ImGui.SetNextWindowSize(new Vector2(660, 480), ImGuiCond.FirstUseEver);
         if (ImGui.Begin("Equinox Companion", ref visible))
         {
-            if (ImGui.BeginTabBar("CompanionSections"))
+            DrawSharedStatus();
+            if (ImGui.BeginTabBar("CompanionSections", ImGuiTabBarFlags.Reorderable))
             {
                 if (ImGui.BeginTabItem("Tests"))
                 {
@@ -646,24 +651,36 @@ public sealed partial class Plugin : IDalamudPlugin
                     DrawHousing();
                     ImGui.EndTabItem();
                 }
+                if (ImGui.BeginTabItem("Settings"))
+                {
+                    DrawSettings();
+                    ImGui.EndTabItem();
+                }
+                foreach (var profile in config.SharedRoster?.People ?? [])
+                {
+                    if (ImGui.BeginTabItem(profile.Name.Replace("##", "") + "###person-" + profile.Id))
+                    {
+                        DrawSharedPerson(profile);
+                        ImGui.EndTabItem();
+                    }
+                }
                 ImGui.EndTabBar();
             }
         }
         ImGui.End();
     }
 
-    private void DrawTests()
+    private void DrawConnection()
     {
-            ImGui.TextWrapped("Local tracking version 0.4.0.4 — optional website connection available.");
             if (ImGui.CollapsingHeader("Website connection"))
             {
-                ImGui.TextWrapped("First deploy Journal V7.9.21, then open Game connection on the website and create a pairing key.");
+                ImGui.TextWrapped("Use Journal V7.9.23 or newer. Keep your existing pairing key. Both installations use the same key for this shared Journal.");
                 ImGui.InputText("Pairing key", ref pairingInput, 128, ImGuiInputTextFlags.Password);
                 if (ImGui.Button("Save pairing key") && syncTask is null)
                 {
                     var key = pairingInput.Trim();
                     if (key.Length == 64 && key.All(c => char.IsAsciiHexDigit(c)))
-                    { config.PairingKey = key.ToLowerInvariant(); pairingInput = ""; config.SentEvents.Clear(); nextSync = default; Pi.SavePluginConfig(config); syncStatus = "Paired. Enable sync to send saved entries and tending."; }
+                    { config.PairingKey = key.ToLowerInvariant(); config.SharedRoster = null; nextRosterRead = default; pairingInput = ""; config.SentEvents.Clear(); nextSync = default; Pi.SavePluginConfig(config); syncStatus = "Paired. Enable sync to send saved entries and tending."; }
                     else syncStatus = "Paste the 64-character key from Game connection.";
                 }
                 var enabled = config.SyncEnabled;
@@ -676,6 +693,11 @@ public sealed partial class Plugin : IDalamudPlugin
                 if (heldSyncRecords > 0) ImGui.TextWrapped($"{heldSyncRecords} incomplete record(s) kept locally; valid actions continue syncing.");
                 ImGui.TextWrapped("Sends character and job details, confirmed owned-estate and FC details, property addresses, planting and tending records, and entry times. Pairing key is saved on this PC and is never included in test exports. Characters match automatically by name and home server. Unmatched houses and patches need linking once.");
             }
+    }
+
+    private void DrawTests()
+    {
+            ImGui.TextWrapped("Local tracking version 0.4.1.0 — optional website connection available.");
             ImGui.Separator(); ImGui.TextWrapped(status);
             ImGui.TextWrapped(discoveryStatus);
             ImGui.TextWrapped(cropChatStatus);

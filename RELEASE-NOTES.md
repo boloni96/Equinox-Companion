@@ -1,3 +1,11 @@
+# 0.4.1.0
+
+Shared Journal profile tabs using the existing pairing key, independent Private/FC header colours, draggable tabs, Settings, optional local-only house-entry chat, and optional background shared-list refresh. Requires Journal V7.9.23 for the shared roster. Includes the previous queue fix; 0.4.0.5 was superseded before publication.
+
+# 0.4.0.5
+
+Colour character name-bar backgrounds by the most urgent recorded estate timer, including collapsed, hovered and active bars. Unknown history remains grey unless a known warning needs attention. White text on darker status colours preserves readability. Includes the 0.4.0.4 sync fix.
+
 # 0.4.0.4
 
 Fix incomplete character snapshots blocking website uploads; add Tests and Characters & housing tabs with recorded-entry colour estimates and estate hover details. Re-enable character/job sync after updating. Same website and pairing key. Purple DEMOLISHED? is an estimate, not confirmed destruction.

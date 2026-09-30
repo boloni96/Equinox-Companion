@@ -3,6 +3,9 @@ namespace EquinoxCompanion;
 [Serializable]
 public sealed class Configuration : IPluginConfiguration
 {
+    public bool NotifyHouseEntries { get; set; }
+    public bool RefreshSharedInBackground { get; set; }
+    public SharedRoster? SharedRoster { get; set; }
     public int Version { get; set; } = 4;
     public bool SyncEnabled { get; set; }
     public string PairingKey { get; set; } = "";

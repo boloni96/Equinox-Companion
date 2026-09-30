@@ -1,15 +1,11 @@
-# 0.4.0.4 — resilient sync and character housing view
+# 0.4.1.0 — shared profiles, split house status, settings and local chat
 
-Plugin-only update; keep Journal V7.9.21 or newer and the existing pairing key.
+Requires Journal V7.9.23 for shared-profile downloads. Keep the existing pairing key on both installations. Includes the incomplete-character queue fix from 0.4.0.4 and supersedes the unpublished 0.4.0.5 colour-only package.
 
-- Prevent character snapshots with missing identity/world/job data during loading from entering the discovery queue.
-- Validate pending records before batching; incomplete legacy records remain local and cannot block later valid actions. No events are falsely acknowledged or deleted. The Tests tab reports held records.
-- Two top tabs: Tests and Characters & housing. Existing recording, export and connection controls remain under Tests.
-- Housing view groups locally observed characters by identity, displays home world/data centre/region, and shows confirmed private/FC estates. Hover for estate address, size, owner/FC master, own entry and latest recorded eligible entry.
-- Green for completed days 0–7; orange 8–30; red 31 through the 45-day boundary; purple after 45 days, labelled DEMOLISHED? with explicit estimated status. Unknown entries stay grey.
-- Private guest entries, login observations, workshop/room visits and ordinary FC activity do not reset the estimate. Recorded members of the same confirmed FC estate can contribute qualifying entries. This is a local recorded-history estimate, not the game's authoritative countdown; other clients, membership/ownership changes, incomplete history and demolition suspensions can affect it.
-- Website-only characters are not downloaded into the plugin. No new polling requests are introduced.
+Private/FC header halves have independent status colours. Tests, Characters & housing, Settings and per-profile tabs can be dragged into a different order. Shared profile data is read-only and cached separately from local game observations; it is never uploaded as newly observed game data.
 
-Validation: Release build succeeds with zero warnings/errors. Existing observation/menu/planting/chat gate tests and new sync/age/eligibility tests pass. Private 04:59 export replay holds exactly the zero-world character snapshot and retains both Vaelis owned-estate discoveries as sendable. Diagnostics stay private and are not in the package or repository. Actual in-game tab appearance and live re-enabled character sync await user testing.
+Settings adds opt-in local-only entry messages and opt-in shared refresh while closed. Tracking and queued game uploads do not depend on window visibility. The shared roster checks at most once per minute automatically and uses ETags. Closing the window pauses only shared-list refresh unless background refresh is enabled. Revoked keys clear the shared cache on the next check; changing pairing keys clears it immediately.
 
-Future investigation: compare FC Activity before/after an interior entry; only a verified explicit entry/demolition event should affect housing state. Login/online status is not entry evidence.
+The server shares only roster and house-summary fields. The website must apply incoming game events and save to publish an updated summary; plugins do not download pictures, notes, full journal history or credentials. FC Activity inference and online-status timer resets are not implemented.
+
+Validation: zero-warning Release build; existing gate suite and private queue replay; private/FC/guest/login/workshop notification rules; website storage/event regressions; same-key two-client roster reads, three-profile projection, role eligibility, privacy allowlist, revoked-key/unauthenticated/full-journal access rejection, ETags and no R2 access during roster GET; browser save-to-roster integration. Actual native tab appearance, drag behaviour and local chat require in-game testing. No private diagnostics or screenshots in the public release.

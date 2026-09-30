@@ -196,5 +196,11 @@ if (args.Length > 1 && args[0] == "--queue") {
     var held = entries.Where(e=>!SyncValidation.CanSend(e,at)).ToArray();
     Check("live export holds only bad world record",held.Length.ToString(),"1");
     Check("live export identifies recorded zero world",held[0].Actor.HomeWorldId.ToString(),"0");
-    Check("live FC discovery remains sendable",entries.Where(e=>e.Actor.Name=="Vaelis Nohr"&&e.Kind=="house.discovered").All(e=>SyncValidation.CanSend(e,at)).ToString(),"True");
+    Check("live FC discovery remains sendable",entries.Where(e=>e.Kind=="house.discovered"&&e.At>=at.AddMinutes(-10)).All(e=>SyncValidation.CanSend(e,at)).ToString(),"True");
 }
+
+Check("entry chat identifies private owner", HouseEntryNotice.Format(ownerVisit,estateEvent)?.Contains("your Private House").ToString(), "True");
+Check("entry chat identifies FC member", HouseEntryNotice.Format(ownerVisit,fcEstate)?.Contains("your FC House").ToString(), "True");
+Check("login observation never chats", HouseEntryNotice.Format(ownerVisit with { Kind="house.observedInside" },estateEvent), null);
+Check("guest never labelled owner", HouseEntryNotice.Format(guestVisit,estateEvent)?.Contains("ownership unconfirmed").ToString(), "True");
+Check("workshop never triggers estate chat", HouseEntryNotice.Format(ownerVisit with { Address=realAddress with { Workshop=true } },estateEvent), null);

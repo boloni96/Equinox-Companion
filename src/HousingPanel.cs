@@ -28,6 +28,7 @@ public sealed partial class Plugin
         ImGui.TextColored(Red, "31–45"); ImGui.SameLine();
         ImGui.TextColored(Purple, "45+ DEMOLISHED?");
         ImGui.TextWrapped("Based on recorded eligible entries. Hover an estate for details. Other players' visits and demolition suspensions may change the actual deadline.");
+        ImGui.TextDisabled("Name bar: left = Private | right = FC. Drag tabs to reorder.");
         ImGui.InputText("Find character / server", ref housingSearch, 100);
         var actors = config.Discoveries.Select(d => (d.At, d.Actor))
             .Concat(config.Houses.Select(h => (At: h.ObservedAt, h.Actor)))
@@ -43,11 +44,14 @@ public sealed partial class Plugin
             var location = HomeLocation(actor);
             if (!string.IsNullOrWhiteSpace(housingSearch) && !(actor.Name + " " + location).Contains(housingSearch, StringComparison.OrdinalIgnoreCase)) continue;
             ImGui.PushID(actor.ContentId);
-            if (ImGui.CollapsingHeader(actor.Name + " · " + (actor.HomeWorldName ?? WorldName(actor.HomeWorldId)), ImGuiTreeNodeFlags.DefaultOpen))
+            var estates = config.Discoveries.Where(d => d.Kind == "house.discovered" && d.Actor.ContentId == actor.ContentId && d.Address is not null && d.House is not null)
+                .GroupBy(d => d.Address!.HouseId).Select(g => g.OrderByDescending(d => d.At).First()).OrderBy(d => d.House!.Type).ToArray();
+            HousingBand? EstateBand(string type) => SummarizeBands(estates.Where(e => e.House!.Type == type)
+                .Select(e => HousingStatus.Band(HousingStatus.LastEligibleEntry(e, config.Discoveries, config.Houses), now)));
+            var expanded = DrawSplitHeader(actor.Name + " · " + (actor.HomeWorldName ?? WorldName(actor.HomeWorldId)), EstateBand("Private house"), EstateBand("Free Company house"));
+            if (expanded)
             {
                 ImGui.TextDisabled(location);
-                var estates = config.Discoveries.Where(d => d.Kind == "house.discovered" && d.Actor.ContentId == actor.ContentId && d.Address is not null && d.House is not null)
-                    .GroupBy(d => d.Address!.HouseId).Select(g => g.OrderByDescending(d => d.At).First()).OrderBy(d => d.House!.Type).ToArray();
                 if (estates.Length == 0) ImGui.TextWrapped("No owned estate confirmed yet. Open its placard and enter; FC details may need the member list opened once.");
                 foreach (var estate in estates)
                 {

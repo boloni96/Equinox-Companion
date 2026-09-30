@@ -1,0 +1,107 @@
+using System.Numerics;
+using Dalamud.Bindings.ImGui;
+namespace EquinoxCompanion;
+public sealed partial class Plugin
+{
+    private Task<RosterResult>? rosterTask;
+    private string rosterTaskKey = "";
+    private DateTimeOffset nextRosterRead;
+    private string rosterStatus = "Open the updated website to share its profiles here.";
+    private string sharedSearch = "";
+    private void UpdateSharedRoster(DateTimeOffset now)
+    {
+        if (rosterTask?.IsCompleted == true)
+        {
+            if (rosterTaskKey == config.PairingKey && rosterTask.IsCompletedSuccessfully)
+            {
+                var r = rosterTask.Result; rosterStatus = r.Status;
+                if (r.Roster is not null) { config.SharedRoster = r.Roster; Pi.SavePluginConfig(config); }
+                if (r.Unauthorized) { config.SharedRoster = null; Pi.SavePluginConfig(config); }
+            }
+            rosterTask = null;
+        }
+        if ((!visible && !config.RefreshSharedInBackground) || !config.SyncEnabled || config.PairingKey.Length != 64 || rosterTask is not null || now < nextRosterRead) return;
+        nextRosterRead = now.AddMinutes(1);
+        rosterTaskKey = config.PairingKey;
+        rosterTask = sync.ReadRoster(rosterTaskKey, config.SharedRoster?.Revision);
+    }
+    private void DrawSharedStatus()
+    {
+        ImGui.TextDisabled(rosterStatus);
+        if (config.SharedRoster is { } r) ImGui.TextDisabled($"Shared journal saved: {r.Updated.ToLocalTime():g}");
+        if (ImGui.SmallButton("Refresh shared profiles")) nextRosterRead = default;
+        ImGui.SameLine(); ImGui.TextDisabled("Drag tabs to reorder");
+    }
+    private static HousingBand? SummarizeBands(IEnumerable<HousingBand> source)
+    {
+        var bands = source.ToArray(); if (bands.Length == 0) return null;
+        var worst = bands.Max();
+        return worst == HousingBand.Recent && bands.Contains(HousingBand.Unknown) ? HousingBand.Unknown : worst;
+    }
+    private static Vector4 BandColour(HousingBand? band) => band switch {
+        HousingBand.Recent => Green, HousingBand.Warning => Orange, HousingBand.Urgent => Red,
+        HousingBand.Overdue => Purple, HousingBand.Unknown => Grey, _ => new(.30f,.32f,.35f,1)
+    };
+    private static string BandLabel(HousingBand? band) => band switch {
+        HousingBand.Recent => "Recent (0–7 days)", HousingBand.Warning => "8–30 days", HousingBand.Urgent => "31–45 days",
+        HousingBand.Overdue => "DEMOLISHED? — estimate", HousingBand.Unknown => "Entry unknown / paused", _ => "No house recorded"
+    };
+    private static bool DrawSplitHeader(string label, HousingBand? privateBand, HousingBand? fcBand)
+    {
+        var pos = ImGui.GetCursorScreenPos(); var width = Math.Max(1, ImGui.GetContentRegionAvail().X); var height = ImGui.GetFrameHeight();
+        static uint Background(HousingBand? b) { var c = BandColour(b);return ImGui.ColorConvertFloat4ToU32(new(c.X*.38f,c.Y*.38f,c.Z*.38f,1)); }
+        var draw = ImGui.GetWindowDrawList(); var middle = pos.X+width/2;
+        draw.AddRectFilled(pos,new Vector2(middle,pos.Y+height),Background(privateBand));
+        draw.AddRectFilled(new Vector2(middle,pos.Y),new Vector2(pos.X+width,pos.Y+height),Background(fcBand));
+        draw.AddLine(new Vector2(middle,pos.Y),new Vector2(middle,pos.Y+height),ImGui.ColorConvertFloat4ToU32(new Vector4(.1f,.1f,.1f,1)));
+        ImGui.PushStyleColor(ImGuiCol.Header,Vector4.Zero);
+        ImGui.PushStyleColor(ImGuiCol.HeaderHovered,new Vector4(1,1,1,.10f));
+        ImGui.PushStyleColor(ImGuiCol.HeaderActive,new Vector4(1,1,1,.18f));
+        ImGui.PushStyleColor(ImGuiCol.Text,Vector4.One);
+        var open = ImGui.CollapsingHeader(label,ImGuiTreeNodeFlags.DefaultOpen);
+        ImGui.PopStyleColor(4);
+        if (ImGui.IsItemHovered()) { ImGui.BeginTooltip();ImGui.TextUnformatted("Left / Private: "+BandLabel(privateBand));ImGui.TextUnformatted("Right / FC: "+BandLabel(fcBand));ImGui.EndTooltip(); }
+        return open;
+    }
+    private void DrawSharedPerson(SharedPerson person)
+    {
+        ImGui.PushID("shared-"+person.Id);
+        ImGui.TextWrapped(person.Name+" · shared Journal characters");
+        ImGui.TextDisabled("Name bar: left = Private | right = FC");
+        ImGui.InputText("Find character / server",ref sharedSearch,100);
+        var now=DateTimeOffset.UtcNow;
+        foreach(var c in person.Characters)
+        {
+            if (!string.IsNullOrWhiteSpace(sharedSearch) && !(c.Name+" "+c.World+" "+c.Dc+" "+c.Region).Contains(sharedSearch,StringComparison.OrdinalIgnoreCase)) continue;
+            ImGui.PushID(c.Id);
+            HousingBand? Status(string type) => SummarizeBands(c.Houses.Where(h=>h.Type==type).Select(h=>h.Paused?HousingBand.Unknown:HousingStatus.Band(h.LastEntry,now)));
+            if (DrawSplitHeader(c.Name+" · "+c.World,Status("Private house"),Status("Free Company house")))
+            {
+                ImGui.TextDisabled(c.World+" · "+c.Dc+" · "+c.Region+" · "+c.Account);
+                if(c.Houses.Length==0)ImGui.TextDisabled("No house recorded in the shared Journal.");
+                foreach(var h in c.Houses)
+                {
+                    var band=h.Paused?HousingBand.Unknown:HousingStatus.Band(h.LastEntry,now);
+                    ImGui.TextColored(BandColour(band),$"[{(h.Type=="Private house"?"Private":"FC")}] {(string.IsNullOrWhiteSpace(h.Name)?"Estate name unknown":h.Name)} · {BandLabel(band)}");
+                    if(ImGui.IsItemHovered())
+                    {
+                        ImGui.BeginTooltip();
+                        ImGui.TextUnformatted($"{h.World} · {h.District} · W{h.Ward} P{h.Plot} · {h.Size}");
+                        ImGui.TextUnformatted($"Owner / FC master: {h.OwnerName}");
+                        if(!string.IsNullOrWhiteSpace(h.FcName))ImGui.TextUnformatted($"FC: {h.FcName} <{h.FcTag}>");
+                        if(h.LastEntry is not null)ImGui.TextUnformatted($"45-day estimate: {h.LastEntry.Value.AddDays(45).ToLocalTime():g}");
+                        ImGui.TextUnformatted("Based on shared recorded entries, not the game's live countdown.");
+                        ImGui.EndTooltip();
+                    }
+                    ImGui.TextDisabled($"{h.District} · W{h.Ward} P{h.Plot} · {h.Size}");
+                    ImGui.TextWrapped(h.Paused?"Demolition marked suspended in Journal.":h.LastEntry is null?"No eligible entry recorded.":$"Last eligible entry: {h.LastEntry.Value.ToLocalTime():g} · {Math.Max(0,(int)(now-h.LastEntry.Value).TotalDays)} days ago");
+                    ImGui.Spacing();
+                }
+            }
+            ImGui.PopID();
+        }
+        if(person.Characters.Length==0)ImGui.TextDisabled("No characters in this profile yet.");
+        ImGui.TextWrapped("Shared view refreshes once a minute while open, or also in the background if enabled in Settings. Keep the website open to process new game events and publish the updated Journal. Saved copies remain available offline.");
+        ImGui.PopID();
+    }
+}
