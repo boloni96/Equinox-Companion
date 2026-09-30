@@ -2,6 +2,7 @@ using Dalamud.Bindings.ImGui;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
+    private bool showSavedPairingKey;
     private readonly List<HouseObservation> pendingHouseNotices = [];
     private void UpdateHouseNotices(DateTimeOffset now)
     {
@@ -20,6 +21,39 @@ public sealed partial class Plugin
     }
     private void DrawSettings()
     {
+        if (!ImGui.BeginTabBar("SettingsSections")) return;
+        if (ImGui.BeginTabItem("General"))
+        {
+            DrawGeneralSettings();
+            ImGui.EndTabItem();
+        }
+        if (ImGui.BeginTabItem("Characters"))
+        {
+            DrawCharacterOrderSettings();
+            ImGui.EndTabItem();
+        }
+        if (ImGui.BeginTabItem("Connection"))
+        {
+            DrawConnection();
+            ImGui.EndTabItem();
+        }
+        ImGui.EndTabBar();
+    }
+    private void DrawSavedPairingKey()
+    {
+        if (config.PairingKey.Length == 0) return;
+        ImGui.TextUnformatted("Saved pairing key");
+        var savedKey = config.PairingKey;
+        ImGui.InputText("##saved-pairing-key", ref savedKey, 128,
+            ImGuiInputTextFlags.ReadOnly | (showSavedPairingKey ? ImGuiInputTextFlags.None : ImGuiInputTextFlags.Password));
+        if (ImGui.SmallButton(showSavedPairingKey ? "Hide key" : "Show key")) showSavedPairingKey = !showSavedPairingKey;
+        ImGui.SameLine();
+        if (ImGui.SmallButton("Copy key")) ImGui.SetClipboardText(config.PairingKey);
+        ImGui.TextWrapped("Share only with trusted people: this key reads the shared character/house list and allows sending game records to this Journal. It is not a view-only guest key.");
+        ImGui.Separator();
+    }
+    private void DrawGeneralSettings()
+    {
         ImGui.TextWrapped("Tracking and enabled uploads continue when the plugin window is closed.");
         var notify = config.NotifyHouseEntries;
         if (ImGui.Checkbox("Show house-entry messages in my chat",ref notify))
@@ -30,9 +64,5 @@ public sealed partial class Plugin
         if (ImGui.Checkbox("Refresh shared profiles while this window is closed",ref background))
         { config.RefreshSharedInBackground=background;nextRosterRead=default;Pi.SavePluginConfig(config); }
         ImGui.TextWrapped("One shared-list check per minute while open, or also in the background if enabled. Game actions still upload only when there are pending records. Both plugins can use the same pairing key.");
-        ImGui.Separator();
-        DrawCharacterOrderSettings();
-        ImGui.Separator();
-        DrawConnection();
     }
 }

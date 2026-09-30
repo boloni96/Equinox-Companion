@@ -43,7 +43,7 @@ public sealed partial class Plugin
             HousingBand? EstateBand(string type) => SummarizeBands(estates.Where(e => e.House!.Type == type)
                 .Select(e => HousingStatus.Band(HousingStatus.LastEligibleEntry(e, config.Discoveries, config.Houses), now)));
             var expanded = DrawSplitHeader(actor.Name + " · " + location + "###character", EstateBand("Private house"), EstateBand("Free Company house"),
-                estates.Select(e => EntryHover(e.House!.Type, e.Address!.Ward, e.Address.Plot, HousingStatus.LastEligibleEntry(e, config.Discoveries, config.Houses))));
+                estates.Select(e => EntryHover(e.House!.Type, e.Address!.Ward, e.Address.Plot, HousingStatus.LastEligibleEntry(e, config.Discoveries, config.Houses), now)));
             if (expanded)
             {
                 ImGui.TextDisabled(location);

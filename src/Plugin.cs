@@ -634,7 +634,7 @@ public sealed partial class Plugin : IDalamudPlugin
 
     private void Draw()
     {
-        if (!visible) return;
+        if (!visible) { showSavedPairingKey = false; return; }
         ImGui.SetNextWindowSize(new Vector2(660, 480), ImGuiCond.FirstUseEver);
         if (ImGui.Begin("Equinox Companion", ref visible))
         {
@@ -673,15 +673,15 @@ public sealed partial class Plugin : IDalamudPlugin
 
     private void DrawConnection()
     {
-            if (ImGui.CollapsingHeader("Website connection"))
-            {
+        ImGui.TextUnformatted("Website connection");
+        DrawSavedPairingKey();
                 ImGui.TextWrapped("Use Journal V7.9.23 or newer. Keep your existing pairing key. Both installations use the same key for this shared Journal.");
                 ImGui.InputText("Pairing key", ref pairingInput, 128, ImGuiInputTextFlags.Password);
                 if (ImGui.Button("Save pairing key") && syncTask is null)
                 {
                     var key = pairingInput.Trim();
                     if (key.Length == 64 && key.All(c => char.IsAsciiHexDigit(c)))
-                    { config.PairingKey = key.ToLowerInvariant(); config.SharedRoster = null; nextRosterRead = default; pairingInput = ""; config.SentEvents.Clear(); nextSync = default; Pi.SavePluginConfig(config); syncStatus = "Paired. Enable sync to send saved entries and tending."; }
+                    { config.PairingKey = key.ToLowerInvariant(); showSavedPairingKey = false; config.SharedRoster = null; nextRosterRead = default; pairingInput = ""; config.SentEvents.Clear(); nextSync = default; Pi.SavePluginConfig(config); syncStatus = "Paired. Enable sync to send saved entries and tending."; }
                     else syncStatus = "Paste the 64-character key from Game connection.";
                 }
                 var enabled = config.SyncEnabled;
@@ -693,12 +693,11 @@ public sealed partial class Plugin : IDalamudPlugin
                 ImGui.TextWrapped(syncStatus);
                 if (heldSyncRecords > 0) ImGui.TextWrapped($"{heldSyncRecords} incomplete record(s) kept locally; valid actions continue syncing.");
                 ImGui.TextWrapped("Sends character and job details, confirmed owned-estate and FC details, property addresses, planting and tending records, and entry times. Pairing key is saved on this PC and is never included in test exports. Characters match automatically by name and home server. Unmatched houses and patches need linking once.");
-            }
     }
 
     private void DrawTests()
     {
-            ImGui.TextWrapped("Local tracking version 0.4.1.0 — optional website connection available.");
+            ImGui.TextWrapped($"Local tracking version {typeof(Plugin).Assembly.GetName().Version} — optional website connection available.");
             ImGui.Separator(); ImGui.TextWrapped(status);
             ImGui.TextWrapped(discoveryStatus);
             ImGui.TextWrapped(cropChatStatus);

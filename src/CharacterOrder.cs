@@ -47,7 +47,7 @@ public sealed partial class Plugin
 
     private void DrawCharacterOrderSettings()
     {
-        if (!ImGui.CollapsingHeader("Character order")) return;
+        ImGui.TextUnformatted("Character order & hidden characters");
         var ownersFirst = config.HouseCharactersFirst;
         if (ImGui.Checkbox("Keep characters without houses at the bottom", ref ownersFirst))
         { config.HouseCharactersFirst = ownersFirst; Pi.SavePluginConfig(config); }

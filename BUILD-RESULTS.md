@@ -1,3 +1,11 @@
+# 0.4.1.3 — compact coloured hover dates
+
+Connection also shows the saved pairing key masked by default, with Show/Hide and Copy controls. The UI explains this is read/write game-sync access, not view-only guest access. Closing the window remasks it.
+
+Settings now has General, Characters and Connection subtabs below the main tab row.
+
+Removed duplicate tooltip status rows. Each estate date line uses its own timer colour, including paused/unknown shared entries. Removed the numeric timezone offset while retaining local-time conversion. Release build passed with zero warnings and errors; native appearance requires an in-game check.
+
 # 0.4.1.2 — character list controls
 
 Last eligible entry dates in character-bar tooltips, assembly version label, server/data center/region on bars, houses-first sorting, persistent per-list custom ordering, hide and restore in Settings. Hidden IDs and custom order are saved separately from observation records and shared roster data. No changes to event uploads or website data. Logged-in pinning is a stable view-only sort, skipped by Settings; local matching uses content ID and shared matching requires a unique name/home-world match. Hidden characters remain hidden.

@@ -1,3 +1,11 @@
+# 0.4.1.3
+
+Connection also shows the saved pairing key masked by default, with Show/Hide and Copy controls. The UI explains this is read/write game-sync access, not view-only guest access. Closing the window remasks it.
+
+Settings now has General, Characters and Connection subtabs below the main tab row.
+
+Character hover tooltips show coloured Private/FC entry-date lines directly, removing the redundant status summary above them. Times stay in the viewing computer’s local timezone, without the numeric UTC offset. Paused or unknown entries remain grey.
+
 # 0.4.1.2
 
 - Hover any character name bar for each Private/FC house's last eligible recorded entry date, local time and UTC offset.

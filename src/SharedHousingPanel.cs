@@ -46,9 +46,9 @@ public sealed partial class Plugin
         HousingBand.Recent => "Recent (0–7 days)", HousingBand.Warning => "8–30 days", HousingBand.Urgent => "31–45 days",
         HousingBand.Overdue => "DEMOLISHED? — estimate", HousingBand.Unknown => "Entry unknown / paused", _ => "No house recorded"
     };
-    private static string EntryHover(string type, int ward, int plot, DateTimeOffset? entry)
-        => $"{(type == "Private house" ? "Private" : "FC")} · W{ward} P{plot} — Last eligible entry: {(entry is { } at ? at.ToLocalTime().ToString("dd MMM yyyy, HH:mm:ss zzz") : "Unknown")}";
-    private static bool DrawSplitHeader(string label, HousingBand? privateBand, HousingBand? fcBand, IEnumerable<string> entryDetails)
+    private static (string Text, HousingBand Band) EntryHover(string type, int ward, int plot, DateTimeOffset? entry, DateTimeOffset now, bool paused = false)
+        => ($"{(type == "Private house" ? "Private" : "FC")} · W{ward} P{plot} — Last eligible entry: {(entry is { } at ? at.ToLocalTime().ToString("dd MMM yyyy, HH:mm:ss") : "Unknown")}", paused ? HousingBand.Unknown : HousingStatus.Band(entry, now));
+    private static bool DrawSplitHeader(string label, HousingBand? privateBand, HousingBand? fcBand, IEnumerable<(string Text, HousingBand Band)> entryDetails)
     {
         var pos = ImGui.GetCursorScreenPos(); var width = Math.Max(1, ImGui.GetContentRegionAvail().X); var height = ImGui.GetFrameHeight();
         static uint Background(HousingBand? b) { var c = BandColour(b);return ImGui.ColorConvertFloat4ToU32(new(c.X*.38f,c.Y*.38f,c.Z*.38f,1)); }
@@ -62,7 +62,14 @@ public sealed partial class Plugin
         ImGui.PushStyleColor(ImGuiCol.Text,Vector4.One);
         var open = ImGui.CollapsingHeader(label);
         ImGui.PopStyleColor(4);
-        if (ImGui.IsItemHovered()) { ImGui.BeginTooltip();ImGui.TextUnformatted("Left / Private: "+BandLabel(privateBand));ImGui.TextUnformatted("Right / FC: "+BandLabel(fcBand));ImGui.Separator();foreach(var detail in entryDetails) ImGui.TextUnformatted(detail);ImGui.EndTooltip(); }
+        if (ImGui.IsItemHovered())
+        {
+            ImGui.BeginTooltip();
+            var any = false;
+            foreach (var detail in entryDetails) { ImGui.TextColored(BandColour(detail.Band), detail.Text); any = true; }
+            if (!any) ImGui.TextDisabled("No house recorded.");
+            ImGui.EndTooltip();
+        }
         return open;
     }
     private void DrawSharedPerson(SharedPerson person)
@@ -79,7 +86,7 @@ public sealed partial class Plugin
             ImGui.PushID(c.Id);
             HousingBand? Status(string type) => SummarizeBands(c.Houses.Where(h=>h.Type==type).Select(h=>h.Paused?HousingBand.Unknown:HousingStatus.Band(h.LastEntry,now)));
             if (DrawSplitHeader(c.Name+" · "+SharedLocation(c)+"###character",Status("Private house"),Status("Free Company house"),
-                c.Houses.Select(h=>EntryHover(h.Type,h.Ward,h.Plot,h.LastEntry))))
+                c.Houses.Select(h=>EntryHover(h.Type,h.Ward,h.Plot,h.LastEntry,now,h.Paused))))
             {
                 ImGui.TextDisabled(c.World+" · "+c.Dc+" · "+c.Region+" · "+c.Account);
                 if(c.Houses.Length==0)ImGui.TextDisabled("No house recorded in the shared Journal.");
