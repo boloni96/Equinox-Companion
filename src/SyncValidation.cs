@@ -14,6 +14,21 @@ public static class SyncValidation
         c.Level is >= 1 and <= 200 && c.HighestLevel is >= 1 and <= 200 && c.HighestBattleLevel is >= 0 and <= 200 &&
         new[] { c.Race, c.Tribe, c.Sex }.All(s => s is not null && s.Length <= 100) &&
         c.Jobs is not null && c.Jobs.Length <= 100 && c.Jobs.All(j => j is not null && j.Id is >= 1 and <= 100 && Text(j.Name) && j.Level is >= 1 and <= 200) && (c.FreeCompany is null || FC(c.FreeCompany));
+    public static string HoldReason(SyncEvent e, DateTimeOffset now)
+    {
+        if (!ActorReady(e.Actor))
+        {
+            if (e.Actor is null) return "Missing character information.";
+            if (e.Actor.HomeWorldId == 0) return "Character home server was not loaded.";
+            if (e.Actor.CurrentWorldId == 0) return "Character current server was not loaded.";
+            return "Incomplete or invalid character identity.";
+        }
+        if (!Regex.IsMatch(e.Id ?? "", "^[a-f0-9]{32}$")) return "Invalid event identifier.";
+        if (e.At.Year < 2020 || e.At > now.AddMinutes(5)) return "Invalid event timestamp or clock ahead.";
+        if (e.Kind == "character.updated") return "Incomplete character/job/FC details.";
+        if (e.Address is null) return "Missing estate address.";
+        return "Incomplete or invalid estate/garden details for this event type.";
+    }
     public static bool CanSend(SyncEvent e, DateTimeOffset now)
     {
         if (!Regex.IsMatch(e.Id ?? "", "^[a-f0-9]{32}$") || !ActorReady(e.Actor) || e.At.Year < 2020 || e.At > now.AddMinutes(5)) return false;

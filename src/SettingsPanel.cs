@@ -37,6 +37,21 @@ public sealed partial class Plugin
             DrawConnection();
             ImGui.EndTabItem();
         }
+        if (ImGui.BeginTabItem("Diagnostics"))
+        {
+            ImGui.TextWrapped("Errors and held-record reasons are saved automatically on this PC, even with the window closed. Repeated issues are limited to once every five minutes; the log keeps about 2 MB across two files.");
+            ImGui.TextWrapped(errorJournal.FilePath);
+            if (ImGui.Button("Copy error log path")) ImGui.SetClipboardText(errorJournal.FilePath);
+            if (ImGui.Button("Export diagnostics with error history")) Export();
+            if (exportPath is not null)
+            {
+                ImGui.TextWrapped(exportPath);
+                if (ImGui.Button("Copy diagnostic export path")) ImGui.SetClipboardText(exportPath);
+            }
+            if (errorJournal.WriteFailure is { } failure) ImGui.TextWrapped(failure);
+            ImGui.TextWrapped("Send the exported file when asking for help. Error logs exclude pairing keys, chat and raw server responses. The full diagnostic export also includes your recorded characters, house and garden details. Logs are not uploaded automatically.");
+            ImGui.EndTabItem();
+        }
         ImGui.EndTabBar();
     }
     private void DrawSavedPairingKey()

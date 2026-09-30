@@ -3,6 +3,26 @@ using EquinoxCompanion;
 var time = DateTimeOffset.Parse("2026-09-29T00:00:00Z");
 var gate = new ObservationGate();
 void Check(string name, string? actual, string? expected) { if (actual != expected) throw new Exception($"{name}: {actual} != {expected}"); Console.WriteLine($"PASS {name}"); }
+var errorDir = Path.Combine(Path.GetTempPath(), "equinox-errors-" + Guid.NewGuid().ToString("N"));
+try
+{
+    var journal = new ErrorJournal(errorDir);
+    journal.Record("test", "Known failure", "event-a", "house.entered");
+    journal.Record("test", "Known failure", "event-a", "house.entered");
+    Check("error log deduplicates repeats", journal.Snapshot().Length.ToString(), "1");
+    var reopened = new ErrorJournal(errorDir);
+    Check("error history survives reopening", reopened.Snapshot().Length.ToString(), "1");
+    var entry = JsonDocument.Parse(reopened.Snapshot()[0]);
+    Check("error event remains identifiable", entry.RootElement.GetProperty("eventId").GetString(), "event-a");
+    File.WriteAllText(journal.FilePath, new string(' ', 1_000_001));
+    journal.Record("test", "Another failure");
+    Check("oversized log rotates", File.Exists(journal.FilePath + ".previous").ToString(), "True");
+    Check("new log remains bounded", (new FileInfo(journal.FilePath).Length < 10000).ToString(), "True");
+    var blocked = Path.Combine(errorDir, "not-a-directory"); File.WriteAllText(blocked, "file");
+    var unavailable = new ErrorJournal(blocked); unavailable.Record("test", "Failure");
+    Check("log write failure does not crash", (unavailable.WriteFailure is not null).ToString(), "True");
+}
+finally { Directory.Delete(errorDir, true); }
 Check("debounce initial location", gate.Observe("house-a", time), null);
 Check("startup inside is not entry", gate.Observe("house-a", time.AddSeconds(2)), "house.observedInside");
 Check("standing inside does not repeat", gate.Observe("house-a", time.AddSeconds(10)), null);

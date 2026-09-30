@@ -1,3 +1,7 @@
+# 0.4.1.4 — persistent error diagnostics
+
+Release build: zero warnings/errors. Gate suite verifies persistent error history, repeated-event suppression, rotation and nonfatal filesystem failures alongside existing sync/housing/garden checks. Error log uses fixed application descriptions and exception type names only. Diagnostic exports now report the actual plugin version and include up to 2,000 recent log lines. Native Diagnostics controls require an in-game check.
+
 # 0.4.1.3 — compact coloured hover dates
 
 Connection also shows the saved pairing key masked by default, with Show/Hide and Copy controls. The UI explains this is read/write game-sync access, not view-only guest access. Closing the window remasks it.

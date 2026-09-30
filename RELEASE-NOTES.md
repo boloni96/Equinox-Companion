@@ -1,3 +1,7 @@
+# 0.4.1.4 — persistent error diagnostics
+
+Automatic rolling local error history for upload/shared-list failures, observer errors and held-record reasons. Settings > Diagnostics offers a file path and a full diagnostic export including saved error history; no recording session needed. Logs keep about 2 MB across two files, suppress repeats for five minutes, and omit pairing keys, chat, raw exception messages and server bodies. Old incomplete queued records are diagnosed when sync checks them again. Earlier errors cannot be reconstructed.
+
 # 0.4.1.3
 
 Connection also shows the saved pairing key masked by default, with Show/Hide and Copy controls. The UI explains this is read/write game-sync access, not view-only guest access. Closing the window remasks it.

@@ -89,6 +89,7 @@ public sealed partial class Plugin : IDalamudPlugin
     private string pairingInput = "";
     private int syncFailures;
     private int heldSyncRecords;
+    private ErrorJournal errorJournal = null!;
 
     private void UpdateSync(DateTimeOffset now)
     {
@@ -103,10 +104,11 @@ public sealed partial class Plugin : IDalamudPlugin
                 config.SentEvents.RemoveAll(id => !retained.Contains(id));
                 Pi.SavePluginConfig(config);
                 syncStatus = result.Status;
+                if (result.Retry) errorJournal.Record("upload", result.Status);
                 syncFailures = result.Retry ? Math.Min(syncFailures + 1, 5) : 0;
                 nextSync = now.AddSeconds(result.Retry ? Math.Min(600, 30 * (1 << syncFailures)) : 30);
             }
-            else { syncStatus = "Sync paused after a connection error; local records are kept."; nextSync = now.AddMinutes(2); }
+            else { errorJournal.Record("upload", "Upload task failed; records kept.", exceptionType: syncTask.Exception?.GetBaseException().GetType().Name); syncStatus = "Sync paused after a connection error; local records are kept."; nextSync = now.AddMinutes(2); }
             syncTask = null;
         }
         if (!config.SyncEnabled || config.PairingKey.Length != 64 || syncTask is not null || now < nextSync) return;
@@ -117,7 +119,9 @@ public sealed partial class Plugin : IDalamudPlugin
             .Concat(config.Planting.Where(t => !sent.Contains(t.EventId)).Select(t => new SyncEvent(t.EventId, "garden.planted", t.ConfirmedAt, WithWorldNames(t.Actor), WithAddressNames(t.Address), t.Patch, t.Bed, t.Plant)))
             .Concat(config.Discoveries.Where(e => !sent.Contains(e.Id) && (e.Kind is "garden.ready" or "garden.observed" ? config.TrackGardens : e.Kind == "character.updated" ? config.SyncCharacterDetails : config.SyncHouseDetails)))
             .OrderBy(e => e.At).ToArray();
-        heldSyncRecords = pending.Count(e => !SyncValidation.CanSend(e, now));
+        var held = pending.Where(e => !SyncValidation.CanSend(e, now)).ToArray();
+        heldSyncRecords = held.Length;
+        foreach (var e in held) errorJournal.Record("held-record", SyncValidation.HoldReason(e, now), e.Id, e.Kind);
         var events = pending.Where(e => SyncValidation.CanSend(e, now)).Take(50).ToArray();
         while (events.Length > 1 && JsonSerializer.SerializeToUtf8Bytes(new { events }, json).Length > 60000) events = events[..^1];
         if (events.Length == 0) { nextSync = now.AddSeconds(30); return; }
@@ -127,18 +131,19 @@ public sealed partial class Plugin : IDalamudPlugin
 
     public unsafe Plugin()
     {
+        errorJournal = new ErrorJournal(Pi.GetPluginConfigDirectory());
         try
         {
             callbackHook = Interop.HookFromAddress<FireCallbackDelegate>(
                 AtkUnitBase.MemberFunctionPointers.FireCallback, ObserveCallback);
             callbackStatus = "Ready";
         }
-        catch (Exception ex) { callbackStatus = "Unavailable; see /xllog"; Log.Error(ex, "Garden callback observer unavailable"); }
+        catch (Exception ex) { callbackStatus = "Unavailable; see /xllog"; errorJournal.Record("plugin", "Garden callback observer unavailable", exceptionType: ex.GetType().Name); Log.Error(ex, "Garden callback observer unavailable"); }
         config = Pi.GetPluginConfig() as Configuration ?? new();
         try { plantHook = Interop.HookFromAddress<ConfirmPlantDelegate>(AgentHousingPlant.MemberFunctionPointers.ConfirmSeedAndSoilSelection, ObservePlantSelection); }
-        catch (Exception ex) { Log.Error(ex, "Plant selection observer unavailable"); }
+        catch (Exception ex) { errorJournal.Record("plugin", "Plant selection observer unavailable", exceptionType: ex.GetType().Name); Log.Error(ex, "Plant selection observer unavailable"); }
         try { signboardHook = Interop.HookFromAddress<SignboardDelegate>(AgentHousingSignboard.MemberFunctionPointers.ReadPacket, ObserveSignboard); signboardHook.Enable(); }
-        catch (Exception ex) { Log.Error(ex, "Estate placard observer unavailable"); }
+        catch (Exception ex) { errorJournal.Record("plugin", "Estate placard observer unavailable", exceptionType: ex.GetType().Name); Log.Error(ex, "Estate placard observer unavailable"); }
         if (config.TrackGardens) { callbackHook?.Enable(); plantHook?.Enable(); }
         Commands.AddHandler("/equinox", new CommandInfo(OnCommand) { HelpMessage = "Open Equinox Companion, shared profiles, housing and settings." });
         Pi.UiBuilder.Draw += Draw;
@@ -196,7 +201,7 @@ public sealed partial class Plugin : IDalamudPlugin
         if (now >= nextDiscovery)
         {
             nextDiscovery = now.AddSeconds(5);
-            try { ObserveDetails(now); } catch (Exception ex) { discoveryStatus = "Details not available yet; try opening your FC member list."; Log.Debug(ex, "Details observation deferred"); }
+            try { ObserveDetails(now); } catch (Exception ex) { discoveryStatus = "Details not available yet; try opening your FC member list."; errorJournal.Record("details", "Details observation deferred.", exceptionType: ex.GetType().Name); Log.Debug(ex, "Details observation deferred"); }
         }
         if (now < nextSample) return;
         nextSample = now.AddMilliseconds(ObservingGardens ? 50 : 250);
@@ -270,7 +275,7 @@ public sealed partial class Plugin : IDalamudPlugin
         {
             faulted = true; StopRecording();
             status = "Recorder paused after an error. See /xllog. Reload after checking game/plugin compatibility.";
-            Log.Error(ex, "Equinox observation paused");
+            errorJournal.Record("plugin", "Equinox observation paused", exceptionType: ex.GetType().Name); Log.Error(ex, "Equinox observation paused");
         }
     }
 
@@ -353,7 +358,7 @@ public sealed partial class Plugin : IDalamudPlugin
                 confirmedAction = false, confirmedBed = false
             }));
         }
-        catch (Exception ex) { Log.Error(ex, "Could not copy garden menu diagnostic"); }
+        catch (Exception ex) { errorJournal.Record("plugin", "Could not copy garden menu diagnostic", exceptionType: ex.GetType().Name); Log.Error(ex, "Could not copy garden menu diagnostic"); }
     }
 
     private static unsafe string? CopyMenuText(byte* value)
@@ -396,7 +401,7 @@ public sealed partial class Plugin : IDalamudPlugin
                 lastSubmittedOption = $"{menu.Title}: {option ?? "unresolved (see export)"}";
             }
         }
-        catch (Exception ex) { Log.Error(ex, "Could not copy garden callback diagnostic"); }
+        catch (Exception ex) { errorJournal.Record("plugin", "Could not copy garden callback diagnostic", exceptionType: ex.GetType().Name); Log.Error(ex, "Could not copy garden callback diagnostic"); }
         return callbackHook!.Original(addon, count, values, close);
     }
 
@@ -417,7 +422,7 @@ public sealed partial class Plugin : IDalamudPlugin
                     Volatile.Write(ref pendingPlant, new(Guid.NewGuid().ToString("N"), now, target, new(seed, seedName, soil, soilName)));
             }
         }
-        catch (Exception ex) { Log.Error(ex, "Could not copy plant selection"); }
+        catch (Exception ex) { errorJournal.Record("plugin", "Could not copy plant selection", exceptionType: ex.GetType().Name); Log.Error(ex, "Could not copy plant selection"); }
         plantHook!.Original(agent);
     }
 
@@ -433,7 +438,7 @@ public sealed partial class Plugin : IDalamudPlugin
                         packet->Size switch { 0 => "Small", 1 => "Medium", _ => "Large" }, packet->EstateType));
             }
         }
-        catch (Exception ex) { Log.Error(ex, "Could not copy estate placard"); }
+        catch (Exception ex) { errorJournal.Record("plugin", "Could not copy estate placard", exceptionType: ex.GetType().Name); Log.Error(ex, "Could not copy estate placard"); }
         signboardHook!.Original(agent, packet);
     }
 
@@ -624,12 +629,12 @@ public sealed partial class Plugin : IDalamudPlugin
             Directory.CreateDirectory(dir);
             exportPath = Path.Combine(dir, $"equinox-test-{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.json");
             File.WriteAllText(exportPath, JsonSerializer.Serialize(new {
-                schemaVersion = 3, pluginVersion = "0.4.1.0", exportedAt = DateTimeOffset.UtcNow,
+                schemaVersion = 4, pluginVersion = typeof(Plugin).Assembly.GetName().Version?.ToString(), errorLog = errorJournal.Snapshot(), exportedAt = DateTimeOffset.UtcNow,
                 mode = "local-diagnostics", gardeningConfirmed = false,
                 houseObservations = config.Houses, confirmedTending = config.Tending, confirmedPlanting = config.Planting, observedDetails = config.Discoveries, diagnostics
             }, json));
         }
-        catch (Exception ex) { exportPath = null; status = "Export failed; see /xllog."; Log.Error(ex, "Equinox export failed"); }
+        catch (Exception ex) { exportPath = null; status = "Export failed; see /xllog."; errorJournal.Record("plugin", "Equinox export failed", exceptionType: ex.GetType().Name); Log.Error(ex, "Equinox export failed"); }
     }
 
     private void Draw()

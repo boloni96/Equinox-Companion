@@ -15,9 +15,11 @@ public sealed partial class Plugin
             if (rosterTaskKey == config.PairingKey && rosterTask.IsCompletedSuccessfully)
             {
                 var r = rosterTask.Result; rosterStatus = r.Status;
+                if (r.Roster is null && !r.NotModified) errorJournal.Record("shared-roster", r.Status);
                 if (r.Roster is not null) { config.SharedRoster = r.Roster; Pi.SavePluginConfig(config); }
                 if (r.Unauthorized) { config.SharedRoster = null; Pi.SavePluginConfig(config); }
             }
+            if (rosterTask.IsFaulted) errorJournal.Record("shared-roster", "Shared roster task failed.", exceptionType: rosterTask.Exception?.GetBaseException().GetType().Name);
             rosterTask = null;
         }
         if ((!visible && !config.RefreshSharedInBackground) || !config.SyncEnabled || config.PairingKey.Length != 64 || rosterTask is not null || now < nextRosterRead) return;
