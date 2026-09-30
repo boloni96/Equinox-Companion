@@ -1,3 +1,4 @@
+using System.Text.Json;
 using EquinoxCompanion;
 var time = DateTimeOffset.Parse("2026-09-29T00:00:00Z");
 var gate = new ObservationGate();
@@ -69,7 +70,7 @@ Check("missing target cannot confirm", intent.Confirm(4017, time.AddMilliseconds
 Check("duplicate response has same dedupe key", intent.Confirm(4017, time.AddMilliseconds(450), Sample(450, "bed-a"))?.EventId, intent.EventId);
 
 // Optional private replay input; never copy player diagnostics into the repository.
-if (args.Length > 0)
+if (args.Length > 0 && args[0] != "--queue")
 {
     var opts = new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true };
     using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(args[0]));
@@ -162,3 +163,38 @@ Check("mature menu extra slots are not interpreted",GardenMenu.VisibleOptionCoun
 Check("growing menu preserves all option indices",GardenMenu.VisibleOptionCount(4,4,"Fertilize Crop","Tend Crop").ToString(),"4");
 Check("truncated growing menu rejected",GardenMenu.VisibleOptionCount(4,2,"Fertilize Crop","Tend Crop").ToString(),"0");
 Check("incomplete mature pair rejected",GardenMenu.VisibleOptionCount(4,1,"Harvest Crop",null).ToString(),"0");
+
+// Queue regression and exact housing-age boundaries.
+var realActor = new Actor("123456789", "Test Owner", 409, 409, "Kraken", "Kraken");
+var realAddress = new Address("019903D3001B002C", 409, 979, 28, 45, 0, false, false);
+var chInfo = new CharacterDetails(23, "BRD", 91, 91, "Au Ra", "Xaela", "Male", [new(23, "BRD", 91)], HighestBattleLevel: 91);
+var badCharacter = new SyncEvent(new string('a',32), "character.updated", time, realActor with { HomeWorldId = 0, CurrentWorldId = 0 }, null, Character: chInfo);
+var goodCharacter = badCharacter with { Id = new string('b',32), Actor = realActor };
+var estateEvent = new SyncEvent(new string('c',32), "house.discovered", time, realActor, realAddress, House: new("Private house", "Small", "owned-estate-id"));
+Check("incomplete world held", SyncValidation.CanSend(badCharacter,time).ToString(), "False");
+Check("valid character uploads", SyncValidation.CanSend(goodCharacter,time).ToString(), "True");
+Check("house behind invalid record uploads", new[]{badCharacter,estateEvent,goodCharacter}.Count(e=>SyncValidation.CanSend(e,time)).ToString(), "2");
+Check("incomplete job held", SyncValidation.CanSend(goodCharacter with { Character = chInfo with { JobId = 0 } },time).ToString(), "False");
+foreach (var boundary in new[]{ (0d,HousingBand.Recent),(7d,HousingBand.Recent),(7.999d,HousingBand.Recent),(8d,HousingBand.Warning),(30.999d,HousingBand.Warning),(31d,HousingBand.Urgent),(45d,HousingBand.Urgent),(45.001d,HousingBand.Overdue) })
+    Check($"housing band {boundary.Item1}",HousingStatus.Band(time,time.AddDays(boundary.Item1)).ToString(),boundary.Item2.ToString());
+Check("unknown entry stays unknown", HousingStatus.Band(null,time).ToString(), "Unknown");
+var ownerVisit = new HouseObservation("owner",time,"house.entered",realActor,realAddress);
+var visitor = realActor with { ContentId = "555", Name = "Guest" };
+var guestVisit = ownerVisit with { EventId="guest",Actor=visitor,ObservedAt=time.AddDays(2) };
+Check("guest does not reset private estimate", HousingStatus.LastEligibleEntry(estateEvent,[estateEvent],[ownerVisit,guestVisit])?.ToString("O"),time.ToString("O"));
+Check("login observation does not reset", HousingStatus.LastEligibleEntry(estateEvent,[estateEvent],[ownerVisit with { Kind="house.observedInside" }])?.ToString("O"),null);
+var fcDetail = new HouseDetails("Free Company house","Small","owned-estate-id",new("999","Example FC","FC",409));
+var fcEstate = estateEvent with { House=fcDetail };
+var memberEstate = fcEstate with { Actor=visitor };
+Check("linked FC member counts", HousingStatus.LastEligibleEntry(fcEstate,[fcEstate,memberEstate],[ownerVisit,guestVisit])?.ToString("O"),time.AddDays(2).ToString("O"));
+// Optional replay uses a private diagnostic export, never included in a release.
+if (args.Length > 1 && args[0] == "--queue") {
+    using var recorded = System.Text.Json.JsonDocument.Parse(File.ReadAllText(args[1]));
+    var options = new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+    var entries = recorded.RootElement.GetProperty("observedDetails").Deserialize<SyncEvent[]>(options)!;
+    var at = recorded.RootElement.GetProperty("exportedAt").GetDateTimeOffset();
+    var held = entries.Where(e=>!SyncValidation.CanSend(e,at)).ToArray();
+    Check("live export holds only bad world record",held.Length.ToString(),"1");
+    Check("live export identifies recorded zero world",held[0].Actor.HomeWorldId.ToString(),"0");
+    Check("live FC discovery remains sendable",entries.Where(e=>e.Actor.Name=="Vaelis Nohr"&&e.Kind=="house.discovered").All(e=>SyncValidation.CanSend(e,at)).ToString(),"True");
+}

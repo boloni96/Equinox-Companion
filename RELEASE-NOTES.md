@@ -1,3 +1,7 @@
+# 0.4.0.4
+
+Fix incomplete character snapshots blocking website uploads; add Tests and Characters & housing tabs with recorded-entry colour estimates and estate hover details. Re-enable character/job sync after updating. Same website and pairing key. Purple DEMOLISHED? is an estimate, not confirmed destruction.
+
 # 0.4.0.3 — mature menu/chat association fix
 
 Keep Journal V7.9.21 and the same pairing key. This is a plugin-only update.

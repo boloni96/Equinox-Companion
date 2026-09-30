@@ -24,7 +24,7 @@ using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 
 namespace EquinoxCompanion;
 
-public sealed class Plugin : IDalamudPlugin
+public sealed partial class Plugin : IDalamudPlugin
 {
     [PluginService] internal static IDalamudPluginInterface Pi { get; private set; } = null!;
     [PluginService] internal static IDataManager DataManager { get; private set; } = null!;
@@ -88,6 +88,7 @@ public sealed class Plugin : IDalamudPlugin
     private string syncStatus = "Not paired. Local records only.";
     private string pairingInput = "";
     private int syncFailures;
+    private int heldSyncRecords;
 
     private void UpdateSync(DateTimeOffset now)
     {
@@ -110,12 +111,14 @@ public sealed class Plugin : IDalamudPlugin
         }
         if (!config.SyncEnabled || config.PairingKey.Length != 64 || syncTask is not null || now < nextSync) return;
         var sent = config.SentEvents.ToHashSet();
-        var events = config.Houses.Where(h => h.Kind == "house.entered" && !sent.Contains(h.EventId))
+        var pending = config.Houses.Where(h => h.Kind == "house.entered" && !sent.Contains(h.EventId))
             .Select(h => new SyncEvent(h.EventId, h.Kind, h.ObservedAt, WithWorldNames(h.Actor), WithAddressNames(h.Address)))
             .Concat(config.Tending.Where(t => !sent.Contains(t.EventId)).Select(t => new SyncEvent(t.EventId, "garden.tended", t.ConfirmedAt, WithWorldNames(t.Actor), WithAddressNames(t.Address), t.Patch, t.Bed)))
             .Concat(config.Planting.Where(t => !sent.Contains(t.EventId)).Select(t => new SyncEvent(t.EventId, "garden.planted", t.ConfirmedAt, WithWorldNames(t.Actor), WithAddressNames(t.Address), t.Patch, t.Bed, t.Plant)))
             .Concat(config.Discoveries.Where(e => !sent.Contains(e.Id) && (e.Kind is "garden.ready" or "garden.observed" ? config.TrackGardens : e.Kind == "character.updated" ? config.SyncCharacterDetails : config.SyncHouseDetails)))
-            .OrderBy(e => e.At).Take(50).ToArray();
+            .OrderBy(e => e.At).ToArray();
+        heldSyncRecords = pending.Count(e => !SyncValidation.CanSend(e, now));
+        var events = pending.Where(e => SyncValidation.CanSend(e, now)).Take(50).ToArray();
         while (events.Length > 1 && JsonSerializer.SerializeToUtf8Bytes(new { events }, json).Length > 60000) events = events[..^1];
         if (events.Length == 0) { nextSync = now.AddSeconds(30); return; }
         syncStatus = $"Sending {events.Length} events…";
@@ -432,6 +435,7 @@ public sealed class Plugin : IDalamudPlugin
 
     private void KeepDiscovery(SyncEvent e)
     {
+        if (!SyncValidation.CanSend(e, DateTimeOffset.UtcNow)) return;
         var last = config.Discoveries.LastOrDefault(x => x.Kind == e.Kind && x.Actor.ContentId == e.Actor.ContentId && x.Address?.HouseId == e.Address?.HouseId && x.Patch == e.Patch && x.Bed == e.Bed);
         if (last is not null && !(e.Kind is "garden.ready" or "garden.observed" && config.Planting.Any(p => p.Actor.ContentId == e.Actor.ContentId && p.Address.HouseId == e.Address?.HouseId && p.Patch == e.Patch && p.Bed == e.Bed && p.ConfirmedAt > last.At)) && JsonSerializer.Serialize(new { last.Actor, last.Address, last.House, last.Character, last.Crop }) == JsonSerializer.Serialize(new { e.Actor, e.Address, e.House, e.Character, e.Crop })) return;
         config.Discoveries.Add(e);
@@ -442,6 +446,7 @@ public sealed class Plugin : IDalamudPlugin
     private unsafe void ObserveDetails(DateTimeOffset now)
     {
         var actor = ReadActor();
+        if (!SyncValidation.ActorReady(actor) || Player.ClassJob.RowId == 0 || Player.Level == 0) return;
         while (placards.TryDequeue(out var placard)) if (placard.CharacterId == actor.ContentId) estateNames[placard.Address.HouseId] = placard;
         FreeCompanyDetails? fc = null;
         var proxy = InfoProxyFreeCompany.Instance(); var members = InfoProxyFreeCompanyMember.Instance();
@@ -615,7 +620,7 @@ public sealed class Plugin : IDalamudPlugin
             Directory.CreateDirectory(dir);
             exportPath = Path.Combine(dir, $"equinox-test-{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.json");
             File.WriteAllText(exportPath, JsonSerializer.Serialize(new {
-                schemaVersion = 3, pluginVersion = "0.4.0.3", exportedAt = DateTimeOffset.UtcNow,
+                schemaVersion = 3, pluginVersion = "0.4.0.4", exportedAt = DateTimeOffset.UtcNow,
                 mode = "local-diagnostics", gardeningConfirmed = false,
                 houseObservations = config.Houses, confirmedTending = config.Tending, confirmedPlanting = config.Planting, observedDetails = config.Discoveries, diagnostics
             }, json));
@@ -629,7 +634,27 @@ public sealed class Plugin : IDalamudPlugin
         ImGui.SetNextWindowSize(new Vector2(660, 480), ImGuiCond.FirstUseEver);
         if (ImGui.Begin("Equinox Companion", ref visible))
         {
-            ImGui.TextWrapped("Local tracking version 0.4.0.3 — optional website connection available.");
+            if (ImGui.BeginTabBar("CompanionSections"))
+            {
+                if (ImGui.BeginTabItem("Tests"))
+                {
+                    DrawTests();
+                    ImGui.EndTabItem();
+                }
+                if (ImGui.BeginTabItem("Characters & housing"))
+                {
+                    DrawHousing();
+                    ImGui.EndTabItem();
+                }
+                ImGui.EndTabBar();
+            }
+        }
+        ImGui.End();
+    }
+
+    private void DrawTests()
+    {
+            ImGui.TextWrapped("Local tracking version 0.4.0.4 — optional website connection available.");
             if (ImGui.CollapsingHeader("Website connection"))
             {
                 ImGui.TextWrapped("First deploy Journal V7.9.21, then open Game connection on the website and create a pairing key.");
@@ -645,9 +670,10 @@ public sealed class Plugin : IDalamudPlugin
                 if (ImGui.Checkbox("Sync confirmed actions to Equinox Journal", ref enabled))
                 { config.SyncEnabled = enabled; nextSync = default; Pi.SavePluginConfig(config); }
                 var characters = config.SyncCharacterDetails; var houses = config.SyncHouseDetails;
-                if (ImGui.Checkbox("Sync character and job details", ref characters)) { config.SyncCharacterDetails = characters; Pi.SavePluginConfig(config); }
+                if (ImGui.Checkbox("Sync character and job details", ref characters)) { config.SyncCharacterDetails = characters; nextSync = default; Pi.SavePluginConfig(config); }
                 if (ImGui.Checkbox("Discover/update owned private and FC houses", ref houses)) { config.SyncHouseDetails = houses; Pi.SavePluginConfig(config); }
                 ImGui.TextWrapped(syncStatus);
+                if (heldSyncRecords > 0) ImGui.TextWrapped($"{heldSyncRecords} incomplete record(s) kept locally; valid actions continue syncing.");
                 ImGui.TextWrapped("Sends character and job details, confirmed owned-estate and FC details, property addresses, planting and tending records, and entry times. Pairing key is saved on this PC and is never included in test exports. Characters match automatically by name and home server. Unmatched houses and patches need linking once.");
             }
             ImGui.Separator(); ImGui.TextWrapped(status);
@@ -717,9 +743,7 @@ public sealed class Plugin : IDalamudPlugin
                 if (ImGui.Button("Copy export path")) ImGui.SetClipboardText(exportPath);
             }
             ImGui.Separator();
-            ImGui.TextWrapped("Export includes character names/IDs and house addresses. Includes garden menu labels. No account credentials or player chat text. Nothing is sent online.");
-        }
-        ImGui.End();
+            ImGui.TextWrapped("Export includes character names/IDs, house addresses and garden menu labels. No account credentials or player chat. Test exports stay local; enabled website sync sends confirmed records.");
     }
 
     public void Dispose()
