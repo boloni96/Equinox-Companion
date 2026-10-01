@@ -118,6 +118,7 @@ public sealed partial class Plugin : IDalamudPlugin
             .Concat(config.Tending.Where(t => !sent.Contains(t.EventId)).Select(t => new SyncEvent(t.EventId, "garden.tended", t.ConfirmedAt, WithWorldNames(t.Actor), WithAddressNames(t.Address), t.Patch, t.Bed)))
             .Concat(config.Planting.Where(t => !sent.Contains(t.EventId)).Select(t => new SyncEvent(t.EventId, "garden.planted", t.ConfirmedAt, WithWorldNames(t.Actor), WithAddressNames(t.Address), t.Patch, t.Bed, t.Plant)))
             .Concat(config.Discoveries.Where(e => !sent.Contains(e.Id) && (e.Kind is "garden.ready" or "garden.observed" ? config.TrackGardens : e.Kind == "character.updated" ? config.SyncCharacterDetails : config.SyncHouseDetails)))
+            .Where(e => !SyncValidation.SupersededIncompleteCharacter(e, config.Discoveries, now))
             .OrderBy(e => e.At).ToArray();
         var held = pending.Where(e => !SyncValidation.CanSend(e, now)).ToArray();
         heldSyncRecords = held.Length;
@@ -469,7 +470,8 @@ public sealed partial class Plugin : IDalamudPlugin
         }
         if (fc is not null && string.IsNullOrWhiteSpace(fc.Name)) fc = null;
         var jobs = DataManager.GetExcelSheet<Lumina.Excel.Sheets.ClassJob>(Dalamud.Game.ClientLanguage.English)
-            .Where(j => j.RowId > 0 && j.ExpArrayIndex >= 0).Select(j => new JobDetails(j.RowId, j.Abbreviation.ToString(), Player.GetClassJobLevel(j))).Where(j => j.Level > 0).ToArray();
+            .Where(j => j.RowId > 0 && j.ExpArrayIndex >= 0 && !string.IsNullOrWhiteSpace(j.Abbreviation.ToString()))
+            .Select(j => new JobDetails(j.RowId, j.Abbreviation.ToString(), Player.GetClassJobLevel(j))).Where(j => j.Level > 0).ToArray();
         var jobName = DataManager.GetExcelSheet<Lumina.Excel.Sheets.ClassJob>(Dalamud.Game.ClientLanguage.English).GetRowOrDefault(Player.ClassJob.RowId)?.Abbreviation.ToString() ?? "";
         var info = new CharacterDetails(Player.ClassJob.RowId, jobName, Player.Level, jobs.Select(j => j.Level).DefaultIfEmpty(Player.Level).Max(),
             Player.Race.Value.Masculine.ToString(), Player.Tribe.Value.Masculine.ToString(), (Player.Sex == 0 ? "Male" : "Female"), jobs, fc, jobs.Where(j => j.Id < 8 || j.Id > 18).Select(j => j.Level).DefaultIfEmpty(0).Max());
@@ -640,6 +642,7 @@ public sealed partial class Plugin : IDalamudPlugin
     private void Draw()
     {
         if (!visible) { showSavedPairingKey = false; return; }
+        ImGui.SetNextWindowSizeConstraints(new Vector2(500, 360), new Vector2(float.MaxValue, float.MaxValue));
         ImGui.SetNextWindowSize(new Vector2(660, 480), ImGuiCond.FirstUseEver);
         if (ImGui.Begin("Equinox Companion", ref visible))
         {
@@ -686,7 +689,14 @@ public sealed partial class Plugin : IDalamudPlugin
                 {
                     var key = pairingInput.Trim();
                     if (key.Length == 64 && key.All(c => char.IsAsciiHexDigit(c)))
-                    { config.PairingKey = key.ToLowerInvariant(); showSavedPairingKey = false; config.SharedRoster = null; nextRosterRead = default; pairingInput = ""; config.SentEvents.Clear(); nextSync = default; Pi.SavePluginConfig(config); syncStatus = "Paired. Enable sync to send saved entries and tending."; }
+                    {
+                        var changed = !string.Equals(config.PairingKey, key, StringComparison.OrdinalIgnoreCase);
+                        config.PairingKey = key.ToLowerInvariant(); showSavedPairingKey = false;
+                        if (changed) { config.SharedRoster = null; config.SentEvents.Clear(); }
+                        nextRosterRead = default; pairingInput = ""; nextSync = default;
+                        Pi.SavePluginConfig(config);
+                        syncStatus = changed ? "Paired. Enable sync to send saved entries and tending." : "Existing key kept. Retrying sync without resending acknowledged records.";
+                    }
                     else syncStatus = "Paste the 64-character key from Game connection.";
                 }
                 var enabled = config.SyncEnabled;

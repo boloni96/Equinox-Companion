@@ -1,3 +1,14 @@
+## 0.4.1.7 — sync recovery and paired estate messages
+
+- Ignore unnamed placeholder ClassJob rows when collecting a character snapshot.
+- Keep incomplete snapshots in diagnostics, but stop retrying them when a newer complete snapshot of the same character exists.
+- Re-saving the same pairing key retries connection without clearing acknowledged event IDs or the cached shared roster.
+- Entry chat can identify the owner/FC from an unambiguous paired-roster estate, without treating the visitor as an owner. Entry messages use green text.
+- Minimum window size is 500 × 360.
+- Pair with Journal V7.9.24 for smaller cloud uploads and corrected qualifying-entry timer display.
+
+Validation: Release build and pure logic tests. No live FFXIV validation performed. This release does not add collection/event/fashion/submarine tracking or fix the no-harvest-permission garden bed association.
+
 # 0.4.1.6 — exclude shared private houses from character timers
 
 Shared private houses remain visible when expanded, but do not affect the character colour bar, name-bar tooltip or houses-first sorting. Private ownership requires a unique owner name plus home-world match in the shared roster; unconfirmed ownership is excluded. FC-member houses still count. No website update required.

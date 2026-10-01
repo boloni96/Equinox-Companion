@@ -199,6 +199,11 @@ var realAddress = new Address("019903D3001B002C", 409, 979, 28, 45, 0, false, fa
 var chInfo = new CharacterDetails(23, "BRD", 91, 91, "Au Ra", "Xaela", "Male", [new(23, "BRD", 91)], HighestBattleLevel: 91);
 var badCharacter = new SyncEvent(new string('a',32), "character.updated", time, realActor with { HomeWorldId = 0, CurrentWorldId = 0 }, null, Character: chInfo);
 var goodCharacter = badCharacter with { Id = new string('b',32), Actor = realActor };
+var newerCharacter = goodCharacter with { At = time.AddMinutes(1) };
+Check("complete newer snapshot supersedes incomplete login", SyncValidation.SupersededIncompleteCharacter(badCharacter, [newerCharacter], time.AddMinutes(2)).ToString(), "True");
+Check("different character cannot supersede incomplete snapshot", SyncValidation.SupersededIncompleteCharacter(badCharacter, [newerCharacter with { Actor = realActor with { ContentId = "888" } }], time.AddMinutes(2)).ToString(), "False");
+Check("equal time does not supersede incomplete snapshot", SyncValidation.SupersededIncompleteCharacter(badCharacter, [goodCharacter], time).ToString(), "False");
+Check("complete snapshots remain sendable", SyncValidation.SupersededIncompleteCharacter(goodCharacter, [newerCharacter], time.AddMinutes(2)).ToString(), "False");
 var estateEvent = new SyncEvent(new string('c',32), "house.discovered", time, realActor, realAddress, House: new("Private house", "Small", "owned-estate-id"));
 Check("incomplete world held", SyncValidation.CanSend(badCharacter,time).ToString(), "False");
 Check("valid character uploads", SyncValidation.CanSend(goodCharacter,time).ToString(), "True");
@@ -232,4 +237,9 @@ Check("entry chat identifies private owner", HouseEntryNotice.Format(ownerVisit,
 Check("entry chat identifies FC member", HouseEntryNotice.Format(ownerVisit,fcEstate)?.Contains("your FC House").ToString(), "True");
 Check("login observation never chats", HouseEntryNotice.Format(ownerVisit with { Kind="house.observedInside" },estateEvent), null);
 Check("guest never labelled owner", HouseEntryNotice.Format(guestVisit,estateEvent)?.Contains("ownership unconfirmed").ToString(), "True");
+var pairedHome = sharedPrivate with { GameHouseId = realAddress.HouseId, OwnerName = "Paired Owner", Name = "Our home" };
+var pairedRoster = new SharedRoster(1,time,[new("person","Person",[houseOwner with { Houses = [pairedHome] }])]);
+Check("paired owner appears in visiting chat", HouseEntryNotice.Format(guestVisit,null,pairedRoster)?.Contains("Paired Owner's Private house").ToString(), "True");
+Check("paired visitor is never called owner", HouseEntryNotice.Format(guestVisit,null,pairedRoster)?.Contains("your Private House").ToString(), "False");
+Check("another estate cannot supply owner", HouseEntryNotice.Format(guestVisit with { Address = realAddress with { HouseId = "0000000000000001" } },null,pairedRoster)?.Contains("ownership unconfirmed").ToString(), "True");
 Check("workshop never triggers estate chat", HouseEntryNotice.Format(ownerVisit with { Address=realAddress with { Workshop=true } },estateEvent), null);

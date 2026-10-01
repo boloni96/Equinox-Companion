@@ -14,8 +14,8 @@ public sealed partial class Plugin
             var estate = config.Discoveries.LastOrDefault(e => e.Kind == "house.discovered" && e.Actor.ContentId == visit.Actor.ContentId && e.Address?.HouseId == visit.Address.HouseId);
             // Give the estate observer a chance to identify a newly discovered house.
             if (estate is null && now - visit.ObservedAt < TimeSpan.FromSeconds(10)) continue;
-            var message = HouseEntryNotice.Format(visit, estate);
-            if (message is not null) Chat.Print(message);
+            var message = HouseEntryNotice.Format(visit, estate, config.SharedRoster);
+            if (message is not null) Chat.Print(new Dalamud.Game.Text.SeStringHandling.SeStringBuilder().AddUiForeground(45).AddText(message).AddUiForegroundOff().Build());
             pendingHouseNotices.Remove(visit);
         }
     }

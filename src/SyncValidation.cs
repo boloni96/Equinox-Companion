@@ -4,6 +4,13 @@ namespace EquinoxCompanion;
 // Keep incomplete login/logout snapshots local; never let one block valid queued actions.
 public static class SyncValidation
 {
+    // Keep old diagnostic records in the export, but a complete newer snapshot
+    // of the same character makes an incomplete login snapshot obsolete.
+    public static bool SupersededIncompleteCharacter(SyncEvent e, IEnumerable<SyncEvent> records, DateTimeOffset now) =>
+        e.Kind == "character.updated" && !CanSend(e, now) &&
+        !string.IsNullOrWhiteSpace(e.Actor?.ContentId) && records.Any(newer =>
+            newer.Kind == "character.updated" && newer.Actor?.ContentId == e.Actor.ContentId &&
+            newer.At > e.At && CanSend(newer, now));
     private static bool Text(string? s) => !string.IsNullOrWhiteSpace(s) && s.Length <= 100;
     public static bool ActorReady(Actor? a) => a is not null &&
         Regex.IsMatch(a.ContentId ?? "", @"^[1-9]\d{0,19}$") &&
