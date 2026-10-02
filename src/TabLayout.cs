@@ -8,7 +8,6 @@ public sealed partial class Plugin
     {
         var tabs = new List<(string Id, string Label, Action Draw)>
         {
-            ("tests", "Tests###equinox-tests", DrawTests),
             ("housing", "Characters & housing###equinox-housing", DrawHousing),
         };
         foreach (var profile in config.SharedRoster?.People ?? [])
@@ -16,20 +15,18 @@ public sealed partial class Plugin
         tabs.Add(("submarines", "Submarines###equinox-submarines", DrawSubmarines));
         tabs.Add(("settings", "Settings###equinox-settings", DrawSettings));
         config.TabOrder ??= [];
-        // Retain absent people so a temporarily unavailable roster cannot erase their positions.
-        var order = config.TabOrder.Distinct().ToList();
-        foreach (var tab in tabs.Where(t => !order.Contains(t.Id)))
-        {
-            var settings = tab.Id.StartsWith("person:") && order.Contains("submarines") ? order.IndexOf("submarines") : order.IndexOf("settings");
-            if (settings >= 0 && tab.Id != "settings") order.Insert(settings, tab.Id);
-            else order.Add(tab.Id);
-        }
-        if (!ImGui.BeginTabBar("CompanionSections", ImGuiTabBarFlags.Reorderable)) return;
+        // Repair the old person-at-end layout once; retain subsequent user ordering.
+        var order = TabOrderPolicy.Reconcile(config.TabOrder,tabs.Select(t=>t.Id),config.TabOrderVersion<1);
+        if(config.TabOrderVersion<1){config.TabOrderVersion=1;config.TabOrder=order;Pi.SavePluginConfig(config);}
+        // ImGui appends late-arriving tabs regardless of submission order. Recreate the
+        // bar when the roster's tab membership changes, then restore the saved order.
+        var tabBarId="CompanionSections-v2-"+string.Join("|",tabs.Select(t=>t.Id));
+        if (!ImGui.BeginTabBar(tabBarId, ImGuiTabBarFlags.Reorderable)) return;
         var ids = new Dictionary<uint, string>();
         foreach (var tab in tabs.OrderBy(t => order.IndexOf(t.Id)))
         {
             ids[ImGui.GetID(tab.Label)] = tab.Id;
-            if (!ImGui.BeginTabItem(tab.Label)) continue;
+            if (!ImGui.BeginTabItem(tab.Label,tab.Id=="settings"?ImGuiTabItemFlags.Trailing|ImGuiTabItemFlags.NoReorder:ImGuiTabItemFlags.None)) continue;
             tab.Draw();
             ImGui.EndTabItem();
         }

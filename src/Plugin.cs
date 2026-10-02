@@ -166,7 +166,7 @@ public sealed partial class Plugin : IDalamudPlugin
         fashionCommandRegistered = Commands.AddHandler("/fashionr", new CommandInfo(OnFashionCommand) { HelpMessage = "Open the current Fashion Report V1 picture in game." });
         if (!fashionCommandRegistered) Log.Warning("/fashionr is already registered by another plugin. Use /equinox fashion instead.");
         mainWindow = new CompanionWindow(this); windows.AddWindow(mainWindow);
-        fashionWindow = new FashionReportWindow(); windows.AddWindow(fashionWindow);
+        fashionWindow = new FashionReportWindow(OpenFashionBrowser); windows.AddWindow(fashionWindow);
         plantingWindow = new PlantingGuideWindow(this); windows.AddWindow(plantingWindow);
         Pi.UiBuilder.Draw += Draw;
         Pi.UiBuilder.OpenMainUi += Open;
@@ -190,15 +190,15 @@ public sealed partial class Plugin : IDalamudPlugin
     private void OnFashionCommand(string command, string args)
     {
         fashionWindow.OpenReport();
-        Chat.Print(new Dalamud.Game.Text.SeStringHandling.SeStringBuilder()
+        if(config.NotifyFashionLink) Chat.Print(new Dalamud.Game.Text.SeStringHandling.SeStringBuilder()
             .AddText("[Equinox] ").Add(fashionBrowserLink).AddUiForeground(45)
             .AddText("Click here to open Fashion Report in your browser")
             .AddUiForegroundOff().Add(Dalamud.Game.Text.SeStringHandling.Payloads.RawPayload.LinkTerminator).Build());
     }
-    private static void OpenFashionBrowser()
+    private void OpenFashionBrowser()
     {
         try { Dalamud.Utility.Util.OpenLink("https://fashionreportxiv.com/hint.png?equinox=" + DateTimeOffset.UtcNow.ToUnixTimeSeconds()); }
-        catch (Exception ex) { Log.Error(ex, "Could not open Fashion Report in the browser."); Chat.PrintError("[Equinox] Could not open the browser. Visit https://fashionreportxiv.com/hint.png"); }
+        catch (Exception ex) { Log.Error(ex, "Could not open Fashion Report in the browser."); if(config.NotifyBrowserErrors) Chat.PrintError("[Equinox] Could not open the browser. Visit https://fashionreportxiv.com/hint.png"); }
     }
 
     private Actor ReadActor() => new(Player.ContentId.ToString(CultureInfo.InvariantCulture),
@@ -731,6 +731,7 @@ public sealed partial class Plugin : IDalamudPlugin
 
     private void Draw()
     {
+        UpdateShortcuts();
         mainWindow.IsOpen = visible;
         windows.Draw();
         visible = mainWindow.IsOpen;
@@ -768,32 +769,25 @@ public sealed partial class Plugin : IDalamudPlugin
                     }
                     else syncStatus = "Paste the 64-character key from Game connection.";
                 }
-                var enabled = config.SyncEnabled;
-                if (ImGui.Checkbox("Sync confirmed actions to Equinox Journal", ref enabled))
-                { config.SyncEnabled = enabled; nextSync = default; Pi.SavePluginConfig(config); }
-                var gardenReminders = config.NotifyGardenCare;
-                if (ImGui.Checkbox("Garden tending and harvest chat reminders", ref gardenReminders)) { config.NotifyGardenCare = gardenReminders; Pi.SavePluginConfig(config); }
-                var characters = config.SyncCharacterDetails; var houses = config.SyncHouseDetails;
-                if (ImGui.Checkbox("Sync character and job details", ref characters)) { config.SyncCharacterDetails = characters; nextSync = default; Pi.SavePluginConfig(config); }
-                if (ImGui.Checkbox("Discover/update private, FC and paired placard details", ref houses)) { config.SyncHouseDetails = houses; Pi.SavePluginConfig(config); }
                 ImGui.TextWrapped(syncStatus);
                 if (heldSyncRecords > 0) ImGui.TextWrapped($"{heldSyncRecords} incomplete observation(s) in Diagnostics. They are not sent and do not block valid actions.");
                 ImGui.TextWrapped("Sends character and job details, confirmed owned-estate and FC details, property addresses, planting and tending records, and entry times. Pairing key is saved on this PC and is never included in test exports. Characters match automatically by name and home server. Unmatched houses and patches need linking once.");
     }
 
-    private void DrawTests()
+    private void DrawDiagnosticsTracking()
     {
-            ImGui.TextWrapped($"Local tracking version {typeof(Plugin).Assembly.GetName().Version} — optional website connection available.");
-            ImGui.Separator(); ImGui.TextWrapped(status);
+            ImGui.TextWrapped($"Tracking diagnostics · Companion {typeof(Plugin).Assembly.GetName().Version}");
+            ImGui.TextWrapped(syncStatus);
+            ImGui.TextWrapped(status);
             ImGui.TextWrapped(discoveryStatus);
             ImGui.TextWrapped(cropChatStatus);
             ImGui.TextWrapped($"Saved planting records: {config.Planting.Count}. Plant observer: {(plantHook is null ? "unavailable" : "ready")}");
-            if (ImGui.CollapsingHeader("Character house visits", ImGuiTreeNodeFlags.DefaultOpen))
+            if (ImGui.CollapsingHeader("Recent observed house visits · latest 50"))
             {
                 ImGui.TextWrapped("Touched means entered inside. Times are local. Houses listed here are observed visits, not an ownership roster.");
                 if (currentAddress is not null && Player.IsLoaded && !config.Houses.Any(h => h.Actor.ContentId == Player.ContentId.ToString(CultureInfo.InvariantCulture) && h.Address.HouseId == currentAddress.HouseId))
                     ImGui.TextWrapped("Current property: no entry recorded for this character yet.");
-                foreach (var house in config.Houses.GroupBy(h => (h.Actor.ContentId, h.Address.HouseId)).OrderByDescending(g => g.Max(h => h.ObservedAt)))
+                foreach (var house in config.Houses.GroupBy(h => (h.Actor.ContentId, h.Address.HouseId)).OrderByDescending(g => g.Max(h => h.ObservedAt)).Take(50))
                 {
                     var last = house.OrderByDescending(h => h.ObservedAt).First();
                     var entry = house.Where(h => h.Kind == "house.entered").OrderByDescending(h => h.ObservedAt).FirstOrDefault();
@@ -813,22 +807,21 @@ public sealed partial class Plugin : IDalamudPlugin
                 ImGui.TextWrapped("Open your estate placard to read its name and size. Open the FC member list with your character visible if FC details are missing. Only confirmed owned estate addresses are discovered.");
             }
             ImGui.Separator();
-            var track = config.TrackGardens;
-            if (ImGui.Checkbox("Automatically save confirmed planting and tending locally", ref track))
+            if (ImGui.CollapsingHeader("Garden tracking details"))
             {
-                config.TrackGardens = track;
-                if (ObservingGardens) { callbackHook?.Enable(); plantHook?.Enable(); } else StopRecording();
-                Pi.SavePluginConfig(config);
-            }
+            ImGui.TextDisabled("Garden tracking controls: Settings > Tracking.");
             ImGui.TextWrapped("English garden menus supported. Confirmed tending is saved per house, patch and bed. Website matching preserves existing batches. Planting records include the selected seed and soil plus a successful game response. Open the numbered bed menu after harvesting to sync the observed empty bed. Selecting Harvest alone never clears a bed.");
             ImGui.TextWrapped($"Saved tending records: {config.Tending.Count} (latest 10,000 retained)");
             foreach (var tend in config.Tending.TakeLast(6).Reverse())
                 ImGui.TextWrapped($"{tend.ConfirmedAt.ToLocalTime():g} · {tend.Actor.Name} · W{tend.Address.Ward} P{tend.Address.Plot} · Patch {tend.Patch}, bed {tend.Bed}: tended");
             ImGui.Separator();
-            ImGui.TextWrapped("Optional diagnostics: record your normal gardening routine, then export. Starting a test does not clear saved tending or house visits.");
+            }
+            ImGui.Separator();
+            ImGui.TextUnformatted("Diagnostic recording");
+            ImGui.TextWrapped("Record the action that is failing, then use Export diagnostics below. Normal tracking does not need a recording. Saved gardens and house visits are preserved.");
             if (!recording)
             {
-                if (ImGui.Button("Start a 5-minute garden test") && Player.IsLoaded && !faulted) StartRecording();
+                if (ImGui.Button("Start 5-minute diagnostic recording") && Player.IsLoaded && !faulted) StartRecording();
             }
             else
             {
@@ -844,14 +837,7 @@ public sealed partial class Plugin : IDalamudPlugin
             ImGui.TextWrapped($"Action observer: {callbackStatus}");
             ImGui.TextWrapped($"Last submitted option (unverified): {lastSubmittedOption}");
             foreach (var signal in recentSignals) ImGui.TextWrapped(signal);
-            if (ImGui.Button("Export test JSON")) Export();
-            if (exportPath is not null)
-            {
-                ImGui.TextWrapped(exportPath);
-                if (ImGui.Button("Copy export path")) ImGui.SetClipboardText(exportPath);
-            }
-            ImGui.Separator();
-            ImGui.TextWrapped("Export includes character names/IDs, house addresses and garden menu labels. No account credentials or player chat. Test exports stay local; enabled website sync sends confirmed records.");
+            ImGui.TextWrapped("Recording includes garden menu labels and target details. Exports remain local until you share them.");
     }
 
     public void Dispose()

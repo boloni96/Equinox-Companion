@@ -1,0 +1,11 @@
+Equinox Companion 0.5.1.14 — settings, shortcuts and tab layout
+
+Settings groups: Tracking, Chat messages, Keybinds, Characters, Connection and Diagnostics. Tracking holds sync and data collection controls; Connection holds the pairing key and connection status. Every current chat-message category has a checkbox: house entries, housing warnings, gardening master switch, tending, confirmed harvest readiness, estimated maturity checks, unknown-care checks, Fashion Report link, unidentified-house command feedback and browser errors.
+
+Keybinds for /equinox, /planting and /fashionr: letters, digits or F1–F12 with optional Ctrl/Alt/Shift. Defaults unassigned. Saved locally across logins/updates. Exact modifiers; no key-repeat activation; suppressed while typing/editing or unfocused. Duplicate combinations are disabled and highlighted. Game bindings are not replaced or consumed; choose unused combinations. /planting still requires the paired house.
+
+Default main order: Characters & housing, person tabs, Submarines, Settings. Repairs the old person-at-end order once, preserving relative person ordering. Later user drags remain saved; late roster loading restores saved positions instead of appending people. Settings stays last. Old Tests moved into Settings > Diagnostics, with live status, bounded recent visits, garden details, recording and a single export area.
+
+No website update or new pairing key required: Journal 7.11.25 remains current. Pixel garden art is not included. AutoRetainer cache integration investigated and documented separately, not enabled in this release.
+
+Validation: build succeeds without warnings/errors; gate tests include modifier matching, shortcut config roundtrip, tab migration, late roster arrival and absent-person preservation. In-game keybind and layout behaviour still requires live verification.

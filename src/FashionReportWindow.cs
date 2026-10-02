@@ -26,8 +26,10 @@ public sealed partial class Plugin
         private Vector2 pan;
         private bool dragged;
         private bool picturePressed;
-        public FashionReportWindow() : base("Fashion Report###EquinoxFashion")
+        private readonly Action openBrowser;
+        public FashionReportWindow(Action openBrowser) : base("Fashion Report###EquinoxFashion")
         {
+            this.openBrowser = openBrowser;
             Size = new Vector2(720, 490);
             SizeCondition = ImGuiCond.FirstUseEver;
             SizeConstraints = new WindowSizeConstraints { MinimumSize = new Vector2(360, 260), MaximumSize = new Vector2(float.MaxValue) };
@@ -94,7 +96,7 @@ public sealed partial class Plugin
             if (ImGui.Button("Refresh")) Refresh();
             ImGui.EndDisabled();
             ImGui.SameLine();
-            if (ImGui.Button("Open in browser")) OpenFashionBrowser();
+            if (ImGui.Button("Open in browser")) openBrowser();
             ImGui.SameLine();
             if (ImGui.Button("Reset view")) { zoom = 1; pan = Vector2.Zero; }
             ImGui.TextWrapped(status);

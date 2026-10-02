@@ -26,7 +26,7 @@ public sealed partial class Plugin
     {
         nextRosterRead = default;
         plantingHouseId = config.SyncEnabled && config.PairingKey.Length == 64 ? SharedGardenLocation.Match(currentAddress, GardenPlanSources()) : null;
-        if (plantingHouseId is null) { Chat.Print("[Equinox] /planting is available only at an identified paired house."); return; }
+        if (plantingHouseId is null) { if(config.NotifyPlantingUnavailable) Chat.Print("[Equinox] /planting is available only at an identified paired house."); return; }
         plantingWindow.IsOpen = true;
     }
     private SharedGardenPlan[] GardenPlanSources()

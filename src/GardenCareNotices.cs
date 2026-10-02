@@ -31,7 +31,7 @@ public sealed partial class Plugin
                     if (empty > (bed.Watered ?? DateTimeOffset.MinValue) && empty >= localCare) continue;
                     var effective = localCare > (bed.Watered ?? DateTimeOffset.MinValue) ? bed with { Watered = localCare, NextTend = localCare.AddHours(12), DeathAt = bed.WiltHours is > 0 ? localCare.AddHours(bed.WiltHours.Value+24) : null } : bed;
                     if (lastPlant > (bed.Watered ?? DateTimeOffset.MinValue)) effective = effective with { Ready = false, KeepMature = false, HarvestAt = null, DeathAt = null };
-                    var kind = GardenCareStatus.Due(effective, now); if (kind is null) continue;
+                    var kind = GardenCareStatus.Due(effective, now); if (kind is null || !GardenMessageEnabled(kind)) continue;
                     var left = effective.DeathAt - now;
                     var urgency = left is null ? "unknown" : left <= TimeSpan.Zero ? "risk" : left <= TimeSpan.FromHours(1) ? "1h" : left <= TimeSpan.FromHours(4) ? "4h" : "normal";
                     var key = $"{batch.HouseId}:{batch.Batch}:{bed.Bed}:{kind}:{effective.Watered:O}:{bed.HarvestAt:O}:{urgency}";

@@ -22,11 +22,13 @@ public sealed partial class Plugin
     private void DrawSettings()
     {
         if (!ImGui.BeginTabBar("SettingsSections")) return;
-        if (ImGui.BeginTabItem("General"))
+        if (ImGui.BeginTabItem("Tracking"))
         {
             DrawGeneralSettings();
             ImGui.EndTabItem();
         }
+        if (ImGui.BeginTabItem("Chat messages")) { DrawChatMessageSettings(); ImGui.EndTabItem(); }
+        if (ImGui.BeginTabItem("Keybinds")) { DrawShortcutSettings(); ImGui.EndTabItem(); }
         if (ImGui.BeginTabItem("Characters"))
         {
             DrawCharacterOrderSettings();
@@ -39,6 +41,8 @@ public sealed partial class Plugin
         }
         if (ImGui.BeginTabItem("Diagnostics"))
         {
+            DrawDiagnosticsTracking();
+            ImGui.Separator();ImGui.TextUnformatted("Logs and export");
             ImGui.TextWrapped("Errors and held-record reasons are saved automatically on this PC, even with the window closed. Repeated issues are limited to once every five minutes; the log keeps about 2 MB across two files.");
             ImGui.TextWrapped(errorJournal.FilePath);
             if (ImGui.Button("Copy error log path")) ImGui.SetClipboardText(errorJournal.FilePath);
@@ -69,24 +73,22 @@ public sealed partial class Plugin
     }
     private void DrawGeneralSettings()
     {
+        ImGui.TextUnformatted("Website sync");
+        MessageToggle("Sync confirmed actions to Equinox Journal",config.SyncEnabled,v=>{config.SyncEnabled=v;nextSync=default;});
+        MessageToggle("Refresh shared profiles while this window is closed",config.RefreshSharedInBackground,v=>{config.RefreshSharedInBackground=v;nextRosterRead=default;});
+        ImGui.TextWrapped("Shared profiles refresh every 15 seconds. Actions upload when records are pending. Pairing keys are managed under Connection.");
+        ImGui.Separator();ImGui.TextUnformatted("Information to collect");
+        MessageToggle("Character and job details",config.SyncCharacterDetails,v=>{config.SyncCharacterDetails=v;nextSync=default;});
+        MessageToggle("Private / FC houses and paired estate placards",config.SyncHouseDetails,v=>config.SyncHouseDetails=v);
+        MessageToggle("Collection unlocks and reward items",config.SyncCollections,v=>config.SyncCollections=v);
+        MessageToggle("Fashion Report and submarine observations",config.SyncActivities,v=>config.SyncActivities=v);
+        MessageToggle("Garden planting and tending",config.TrackGardens,v=>{
+            config.TrackGardens=v;
+            if(ObservingGardens){callbackHook?.Enable();plantHook?.Enable();}else StopRecording();
+        });
+        ImGui.TextWrapped("Tracking continues while the window is closed. Garden records include confirmed seed, soil and care actions. Chat reminders are separate, under Chat messages.");
+        ImGui.Separator();ImGui.TextUnformatted("Collection status");
         ImGui.TextWrapped(collectionStatus);
-        ImGui.TextWrapped("Storage is remembered per character after it loads in game. Open the Armoire, Glamour Dresser and each retainer to refresh them.");
-        var collections = config.SyncCollections;
-        if (ImGui.Checkbox("Sync collection unlocks and reward items", ref collections)) { config.SyncCollections = collections; Pi.SavePluginConfig(config); }
-        var activities = config.SyncActivities;
-        if (ImGui.Checkbox("Sync Fashion Report and submarine observations", ref activities)) { config.SyncActivities = activities; Pi.SavePluginConfig(config); }
-        var warn = config.NotifyHousingWarnings;
-        if (ImGui.Checkbox("Red chat reminder after 30 days without eligible entry", ref warn)) { config.NotifyHousingWarnings = warn; Pi.SavePluginConfig(config); }
-        ImGui.TextWrapped("History older than 60 days is pruned after successful sync. Current state and unsent actions are preserved.");
-        ImGui.TextWrapped("Tracking and enabled uploads continue when the plugin window is closed.");
-        var notify = config.NotifyHouseEntries;
-        if (ImGui.Checkbox("Show house-entry messages in my chat",ref notify))
-        { config.NotifyHouseEntries=notify;Pi.SavePluginConfig(config); }
-        ImGui.TextDisabled("Only visible to you. Never sends to FC, party, tell or public chat.");
-        ImGui.TextWrapped("Example: [Equinox] You entered your FC House — HAVEN28-45. Only new interior entries trigger a message; login observations and old sync records do not.");
-        var background = config.RefreshSharedInBackground;
-        if (ImGui.Checkbox("Refresh shared profiles while this window is closed",ref background))
-        { config.RefreshSharedInBackground=background;nextRosterRead=default;Pi.SavePluginConfig(config); }
-        ImGui.TextWrapped("One shared-list check every 15 seconds while open, or also in the background if enabled. Game actions still upload only when there are pending records. Both plugins can use the same pairing key.");
+        ImGui.TextWrapped("Open the Armoire, Glamour Dresser and each retainer to refresh their stored contents. Current state and unsent records are kept; older acknowledged history is pruned after 60 days.");
     }
 }

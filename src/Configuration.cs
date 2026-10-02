@@ -4,10 +4,21 @@ namespace EquinoxCompanion;
 public sealed class Configuration : IPluginConfiguration
 {
     public Dictionary<string, bool> SharedAccountExpanded { get; set; } = [];
+    public int TabOrderVersion { get; set; }
     public List<string> TabOrder { get; set; } = [];
     public bool HouseCharactersFirst { get; set; } = true;
     public Dictionary<string, List<string>> HiddenCharacters { get; set; } = [];
     public Dictionary<string, List<string>> CharacterOrders { get; set; } = [];
+    public Shortcut EquinoxShortcut { get; set; } = new();
+    public Shortcut PlantingShortcut { get; set; } = new();
+    public Shortcut FashionShortcut { get; set; } = new();
+    public bool NotifyGardenTending { get; set; } = true;
+    public bool NotifyGardenHarvest { get; set; } = true;
+    public bool NotifyGardenMaturity { get; set; } = true;
+    public bool NotifyGardenUnknownCare { get; set; } = true;
+    public bool NotifyFashionLink { get; set; } = true;
+    public bool NotifyPlantingUnavailable { get; set; } = true;
+    public bool NotifyBrowserErrors { get; set; } = true;
     public bool NotifyGardenCare { get; set; } = true;
     public bool NotifyHouseEntries { get; set; }
     public bool RefreshSharedInBackground { get; set; } = true;
