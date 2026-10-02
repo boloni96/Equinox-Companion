@@ -4,12 +4,12 @@ using System.Net.Http.Json;
 using System.Text.Json;
 namespace EquinoxCompanion;
 
-public sealed record SyncEvent(string Id, string Kind, DateTimeOffset At, Actor Actor, Address? Address, int? Patch = null, int? Bed = null, PlantDetails? Plant = null, HouseDetails? House = null, CharacterDetails? Character = null, CropDetails? Crop = null, CollectionDetails? Collection = null, FashionDetails? Fashion = null, VoyageDetails? Voyage = null, GardenTargetDetails? GardenTarget = null, StorageDetails? Storage = null, FreeCompanyDetails? Company = null);
+public sealed record SyncEvent(string Id, string Kind, DateTimeOffset At, Actor Actor, Address? Address, int? Patch = null, int? Bed = null, PlantDetails? Plant = null, HouseDetails? House = null, CharacterDetails? Character = null, CropDetails? Crop = null, CollectionDetails? Collection = null, FashionDetails? Fashion = null, VoyageDetails? Voyage = null, GardenTargetDetails? GardenTarget = null, StorageDetails? Storage = null, FreeCompanyDetails? Company = null, CachedVoyage? CachedVoyage = null);
 public sealed record GardenTargetDetails(uint Argument, float X, float Y, float Z);
 public sealed record StorageDetails(string Key, string Name, uint[] Items);
 public sealed record CollectionDetails(string Category, uint[] Known, uint[] Unlocked, uint[] Obtained);
 public sealed record FashionDetails(int Score, int Remaining, int ThemeId, string Cycle);
-public sealed record SubmarineDetails(int Slot, string Name, int Rank, long ReturnTime, uint RegisterTime, ushort[] Parts, byte[] Route);
+public sealed record SubmarineDetails(int Slot, string Name, int Rank, long ReturnTime, uint RegisterTime, ushort[] Parts, [property: System.Text.Json.Serialization.JsonConverter(typeof(SubmarineRouteJson))] byte[] Route);
 public sealed record VoyageDetails(string FcId, SubmarineDetails[] Submarines);
 public sealed record SyncResult(string[] Accepted, string Status, bool Retry);
 public sealed class CompanionSync : IDisposable
@@ -62,6 +62,8 @@ public sealed class CompanionSync : IDisposable
             var roster = JsonSerializer.Deserialize<SharedRoster>(await response.Content.ReadAsStringAsync(cancel.Token), Json);
             if (roster is null || roster.People is null || roster.People.Length > 100 || roster.People.Any(p => p is null || p.Characters is null || p.Characters.Any(c => c is null || c.Houses is null)))
                 return new(null, "Invalid shared profile response; showing saved copy.");
+            if (roster.CachedVoyages is { Length: > 500 } || roster.CachedVoyages?.Any(v=>v is null || v.CharacterId is null || v.CharacterName is null || v.World is null || v.FcName is null || v.ImportedAt.Year<2020 || v.ImportedAt>DateTimeOffset.UtcNow.AddMinutes(5) || !AutoRetainerCache.Valid(v.Data,DateTimeOffset.UtcNow)) == true)
+                return new(null,"Invalid AutoRetainer cache response; showing saved copy.");
             if (roster.Voyages is { Length: > 200 } || roster.Voyages?.Any(v=>v is null || v.Submarines is null || v.Submarines.Length>4 || v.Submarines.Any(s=>s is null || s.Name is null || s.ReturnTime<0 || s.ReturnTime>DateTimeOffset.UtcNow.AddDays(30).ToUnixTimeSeconds())) == true)
                 return new(null,"Invalid shared voyage response; showing saved copy.");
             if (roster.GardenPlans is { Length: > 200 } || roster.GardenPlans?.Any(p => p is null || p.Beds is null || p.Beds.Length > 8 || p.Batch < 1 || p.Batch > 20 || p.Beds.Any(b => b is null || b.Bed < 1 || b.Bed > 8 || b.Crop is null || b.Soil is null || b.Days < 0 || b.Days > 365)) == true)
@@ -77,4 +79,19 @@ public sealed class CompanionSync : IDisposable
     }
     private sealed record Receipt(string[] Accepted);
     public void Dispose() { cancel.Cancel(); client.Dispose(); cancel.Dispose(); }
+}
+
+// Preserve legacy base64 caches while sending the numeric array required by the API.
+public sealed class SubmarineRouteJson : System.Text.Json.Serialization.JsonConverter<byte[]>
+{
+    public override byte[] Read(ref Utf8JsonReader reader, Type type, JsonSerializerOptions options)
+    {
+        if(reader.TokenType==JsonTokenType.String)return reader.GetBytesFromBase64();
+        if(reader.TokenType!=JsonTokenType.StartArray)throw new JsonException("Expected submarine route array.");
+        var result=new List<byte>();
+        while(reader.Read()&&reader.TokenType!=JsonTokenType.EndArray){if(result.Count>=5)throw new JsonException("Too many route sectors.");result.Add(reader.GetByte());}
+        return result.ToArray();
+    }
+    public override void Write(Utf8JsonWriter writer, byte[] value, JsonSerializerOptions options)
+    {writer.WriteStartArray();foreach(var sector in value)writer.WriteNumberValue(sector);writer.WriteEndArray();}
 }

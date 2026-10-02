@@ -361,3 +361,38 @@ Check("repair persons after housing",string.Join(",",TabOrderPolicy.Reconcile(["
 Check("late roster restores persons before subs",string.Join(",",TabOrderPolicy.Reconcile(["housing","submarines","settings"],availableTabs,false)),"housing,person:a,person:b,submarines,settings");
 Check("settings always last",string.Join(",",TabOrderPolicy.Reconcile(["settings","person:b","housing","person:a","submarines"],availableTabs,false)),"person:b,housing,person:a,submarines,settings");
 Check("absent person order retained",string.Join(",",TabOrderPolicy.Reconcile(["housing","person:b","person:a","submarines","settings"],["housing","submarines","settings"],false)),"housing,person:b,person:a,submarines,settings");
+
+var arCharacter=new SharedCharacter("ar-c","Member","Rafflesia","","","Account",[],FcMember:true,FcId:"987");
+var arSource=JsonSerializer.Deserialize<AutoRetainerCharacter>("""{"CID":123,"Name":"Member","World":"Rafflesia","FCID":987,"Ceruleum":1737,"RepairKits":858,"NumSubSlots":4,"Gil":999999,"OfflineSubmarineData":[{"Name":"Hope","ReturnTime":0}],"AdditionalSubmarineData":{"Hope":{"Level":85,"Part1":21794,"Part2":21795,"Part3":21796,"Part4":21797,"CurrentExp":123,"NextLevelExp":456,"Points":"AQIAAAA="}}}""")!;
+Check("AR character and FC matched",AutoRetainerCache.Match(arSource,[arCharacter])?.Id,"ar-c");
+Check("AR same name wrong world blocked",AutoRetainerCache.Match(arSource,[arCharacter with{World="Golem"}])?.Id,null);
+Check("AR ambiguous identity blocked",AutoRetainerCache.Match(arSource,[arCharacter,arCharacter with{Id="other"}])?.Id,null);
+Check("AR stale FC membership blocked",AutoRetainerCache.Match(arSource,[arCharacter with{FcId="999"}])?.Id,null);
+Check("AR explicit FC departure blocked",AutoRetainerCache.Match(arSource,[arCharacter with{FcMember=false}])?.Id,null);
+var arCache=AutoRetainerCache.Copy(arSource,id=>"Item "+id);
+Check("AR caches preserve supplies",arCache.Ceruleum+":"+arCache.RepairKits,"1737:858");
+Check("AR valid cached vessel needs no invented registration",AutoRetainerCache.Valid(arCache,DateTimeOffset.UtcNow).ToString(),"True");
+arSource.AdditionalSubmarineData["Hope"].Points[0]=99;
+Check("AR copied arrays independent of source",arCache.Submarines[0].Route[0].ToString(),"1");
+Check("AR unrelated inventory excluded",JsonSerializer.Serialize(arCache).Contains("Gil").ToString(),"False");
+Check("AR malformed supply rejected",AutoRetainerCache.Valid(arCache with{RepairKits=-1},DateTimeOffset.UtcNow).ToString(),"False");
+Check("AR duplicate vessel rejected",AutoRetainerCache.Valid(arCache with{Submarines=[arCache.Submarines[0],arCache.Submarines[0]]},DateTimeOffset.UtcNow).ToString(),"False");
+Check("AR old website held",SyncValidation.SupportedByWebsite("submarines.cached",6).ToString(),"False");
+Check("AR protocol7 supported",SyncValidation.SupportedByWebsite("submarines.cached",7).ToString(),"True");
+
+Check("AR routes serialize as numeric arrays",JsonSerializer.Serialize(arCache).Contains("\"Route\":[1,2,0,0,0]").ToString(),"True");
+
+var numericVoyage=new SubmarineDetails(0,"Hope",85,0,1,[1,2,3,4],[1,2]);
+Check("direct submarine routes serialize as number array",JsonSerializer.Serialize(numericVoyage).Contains("\"Route\":[1,2]").ToString(),"True");
+Check("legacy direct submarine route readable",JsonSerializer.Deserialize<SubmarineDetails>(JsonSerializer.Serialize(numericVoyage).Replace("[1,2]","\"AQI=\""))!.Route.Length.ToString(),"2");
+
+var captureKeys=new ShortcutCapture();
+Check("capture modifier alone waits",captureKeys.Step([],true,false,false,false)?.Label,null);
+Check("capture chord waits until release",captureKeys.Step(["F8"],true,false,false,false)?.Label,null);
+Check("capture waits for modifier release",captureKeys.Step([],true,false,false,false)?.Label,null);
+Check("capture release preserves modifiers",captureKeys.Step([],false,false,false,false)?.Label,"Ctrl + F8");
+Check("capture does not save twice",captureKeys.Step([],false,false,false,false)?.Label,null);
+var multiKeys=new ShortcutCapture();multiKeys.Step(["A","B"],false,false,false,false);
+Check("capture rejects multiple ordinary keys",multiKeys.Step([],false,false,false,false)?.Label,null);
+multiKeys.Step(["Key1"],false,true,false,false);
+Check("capture recovers after bad chord",multiKeys.Step([],false,false,false,false)?.Label,"Alt + 1");

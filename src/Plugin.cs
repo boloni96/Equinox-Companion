@@ -68,7 +68,7 @@ public sealed partial class Plugin : IDalamudPlugin
     private readonly ConcurrentQueue<Diagnostic> menuMessages = new();
     private readonly ConcurrentQueue<(DateTimeOffset At, uint Id, int?[] Parameters, GardenContext? Context, TendIntent? Intent, PlantIntent? Plant)> messages = new();
     private readonly JsonSerializerOptions json = new() { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
-    private bool visible = true;
+    private bool visible;
     private volatile bool recording;
     private DateTimeOffset recordingUntil;
     private DateTimeOffset nextSample;
@@ -121,7 +121,7 @@ public sealed partial class Plugin : IDalamudPlugin
             .Select(h => new SyncEvent(h.EventId, h.Kind, h.ObservedAt, WithWorldNames(h.Actor), WithAddressNames(h.Address)))
             .Concat(config.Tending.Where(t => !sent.Contains(t.EventId)).Select(t => new SyncEvent(t.EventId, "garden.tended", t.ConfirmedAt, WithWorldNames(t.Actor), WithAddressNames(t.Address), t.Patch, t.Bed)))
             .Concat(config.Planting.Where(t => !sent.Contains(t.EventId)).Select(t => new SyncEvent(t.EventId, "garden.planted", t.ConfirmedAt, WithWorldNames(t.Actor), WithAddressNames(t.Address), t.Patch, t.Bed, t.Plant)))
-            .Concat(config.Discoveries.Where(e => !sent.Contains(e.Id) && (e.Kind is "garden.ready" or "garden.observed" or "garden.unmapped" or "garden.empty" ? config.TrackGardens : e.Kind == "character.updated" ? config.SyncCharacterDetails : e.Kind is "collection.observed" or "storage.observed" ? config.SyncCollections : e.Kind is "fashion.observed" or "submarines.observed" ? config.SyncActivities : config.SyncHouseDetails)))
+            .Concat(config.Discoveries.Where(e => !sent.Contains(e.Id) && (e.Kind is "garden.ready" or "garden.observed" or "garden.unmapped" or "garden.empty" ? config.TrackGardens : e.Kind == "character.updated" ? config.SyncCharacterDetails : e.Kind is "collection.observed" or "storage.observed" ? config.SyncCollections : e.Kind == "submarines.cached" ? config.SyncAutoRetainer : e.Kind is "fashion.observed" or "submarines.observed" ? config.SyncActivities : config.SyncHouseDetails)))
             .Where(e => !SyncValidation.SupersededIncompleteCharacter(e, config.Discoveries, now))
             .OrderBy(e => e.At).ToArray();
         var held = pending.Where(e => !SyncValidation.CanSend(e, now)).ToArray();
@@ -166,6 +166,7 @@ public sealed partial class Plugin : IDalamudPlugin
         fashionCommandRegistered = Commands.AddHandler("/fashionr", new CommandInfo(OnFashionCommand) { HelpMessage = "Open the current Fashion Report V1 picture in game." });
         if (!fashionCommandRegistered) Log.Warning("/fashionr is already registered by another plugin. Use /equinox fashion instead.");
         mainWindow = new CompanionWindow(this); windows.AddWindow(mainWindow);
+        welcomeWindow = new WelcomeWindow(this); windows.AddWindow(welcomeWindow);
         fashionWindow = new FashionReportWindow(OpenFashionBrowser); windows.AddWindow(fashionWindow);
         plantingWindow = new PlantingGuideWindow(this); windows.AddWindow(plantingWindow);
         Pi.UiBuilder.Draw += Draw;
@@ -228,6 +229,7 @@ public sealed partial class Plugin : IDalamudPlugin
         UpdateGardenCareNotices(now);
         MaintainRecords(now);
         if (faulted) return;
+        UpdateAutoRetainer(now);
         
         if (!Player.IsLoaded || Player.ContentId == 0)
         {
@@ -510,7 +512,7 @@ public sealed partial class Plugin : IDalamudPlugin
     {
         if (!SyncValidation.CanSend(e, DateTimeOffset.UtcNow)) return;
         var last = config.Discoveries.LastOrDefault(x => x.Kind == e.Kind && x.Actor.ContentId == e.Actor.ContentId && x.Address?.HouseId == e.Address?.HouseId && x.Patch == e.Patch && x.Bed == e.Bed && x.Collection?.Category == e.Collection?.Category && x.Storage?.Key == e.Storage?.Key && x.GardenTarget?.Argument == e.GardenTarget?.Argument && x.Company?.Id == e.Company?.Id && x.Company?.Profile?.Source == e.Company?.Profile?.Source);
-        if (!force && last is not null && (!(e.Kind is "garden.empty" or "garden.ready" or "garden.observed") || e.At - last.At < TimeSpan.FromSeconds(2)) && !(e.GardenTarget is not null && e.At-last.At > TimeSpan.FromDays(30)) && !(e.Kind is "garden.ready" or "garden.observed" or "garden.empty" && config.Planting.Any(p => p.Actor.ContentId == e.Actor.ContentId && p.Address.HouseId == e.Address?.HouseId && p.Patch == e.Patch && p.Bed == e.Bed && p.ConfirmedAt > last.At)) && JsonSerializer.Serialize(new { last.Actor, last.Address, last.House, last.Character, last.Crop, last.Collection, last.Fashion, last.Voyage, last.GardenTarget, last.Storage, last.Company }) == JsonSerializer.Serialize(new { e.Actor, e.Address, e.House, e.Character, e.Crop, e.Collection, e.Fashion, e.Voyage, e.GardenTarget, e.Storage, e.Company })) return;
+        if (!force && last is not null && (!(e.Kind is "garden.empty" or "garden.ready" or "garden.observed") || e.At - last.At < TimeSpan.FromSeconds(2)) && !(e.GardenTarget is not null && e.At-last.At > TimeSpan.FromDays(30)) && !(e.Kind is "garden.ready" or "garden.observed" or "garden.empty" && config.Planting.Any(p => p.Actor.ContentId == e.Actor.ContentId && p.Address.HouseId == e.Address?.HouseId && p.Patch == e.Patch && p.Bed == e.Bed && p.ConfirmedAt > last.At)) && JsonSerializer.Serialize(new { last.Actor, last.Address, last.House, last.Character, last.Crop, last.Collection, last.Fashion, last.Voyage, last.GardenTarget, last.Storage, last.Company, last.CachedVoyage }) == JsonSerializer.Serialize(new { e.Actor, e.Address, e.House, e.Character, e.Crop, e.Collection, e.Fashion, e.Voyage, e.GardenTarget, e.Storage, e.Company, e.CachedVoyage })) return;
         config.Discoveries.Add(e);
         if(collectingStorage)storageChanged=true;else Pi.SavePluginConfig(config);
     }
@@ -753,7 +755,7 @@ public sealed partial class Plugin : IDalamudPlugin
     {
         ImGui.TextUnformatted("Website connection");
         DrawSavedPairingKey();
-                ImGui.TextWrapped("Use Journal V7.11.25 for all current features. Keep your existing pairing key. Both installations use the same key for this shared Journal.");
+                ImGui.TextWrapped("Use Journal V7.11.27 for all current features. Keep your existing pairing key. Both installations use the same key for this shared Journal.");
                 ImGui.InputText("Pairing key", ref pairingInput, 128, ImGuiInputTextFlags.Password);
                 if (ImGui.Button("Save pairing key") && syncTask is null)
                 {

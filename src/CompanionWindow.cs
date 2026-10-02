@@ -13,7 +13,7 @@ public sealed partial class Plugin
         public CompanionWindow(Plugin plugin) : base("Equinox Companion")
         {
             this.plugin = plugin;
-            IsOpen = true;
+            IsOpen = false;
             Size = new Vector2(660, 480);
             SizeCondition = ImGuiCond.FirstUseEver;
             SizeConstraints = new WindowSizeConstraints { MinimumSize = new Vector2(500, 360), MaximumSize = new Vector2(float.MaxValue) };

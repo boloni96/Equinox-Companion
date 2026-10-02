@@ -41,6 +41,7 @@ public sealed partial class Plugin
         }
         if (ImGui.BeginTabItem("Diagnostics"))
         {
+            if(ImGui.Button("About Equinox Companion / What’s new"))welcomeWindow.IsOpen=true;
             DrawDiagnosticsTracking();
             ImGui.Separator();ImGui.TextUnformatted("Logs and export");
             ImGui.TextWrapped("Errors and held-record reasons are saved automatically on this PC, even with the window closed. Repeated issues are limited to once every five minutes; the log keeps about 2 MB across two files.");
@@ -82,6 +83,8 @@ public sealed partial class Plugin
         MessageToggle("Private / FC houses and paired estate placards",config.SyncHouseDetails,v=>config.SyncHouseDetails=v);
         MessageToggle("Collection unlocks and reward items",config.SyncCollections,v=>config.SyncCollections=v);
         MessageToggle("Fashion Report and submarine observations",config.SyncActivities,v=>config.SyncActivities=v);
+        MessageToggle("Import AutoRetainer submarine cache and carried supplies",config.SyncAutoRetainer,v=>config.SyncAutoRetainer=v);
+        ImGui.TextWrapped(autoRetainerStatus);
         MessageToggle("Garden planting and tending",config.TrackGardens,v=>{
             config.TrackGardens=v;
             if(ObservingGardens){callbackHook?.Enable();plantHook?.Enable();}else StopRecording();

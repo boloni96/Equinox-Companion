@@ -25,6 +25,7 @@ public sealed class Configuration : IPluginConfiguration
     public bool NotifyHousingWarnings { get; set; } = true;
     public Dictionary<string, DateTimeOffset> HousingWarnings { get; set; } = [];
     public SharedRoster? SharedRoster { get; set; }
+    public string WelcomeVersion { get; set; } = "";
     public int Version { get; set; } = 4;
     public bool SyncEnabled { get; set; }
     public string PairingKey { get; set; } = "";
@@ -34,6 +35,7 @@ public sealed class Configuration : IPluginConfiguration
     public bool SyncCharacterDetails { get; set; } = true;
     public bool SyncHouseDetails { get; set; } = true;
     public bool SyncCollections { get; set; } = true;
+    public bool SyncAutoRetainer { get; set; } = true;
     public bool SyncActivities { get; set; } = true;
     public bool TrackGardens { get; set; }
     public List<TendingRecord> Tending { get; set; } = [];

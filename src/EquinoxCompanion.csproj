@@ -1,10 +1,10 @@
 <Project Sdk="Dalamud.NET.Sdk/15.0.0">
   <PropertyGroup>
-    <Version>0.5.1.14</Version>
+    <Version>0.5.1.15</Version>
     <Author>Boloni</Author>
     <Name>Equinox Companion</Name>
     <Punchline>Your shared characters, estates, collections and timers.</Punchline>
-    <Description>Use /planting at an identified paired estate for its garden guide; /fashionr opens the current Fashion Report. Observes characters, paired estates, gardening, collections, event quests, Fashion Report and submarine timers. Reads Company Profile and FC member panels. Requires Journal V7.11.18 for garden plans, care reminders and fertilizer sync. English garden menus supported. In-game validation build.</Description>
+    <Description>Use /planting at an identified paired estate for its garden guide; /fashionr opens the current Fashion Report. Observes characters, paired estates, gardening, collections, event quests, Fashion Report and submarine timers. Reads Company Profile and FC member panels. Optional AutoRetainer cached submarines and carried supplies require Journal V7.11.27. Click-to-record command shortcuts in Settings. Requires Journal V7.11.18 for garden plans, care reminders and fertilizer sync. English garden menus supported. In-game validation build.</Description>
     <IconUrl>https://raw.githubusercontent.com/boloni96/Equinox-Companion/main/dist/v$(Version)/icon.png</IconUrl>
     <RepoUrl>https://github.com/boloni96/Equinox-Companion</RepoUrl>
     <Tags>housing;gardening;journal</Tags>

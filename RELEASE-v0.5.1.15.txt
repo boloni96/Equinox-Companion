@@ -1,0 +1,14 @@
+Equinox Companion 0.5.1.15 — 2026-10-02
+
+Optional read-only AutoRetainer import (Settings > Tracking, enabled by default).
+Scans registered caches one character per 100ms, at most 500 per cycle, then waits one minute. Reads only submarine, FC identity and carried-supply fields through the supported IPC endpoints. No relogging, deployment, configuration writes or retainer import.
+Matches a unique paired character by name/home world and confirmed FC ID. Missing/mismatched identities remain unlinked.
+Shows cached submarine names, rank, return timers, component item names, experience, route sector IDs, unlocked slot count, carried ceruleum tanks and repair kits in Submarines and the website FC page.
+Cache import time is not a game observation timestamp. Direct observations stay separate. Character supply counters are never summed as FC chest stock.
+Requires website 7.11.27 / protocol 7 for cache uploads; older sites hold these events locally. Update website and save once, then allow the shared roster to refresh.
+Fixed direct submarine routes being serialized as base64 instead of the API numeric list; legacy cached route strings remain readable.
+Keybinds: click Set shortcut, press a key with optional Ctrl/Alt/Shift, release all keys to save. Esc/cancel/focus loss cancels; duplicate command shortcuts keep the old assignment; Clear removes a binding. Includes letters, digits, F1–F24, navigation keys and keypad digits.
+
+Installation/update shows a welcome once per version instead of opening the main window automatically: purpose, new features, connection guidance and “Built for GODDESS.” Open Companion or dismiss; reopen in Settings > Diagnostics. Existing pairing/settings are preserved.
+
+Validation: Release build, zero warnings/errors; pure sync, cache, route compatibility and key-capture tests; synthetic website ingress/live projection/FC membership/stale data tests; desktop/mobile website browser checks. Live AutoRetainer IPC and physical in-game shortcut capture still require user testing.

@@ -124,5 +124,6 @@ public sealed partial class Plugin
             }
         }
         if (observations.Count == 0) ImGui.TextWrapped("No submarines observed yet.");
+        DrawAutoRetainerSubmarines();
     }
 }
