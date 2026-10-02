@@ -1,5 +1,5 @@
 namespace EquinoxCompanion;
-public sealed record SharedRoster(long Revision, DateTimeOffset Updated, SharedPerson[] People, SharedVoyage[]? Voyages = null, int ProtocolVersion = 1);
+public sealed record SharedRoster(long Revision, DateTimeOffset Updated, SharedPerson[] People, SharedVoyage[]? Voyages = null, int ProtocolVersion = 1, SharedGardenPlan[]? GardenPlans = null, SharedGardenCare[]? GardenCare = null);
 public sealed record SharedVoyage(string FcId, string FcName, DateTimeOffset At, SubmarineDetails[] Submarines);
 public sealed record SharedPerson(string Id, string Name, SharedCharacter[] Characters);
 public sealed record SharedCharacter(string Id, string Name, string World, string Dc, string Region, string Account, SharedHouse[] Houses, string AccountId = "", bool? NeedsBoost = null, bool? FcMember = null, string FcId = "");
@@ -47,4 +47,57 @@ public static class SharedHousePresentation
         return !string.IsNullOrWhiteSpace(house.OwnerName) && string.Equals(character.Name.Trim(), house.OwnerName.Trim(), StringComparison.OrdinalIgnoreCase) ? "FC" : "Shared";
     }
     public static int Order(string label) => label == "Private" ? 0 : label == "FC" ? 1 : 2;
+}
+
+public sealed record SharedGardenPlan(string HouseId, string HouseName, string World, string District, int Ward, int Plot, int Batch, string Target, DateTimeOffset At, SharedGardenBed[] Beds, string GameHouseId = "", int Capacity = 1);
+public sealed record SharedGardenBed(int Bed, string Crop, string Soil, string Status, string ActualCrop, string ActualSoil, DateTimeOffset? Planted, DateTimeOffset? Watered, double Days, bool Ready, DateTimeOffset? NextTend = null, DateTimeOffset? HarvestAt = null);
+
+public static class SharedGardenLocation
+{
+    public static string? Match(Address? address, IEnumerable<SharedGardenPlan> plans)
+    {
+        if (address is null || address.Apartment || address.Room != 0 || string.IsNullOrWhiteSpace(address.WorldName) || string.IsNullOrWhiteSpace(address.DistrictName)) return null;
+        static string Norm(string? value) => (value ?? "").Trim().Replace("The ", "", StringComparison.OrdinalIgnoreCase).ToLowerInvariant();
+        var matches = plans.Where(p => Norm(p.World) == Norm(address.WorldName) && Norm(p.District) == Norm(address.DistrictName) && p.Ward == address.Ward && p.Plot == address.Plot &&
+            (string.IsNullOrWhiteSpace(p.GameHouseId) || string.Equals(p.GameHouseId, address.HouseId, StringComparison.OrdinalIgnoreCase))).Select(p => p.HouseId).Distinct().Take(2).ToArray();
+        return matches.Length == 1 ? matches[0] : null;
+    }
+}
+
+public sealed record SharedGardenCare(string HouseId, string GameHouseId, string HouseName, string World, string District, int Ward, int Plot, int Batch, string[] CharacterIds, SharedGardenCareBed[] Beds);
+public sealed record SharedGardenCareBed(int Bed, bool Ready, bool KeepMature, DateTimeOffset? Watered, DateTimeOffset? NextTend, DateTimeOffset? HarvestAt, DateTimeOffset? DeathAt = null, double? WiltHours = null);
+public static class GardenCareStatus
+{
+    public static string Message(string houseName, string kind, IEnumerable<int> batches, DateTimeOffset? deathAt = null, DateTimeOffset? now = null)
+    {
+        var label = kind switch { "tend" => "Tending due", "harvest" => "Ready to harvest", "check maturity" => "Check maturity", _ => "Check tending" };
+        var countdown = "";
+        if (now is not null && kind is "tend" or "check care")
+        {
+            var minutes = deathAt is null ? -1 : (int)Math.Ceiling((deathAt.Value-now.Value).TotalMinutes);
+            countdown = deathAt is null ? " [death timer unknown]" : minutes <= 0 ? " [death risk - check now]" : $" [~{minutes/60:00}h:{minutes%60:00}m to die]";
+        }
+        return $"[Equinox] {label} at '{houseName}': Batch {string.Join(", ", batches.Distinct().Order())}.{countdown}";
+    }
+
+    public static string BatchMessage(string houseName, string kind, IEnumerable<(int Batch, DateTimeOffset? DeathAt)> batches, DateTimeOffset now)
+    {
+        var label = kind switch { "tend" => "Tending due", "harvest" => "Ready to harvest", "check maturity" => "Check maturity", _ => "Check tending" };
+        var parts = batches.GroupBy(x => x.Batch).OrderBy(x => x.Key).Select(group =>
+        {
+            var deadline = group.Any(x => x.DeathAt is null) ? null : group.Min(x => x.DeathAt);
+            var minutes = deadline is null ? -1 : (int)Math.Ceiling((deadline.Value-now).TotalMinutes);
+            var time = deadline is null ? "timer unknown" : minutes <= 0 ? "death risk - check now" : $"~{minutes/60:00}h:{minutes%60:00}m";
+            return $"Batch {group.Key}" + (kind is "tend" or "check care" ? $" [{time}]" : "");
+        });
+        return $"[Equinox] {label} at '{houseName}': {string.Join(", ", parts)}.";
+    }
+    public static string? Due(SharedGardenCareBed bed, DateTimeOffset now)
+    {
+        if (bed.Ready) return bed.KeepMature ? null : "harvest";
+        var next = bed.Watered?.AddHours(12) ?? bed.NextTend;
+        if (next is null) return "check care";
+        if (next <= now) return "tend";
+        return bed.HarvestAt <= now ? "check maturity" : null;
+    }
 }

@@ -8,6 +8,7 @@ public sealed class Configuration : IPluginConfiguration
     public bool HouseCharactersFirst { get; set; } = true;
     public Dictionary<string, List<string>> HiddenCharacters { get; set; } = [];
     public Dictionary<string, List<string>> CharacterOrders { get; set; } = [];
+    public bool NotifyGardenCare { get; set; } = true;
     public bool NotifyHouseEntries { get; set; }
     public bool RefreshSharedInBackground { get; set; } = true;
     public bool NotifyHousingWarnings { get; set; } = true;

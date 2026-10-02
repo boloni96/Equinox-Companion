@@ -160,6 +160,8 @@ public sealed partial class Plugin : IDalamudPlugin
         catch (Exception ex) { errorJournal.Record("plugin", "Fashion observer unavailable", exceptionType: ex.GetType().Name); }
         if (config.TrackGardens) { callbackHook?.Enable(); plantHook?.Enable(); }
         Commands.AddHandler("/equinox", new CommandInfo(OnCommand) { HelpMessage = "Open Equinox Companion, shared profiles, housing and settings." });
+        plantingCommandRegistered = Commands.AddHandler("/planting", new CommandInfo(OnPlantingCommand) { HelpMessage = "Open this house's saved planting layouts and bed-by-bed guide." });
+        if (!plantingCommandRegistered) Log.Warning("/planting is already registered. Use /equinox planting instead.");
         fashionBrowserLink = Chat.AddChatLinkHandler(10513, (_, _) => OpenFashionBrowser());
         fashionCommandRegistered = Commands.AddHandler("/fashionr", new CommandInfo(OnFashionCommand) { HelpMessage = "Open the current Fashion Report V1 picture in game." });
         if (!fashionCommandRegistered) Log.Warning("/fashionr is already registered by another plugin. Use /equinox fashion instead.");
@@ -176,10 +178,12 @@ public sealed partial class Plugin : IDalamudPlugin
 
     private void Open() => visible = true;
     private readonly bool fashionCommandRegistered;
+    private readonly bool plantingCommandRegistered;
     private readonly Dalamud.Game.Text.SeStringHandling.Payloads.DalamudLinkPayload fashionBrowserLink;
     private void OnCommand(string command, string args)
     {
         if (args.Trim().Equals("fashion", StringComparison.OrdinalIgnoreCase)) OnFashionCommand(command, args);
+        else if (args.Trim().Equals("planting", StringComparison.OrdinalIgnoreCase)) OnPlantingCommand(command, args);
         else visible = !visible;
     }
     private void OnFashionCommand(string command, string args)
@@ -220,6 +224,7 @@ public sealed partial class Plugin : IDalamudPlugin
         UpdateSync(now);
         UpdateSharedRoster(now);
         UpdateHouseNotices(now);
+        UpdateGardenCareNotices(now);
         MaintainRecords(now);
         if (faulted) return;
         
@@ -264,7 +269,7 @@ public sealed partial class Plugin : IDalamudPlugin
                 DrainMessages();
                 return;
             }
-            if (!manager->CurrentTerritory->IsLoaded()) { Volatile.Write(ref pendingTend, null); Volatile.Write(ref pendingPlant, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); messages.Clear(); menuMessages.Clear(); readyMenus.Clear(); cropChats.Clear(); cropMatcher.Clear(); return; }
+            if (!manager->CurrentTerritory->IsLoaded()) { currentAddress = null; Volatile.Write(ref pendingTend, null); Volatile.Write(ref pendingPlant, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); messages.Clear(); menuMessages.Clear(); readyMenus.Clear(); cropChats.Clear(); cropMatcher.Clear(); return; }
             var type = manager->GetCurrentHousingTerritoryType();
             var inside = type == HousingTerritoryType.Indoor;
             var address = AddressOf(inside ? manager->GetCurrentIndoorHouseId() : manager->GetCurrentHouseId());
@@ -656,7 +661,11 @@ public sealed partial class Plugin : IDalamudPlugin
             if (!ObservingGardens) continue;
             var candidate = message.Context?.CandidateAt(message.At);
             var confirmed = message.Intent?.Confirm(message.Id, message.At, candidate);
-            if (confirmed is not null && !config.Tending.Any(x => x.EventId == confirmed.EventId))
+            if (confirmed?.Kind == "garden.fertilized")
+            {
+                if (!config.Discoveries.Any(e => e.Id == confirmed.EventId)) KeepDiscovery(new(confirmed.EventId, "garden.fertilized", confirmed.ConfirmedAt, WithWorldNames(confirmed.Actor), WithAddressNames(confirmed.Address), confirmed.Patch, confirmed.Bed), force: true);
+            }
+            else if (confirmed is not null && !config.Tending.Any(x => x.EventId == confirmed.EventId))
             {
                 config.Tending.Add(confirmed);
 
@@ -742,7 +751,7 @@ public sealed partial class Plugin : IDalamudPlugin
     {
         ImGui.TextUnformatted("Website connection");
         DrawSavedPairingKey();
-                ImGui.TextWrapped("Use Journal V7.11.0 for all current features. Keep your existing pairing key. Both installations use the same key for this shared Journal.");
+                ImGui.TextWrapped("Use Journal V7.11.18 for all current features. Keep your existing pairing key. Both installations use the same key for this shared Journal.");
                 ImGui.InputText("Pairing key", ref pairingInput, 128, ImGuiInputTextFlags.Password);
                 if (ImGui.Button("Save pairing key") && syncTask is null)
                 {
@@ -761,6 +770,8 @@ public sealed partial class Plugin : IDalamudPlugin
                 var enabled = config.SyncEnabled;
                 if (ImGui.Checkbox("Sync confirmed actions to Equinox Journal", ref enabled))
                 { config.SyncEnabled = enabled; nextSync = default; Pi.SavePluginConfig(config); }
+                var gardenReminders = config.NotifyGardenCare;
+                if (ImGui.Checkbox("Garden tending and harvest chat reminders", ref gardenReminders)) { config.NotifyGardenCare = gardenReminders; Pi.SavePluginConfig(config); }
                 var characters = config.SyncCharacterDetails; var houses = config.SyncHouseDetails;
                 if (ImGui.Checkbox("Sync character and job details", ref characters)) { config.SyncCharacterDetails = characters; nextSync = default; Pi.SavePluginConfig(config); }
                 if (ImGui.Checkbox("Discover/update private, FC and paired placard details", ref houses)) { config.SyncHouseDetails = houses; Pi.SavePluginConfig(config); }
@@ -862,6 +873,7 @@ public sealed partial class Plugin : IDalamudPlugin
         Pi.UiBuilder.OpenConfigUi -= Open;
         Commands.RemoveHandler("/equinox");
         if (fashionCommandRegistered) Commands.RemoveHandler("/fashionr");
+        if (plantingCommandRegistered) Commands.RemoveHandler("/planting");
         Chat.RemoveChatLinkHandler(10513);
     }
 }

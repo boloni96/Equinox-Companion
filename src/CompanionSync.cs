@@ -64,6 +64,10 @@ public sealed class CompanionSync : IDisposable
                 return new(null, "Invalid shared profile response; showing saved copy.");
             if (roster.Voyages is { Length: > 200 } || roster.Voyages?.Any(v=>v is null || v.Submarines is null || v.Submarines.Length>4 || v.Submarines.Any(s=>s is null || s.Name is null || s.ReturnTime<0 || s.ReturnTime>DateTimeOffset.UtcNow.AddDays(30).ToUnixTimeSeconds())) == true)
                 return new(null,"Invalid shared voyage response; showing saved copy.");
+            if (roster.GardenPlans is { Length: > 200 } || roster.GardenPlans?.Any(p => p is null || p.Beds is null || p.Beds.Length > 8 || p.Batch < 1 || p.Batch > 20 || p.Beds.Any(b => b is null || b.Bed < 1 || b.Bed > 8 || b.Crop is null || b.Soil is null || b.Days < 0 || b.Days > 365)) == true)
+                return new(null, "Invalid garden plan response; showing saved copy.");
+            if (roster.GardenCare is { Length: > 1000 } || roster.GardenCare?.Any(g => g is null || g.CharacterIds is null || g.Beds is null || g.Beds.Length > 8 || g.Beds.Any(b => b is null || b.Bed < 1 || b.Bed > 8)) == true)
+                return new(null, "Invalid garden care response; showing saved copy.");
             rosterETag = response.Headers.ETag?.ToString();
             rosterETagKey = key;
             return new(roster, "Shared profiles updated.");

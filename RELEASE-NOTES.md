@@ -1,3 +1,15 @@
+# Companion 0.5.1.10 — House planting guide and care reminders
+
+Use /planting only at an identified paired estate. It opens that house’s garden guide, one numbered 3x3 batch layout at a time, with Batch 1/2/3 buttons according to capacity. No manual house picker and no previous-estate guide during loading or outside housing. /equinox planting is the fallback if another plugin owns /planting. Website V7.11.18 shows all capacity batches side by side and saves planned seeds/soil separately from observed crops.
+
+The paired guide shows planned seeds/soil, game-confirmed matches or differences, planting times, tending and maturity estimates. Plant manually in game. Keep the signed-in website open with companion auto-application enabled to save observations and update the shared guide.
+
+Garden reminders default on: check at login (after 20 seconds for sync) and every 30 seconds while playing. Growing beds qualify 12 hours after planting or last confirmed tending. Messages name only the house and batches, with a separate earliest estimated death countdown per batch. No duplicate warning for the same unchanged care state; escalation at 4h, 1h and estimated deadline. Local confirmed care/clearing suppresses stale reminders. Confirmed mature plants receive no tending/death warning; held mature crops receive no harvest warning. Settings can disable chat reminders.
+
+Crop-specific growth/wilt catalogue: all 107 entries checked against FFXIV Gardening on 2026-10-02. Death estimates use each crop’s wilt period + 24 hours after its last care; unknown timing stays unknown. These are estimates from observations, not native server countdowns. Tending does not speed growth. Each successful fishmeal application reduces the remaining estimated growth by 1%; applications less than an hour apart do not stack in the estimate. Confirmed fertilizer menu + success log now emits garden.fertilized, safely held for website protocol 6. Failure signals, wrong targets and duplicate events do not count as fertilizer or tending.
+
+Plugin build, estate matching, reminder threshold/message, timing math, fertilizer gates, API and browser planner checks passed. Native garden orientation, /planting estate detection, fertilizer observation and chat reminders still require in-game testing. Previous automatic character/account discovery remains awaiting the user’s game test.
+
 # Companion 0.5.1.9 — Account discovery and MSQ grouping
 
 Requires Journal V7.11.17 for new account/progress fields. Log in once on a known character from each service account while the paired journal is open. Its journal-scoped account fingerprint learns the existing person/account destination; subsequent unknown characters sharing that identity are added automatically. Conflicting or unseen identities wait for linking instead of guessing. No raw game account ID or session data is transmitted.

@@ -1,3 +1,7 @@
+# Latest release work — 2026-10-02
+
+Companion 0.5.1.10 / Journal V7.11.18 implement house batches, inline planned planting, game guide via /planting, per-batch care warnings after 12 hours, crop-specific death estimates, and successful fertilizer observation. Read RELEASE-NOTES.md for setup and remaining native testing. Website package includes source and Cloudflare deployment archive; deploy manually. New-character account discovery remains awaiting user test.
+
 # Current handoff
 
 Companion 0.5.1.9 and Journal V7.11.17: automatic discovery through journal-scoped account identity, learned from a known character on each service account. Unknown/conflicting identities stay pending. Regulars use completed level-15 It's Probably Pirates; below that milestone, FC members are Floaters and confirmed nonmembers are Empty. Tests and build passed; game observation requires live verification. Website automatic application must be enabled and open to save new characters. Full release notes document setup and limits.

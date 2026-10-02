@@ -307,3 +307,37 @@ Check("Private FC then all Shared stable order",string.Join(",",mixedEstates.Ord
 
 Check("unknown progress waits", SharedCharacterGrouping.Group(groupedCharacter with { NeedsBoost = null }), "Pending sync");
 Check("unknown FC waits", SharedCharacterGrouping.Group(groupedCharacter with { NeedsBoost = true, FcMember = null }), "Pending sync");
+
+var gardenAddress = new Address("0000000000000001",410,641,15,7,0,false,false,"Rafflesia","Shirogane");
+var gardenPlan = new SharedGardenPlan("house", "Home", "Rafflesia", "Shirogane", 15, 7, 1, "Krakka Root", DateTimeOffset.UtcNow, [], "0000000000000001", 3);
+Check("garden exact estate", SharedGardenLocation.Match(gardenAddress,[gardenPlan])??"none","house");
+Check("garden another world rejected", SharedGardenLocation.Match(gardenAddress with {WorldName="Seraph"},[gardenPlan])??"none","none");
+Check("garden another ward rejected", SharedGardenLocation.Match(gardenAddress with {Ward=16},[gardenPlan])??"none","none");
+Check("garden another estate ID rejected", SharedGardenLocation.Match(gardenAddress with {HouseId="0000000000000002"},[gardenPlan])??"none","none");
+Check("garden loading has no previous guide", SharedGardenLocation.Match(null,[gardenPlan])??"none","none");
+Check("garden duplicate house rejected", SharedGardenLocation.Match(gardenAddress,[gardenPlan,gardenPlan with {HouseId="other"}])??"none","none");
+Check("garden multiple batches same house", SharedGardenLocation.Match(gardenAddress,[gardenPlan,gardenPlan with {Batch=2}])??"none","house");
+var careNow=DateTimeOffset.UtcNow;
+var careBed=new SharedGardenCareBed(1,false,false,careNow.AddHours(-24),careNow.AddHours(-4),careNow.AddDays(1));
+Check("garden due tending reminder",GardenCareStatus.Due(careBed,careNow)??"none","tend");
+Check("garden cared-for quiet",GardenCareStatus.Due(careBed with {Watered=careNow,NextTend=careNow.AddHours(12)},careNow)??"none","none");
+Check("garden confirmed ready harvest",GardenCareStatus.Due(careBed with {Ready=true},careNow)??"none","harvest");
+Check("garden held mature quiet",GardenCareStatus.Due(careBed with {Ready=true,KeepMature=true},careNow)??"none","none");
+Check("garden estimated maturity is check",GardenCareStatus.Due(careBed with {Watered=careNow,NextTend=careNow.AddHours(12),HarvestAt=careNow.AddMinutes(-1)},careNow)??"none","check maturity");
+Check("garden unknown timing needs care check",GardenCareStatus.Due(careBed with {Watered=null,NextTend=null},careNow)??"none","check care");
+Check("garden compact house batches",GardenCareStatus.Message("House X","tend",[3,2,2]),"[Equinox] Tending due at 'House X': Batch 2, 3.");
+Check("garden estimated death countdown",GardenCareStatus.Message("House X","tend",[2,3],careNow.AddMinutes(385),careNow),"[Equinox] Tending due at 'House X': Batch 2, 3. [~06h:25m to die]");
+Check("garden unknown death never invented",GardenCareStatus.Message("House X","tend",[2],null,careNow),"[Equinox] Tending due at 'House X': Batch 2. [death timer unknown]");
+Check("garden expired estimate not declared dead",GardenCareStatus.Message("House X","tend",[2],careNow.AddMinutes(-1),careNow),"[Equinox] Tending due at 'House X': Batch 2. [death risk - check now]");
+Check("garden separate batch countdowns",GardenCareStatus.BatchMessage("House X","tend",[(2,careNow.AddMinutes(385)),(3,careNow.AddMinutes(700))],careNow),"[Equinox] Tending due at 'House X': Batch 2 [~06h:25m], Batch 3 [~11h:40m].");
+Check("garden earliest bed per batch",GardenCareStatus.BatchMessage("House X","tend",[(2,careNow.AddHours(8)),(2,careNow.AddHours(4))],careNow),"[Equinox] Tending due at 'House X': Batch 2 [~04h:00m].");
+
+Check("garden quiet before twelve hours",GardenCareStatus.Due(careBed with {Watered=careNow.AddHours(-11)},careNow)??"none","none");
+Check("garden reminder at twelve hours",GardenCareStatus.Due(careBed with {Watered=careNow.AddHours(-12)},careNow)??"none","tend");
+var fertilizeIntent=TendIntent.From(menu,"Fertilize Crop",time)!;
+Check("fertilizer successful observed action",fertilizeIntent.Confirm(4016,time.AddSeconds(1),menu.Target)?.Kind,"garden.fertilized");
+Check("fertilizer failure never records",fertilizeIntent.Confirm(4012,time.AddSeconds(1),menu.Target)?.Kind,null);
+Check("fertilizer cannot masquerade as tending",fertilizeIntent.Confirm(4017,time.AddSeconds(1),menu.Target)?.Kind,null);
+Check("fertilizer wrong bed rejected",fertilizeIntent.Confirm(4016,time.AddSeconds(1),Sample(0,"bed-b"))?.Kind,null);
+Check("fertilizer old website holds safely",SyncValidation.SupportedByWebsite("garden.fertilized",5).ToString(),"False");
+Check("fertilizer protocol6 enabled",SyncValidation.SupportedByWebsite("garden.fertilized",6).ToString(),"True");
