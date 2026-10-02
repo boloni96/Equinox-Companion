@@ -1,0 +1,12 @@
+Equinox Companion 0.5.1.16 — 2026-10-02
+
+Welcome, Goddess 💙
+Your Empire, with a little less to carry.
+
+Equinox Companion was created to help you care for your Equinox Empire—from every little garden to every place you call home. A little less to remember, a little more time to enjoy the worlds you’ve made your own.
+
+Made with care, for you.
+
+Welcome copy updated to the approved dedication, alongside the existing Equinox icon. The blue heart is drawn so it does not depend on emoji font support. Technical guide and release details remain available in a collapsed section. Existing once-per-version welcome behavior and settings are preserved.
+Plugin-only update. Website remains 7.11.27. No garden changes.
+Validation: Release build, zero warnings/errors. In-game visual verification pending.
