@@ -1,3 +1,7 @@
+## 0.5.1.12 — direct character profile fields
+
+Sync nameday, guardian, starting city and Grand Company/rank from loaded game state using English game-sheet labels. Journal 7.11.22 displays them independently of Lodestone. Deploy website first, then update Companion and log in. Build and sync/UI checks passed; live game validation remains needed.
+
 # Companion 0.5.1.11 — Separate planting window
 
 /planting now opens an independent movable, resizable and pinnable window, like /fashionr. It does not open the main Companion window or select a tab. Removed the Garden plans tab. The guide still requires the current identified paired estate and shows one batch at a time with batch buttons. Leaving/loading the estate prevents showing its old guide. Shared data continues refreshing while this window is open even when background profile refresh is disabled. Window position/size uses the normal Dalamud window persistence.

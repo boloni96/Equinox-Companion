@@ -18,7 +18,7 @@ public sealed record FreeCompanyDetails(string Id, string Name, string Tag, usho
 public sealed record HouseDetails(string Type, string Size, string Evidence, FreeCompanyDetails? FreeCompany = null, string EstateName = "", string OwnerName = "");
 public sealed record PlacardDetails(string CharacterId, Address Address, string Name, string Size, byte EstateType, string OwnerName = "", string FcTag = "", DateTimeOffset At = default);
 public sealed record JobDetails(uint Id, string Name, int Level);
-public sealed record CharacterDetails(uint JobId, string JobName, int Level, int HighestLevel, string Race, string Tribe, string Sex, JobDetails[] Jobs, FreeCompanyDetails? FreeCompany = null, int HighestBattleLevel = 0, string AccountKey = "", bool? Msq15Complete = null, bool? FcMember = null);
+public sealed record CharacterDetails(uint JobId, string JobName, int Level, int HighestLevel, string Race, string Tribe, string Sex, JobDetails[] Jobs, FreeCompanyDetails? FreeCompany = null, int HighestBattleLevel = 0, string AccountKey = "", bool? Msq15Complete = null, bool? FcMember = null, string Nameday = "", string Guardian = "", string CityState = "", string GrandCompany = "");
 
 public sealed record CompanyProfileDetails(int Rank, int ActiveMembers, string Source, string HomeWorld,
     string? FormedAt = null, string? Slogan = null, string? GrandCompany = null, string? Recruitment = null,

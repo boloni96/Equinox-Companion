@@ -9,6 +9,7 @@ public sealed partial class Plugin
 {
     private DateTimeOffset characterReadyAt;
     private int emptyCompanySamples;
+    private static string Ordinal(int n) => n + (n % 100 is 11 or 12 or 13 ? "th" : (n % 10) switch { 1 => "st", 2 => "nd", 3 => "rd", _ => "th" });
     private unsafe CharacterDetails AddIdentityAndProgress(CharacterDetails details)
     {
         var local = Objects.LocalPlayer;
@@ -31,6 +32,32 @@ public sealed partial class Plugin
             var identity = $"equinox-account-v1:{characterState->AccountId}:{lobby->ServiceAccountIndex}";
             accountKey = Convert.ToHexString(HMACSHA256.HashData(Encoding.UTF8.GetBytes(config.PairingKey), Encoding.UTF8.GetBytes(identity))).ToLowerInvariant();
         }
-        return details with { AccountKey = accountKey, Msq15Complete = msq15, FcMember = membership };
+        var ps = &state->PlayerState;
+        var lang = Dalamud.Game.ClientLanguage.English;
+        var nameday = ps->BirthMonth is >= 1 and <= 12 && ps->BirthDay is >= 1 and <= 32
+            ? $"{Ordinal(ps->BirthDay)} Sun of the {Ordinal((ps->BirthMonth + 1) / 2)} {(ps->BirthMonth % 2 == 1 ? "Astral" : "Umbral")} Moon" : "";
+        var guardian = ps->GuardianDeity > 0 ? DataManager.GetExcelSheet<Lumina.Excel.Sheets.GuardianDeity>(lang).GetRowOrDefault(ps->GuardianDeity)?.Name.ToString() ?? "" : "";
+        var town = ps->StartTown > 0 ? DataManager.GetExcelSheet<Lumina.Excel.Sheets.Town>(lang).GetRowOrDefault(ps->StartTown)?.Name.ToString() ?? "" : "";
+        var gc = ps->GrandCompany;
+        var company = gc == 0 && nameday.Length > 0 ? "None" : gc is >= 1 and <= 3 ? DataManager.GetExcelSheet<Lumina.Excel.Sheets.GrandCompany>(lang).GetRowOrDefault(gc)?.Name.ToString() ?? "" : "";
+        if (gc is >= 1 and <= 3)
+        {
+            var rank = ps->GetGrandCompanyRank();
+            if (rank > 0)
+            {
+                var rankName = (gc, Player.Sex == 0) switch
+                {
+                    (1, true) => DataManager.GetExcelSheet<Lumina.Excel.Sheets.GCRankLimsaMaleText>(lang).GetRowOrDefault(rank)?.NameRank.ToString(),
+                    (1, false) => DataManager.GetExcelSheet<Lumina.Excel.Sheets.GCRankLimsaFemaleText>(lang).GetRowOrDefault(rank)?.NameRank.ToString(),
+                    (2, true) => DataManager.GetExcelSheet<Lumina.Excel.Sheets.GCRankGridaniaMaleText>(lang).GetRowOrDefault(rank)?.NameRank.ToString(),
+                    (2, false) => DataManager.GetExcelSheet<Lumina.Excel.Sheets.GCRankGridaniaFemaleText>(lang).GetRowOrDefault(rank)?.NameRank.ToString(),
+                    (3, true) => DataManager.GetExcelSheet<Lumina.Excel.Sheets.GCRankUldahMaleText>(lang).GetRowOrDefault(rank)?.NameRank.ToString(),
+                    (3, false) => DataManager.GetExcelSheet<Lumina.Excel.Sheets.GCRankUldahFemaleText>(lang).GetRowOrDefault(rank)?.NameRank.ToString(),
+                    _ => null
+                };
+                company += " / " + (string.IsNullOrWhiteSpace(rankName) ? "Rank " + rank : rankName);
+            }
+        }
+        return details with { AccountKey = accountKey, Msq15Complete = msq15, FcMember = membership, Nameday = nameday, Guardian = guardian, CityState = town, GrandCompany = company };
     }
 }

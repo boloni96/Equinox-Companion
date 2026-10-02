@@ -25,7 +25,7 @@ public static class SyncValidation
         (p.FormedAt is null || DateTimeOffset.TryParse(p.FormedAt,out var formed) && formed.Year>=2010 && formed<=DateTimeOffset.UtcNow);
     public static bool CharacterReady(CharacterDetails? c) => c is not null && c.JobId is >= 1 and <= 100 && Text(c.JobName) &&
         c.Level is >= 1 and <= 200 && c.HighestLevel is >= 1 and <= 200 && c.HighestBattleLevel is >= 0 and <= 200 &&
-        new[] { c.Race, c.Tribe, c.Sex }.All(s => s is not null && s.Length <= 100) &&
+        new[] { c.Race, c.Tribe, c.Sex, c.Nameday, c.Guardian, c.CityState, c.GrandCompany }.All(s => s is not null && s.Length <= 100) &&
         c.Jobs is not null && c.Jobs.Length <= 100 && c.Jobs.All(j => j is not null && j.Id is >= 1 and <= 100 && Text(j.Name) && j.Level is >= 1 and <= 200) && (c.FreeCompany is null || FC(c.FreeCompany));
     public static string HoldReason(SyncEvent e, DateTimeOffset now)
     {
