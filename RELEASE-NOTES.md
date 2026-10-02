@@ -1,3 +1,9 @@
+Floating shortcuts: existing Companion icon, gold Fashion Report hanger, and garden-art seedling for Planting. Drag to move, click to reopen; per-icon opacity, background blur, lock and visibility in Settings. Minimize to icon replaces collapsed title bars.
+
+# 0.5.1.17 — Pixel garden and responsive planting sync
+
+Square layered garden art shared with Journal V7.11.28. Confirmed local actions advance the guide immediately; active plan checks use 2 seconds. Automatic estate/batch association and persistent plan completion. Manual linking controls are not part of this release. See RELEASE-v0.5.1.17.txt for setup and live checks.
+
 ## 0.5.1.12 — direct character profile fields
 
 Sync nameday, guardian, starting city and Grand Company/rank from loaded game state using English game-sheet labels. Journal 7.11.22 displays them independently of Lodestone. Deploy website first, then update Companion and log in. Build and sync/UI checks passed; live game validation remains needed.

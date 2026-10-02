@@ -110,7 +110,7 @@ public sealed partial class Plugin : IDalamudPlugin
                 syncStatus = result.Status;
                 if (result.Retry) errorJournal.Record("upload", result.Status);
                 syncFailures = result.Retry ? Math.Min(syncFailures + 1, 5) : 0;
-                nextSync = now.AddSeconds(result.Retry ? Math.Min(600, 30 * (1 << syncFailures)) : 30);
+                nextSync = now.AddSeconds(result.Retry ? Math.Min(600, 30 * (1 << syncFailures)) : plantingWindow?.IsOpen == true ? 1 : 30);
             }
             else { errorJournal.Record("upload", "Upload task failed; records kept.", exceptionType: syncTask.Exception?.GetBaseException().GetType().Name); syncStatus = "Sync paused after a connection error; local records are kept."; nextSync = now.AddMinutes(2); }
             syncTask = null;
@@ -132,7 +132,7 @@ public sealed partial class Plugin : IDalamudPlugin
         if (events.Length == 0) {
             if (pending.Any(e => !SyncValidation.SupportedByWebsite(e.Kind, config.SharedRoster?.ProtocolVersion ?? 1)))
                 syncStatus = "New observations kept locally. Deploy Journal V7.11.11, save once, then refresh shared profiles.";
-            nextSync = now.AddSeconds(30); return;
+            nextSync = now.AddSeconds(plantingWindow?.IsOpen == true ? 1 : 30); return;
         }
         syncStatus = $"Sending {events.Length} events…";
         syncTask = sync.Send(config.PairingKey, events);
@@ -514,6 +514,7 @@ public sealed partial class Plugin : IDalamudPlugin
         var last = config.Discoveries.LastOrDefault(x => x.Kind == e.Kind && x.Actor.ContentId == e.Actor.ContentId && x.Address?.HouseId == e.Address?.HouseId && x.Patch == e.Patch && x.Bed == e.Bed && x.Collection?.Category == e.Collection?.Category && x.Storage?.Key == e.Storage?.Key && x.GardenTarget?.Argument == e.GardenTarget?.Argument && x.Company?.Id == e.Company?.Id && x.Company?.Profile?.Source == e.Company?.Profile?.Source);
         if (!force && last is not null && (!(e.Kind is "garden.empty" or "garden.ready" or "garden.observed") || e.At - last.At < TimeSpan.FromSeconds(2)) && !(e.GardenTarget is not null && e.At-last.At > TimeSpan.FromDays(30)) && !(e.Kind is "garden.ready" or "garden.observed" or "garden.empty" && config.Planting.Any(p => p.Actor.ContentId == e.Actor.ContentId && p.Address.HouseId == e.Address?.HouseId && p.Patch == e.Patch && p.Bed == e.Bed && p.ConfirmedAt > last.At)) && JsonSerializer.Serialize(new { last.Actor, last.Address, last.House, last.Character, last.Crop, last.Collection, last.Fashion, last.Voyage, last.GardenTarget, last.Storage, last.Company, last.CachedVoyage }) == JsonSerializer.Serialize(new { e.Actor, e.Address, e.House, e.Character, e.Crop, e.Collection, e.Fashion, e.Voyage, e.GardenTarget, e.Storage, e.Company, e.CachedVoyage })) return;
         config.Discoveries.Add(e);
+        if(e.Kind.StartsWith("garden.") || e.Kind.StartsWith("house.")) GardenActionRecorded();
         if(collectingStorage)storageChanged=true;else Pi.SavePluginConfig(config);
     }
 
@@ -671,6 +672,7 @@ public sealed partial class Plugin : IDalamudPlugin
             else if (confirmed is not null && !config.Tending.Any(x => x.EventId == confirmed.EventId))
             {
                 config.Tending.Add(confirmed);
+                GardenActionRecorded();
 
                 Pi.SavePluginConfig(config);
             }
@@ -678,6 +680,7 @@ public sealed partial class Plugin : IDalamudPlugin
             if (planted is not null && !config.Planting.Any(x => x.EventId == planted.EventId))
             {
                 config.Planting.Add(planted);
+                GardenActionRecorded();
 
                 Pi.SavePluginConfig(config);
             }
@@ -737,6 +740,7 @@ public sealed partial class Plugin : IDalamudPlugin
         mainWindow.IsOpen = visible;
         windows.Draw();
         visible = mainWindow.IsOpen;
+        DrawFloatingLaunchers();
         if (!visible) showSavedPairingKey = false;
     }
 

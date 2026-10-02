@@ -4,6 +4,7 @@ namespace EquinoxCompanion;
 public sealed class Configuration : IPluginConfiguration
 {
     public Dictionary<string, bool> SharedAccountExpanded { get; set; } = [];
+    public Dictionary<string, FloatingLauncherOptions> FloatingLaunchers { get; set; } = [];
     public int TabOrderVersion { get; set; }
     public List<string> TabOrder { get; set; } = [];
     public bool HouseCharactersFirst { get; set; } = true;

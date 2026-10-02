@@ -38,6 +38,8 @@ def package(build, output, repository, tag, ref=None):
     with zipfile.ZipFile(output / "EquinoxCompanion.zip", "w", zipfile.ZIP_DEFLATED) as archive:
         for name in ("EquinoxCompanion.dll", "EquinoxCompanion.json", "EquinoxCompanion.deps.json", "icon.png", "collection-ids.json"):
             archive.write(build / name, name)
+        for asset in (build / "garden-art").rglob("*"):
+            if asset.is_file(): archive.write(asset, asset.relative_to(build))
     link = f"https://github.com/{repository}/releases/download/{tag}/EquinoxCompanion.zip"
     if ref is not None:
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_./-]*", ref) or ".." in ref:

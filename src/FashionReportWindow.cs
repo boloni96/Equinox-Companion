@@ -27,7 +27,7 @@ public sealed partial class Plugin
         private bool dragged;
         private bool picturePressed;
         private readonly Action openBrowser;
-        public FashionReportWindow(Action openBrowser) : base("Fashion Report###EquinoxFashion")
+        public FashionReportWindow(Action openBrowser) : base("Fashion Report###EquinoxFashion", ImGuiWindowFlags.NoCollapse)
         {
             this.openBrowser = openBrowser;
             Size = new Vector2(720, 490);
@@ -85,6 +85,7 @@ public sealed partial class Plugin
         }
         public override void Draw()
         {
+            if (ImGui.SmallButton("Minimize to icon")) IsOpen = false;
             if (resize)
             {
                 var display = ImGui.GetIO().DisplaySize;

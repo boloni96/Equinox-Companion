@@ -17,3 +17,6 @@ Reviewed source: https://github.com/Sohtoren/Altoholic (main), especially Altoho
 
 ## Remaining in-game validation
 FC member info can be unloaded/partial; open the member list with your own character visible. Placard details require opening the owned estate placard. Verify the new native planting selection observer in-game, including cancellation and fast YesAlready confirmation. Harvest/item messages alone remain insufficient to clear a bed.
+
+## 2026-10-02 housing recheck
+Rechecked Sohtoren/Altoholic main GetHousing: skips duty, different home/current world, not-inside and missing HasHousePermissions; stores GetCurrentIndoorHouseId and address under current character. Permission association does not prove private ownership. Equinox already observes GetOwnedHouseId for personal and FC estates; V7.11.28 repairs website ownership/member associations and full-world matching rather than treating every permitted visitor as owner. No Altoholic source copied.

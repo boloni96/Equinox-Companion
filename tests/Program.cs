@@ -396,3 +396,33 @@ var multiKeys=new ShortcutCapture();multiKeys.Step(["A","B"],false,false,false,f
 Check("capture rejects multiple ordinary keys",multiKeys.Step([],false,false,false,false)?.Label,null);
 multiKeys.Step(["Key1"],false,true,false,false);
 Check("capture recovers after bad chord",multiKeys.Step([],false,false,false,false)?.Label,"Alt + 1");
+
+// Immediate guide projection must work before any website round trip.
+var liveAt=DateTimeOffset.Parse("2026-10-02T10:00:00Z");
+var liveAddress=new Address("0000000000000001",410,641,15,15,0,false,false,"Rafflesia","Shirogane");
+var liveActor=new Actor("123","Gardener",410,410,"Rafflesia","Rafflesia");
+var liveBeds=Enumerable.Range(1,8).Select(i=>new SharedGardenBed(i,i%2==1?"Krakka Root":"Mirror Apple","Grade 3 Thanalan Topsoil","planned","Not synced yet","",null,null,0,false,Order:i,ReplantOrder:i==1?9:0,StarterSoil:i==1?"Potting Soil":"")).ToArray();
+var livePlan=new SharedGardenPlan("h","Haven","Rafflesia","Shirogane",15,15,1,"Curiel Root",liveAt,liveBeds,liveAddress.HouseId);
+SyncEvent LivePlant(int bed,int minute,string soil)=>new("live"+minute,"garden.planted",liveAt.AddMinutes(minute),liveActor,liveAddress,1,bed,new PlantDetails(1,liveBeds[bed-1].Crop,2,soil));
+var liveEvents=Enumerable.Range(1,8).Select(i=>LivePlant(i,i,i==1?"Potting Soil":"Grade 3 Thanalan Topsoil")).ToArray();
+Check("local first plant confirms starter",GardenLive.Apply(livePlan,liveEvents.Take(1),x=>x).Beds[0].Status,"starter");
+Check("local neighbours trigger replant",GardenLive.Apply(livePlan,liveEvents,x=>x).Beds[0].Status,"replant");
+var localDone=GardenLive.Apply(livePlan,liveEvents.Append(LivePlant(1,10,"Grade 3 Thanalan Topsoil")),x=>x);
+Check("local final planting completes plan",(localDone.CompletedAt is not null).ToString(),"True");
+var localHarvest=GardenLive.Apply(localDone,[new SyncEvent("empty","garden.empty",liveAt.AddMinutes(11),liveActor,liveAddress,1,2)],x=>x);
+Check("local harvest keeps completed plan",(localHarvest.CompletedAt is not null).ToString(),"True");
+Check("other batch cannot confirm selected tab",GardenLive.Apply(livePlan,[liveEvents[0] with {Patch=2}],x=>x).Beds[0].Status,"planned");
+Check("other world cannot confirm selected tab",GardenLive.Apply(livePlan,[liveEvents[0] with {Address=liveAddress with {WorldName="Halicarnassus"}}],x=>x).Beds[0].Status,"planned");
+var localTend=GardenLive.Apply(localDone,[new SyncEvent("tend","garden.tended",liveAt.AddMinutes(12),liveActor,liveAddress,1,2)],x=>x);
+Check("local tending preserves planting time",localTend.Beds[1].Planted.ToString(),liveEvents[1].At.ToString());
+Check("local tending records actual gardener",localTend.Beds[1].TendedBy,"Gardener");
+
+var withClear=GardenLive.Apply(livePlan,liveEvents.Append(new SyncEvent("clear","garden.empty",liveAt.AddMinutes(9),liveActor,liveAddress,1,1)).Append(LivePlant(1,10,"Grade 3 Thanalan Topsoil")),x=>x);
+Check("local empty then replant completes",withClear.Beds[0].Status,"confirmed");
+Check("local empty then replant complete stamp",(withClear.CompletedAt is not null).ToString(),"True");
+var fertBase=GardenLive.Apply(livePlan,[liveEvents[1]],x=>x,_=>5);
+var fertEvent=new SyncEvent("fert","garden.fertilized",liveAt.AddHours(1),liveActor,liveAddress,1,2);
+var fertResult=GardenLive.Apply(fertBase,[fertEvent],x=>x);
+Check("local fertilizer shortens growth",(fertResult.Beds[1].HarvestAt<fertBase.Beds[1].HarvestAt).ToString(),"True");
+Check("local fertilizer leaves tending unchanged",fertResult.Beds[1].Watered.ToString(),fertBase.Beds[1].Watered.ToString());
+Check("local fertilizer does not double apply",GardenLive.Apply(fertResult,[fertEvent],x=>x).Beds[1].HarvestAt.ToString(),fertResult.Beds[1].HarvestAt.ToString());

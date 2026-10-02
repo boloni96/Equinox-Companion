@@ -1,0 +1,17 @@
+Floating shortcuts: existing Companion icon, gold Fashion Report hanger, and garden-art seedling for Planting. Drag to move, click to reopen; per-icon opacity, background blur, lock and visibility in Settings. Minimize to icon replaces collapsed title bars.
+
+Equinox Journal V7.11.28 / Companion 0.5.1.17 — pixel garden test build
+
+Deploy the Cloudflare ZIP to the existing Pages project. Keep the existing database, bindings, login and pairing key. Open the website and save/sync once, then update Companion through its existing GitHub installer feed.
+
+New garden artwork: square batch backgrounds and independent layered beds, using the 108-entry asset catalogue. Outdoor plans retain the outdoor crop filter. Saved plans remain primary until required planting steps are confirmed; hover shows actual crop/soil and recorded timers. Completing planting preserves the plan for reference and returns the batch to actual garden display. Harvesting does not reopen completed plans. Starter steps require a later replant after the other required beds.
+
+Companion /planting uses the same art and native controls. Confirmed local planting/tending/fertilizer/empty/mature observations update its guide without waiting for a website round trip. The game supplies house/batch/bed identity; the selected tab is never used to assign a physical action. Cached views open immediately, with a new plan check every 2 seconds while open (15 seconds otherwise). Garden uploads are expedited; errors retain records and back off. Website garden views poll accepted events every 2 seconds; plan saves use a short shared-save debounce. Network delays, conflicts and unsaved forms can extend these times.
+
+Automatic linking: full world/district/ward/plot matching, existing wrong-world link repair, numbered physical batches matched to existing displayed batches, imported garden records retained, and character-house associations repaired. Existing waiting events retry automatically. No manual garden linking button is required or included. Position-only observations remain pending if the game has not supplied an unambiguous matching bed identity; they retry when it does. Unknown identity is never assigned from a selected tab.
+
+Known linked plan observations can also update the paired plugin projection before the browser processes them. The website still needs to be open for new links, full journal/history reconciliation and persistence. Readiness and care estimates remain distinct; dead artwork is labelled estimated, and confirmed mature crops do not receive death estimates. Tended-by identifies the recorded gardener, not the viewer.
+
+Checks: plugin builds without warnings/errors; confirmation/matching/timer unit checks; server garden projection and authorization checks; automatic-link and desktop/mobile planner browser checks. In-game input timing and texture presentation require the user's live test.
+
+Test: open updated website, confirm the old Batch 1 waiting events clear; save a plan; open /planting at that estate; confirm the plan arrives; plant one bed; verify immediate guide progress and subsequent website sync. Follow the starter replant if present. Tend another batch and confirm only that batch/bed changes. Existing records and plans are retained.

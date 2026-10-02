@@ -10,7 +10,7 @@ public sealed partial class Plugin
     private sealed class CompanionWindow : Window
     {
         private readonly Plugin plugin;
-        public CompanionWindow(Plugin plugin) : base("Equinox Companion")
+        public CompanionWindow(Plugin plugin) : base("Equinox Companion", ImGuiWindowFlags.NoCollapse)
         {
             this.plugin = plugin;
             IsOpen = false;
@@ -21,6 +21,6 @@ public sealed partial class Plugin
             AllowClickthrough = true;
             AllowBackgroundBlur = true;
         }
-        public override void Draw() => plugin.DrawContents();
+        public override void Draw() { if (ImGui.SmallButton("Minimize to icon")) IsOpen = false; plugin.DrawContents(); }
     }
 }

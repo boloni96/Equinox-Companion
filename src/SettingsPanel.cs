@@ -28,6 +28,7 @@ public sealed partial class Plugin
             ImGui.EndTabItem();
         }
         if (ImGui.BeginTabItem("Chat messages")) { DrawChatMessageSettings(); ImGui.EndTabItem(); }
+        if (ImGui.BeginTabItem("Floating icons")) { DrawFloatingLauncherSettings(); ImGui.EndTabItem(); }
         if (ImGui.BeginTabItem("Keybinds")) { DrawShortcutSettings(); ImGui.EndTabItem(); }
         if (ImGui.BeginTabItem("Characters"))
         {
