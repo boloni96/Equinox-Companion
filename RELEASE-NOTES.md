@@ -1,3 +1,11 @@
+# Companion 0.5.1.9 — Account discovery and MSQ grouping
+
+Requires Journal V7.11.17 for new account/progress fields. Log in once on a known character from each service account while the paired journal is open. Its journal-scoped account fingerprint learns the existing person/account destination; subsequent unknown characters sharing that identity are added automatically. Conflicting or unseen identities wait for linking instead of guessing. No raw game account ID or session data is transmitted.
+
+Regulars have completed the level-15 MSQ “It’s Probably Pirates” (either game-data variant). Below that milestone, FC members are Floaters and confirmed nonmembers are Empty. Unloaded checks remain Pending sync. This is a progress baseline, not proof of purchasing a boost or universal seasonal-event/Fashion eligibility. Manual eligibility flags remain unchanged. Existing markers remain fallback until a game observation is available.
+
+Live progress/FC observations refresh paired roster groups without a browser save. Adding new characters to the saved journal still requires the signed-in website open with automatic companion application enabled. Compile and automated mapping/grouping checks passed; account identification and observations require an in-game check on both users’ service accounts.
+
 # Companion 0.5.1.8 — Private, FC, Shared house order
 
 Expanded character estates now use [Private], [FC], and [Shared], ordered Private first, the character's FC second, then all shared estates in their existing relative order. Shared applies to private and FC estates. The underlying estate type and access explanation remain in the hover details. Shared rows no longer have a repeated warning line above their name. Colour bars exclude shared estates. Journal V7.11.16 publishes character/estate FC identities to distinguish the character's own FC from a different shared FC. Older caches can identify FC masters; other unverified FC relations temporarily show Shared until the new roster is saved.

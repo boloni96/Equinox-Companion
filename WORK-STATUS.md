@@ -1,3 +1,9 @@
+# Current handoff
+
+Companion 0.5.1.9 and Journal V7.11.17: automatic discovery through journal-scoped account identity, learned from a known character on each service account. Unknown/conflicting identities stay pending. Regulars use completed level-15 It's Probably Pirates; below that milestone, FC members are Floaters and confirmed nonmembers are Empty. Tests and build passed; game observation requires live verification. Website automatic application must be enabled and open to save new characters. Full release notes document setup and limits.
+
+Gardening redesign remains pending: show all house-capacity batches and beds side by side, centre Start garden buttons, one inline planting planner under batches, automatic crossbreeding recipe plan separate from observed planting. Preserve all existing data.
+
 Equinox Empire — 23-point status, 2 October 2026
 Journal V7.11.11 / Companion 0.5.1.2
 

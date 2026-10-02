@@ -103,7 +103,7 @@ public sealed partial class Plugin
             if (open)
             {
                 ImGui.Indent();
-                foreach (var group in new[] { "Regulars", "Floaters", "Empty" })
+                foreach (var group in new[] { "Regulars", "Floaters", "Empty", "Pending sync" })
                 {
                     var grouped = account.Where(c => SharedCharacterGrouping.Group(c) == group).ToArray();
                     if (grouped.Length == 0) continue;

@@ -25,9 +25,11 @@ public static class SharedCharacterGrouping
 {
     public static string Group(SharedCharacter character)
     {
-        var needsBoost = character.NeedsBoost ?? character.Name.TrimStart().StartsWith("~", StringComparison.Ordinal);
-        var fcMember = character.FcMember ?? character.Houses.Any(h => h.Type == "Free Company house");
-        return !needsBoost ? "Regulars" : fcMember ? "Floaters" : "Empty";
+        var needsBoost = character.NeedsBoost;
+        if (needsBoost is null && character.Name.TrimStart().StartsWith("~", StringComparison.Ordinal)) needsBoost = true;
+        if (needsBoost is null) return "Pending sync";
+        if (needsBoost == false) return "Regulars";
+        return character.FcMember is true ? "Floaters" : character.FcMember is false ? "Empty" : "Pending sync";
     }
     public static string AccountKey(SharedCharacter character) => string.IsNullOrWhiteSpace(character.AccountId) ? character.Account : character.AccountId;
 }

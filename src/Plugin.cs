@@ -29,6 +29,7 @@ public sealed partial class Plugin : IDalamudPlugin
     [PluginService] internal static IDalamudPluginInterface Pi { get; private set; } = null!;
     [PluginService] internal static IDataManager DataManager { get; private set; } = null!;
     [PluginService] internal static IFramework Framework { get; private set; } = null!;
+    [PluginService] internal static IObjectTable Objects { get; private set; } = null!;
     [PluginService] internal static IPlayerState Player { get; private set; } = null!;
     [PluginService] internal static IClientState Client { get; private set; } = null!;
     [PluginService] internal static ICondition Conditions { get; private set; } = null!;
@@ -230,7 +231,7 @@ public sealed partial class Plugin : IDalamudPlugin
         if (character != Player.ContentId)
         {
             gate.Reset(); StopRecording(); character = Player.ContentId;
-            nextDiscovery = default; nextCharacterRefresh = default;
+            nextDiscovery = default; nextCharacterRefresh = default; characterReadyAt = now.AddSeconds(15); emptyCompanySamples = 0;
             fashionWindow.Tick(login: true);
         }
         fashionWindow.Tick();
@@ -544,6 +545,7 @@ public sealed partial class Plugin : IDalamudPlugin
         var jobName = DataManager.GetExcelSheet<Lumina.Excel.Sheets.ClassJob>(Dalamud.Game.ClientLanguage.English).GetRowOrDefault(Player.ClassJob.RowId)?.Abbreviation.ToString() ?? "";
         var info = new CharacterDetails(Player.ClassJob.RowId, jobName, Player.Level, jobs.Select(j => j.Level).DefaultIfEmpty(Player.Level).Max(),
             Player.Race.Value.Masculine.ToString(), Player.Tribe.Value.Masculine.ToString(), (Player.Sex == 0 ? "Male" : "Female"), jobs, fc, jobs.Where(j => j.Id < 8 || j.Id > 18).Select(j => j.Level).DefaultIfEmpty(0).Max());
+        info = AddIdentityAndProgress(info);
         if (SyncValidation.CharacterReady(info))
         {
             KeepDiscovery(new(Guid.NewGuid().ToString("N"), "character.updated", now, actor, null, Character: info), now >= nextCharacterRefresh);

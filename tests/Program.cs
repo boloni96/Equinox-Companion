@@ -304,3 +304,6 @@ Check("other FC shared display", SharedHousePresentation.Label(memberDisplay,sha
 Check("unknown FC membership shared display", SharedHousePresentation.Label(houseTenant,ownFcDisplay,false),"Shared");
 var mixedEstates = new[]{(House: sharedPrivate with {Id="shared-private"}, Own:false),(House:sharedFcDisplay, Own:false),(House:ownFcDisplay, Own:false),(House:sharedPrivate, Own:true)};
 Check("Private FC then all Shared stable order",string.Join(",",mixedEstates.OrderBy(x=>SharedHousePresentation.Order(SharedHousePresentation.Label(memberDisplay,x.House,x.Own))).Select(x=>x.House.Id)),"house,fc,shared-private,shared-fc");
+
+Check("unknown progress waits", SharedCharacterGrouping.Group(groupedCharacter with { NeedsBoost = null }), "Pending sync");
+Check("unknown FC waits", SharedCharacterGrouping.Group(groupedCharacter with { NeedsBoost = true, FcMember = null }), "Pending sync");
