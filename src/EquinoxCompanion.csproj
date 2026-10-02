@@ -1,11 +1,12 @@
 <Project Sdk="Dalamud.NET.Sdk/15.0.0">
   <PropertyGroup>
-    <Version>0.4.1.7</Version>
+    <Version>0.5.0.2</Version>
     <Author>Boloni</Author>
     <Name>Equinox Companion</Name>
-    <Punchline>Sync character details, owned estates, planting and tending to Equinox Journal.</Punchline>
-    <Description>Records house entries, confirmed planting and tending, and observed character/owned estate details. Optional paired sync to Equinox Journal V7.9.23. English garden menus supported.</Description>
+    <Punchline>Your shared characters, estates, collections and timers.</Punchline>
+    <Description>Observes characters, paired estates, gardening, collections, event quests, Fashion Report and submarine timers. Requires Journal V7.10.2 for new observations. English garden menus supported. In-game validation build.</Description>
     <Tags>housing;gardening;journal</Tags>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
+  <ItemGroup><Content Include="collection-ids.json" CopyToOutputDirectory="PreserveNewest" /><Content Include="icon.png" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
 </Project>

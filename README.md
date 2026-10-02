@@ -1,18 +1,21 @@
-## Current test release: 0.4.0.0
+# Equinox Companion 0.5.0.2 — validation build
 
-Requires Equinox Journal V7.9.21 for the new event types. Deploy the website first, then update through the existing Dalamud custom repository. See RELEASE-NOTES.md for setup and the short in-game test.
+Read RELEASE-NOTES.md and WORK-STATUS.md. This update uses the existing GitHub installer feed and requires Journal V7.10.2 for background housing propagation. The complete 23-point project remains in progress.
 
 # Equinox Companion
 
-Dalamud API 15 plugin for local house-entry and gardening observations. Current version: 0.3.0.0.
+Prepared installer build: **0.5.0.2**, for **Journal V7.10.2**. Check `repo.json` for the published version. This release needs in-game validation; the complete feature audit and remaining gaps are in [WORK-STATUS.md](WORK-STATUS.md).
 
-Add this custom repository URL in Dalamud's Experimental settings:
+Add this repository in Dalamud → Settings → Experimental:
 
+```
 https://raw.githubusercontent.com/boloni96/Equinox-Companion/main/repo.json
+```
 
-Install or update Equinox Companion, then open `/equinox`.
-Enable **Automatically save confirmed tending locally** to record normal tending without starting a test. The plugin observes your actions; it does not perform them. English garden menu titles are currently supported. House visits are recorded independently of this toggle.
+Update/install Equinox Companion and open `/equinox`. Deploy the website package to the existing Cloudflare Pages project first, then let it save once. Keep the same pairing key for both users. Tracking and enabled uploads continue with the plugin window closed; known-house entries and names can propagate between paired plugins with Journal V7.10.2 closed after its first save with automatic application enabled. The full journal and gardens still apply events when the website is open.
 
-Successful tending records are saved locally by character, house, patch and bed. The house view shows detected entries, with startup-inside observations labeled separately. Optional pairing to Journal V7.9.14 sends confirmed house entries and tending. Open Website connection in /equinox; create a key from Game connection on the website. Characters match by name and home server; houses by full address; physical patches need a one-time link. Optional five-minute recordings export diagnostics for troubleshooting; exports contain character identities and property addresses and should stay private.
+The plugin observes normal game actions and loaded data. It does not perform game actions. English garden menus are supported. After harvesting, reopen the numbered bed menu to synchronize its empty state.
 
-See ROADMAP.md for the deferred in-game planner and website integration requirements. Build locally with .NET 10 and Dalamud API 15 references; package using scripts/package_release.py. GitHub Actions is manual-only.
+See [RELEASE-NOTES.md](RELEASE-NOTES.md) for setup, changes, limitations and live tests. Build with .NET 10 and official Dalamud API 15 references; run `dotnet run --project tests/GateTests.csproj -c Release`, then `dotnet build src/EquinoxCompanion.csproj -c Release`. Package with `scripts/package_release.py`. The existing GitHub Actions workflow remains manual-only.
+
+Private journal exports, pairing keys and diagnostic recordings must not be committed to this repository.

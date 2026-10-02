@@ -15,7 +15,7 @@ public sealed record PlantIntent(string EventId, DateTimeOffset At, GardenSnapsh
     }
 }
 public sealed record FreeCompanyDetails(string Id, string Name, string Tag, ushort WorldId, string MasterName = "");
-public sealed record HouseDetails(string Type, string Size, string Evidence, FreeCompanyDetails? FreeCompany = null, string EstateName = "");
-public sealed record PlacardDetails(string CharacterId, Address Address, string Name, string Size, byte EstateType);
+public sealed record HouseDetails(string Type, string Size, string Evidence, FreeCompanyDetails? FreeCompany = null, string EstateName = "", string OwnerName = "");
+public sealed record PlacardDetails(string CharacterId, Address Address, string Name, string Size, byte EstateType, string OwnerName = "", string FcTag = "", DateTimeOffset At = default);
 public sealed record JobDetails(uint Id, string Name, int Level);
 public sealed record CharacterDetails(uint JobId, string JobName, int Level, int HighestLevel, string Race, string Tribe, string Sex, JobDetails[] Jobs, FreeCompanyDetails? FreeCompany = null, int HighestBattleLevel = 0);

@@ -22,7 +22,7 @@ public sealed class CropChatMatcher
         if (name.Length == 0) name = sender.Trim();
         return name.Length is > 0 and <= 100 && !name.Any(char.IsControl) ? name : null;
     }
-    public List<CropObservation> Drain(DateTimeOffset now, Func<string, bool> knownItem)
+    public List<CropObservation> Drain(DateTimeOffset now, Func<string, bool> knownItem, bool retainUnmapped = false)
     {
         var result = new List<CropObservation>();
         foreach (var chat in chats.ToArray())
@@ -41,7 +41,12 @@ public sealed class CropChatMatcher
             var candidates = menus.Where(m => Math.Abs((m.OpenedAt - chat.At).TotalSeconds) <= 2 && Same(m.Target, chat.Target))
                 .Select(m => (Menu: m, Location: m.ReadyLocation()!.Value)).ToArray();
             var locations = candidates.Select(x => x.Location).Distinct().ToArray();
-            if (locations.Length != 1) continue;
+            if (locations.Length != 1)
+            {
+                if (retainUnmapped && locations.Length == 0 && now-chat.At >= TimeSpan.FromSeconds(2) && chat.Target.TargetDetails?.EventArgument is not null)
+                { result.Add(new(chat.At,chat.Target,0,0,new(name,true,"garden-system-message-awaiting-calibration"))); chats.Remove(chat); }
+                continue;
+            }
             var nearest = candidates.MinBy(x => Math.Abs((x.Menu.OpenedAt - chat.At).TotalMilliseconds));
             result.Add(new(chat.At, nearest.Menu.Target, nearest.Location.Patch, nearest.Location.Bed, new(name)));
             chats.Remove(chat);

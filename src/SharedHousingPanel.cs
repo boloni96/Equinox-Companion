@@ -23,7 +23,7 @@ public sealed partial class Plugin
             rosterTask = null;
         }
         if ((!visible && !config.RefreshSharedInBackground) || !config.SyncEnabled || config.PairingKey.Length != 64 || rosterTask is not null || now < nextRosterRead) return;
-        nextRosterRead = now.AddMinutes(1);
+        nextRosterRead = now.AddSeconds(15);
         rosterTaskKey = config.PairingKey;
         rosterTask = sync.ReadRoster(rosterTaskKey, config.SharedRoster?.Revision);
     }
@@ -96,6 +96,8 @@ public sealed partial class Plugin
                 timerHouses.Select(h=>EntryHover(h.Type,h.Ward,h.Plot,h.LastEntry,now,h.Paused))))
             {
                 ImGui.TextDisabled(c.World+" · "+c.Dc+" · "+c.Region+" · "+c.Account);
+                if (ImGui.SmallButton("Open character in Journal"))
+                    Dalamud.Utility.Util.OpenLink("https://equinoxjournal.pages.dev/#character=" + Uri.EscapeDataString(c.Id));
                 if(c.Houses.Length==0)ImGui.TextDisabled("No house recorded in the shared Journal.");
                 foreach(var h in houses)
                 {

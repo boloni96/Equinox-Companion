@@ -4,7 +4,12 @@ using System.Net.Http.Json;
 using System.Text.Json;
 namespace EquinoxCompanion;
 
-public sealed record SyncEvent(string Id, string Kind, DateTimeOffset At, Actor Actor, Address? Address, int? Patch = null, int? Bed = null, PlantDetails? Plant = null, HouseDetails? House = null, CharacterDetails? Character = null, CropDetails? Crop = null);
+public sealed record SyncEvent(string Id, string Kind, DateTimeOffset At, Actor Actor, Address? Address, int? Patch = null, int? Bed = null, PlantDetails? Plant = null, HouseDetails? House = null, CharacterDetails? Character = null, CropDetails? Crop = null, CollectionDetails? Collection = null, FashionDetails? Fashion = null, VoyageDetails? Voyage = null, GardenTargetDetails? GardenTarget = null);
+public sealed record GardenTargetDetails(uint Argument, float X, float Y, float Z);
+public sealed record CollectionDetails(string Category, uint[] Known, uint[] Unlocked, uint[] Obtained);
+public sealed record FashionDetails(int Score, int Remaining, int ThemeId, string Cycle);
+public sealed record SubmarineDetails(int Slot, string Name, int Rank, long ReturnTime, uint RegisterTime, ushort[] Parts, byte[] Route);
+public sealed record VoyageDetails(string FcId, SubmarineDetails[] Submarines);
 public sealed record SyncResult(string[] Accepted, string Status, bool Retry);
 public sealed class CompanionSync : IDisposable
 {
@@ -37,22 +42,29 @@ public sealed class CompanionSync : IDisposable
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
         { return new([], "Connection unavailable; local records are kept for retry.", true); }
     }
+    private string? rosterETag;
+    private string? rosterETagKey;
     public async Task<RosterResult> ReadRoster(string key, long? revision)
     {
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, "https://equinoxjournal.pages.dev/api/companion/roster");
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
-            if (revision is not null) request.Headers.TryAddWithoutValidation("If-None-Match", $"\"roster-{revision}\"");
+            if (revision is not null && rosterETagKey == key && rosterETag is not null)
+                request.Headers.TryAddWithoutValidation("If-None-Match", rosterETag);
             using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancel.Token);
             if (response.StatusCode == HttpStatusCode.NotModified) return new(null, "Shared profiles up to date.", true);
             if (response.StatusCode == HttpStatusCode.Unauthorized) return new(null, "Shared profiles: pairing key invalid or revoked.", Unauthorized: true);
-            if (response.StatusCode == HttpStatusCode.NotFound) return new(null, "Shared profiles need Journal V7.9.23 and a new website save.");
+            if (response.StatusCode == HttpStatusCode.NotFound) return new(null, "Shared profiles need Journal V7.10.2 and a new website save.");
             if (!response.IsSuccessStatusCode) return new(null, $"Shared profiles unavailable (HTTP {(int)response.StatusCode}); showing saved copy.");
             await response.Content.LoadIntoBufferAsync(1000000);
             var roster = JsonSerializer.Deserialize<SharedRoster>(await response.Content.ReadAsStringAsync(cancel.Token), Json);
             if (roster is null || roster.People is null || roster.People.Length > 100 || roster.People.Any(p => p is null || p.Characters is null || p.Characters.Any(c => c is null || c.Houses is null)))
                 return new(null, "Invalid shared profile response; showing saved copy.");
+            if (roster.Voyages is { Length: > 200 } || roster.Voyages?.Any(v=>v is null || v.Submarines is null || v.Submarines.Length>4 || v.Submarines.Any(s=>s is null || s.Name is null || s.ReturnTime<0 || s.ReturnTime>DateTimeOffset.UtcNow.AddDays(30).ToUnixTimeSeconds())) == true)
+                return new(null,"Invalid shared voyage response; showing saved copy.");
+            rosterETag = response.Headers.ETag?.ToString();
+            rosterETagKey = key;
             return new(roster, "Shared profiles updated.");
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException or InvalidOperationException)

@@ -1,0 +1,30 @@
+[
+  {
+    "Author": "Boloni",
+    "Name": "Equinox Companion",
+    "InternalName": "EquinoxCompanion",
+    "AssemblyVersion": "0.5.0.1",
+    "Description": "Observes characters, paired estates, gardening, collections, event quests, Fashion Report and submarine timers. Requires Journal V7.10.1 for new observations. English garden menus supported. In-game validation build.",
+    "ApplicableVersion": "any",
+    "Tags": [
+      "housing",
+      "gardening",
+      "journal"
+    ],
+    "DalamudApiLevel": 15,
+    "LoadRequiredState": 0,
+    "LoadSync": false,
+    "CanUnloadAsync": false,
+    "LoadPriority": 0,
+    "Punchline": "Your shared characters, estates, collections and timers.",
+    "AcceptsFeedback": true,
+    "IconUrl": "https://raw.githubusercontent.com/boloni96/Equinox-Companion/main/src/icon.png",
+    "RepoUrl": "https://github.com/boloni96/Equinox-Companion",
+    "IsHide": false,
+    "IsTestingExclusive": false,
+    "DownloadLinkInstall": "https://raw.githubusercontent.com/boloni96/Equinox-Companion/main/dist/v0.5.0.1/EquinoxCompanion.zip",
+    "DownloadLinkUpdate": "https://raw.githubusercontent.com/boloni96/Equinox-Companion/main/dist/v0.5.0.1/EquinoxCompanion.zip",
+    "DownloadLinkTesting": "https://raw.githubusercontent.com/boloni96/Equinox-Companion/main/dist/v0.5.0.1/EquinoxCompanion.zip",
+    "LastUpdate": 1790902917
+  }
+]

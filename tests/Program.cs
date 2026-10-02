@@ -243,3 +243,28 @@ Check("paired owner appears in visiting chat", HouseEntryNotice.Format(guestVisi
 Check("paired visitor is never called owner", HouseEntryNotice.Format(guestVisit,null,pairedRoster)?.Contains("your Private House").ToString(), "False");
 Check("another estate cannot supply owner", HouseEntryNotice.Format(guestVisit with { Address = realAddress with { HouseId = "0000000000000001" } },null,pairedRoster)?.Contains("ownership unconfirmed").ToString(), "True");
 Check("workshop never triggers estate chat", HouseEntryNotice.Format(ownerVisit with { Address=realAddress with { Workshop=true } },estateEvent), null);
+
+var collectionEvent=estateEvent with {Kind="collection.observed",Address=null,Collection=new("mount",[1,2],[1],[2])};
+Check("collection does not require house",SyncValidation.CanSend(collectionEvent,time).ToString(),"True");
+Check("collection rejects unknown unlocked id",SyncValidation.CanSend(collectionEvent with {Collection=new("mount",[1],[9],[])},time).ToString(),"False");
+Check("collection rejects null known array",SyncValidation.CanSend(collectionEvent with {Collection=new("mount",null!,[],[])},time).ToString(),"False");
+Check("fashion rejects score from another cycle",SyncValidation.CanSend(estateEvent with {Kind="fashion.observed",Address=null,Fashion=new(80,3,0,time.AddDays(-8).ToString("O"))},time).ToString(),"False");
+var unmappedTarget=plantTarget with {TargetDetails=plantTarget.TargetDetails! with {EventArgument=5652}};
+cm.Clear();cm.Add(new CropChat(time,unmappedTarget,"Curiel Root\n"+CropChatMatcher.ReadyText));
+Check("no-permission chat waits for menu",cm.Drain(time.AddMilliseconds(500),Known,true).Count.ToString(),"0");
+var pendingCrop=cm.Drain(time.AddMilliseconds(2200),Known,true).Single();
+Check("unmapped chat retains crop",pendingCrop.Crop.CropName,"Curiel Root");
+Check("unmapped chat never invents patch",pendingCrop.Patch.ToString(),"0");
+Check("unmapped chat keeps calibration requirement",pendingCrop.Crop.Evidence,"garden-system-message-awaiting-calibration");
+Check("unmapped observation consumed once",cm.Drain(time.AddMilliseconds(2400),Known,true).Count.ToString(),"0");
+var emptyMenu = matureMenu with { Options = ["Plant Seeds", "Quit"] };
+Check("numbered empty menu identifies bed", emptyMenu.EmptyLocation()?.Bed.ToString(), "8");
+Check("mature menu is never empty", matureMenu.EmptyLocation()?.Bed.ToString(), null);
+Check("ambiguous empty menu is rejected", (emptyMenu with { Options = ["Plant Seeds", "Tend Crop", "Quit"] }).EmptyLocation()?.Bed.ToString(), null);
+Check("unnumbered empty menu is rejected", (emptyMenu with { Title = "Garden" }).EmptyLocation()?.Bed.ToString(), null);
+Check("empty menu ignores stale option count", GardenMenu.VisibleOptionCount(4, 2, "Plant Seeds", "Quit").ToString(), "2");
+Check("old website keeps house entries flowing", SyncValidation.SupportedByWebsite("house.entered", 1).ToString(), "True");
+Check("old website holds new collection observations", SyncValidation.SupportedByWebsite("collection.observed", 1).ToString(), "False");
+Check("old website holds empty-bed observations", SyncValidation.SupportedByWebsite("garden.empty", 1).ToString(), "False");
+Check("updated website accepts new observations", SyncValidation.SupportedByWebsite("garden.empty", 2).ToString(), "True");
+Check("hairstyle uses collection contract", SyncValidation.CanSend(collectionEvent with { Collection = new("hairstyle", [637], [637], []) }, time).ToString(), "True");

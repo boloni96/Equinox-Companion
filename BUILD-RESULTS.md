@@ -1,3 +1,7 @@
+# 0.5.0.2 — recovered checkpoint and background housing
+
+Release build: zero warnings/errors using Dalamud API 15 references. Existing synthetic gate suite passes. Installer package matches the compiled DLL, manifest, artwork and catalogue. Journal V7.10.2 tests cover two-client background housing, tenant/FC membership eligibility, ownership changes, replay/stale events, no R2 access, ETags, bounded cache, full 50-event upload query count, and durable queue preservation. Native FFXIV and production Cloudflare checks remain outstanding. The user explicitly authorized publication of this prepared build on 2 October 2026.
+
 # 0.4.1.6 — exclude shared private houses from character timers
 
 Validated owner/tenant/unknown/ambiguous name/home-world cases and FC membership projection. Local owned-estate details require ownership evidence. Shared private details remain expanded-only. Release build and gate suite passed; native appearance needs an in-game check.

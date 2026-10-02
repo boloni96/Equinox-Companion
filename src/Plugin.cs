@@ -37,6 +37,7 @@ public sealed partial class Plugin : IDalamudPlugin
     [PluginService] internal static IChatGui Chat { get; private set; } = null!;
     [PluginService] internal static IGameInteropProvider Interop { get; private set; } = null!;
     [PluginService] internal static IAddonLifecycle Addons { get; private set; } = null!;
+    [PluginService] internal static ITextureProvider Textures { get; private set; } = null!;
     [PluginService] internal static IPluginLog Log { get; private set; } = null!;
 
     private static readonly string[] GardenMenus = ["HousingGardening", "SelectString", "SelectIconString", "ContextMenu", "SelectYesno"];
@@ -117,15 +118,19 @@ public sealed partial class Plugin : IDalamudPlugin
             .Select(h => new SyncEvent(h.EventId, h.Kind, h.ObservedAt, WithWorldNames(h.Actor), WithAddressNames(h.Address)))
             .Concat(config.Tending.Where(t => !sent.Contains(t.EventId)).Select(t => new SyncEvent(t.EventId, "garden.tended", t.ConfirmedAt, WithWorldNames(t.Actor), WithAddressNames(t.Address), t.Patch, t.Bed)))
             .Concat(config.Planting.Where(t => !sent.Contains(t.EventId)).Select(t => new SyncEvent(t.EventId, "garden.planted", t.ConfirmedAt, WithWorldNames(t.Actor), WithAddressNames(t.Address), t.Patch, t.Bed, t.Plant)))
-            .Concat(config.Discoveries.Where(e => !sent.Contains(e.Id) && (e.Kind is "garden.ready" or "garden.observed" ? config.TrackGardens : e.Kind == "character.updated" ? config.SyncCharacterDetails : config.SyncHouseDetails)))
+            .Concat(config.Discoveries.Where(e => !sent.Contains(e.Id) && (e.Kind is "garden.ready" or "garden.observed" or "garden.unmapped" or "garden.empty" ? config.TrackGardens : e.Kind == "character.updated" ? config.SyncCharacterDetails : e.Kind == "collection.observed" ? config.SyncCollections : e.Kind is "fashion.observed" or "submarines.observed" ? config.SyncActivities : config.SyncHouseDetails)))
             .Where(e => !SyncValidation.SupersededIncompleteCharacter(e, config.Discoveries, now))
             .OrderBy(e => e.At).ToArray();
         var held = pending.Where(e => !SyncValidation.CanSend(e, now)).ToArray();
         heldSyncRecords = held.Length;
         foreach (var e in held) errorJournal.Record("held-record", SyncValidation.HoldReason(e, now), e.Id, e.Kind);
-        var events = pending.Where(e => SyncValidation.CanSend(e, now)).Take(50).ToArray();
+        var events = pending.Where(e => SyncValidation.CanSend(e, now) && SyncValidation.SupportedByWebsite(e.Kind, config.SharedRoster?.ProtocolVersion ?? 1)).Take(50).ToArray();
         while (events.Length > 1 && JsonSerializer.SerializeToUtf8Bytes(new { events }, json).Length > 60000) events = events[..^1];
-        if (events.Length == 0) { nextSync = now.AddSeconds(30); return; }
+        if (events.Length == 0) {
+            if (pending.Any(e => !SyncValidation.SupportedByWebsite(e.Kind, config.SharedRoster?.ProtocolVersion ?? 1)))
+                syncStatus = "New observations kept locally. Deploy Journal V7.10.2, save once, then refresh shared profiles.";
+            nextSync = now.AddSeconds(30); return;
+        }
         syncStatus = $"Sending {events.Length} events…";
         syncTask = sync.Send(config.PairingKey, events);
     }
@@ -141,12 +146,18 @@ public sealed partial class Plugin : IDalamudPlugin
         }
         catch (Exception ex) { callbackStatus = "Unavailable; see /xllog"; errorJournal.Record("plugin", "Garden callback observer unavailable", exceptionType: ex.GetType().Name); Log.Error(ex, "Garden callback observer unavailable"); }
         config = Pi.GetPluginConfig() as Configuration ?? new();
+        config.PairingKey = config.PairingKey.Trim().ToLowerInvariant();
+        syncStatus = config.PairingKey.Length == 64 ? "Saved pairing key loaded. Waiting to sync." : "Not paired. Local records only.";
+        if (config.Version < 5) { config.RefreshSharedInBackground = true; config.Version = 5; Pi.SavePluginConfig(config); }
         try { plantHook = Interop.HookFromAddress<ConfirmPlantDelegate>(AgentHousingPlant.MemberFunctionPointers.ConfirmSeedAndSoilSelection, ObservePlantSelection); }
         catch (Exception ex) { errorJournal.Record("plugin", "Plant selection observer unavailable", exceptionType: ex.GetType().Name); Log.Error(ex, "Plant selection observer unavailable"); }
         try { signboardHook = Interop.HookFromAddress<SignboardDelegate>(AgentHousingSignboard.MemberFunctionPointers.ReadPacket, ObserveSignboard); signboardHook.Enable(); }
         catch (Exception ex) { errorJournal.Record("plugin", "Estate placard observer unavailable", exceptionType: ex.GetType().Name); Log.Error(ex, "Estate placard observer unavailable"); }
+        try { fashionHook = Interop.HookFromAddress<FFXIVClientStructs.FFXIV.Client.Game.Event.EventFramework.Delegates.ProcessEventPlay>(FFXIVClientStructs.FFXIV.Client.Game.Event.EventFramework.MemberFunctionPointers.ProcessEventPlay, ObserveNpcEvent); fashionHook.Enable(); }
+        catch (Exception ex) { errorJournal.Record("plugin", "Fashion observer unavailable", exceptionType: ex.GetType().Name); }
         if (config.TrackGardens) { callbackHook?.Enable(); plantHook?.Enable(); }
         Commands.AddHandler("/equinox", new CommandInfo(OnCommand) { HelpMessage = "Open Equinox Companion, shared profiles, housing and settings." });
+        mainWindow = new CompanionWindow(this); windows.AddWindow(mainWindow);
         Pi.UiBuilder.Draw += Draw;
         Pi.UiBuilder.OpenMainUi += Open;
         Pi.UiBuilder.OpenConfigUi += Open;
@@ -183,6 +194,7 @@ public sealed partial class Plugin : IDalamudPlugin
         UpdateSync(now);
         UpdateSharedRoster(now);
         UpdateHouseNotices(now);
+        MaintainRecords(now);
         if (faulted) return;
         
         if (!Player.IsLoaded || Player.ContentId == 0)
@@ -202,7 +214,10 @@ public sealed partial class Plugin : IDalamudPlugin
         if (now >= nextDiscovery)
         {
             nextDiscovery = now.AddSeconds(5);
-            try { ObserveDetails(now); } catch (Exception ex) { discoveryStatus = "Details not available yet; try opening your FC member list."; errorJournal.Record("details", "Details observation deferred.", exceptionType: ex.GetType().Name); Log.Debug(ex, "Details observation deferred"); }
+            ObserveSafely("details", () => ObserveDetails(now));
+            ObserveSafely("collections", () => ObserveCollections(now));
+            ObserveSafely("voyages", () => ObserveActivities(now));
+            ObserveSafely("fashion", DrainFashionObservations);
         }
         if (now < nextSample) return;
         nextSample = now.AddMilliseconds(ObservingGardens ? 50 : 250);
@@ -232,7 +247,7 @@ public sealed partial class Plugin : IDalamudPlugin
                     var visit = new HouseObservation(Guid.NewGuid().ToString("N"), now, kind, actor, address);
                     config.Houses.Add(visit);
                     if (config.NotifyHouseEntries && kind == "house.entered") pendingHouseNotices.Add(visit);
-                    if (config.Houses.Count > 500) config.Houses.RemoveRange(0, config.Houses.Count - 500);
+
                     Pi.SavePluginConfig(config);
                 }
             }
@@ -330,7 +345,7 @@ public sealed partial class Plugin : IDalamudPlugin
                             {
                                 var menu = new GardenMenu((nint)addon, now, candidate, title, options);
                                 Volatile.Write(ref activeGardenMenu, menu);
-                                if (menu.ReadyLocation() is not null && readyMenus.Count < 128) readyMenus.Enqueue(menu);
+                                if ((menu.ReadyLocation() is not null || menu.EmptyLocation() is not null) && readyMenus.Count < 128) readyMenus.Enqueue(menu);
                             }
                         }
                     }
@@ -436,20 +451,31 @@ public sealed partial class Plugin : IDalamudPlugin
                 var address = AddressOf(packet->HouseId);
                 if (address is not null && !address.Apartment && !address.Workshop && address.Room == 0 && packet->Size <= 2)
                     placards.Enqueue(new(Player.ContentId.ToString(CultureInfo.InvariantCulture), address, packet->NameString,
-                        packet->Size switch { 0 => "Small", 1 => "Medium", _ => "Large" }, packet->EstateType));
+                        packet->Size switch { 0 => "Small", 1 => "Medium", _ => "Large" }, packet->EstateType,
+                        packet->OwnerNameString, packet->FCTagString, DateTimeOffset.UtcNow));
             }
         }
         catch (Exception ex) { errorJournal.Record("plugin", "Could not copy estate placard", exceptionType: ex.GetType().Name); Log.Error(ex, "Could not copy estate placard"); }
         signboardHook!.Original(agent, packet);
     }
 
+    private void ObserveSafely(string source, Action observe)
+    {
+        try { observe(); }
+        catch (Exception ex)
+        {
+            errorJournal.Record(source, "Observation deferred; other tracking continues.", exceptionType: ex.GetType().Name);
+            Log.Debug(ex, "{Source} observation deferred", source);
+        }
+    }
+
     private void KeepDiscovery(SyncEvent e)
     {
         if (!SyncValidation.CanSend(e, DateTimeOffset.UtcNow)) return;
-        var last = config.Discoveries.LastOrDefault(x => x.Kind == e.Kind && x.Actor.ContentId == e.Actor.ContentId && x.Address?.HouseId == e.Address?.HouseId && x.Patch == e.Patch && x.Bed == e.Bed);
-        if (last is not null && !(e.Kind is "garden.ready" or "garden.observed" && config.Planting.Any(p => p.Actor.ContentId == e.Actor.ContentId && p.Address.HouseId == e.Address?.HouseId && p.Patch == e.Patch && p.Bed == e.Bed && p.ConfirmedAt > last.At)) && JsonSerializer.Serialize(new { last.Actor, last.Address, last.House, last.Character, last.Crop }) == JsonSerializer.Serialize(new { e.Actor, e.Address, e.House, e.Character, e.Crop })) return;
+        var last = config.Discoveries.LastOrDefault(x => x.Kind == e.Kind && x.Actor.ContentId == e.Actor.ContentId && x.Address?.HouseId == e.Address?.HouseId && x.Patch == e.Patch && x.Bed == e.Bed && x.Collection?.Category == e.Collection?.Category && x.GardenTarget?.Argument == e.GardenTarget?.Argument);
+        if (last is not null && (!(e.Kind is "garden.empty" or "garden.ready" or "garden.observed") || e.At - last.At < TimeSpan.FromSeconds(2)) && !(e.GardenTarget is not null && e.At-last.At > TimeSpan.FromDays(30)) && !(e.Kind is "garden.ready" or "garden.observed" or "garden.empty" && config.Planting.Any(p => p.Actor.ContentId == e.Actor.ContentId && p.Address.HouseId == e.Address?.HouseId && p.Patch == e.Patch && p.Bed == e.Bed && p.ConfirmedAt > last.At)) && JsonSerializer.Serialize(new { last.Actor, last.Address, last.House, last.Character, last.Crop, last.Collection, last.Fashion, last.Voyage, last.GardenTarget }) == JsonSerializer.Serialize(new { e.Actor, e.Address, e.House, e.Character, e.Crop, e.Collection, e.Fashion, e.Voyage, e.GardenTarget })) return;
         config.Discoveries.Add(e);
-        if (config.Discoveries.Count > 2000) config.Discoveries.RemoveRange(0, config.Discoveries.Count - 2000);
+
         Pi.SavePluginConfig(config);
     }
 
@@ -469,6 +495,19 @@ public sealed partial class Plugin : IDalamudPlugin
                     fc = new(proxy->Id.ToString(CultureInfo.InvariantCulture), proxy->NameString, members->CharData[i].FCTagString, proxy->HomeWorldId, proxy->MasterString);
         }
         if (fc is not null && string.IsNullOrWhiteSpace(fc.Name)) fc = null;
+        // The company profile may describe a different FC. Use it for that placard only;
+        // it never proves that the visiting character is a member.
+        foreach (var sign in estateNames.Values.Where(s => s.CharacterId == actor.ContentId && now - s.At < TimeSpan.FromMinutes(2)))
+        {
+            var isFc = sign.EstateType == (byte)EstateType.FreeCompanyEstate;
+            if (!isFc && sign.EstateType != (byte)EstateType.PersonalEstate) continue;
+            FreeCompanyDetails? placardFc = null;
+            if (isFc && proxy != null && proxy->Id != 0 && proxy->HomeWorldId == sign.Address.WorldId &&
+                string.Equals(proxy->NameString.Trim(), sign.OwnerName.Trim(), StringComparison.OrdinalIgnoreCase))
+                placardFc = new(proxy->Id.ToString(CultureInfo.InvariantCulture), proxy->NameString, sign.FcTag, proxy->HomeWorldId, proxy->MasterString);
+            KeepDiscovery(new(Guid.NewGuid().ToString("N"), "house.placard", now, actor, sign.Address,
+                House: new(isFc ? "Free Company house" : "Private house", sign.Size, "observed-placard", placardFc, sign.Name, sign.OwnerName)));
+        }
         var jobs = DataManager.GetExcelSheet<Lumina.Excel.Sheets.ClassJob>(Dalamud.Game.ClientLanguage.English)
             .Where(j => j.RowId > 0 && j.ExpArrayIndex >= 0 && !string.IsNullOrWhiteSpace(j.Abbreviation.ToString()))
             .Select(j => new JobDetails(j.RowId, j.Abbreviation.ToString(), Player.GetClassJobLevel(j))).Where(j => j.Level > 0).ToArray();
@@ -477,16 +516,15 @@ public sealed partial class Plugin : IDalamudPlugin
             Player.Race.Value.Masculine.ToString(), Player.Tribe.Value.Masculine.ToString(), (Player.Sex == 0 ? "Male" : "Female"), jobs, fc, jobs.Where(j => j.Id < 8 || j.Id > 18).Select(j => j.Level).DefaultIfEmpty(0).Max());
         KeepDiscovery(new(Guid.NewGuid().ToString("N"), "character.updated", now, actor, null, Character: info));
         var manager = HousingManager.Instance();
-        if (manager == null || manager->CurrentTerritory == null || !manager->CurrentTerritory->IsLoaded()) return;
-        var type = manager->GetCurrentHousingTerritoryType();
-        var current = AddressOf(type == HousingTerritoryType.Indoor ? manager->GetCurrentIndoorHouseId() : manager->GetCurrentHouseId());
-        if (current is null || current.Room != 0 || current.Apartment || current.Workshop) return;
+        if (manager == null) return;
+        var loaded = manager->CurrentTerritory != null && manager->CurrentTerritory->IsLoaded();
         foreach (var estate in new[] { EstateType.FreeCompanyEstate, EstateType.PersonalEstate })
         {
             var owned = AddressOf(HousingManager.GetOwnedHouseId(estate));
-            if (owned is null || owned.HouseId != current.HouseId || owned.WorldId != actor.HomeWorldId || estate == EstateType.FreeCompanyEstate && fc is null) continue;
+            if (owned is null || owned.WorldId != actor.HomeWorldId || estate == EstateType.FreeCompanyEstate && fc is null) continue;
+            var current = owned;
             var size = "";
-            if (type == HousingTerritoryType.Outdoor && manager->OutdoorTerritory != null)
+            if (loaded && manager->GetCurrentHousingTerritoryType() == HousingTerritoryType.Outdoor && manager->OutdoorTerritory != null && manager->GetCurrentHouseId().TerritoryTypeId == owned.TerritoryTypeId && manager->GetCurrentHouseId().WardIndex + 1 == owned.Ward && manager->GetCurrentHouseId().WorldId == owned.WorldId)
             {
                 var plot = manager->OutdoorTerritory->Plots[current.Plot - 1];
                 if (plot.State == PlotState.OwnedEstate) size = plot.Size switch { PlotSize.Small => "Small", PlotSize.Medium => "Medium", PlotSize.Large => "Large", _ => "" };
@@ -554,20 +592,25 @@ public sealed partial class Plugin : IDalamudPlugin
         messages.Enqueue((DateTimeOffset.UtcNow, message.LogMessageId, parameters, Volatile.Read(ref capturedContext), Volatile.Read(ref pendingTend), Volatile.Read(ref pendingPlant)));
     }
 
+    private static GardenTargetDetails? GardenTargetOf(GardenSnapshot s) => s.TargetDetails is { EventArgument: {} argument } t ? new(argument,t.X,t.Y,t.Z) : null;
+
     private void DrainMessages()
     {
         while (readyMenus.TryDequeue(out var menu))
         {
             cropMatcher.Add(menu);
+            if (menu.EmptyLocation() is { } empty && menu.Target.Address is { } emptyAddress)
+                KeepDiscovery(new(Guid.NewGuid().ToString("N"), "garden.empty", menu.OpenedAt,
+                    WithWorldNames(menu.Target.Actor), WithAddressNames(emptyAddress), empty.Patch, empty.Bed, GardenTarget: GardenTargetOf(menu.Target)));
             if (menu.ReadyLocation() is { } location && menu.Target.Address is { } address)
                 KeepDiscovery(new(Guid.NewGuid().ToString("N"), "garden.ready", menu.OpenedAt,
-                    WithWorldNames(menu.Target.Actor), WithAddressNames(address), location.Patch, location.Bed));
+                    WithWorldNames(menu.Target.Actor), WithAddressNames(address), location.Patch, location.Bed, GardenTarget: GardenTargetOf(menu.Target)));
         }
         while (cropChats.TryDequeue(out var chat)) cropMatcher.Add(chat);
-        foreach (var observed in cropMatcher.Drain(DateTimeOffset.UtcNow, IsKnownCropItem))
+        foreach (var observed in cropMatcher.Drain(DateTimeOffset.UtcNow, IsKnownCropItem, true))
         {
-            KeepDiscovery(new(Guid.NewGuid().ToString("N"), "garden.observed", observed.At,
-                WithWorldNames(observed.Target.Actor), WithAddressNames(observed.Target.Address!), observed.Patch, observed.Bed, Crop: observed.Crop));
+            KeepDiscovery(new(Guid.NewGuid().ToString("N"), observed.Patch == 0 ? "garden.unmapped" : "garden.observed", observed.At,
+                WithWorldNames(observed.Target.Actor), WithAddressNames(observed.Target.Address!), observed.Patch, observed.Bed, Crop: observed.Crop, GardenTarget: GardenTargetOf(observed.Target)));
             cropChatStatus = $"{observed.Crop.CropName} · patch {observed.Patch}, bed {observed.Bed} · ready to harvest";
         }
         while (menuMessages.TryDequeue(out var menu)) if (recording) { menuObservations++; AddDiagnostic(menu); }
@@ -579,14 +622,14 @@ public sealed partial class Plugin : IDalamudPlugin
             if (confirmed is not null && !config.Tending.Any(x => x.EventId == confirmed.EventId))
             {
                 config.Tending.Add(confirmed);
-                if (config.Tending.Count > 10000) config.Tending.RemoveRange(0, config.Tending.Count - 10000);
+
                 Pi.SavePluginConfig(config);
             }
             var planted = message.Plant?.Confirm(message.Id, message.Parameters, message.At, candidate);
             if (planted is not null && !config.Planting.Any(x => x.EventId == planted.EventId))
             {
                 config.Planting.Add(planted);
-                if (config.Planting.Count > 10000) config.Planting.RemoveRange(0, config.Planting.Count - 10000);
+
                 Pi.SavePluginConfig(config);
             }
             if (message.Id is >= 4005 and <= 4009) Volatile.Write(ref pendingPlant, null);
@@ -641,11 +684,16 @@ public sealed partial class Plugin : IDalamudPlugin
 
     private void Draw()
     {
-        if (!visible) { showSavedPairingKey = false; return; }
-        ImGui.SetNextWindowSizeConstraints(new Vector2(500, 360), new Vector2(float.MaxValue, float.MaxValue));
-        ImGui.SetNextWindowSize(new Vector2(660, 480), ImGuiCond.FirstUseEver);
-        if (ImGui.Begin("Equinox Companion", ref visible))
-        {
+        mainWindow.IsOpen = visible;
+        windows.Draw();
+        visible = mainWindow.IsOpen;
+        if (!visible) showSavedPairingKey = false;
+    }
+
+    private void DrawContents()
+    {
+        var icon = Textures.GetFromFile(System.IO.Path.Combine(Pi.AssemblyLocation.DirectoryName!, "icon.png")).GetWrapOrDefault();
+        if (icon is not null) { ImGui.Image(icon.Handle, new Vector2(40, 40)); ImGui.SameLine(); }
             ImGui.TextDisabled($"Equinox Companion v{typeof(Plugin).Assembly.GetName().Version}");
             DrawSharedStatus();
             if (ImGui.BeginTabBar("CompanionSections", ImGuiTabBarFlags.Reorderable))
@@ -660,6 +708,7 @@ public sealed partial class Plugin : IDalamudPlugin
                     DrawHousing();
                     ImGui.EndTabItem();
                 }
+                if (ImGui.BeginTabItem("Collections & timers")) { DrawCollectionTimers(); ImGui.EndTabItem(); }
                 if (ImGui.BeginTabItem("Settings"))
                 {
                     DrawSettings();
@@ -675,15 +724,13 @@ public sealed partial class Plugin : IDalamudPlugin
                 }
                 ImGui.EndTabBar();
             }
-        }
-        ImGui.End();
     }
 
     private void DrawConnection()
     {
         ImGui.TextUnformatted("Website connection");
         DrawSavedPairingKey();
-                ImGui.TextWrapped("Use Journal V7.9.23 or newer. Keep your existing pairing key. Both installations use the same key for this shared Journal.");
+                ImGui.TextWrapped("Use Journal V7.10.0 or newer. Keep your existing pairing key. Both installations use the same key for this shared Journal.");
                 ImGui.InputText("Pairing key", ref pairingInput, 128, ImGuiInputTextFlags.Password);
                 if (ImGui.Button("Save pairing key") && syncTask is null)
                 {
@@ -704,9 +751,9 @@ public sealed partial class Plugin : IDalamudPlugin
                 { config.SyncEnabled = enabled; nextSync = default; Pi.SavePluginConfig(config); }
                 var characters = config.SyncCharacterDetails; var houses = config.SyncHouseDetails;
                 if (ImGui.Checkbox("Sync character and job details", ref characters)) { config.SyncCharacterDetails = characters; nextSync = default; Pi.SavePluginConfig(config); }
-                if (ImGui.Checkbox("Discover/update owned private and FC houses", ref houses)) { config.SyncHouseDetails = houses; Pi.SavePluginConfig(config); }
+                if (ImGui.Checkbox("Discover/update private, FC and paired placard details", ref houses)) { config.SyncHouseDetails = houses; Pi.SavePluginConfig(config); }
                 ImGui.TextWrapped(syncStatus);
-                if (heldSyncRecords > 0) ImGui.TextWrapped($"{heldSyncRecords} incomplete record(s) kept locally; valid actions continue syncing.");
+                if (heldSyncRecords > 0) ImGui.TextWrapped($"{heldSyncRecords} incomplete observation(s) in Diagnostics. They are not sent and do not block valid actions.");
                 ImGui.TextWrapped("Sends character and job details, confirmed owned-estate and FC details, property addresses, planting and tending records, and entry times. Pairing key is saved on this PC and is never included in test exports. Characters match automatically by name and home server. Unmatched houses and patches need linking once.");
     }
 
@@ -749,7 +796,7 @@ public sealed partial class Plugin : IDalamudPlugin
                 if (ObservingGardens) { callbackHook?.Enable(); plantHook?.Enable(); } else StopRecording();
                 Pi.SavePluginConfig(config);
             }
-            ImGui.TextWrapped("English garden menus supported. Confirmed tending is saved per house, patch and bed. Website matching preserves existing batches. Planting records include the selected seed and soil plus a successful game response. Harvest syncing is not enabled.");
+            ImGui.TextWrapped("English garden menus supported. Confirmed tending is saved per house, patch and bed. Website matching preserves existing batches. Planting records include the selected seed and soil plus a successful game response. Open the numbered bed menu after harvesting to sync the observed empty bed. Selecting Harvest alone never clears a bed.");
             ImGui.TextWrapped($"Saved tending records: {config.Tending.Count} (latest 10,000 retained)");
             foreach (var tend in config.Tending.TakeLast(6).Reverse())
                 ImGui.TextWrapped($"{tend.ConfirmedAt.ToLocalTime():g} · {tend.Actor.Name} · W{tend.Address.Ward} P{tend.Address.Plot} · Patch {tend.Patch}, bed {tend.Bed}: tended");
@@ -791,11 +838,13 @@ public sealed partial class Plugin : IDalamudPlugin
         callbackHook?.Dispose();
         plantHook?.Disable(); plantHook?.Dispose();
         signboardHook?.Disable(); signboardHook?.Dispose();
+        fashionHook?.Disable(); fashionHook?.Dispose();
         Chat.LogMessage -= OnLog;
         Chat.ChatMessage -= OnGardenChat;
         foreach (var menuEvent in MenuEvents) Addons.UnregisterListener(menuEvent, GardenMenus, OnGardenMenu);
         Framework.Update -= Update;
         Pi.UiBuilder.Draw -= Draw;
+        windows.RemoveAllWindows();
         Pi.UiBuilder.OpenMainUi -= Open;
         Pi.UiBuilder.OpenConfigUi -= Open;
         Commands.RemoveHandler("/equinox");

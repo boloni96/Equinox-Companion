@@ -69,6 +69,13 @@ public sealed partial class Plugin
     }
     private void DrawGeneralSettings()
     {
+        var collections = config.SyncCollections;
+        if (ImGui.Checkbox("Sync collection unlocks and reward items", ref collections)) { config.SyncCollections = collections; Pi.SavePluginConfig(config); }
+        var activities = config.SyncActivities;
+        if (ImGui.Checkbox("Sync Fashion Report and submarine observations", ref activities)) { config.SyncActivities = activities; Pi.SavePluginConfig(config); }
+        var warn = config.NotifyHousingWarnings;
+        if (ImGui.Checkbox("Red chat reminder after 30 days without eligible entry", ref warn)) { config.NotifyHousingWarnings = warn; Pi.SavePluginConfig(config); }
+        ImGui.TextWrapped("History older than 60 days is pruned after successful sync. Current state and unsent actions are preserved.");
         ImGui.TextWrapped("Tracking and enabled uploads continue when the plugin window is closed.");
         var notify = config.NotifyHouseEntries;
         if (ImGui.Checkbox("Show house-entry messages in my chat",ref notify))
@@ -78,6 +85,6 @@ public sealed partial class Plugin
         var background = config.RefreshSharedInBackground;
         if (ImGui.Checkbox("Refresh shared profiles while this window is closed",ref background))
         { config.RefreshSharedInBackground=background;nextRosterRead=default;Pi.SavePluginConfig(config); }
-        ImGui.TextWrapped("One shared-list check per minute while open, or also in the background if enabled. Game actions still upload only when there are pending records. Both plugins can use the same pairing key.");
+        ImGui.TextWrapped("One shared-list check every 15 seconds while open, or also in the background if enabled. Game actions still upload only when there are pending records. Both plugins can use the same pairing key.");
     }
 }
