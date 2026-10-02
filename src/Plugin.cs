@@ -229,7 +229,9 @@ public sealed partial class Plugin : IDalamudPlugin
         if (character != Player.ContentId)
         {
             gate.Reset(); StopRecording(); character = Player.ContentId;
+            fashionWindow.Tick(login: true);
         }
+        fashionWindow.Tick();
         if (recording && now >= recordingUntil) StopRecording();
         if (Conditions[ConditionFlag.BetweenAreas] || Conditions[ConditionFlag.BetweenAreas51])
         {

@@ -1,3 +1,7 @@
+# Companion 0.5.1.4 — Fashion login refresh
+
+Checks the shared Fashion Report picture on character login and once per hour while logged in, even with its window closed. Login does not open the window or print the chat link. `/fashion` opens the in-game picture and prints the optional browser link. Keeps the existing picture on failure. Native game testing still required.
+
 # Companion 0.5.1.3 — Fashion picture window
 
 `/fashion` opens the current V1 report inside the game and prints a clickable browser link in local chat. Click the image to expand/shrink; resize, pin, refresh, or open in browser. Week/theme are read from Fashion Report XIV metadata. Refreshes every 15 minutes while open and when reopening a stale picture. Downloads run asynchronously; previous image retained if refresh fails; textures released on replacement/unload. `/equinox fashion` is the fallback if another plugin owns `/fashion`. Does not mark Fashion complete. Published through the normal repo.json installer feed; user will test native behavior in game.

@@ -33,7 +33,7 @@ public sealed partial class Plugin
         public void OpenReport()
         {
             IsOpen = true;
-            if (picture is null || DateTimeOffset.UtcNow - lastLoaded > TimeSpan.FromMinutes(15)) Refresh();
+            if (picture is null || DateTimeOffset.UtcNow - lastLoaded > TimeSpan.FromHours(1)) Refresh();
         }
         private void Refresh()
         {
@@ -57,7 +57,7 @@ public sealed partial class Plugin
             var texture = await Textures.CreateFromImageAsync(bytes, "Equinox Fashion Report V1", cancel.Token);
             return (texture, label);
         }
-        public override void Draw()
+        public void Tick(bool login = false)
         {
             if (loading?.IsCompleted == true)
             {
@@ -75,7 +75,10 @@ public sealed partial class Plugin
                 }
                 loading = null;
             }
-            if (loading is null && DateTimeOffset.UtcNow - lastAttempt > TimeSpan.FromMinutes(15)) Refresh();
+            if (loading is null && (login || DateTimeOffset.UtcNow - lastAttempt > TimeSpan.FromHours(1))) Refresh();
+        }
+        public override void Draw()
+        {
             if (resize)
             {
                 var display = ImGui.GetIO().DisplaySize;
