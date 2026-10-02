@@ -1,10 +1,10 @@
 <Project Sdk="Dalamud.NET.Sdk/15.0.0">
   <PropertyGroup>
-    <Version>0.5.1.0</Version>
+    <Version>0.5.1.1</Version>
     <Author>Boloni</Author>
     <Name>Equinox Companion</Name>
     <Punchline>Your shared characters, estates, collections and timers.</Punchline>
-    <Description>Observes characters, paired estates, gardening, collections, event quests, Fashion Report and submarine timers. Requires Journal V7.11.0 for storage observations and the updated collection views. English garden menus supported. In-game validation build.</Description>
+    <Description>Observes characters, paired estates, gardening, collections, event quests, Fashion Report and submarine timers. Requires Journal V7.11.1 for storage observations and the updated collection views. English garden menus supported. In-game validation build.</Description>
     <IconUrl>https://raw.githubusercontent.com/boloni96/Equinox-Companion/main/dist/v$(Version)/icon.png</IconUrl>
     <RepoUrl>https://github.com/boloni96/Equinox-Companion</RepoUrl>
     <Tags>housing;gardening;journal</Tags>

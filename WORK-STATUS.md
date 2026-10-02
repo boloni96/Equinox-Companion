@@ -1,6 +1,6 @@
 # Equinox Empire — implementation and live-validation status
 
-Journal V7.11.0 / Companion 0.5.1.0, 2 October 2026. Updated against all 23 requests and later corrections, including numbered storage locations.
+Journal V7.11.1 / Companion 0.5.1.1, 2 October 2026. Updated against all 23 requests and later corrections, including numbered storage locations.
 
 Implemented means source changes and relevant local checks, not proof of live FFXIV behavior. This remains an in-game validation release.
 
