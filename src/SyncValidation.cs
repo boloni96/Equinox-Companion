@@ -11,7 +11,7 @@ public static class SyncValidation
         !string.IsNullOrWhiteSpace(e.Actor?.ContentId) && records.Any(newer =>
             newer.Kind == "character.updated" && newer.Actor?.ContentId == e.Actor.ContentId &&
             newer.At > e.At && CanSend(newer, now));
-    public static bool SupportedByWebsite(string kind, int version) => kind == "storage.observed" ? version >= 3 : version >= 2 ||
+    public static bool SupportedByWebsite(string kind, int version) => kind == "company.observed" ? version >= 4 : kind == "storage.observed" ? version >= 3 : version >= 2 ||
         kind is "house.entered" or "garden.tended" or "garden.ready" or "garden.observed" or "garden.planted" or "house.discovered" or "character.updated";
     private static bool Text(string? s) => !string.IsNullOrWhiteSpace(s) && s.Length <= 100;
     public static bool ActorReady(Actor? a) => a is not null &&
@@ -19,6 +19,10 @@ public static class SyncValidation
         !string.IsNullOrWhiteSpace(a.Name) && a.Name.Length <= 80 &&
         a.HomeWorldId is > 0 and <= 65535 && a.CurrentWorldId is > 0 and <= 65535;
     private static bool FC(FreeCompanyDetails? f) => f is not null && Regex.IsMatch(f.Id ?? "", @"^[1-9]\d{0,19}$") && Text(f.Name) && f.Tag is not null && f.Tag.Length <= 10 && f.WorldId > 0;
+    public static bool CompanyReady(FreeCompanyDetails? f) => FC(f) && f!.MasterName.Length <= 80 && f.Profile is { Rank: >= 1 and <= 30, ActiveMembers: >= 1 and <= 512 } p &&
+        p.Source is "company-profile" or "member-list" && Text(p.HomeWorld) &&
+        new[] {p.Slogan,p.GrandCompany,p.Recruitment,p.Active,p.Focus,p.Seeking,p.EstateName}.All(x=>x is null || x.Length<=500 && !x.Any(char.IsControl)) &&
+        (p.FormedAt is null || DateTimeOffset.TryParse(p.FormedAt,out var formed) && formed.Year>=2010 && formed<=DateTimeOffset.UtcNow);
     public static bool CharacterReady(CharacterDetails? c) => c is not null && c.JobId is >= 1 and <= 100 && Text(c.JobName) &&
         c.Level is >= 1 and <= 200 && c.HighestLevel is >= 1 and <= 200 && c.HighestBattleLevel is >= 0 and <= 200 &&
         new[] { c.Race, c.Tribe, c.Sex }.All(s => s is not null && s.Length <= 100) &&
@@ -41,6 +45,7 @@ public static class SyncValidation
     public static bool CanSend(SyncEvent e, DateTimeOffset now)
     {
         if (!Regex.IsMatch(e.Id ?? "", "^[a-f0-9]{32}$") || !ActorReady(e.Actor) || e.At.Year < 2020 || e.At > now.AddMinutes(5)) return false;
+        if (e.Kind == "company.observed") return e.Address is null && CompanyReady(e.Company);
         if (e.Kind == "character.updated") return CharacterReady(e.Character);
         if (e.Kind == "storage.observed") return e.Storage is {} storage && Regex.IsMatch(storage.Key ?? "", @"^(bag:\d{1,5}|armoire|dresser|(?:retainer|fc):[1-9]\d{0,19}:\d{1,5})$") && Text(storage.Name) && storage.Items is { Length: <= 8000 } && storage.Items.All(i=>i is >0 and <1000000);
         if (e.Kind == "collection.observed") return e.Collection is { } collection &&

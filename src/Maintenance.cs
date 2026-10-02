@@ -14,7 +14,7 @@ public sealed partial class Plugin
         var latestHouse = config.Houses.GroupBy(x => (x.Actor.ContentId,x.Address.HouseId,x.Kind)).Select(g => g.MaxBy(x=>x.ObservedAt)!.EventId).ToHashSet();
         var latestTend = config.Tending.GroupBy(x => (x.Actor.ContentId,x.Address.HouseId,x.Patch,x.Bed)).Select(g => g.MaxBy(x=>x.ConfirmedAt)!.EventId).ToHashSet();
         var latestPlant = config.Planting.GroupBy(x => (x.Actor.ContentId,x.Address.HouseId,x.Patch,x.Bed)).Select(g => g.MaxBy(x=>x.ConfirmedAt)!.EventId).ToHashSet();
-        var latestDetail = config.Discoveries.GroupBy(x => (x.Actor.ContentId,x.Kind,x.Address?.HouseId,x.Patch,x.Bed,x.Collection?.Category,x.GardenTarget?.Argument,x.Storage?.Key)).Select(g => g.MaxBy(x=>x.At)!.Id).ToHashSet();
+        var latestDetail = config.Discoveries.GroupBy(x => (x.Actor.ContentId,x.Kind,x.Address?.HouseId,x.Patch,x.Bed,x.Collection?.Category,x.GardenTarget?.Argument,x.Storage?.Key,x.Company?.Id,x.Company?.Profile?.Source)).Select(g => g.MaxBy(x=>x.At)!.Id).ToHashSet();
         var removed = config.Houses.RemoveAll(x => x.ObservedAt < cutoff && sent.Contains(x.EventId) && !latestHouse.Contains(x.EventId));
         removed += config.Tending.RemoveAll(x => x.ConfirmedAt < cutoff && sent.Contains(x.EventId) && !latestTend.Contains(x.EventId));
         removed += config.Planting.RemoveAll(x => x.ConfirmedAt < cutoff && sent.Contains(x.EventId) && !latestPlant.Contains(x.EventId));

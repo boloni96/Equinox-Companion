@@ -1,3 +1,12 @@
+# Companion 0.5.1.2 — Company Profile sync
+
+Reads the separate Company Profile window opened from an estate placard, as well as the existing FC Members source. Sends master, rank, member count, founding date, slogan, Grand Company, activity, focus, recruitment and estate name when observed. Matches a viewed profile to a recent estate placard without assigning the visiting character FC membership. Preserves unsigned 64-bit FC/Lodestone identity.
+
+Deploy Journal V7.11.11 first, sign in and save once, then refresh shared profiles in Companion. New Company Profile events stay local until protocol 4 is advertised. Existing normal observations continue syncing with older supported website versions.
+
+Local build and sync/identity tests passed. Native game behavior remains to be validated: open the placard and its owner magnifying glass, keep Company Profile open at least five seconds, then check the paired FC/estate on the website. Viewing a stranger must not create membership or reset an entry timer. The blue installer icon is packaged but its display on the user's machine remains unconfirmed.
+
+
 # Companion 0.5.1.1 / Journal V7.11.1
 
 This is an in-game validation release. Build and automated checks pass; native game observations still require live verification.

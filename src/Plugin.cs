@@ -129,7 +129,7 @@ public sealed partial class Plugin : IDalamudPlugin
         while (events.Length > 1 && JsonSerializer.SerializeToUtf8Bytes(new { events }, json).Length > 60000) events = events[..^1];
         if (events.Length == 0) {
             if (pending.Any(e => !SyncValidation.SupportedByWebsite(e.Kind, config.SharedRoster?.ProtocolVersion ?? 1)))
-                syncStatus = "New observations kept locally. Deploy Journal V7.11.0, save once, then refresh shared profiles.";
+                syncStatus = "New observations kept locally. Deploy Journal V7.11.11, save once, then refresh shared profiles.";
             nextSync = now.AddSeconds(30); return;
         }
         syncStatus = $"Sending {events.Length} events…";
@@ -200,7 +200,7 @@ public sealed partial class Plugin : IDalamudPlugin
         
         if (!Player.IsLoaded || Player.ContentId == 0)
         {
-            character = 0; currentAddress = null; gate.Reset(); snapshot = null; StopRecording();
+            companyCandidate = null; character = 0; currentAddress = null; gate.Reset(); snapshot = null; StopRecording();
             status = "Waiting for your character."; return;
         }
         if (character != Player.ContentId)
@@ -210,8 +210,9 @@ public sealed partial class Plugin : IDalamudPlugin
         if (recording && now >= recordingUntil) StopRecording();
         if (Conditions[ConditionFlag.BetweenAreas] || Conditions[ConditionFlag.BetweenAreas51])
         {
-            snapshot = null; currentAddress = null; Volatile.Write(ref pendingTend, null); Volatile.Write(ref pendingPlant, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); messages.Clear(); menuMessages.Clear(); readyMenus.Clear(); cropChats.Clear(); cropMatcher.Clear(); status = "Waiting for the area to finish loading."; return;
+            companyCandidate = null; snapshot = null; currentAddress = null; Volatile.Write(ref pendingTend, null); Volatile.Write(ref pendingPlant, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); messages.Clear(); menuMessages.Clear(); readyMenus.Clear(); cropChats.Clear(); cropMatcher.Clear(); status = "Waiting for the area to finish loading."; return;
         }
+        ObserveSafely("company-profile", () => ObserveCompanyProfile(now));
         if (now >= nextDiscovery)
         {
             nextDiscovery = now.AddSeconds(5);
@@ -474,8 +475,8 @@ public sealed partial class Plugin : IDalamudPlugin
     private void KeepDiscovery(SyncEvent e)
     {
         if (!SyncValidation.CanSend(e, DateTimeOffset.UtcNow)) return;
-        var last = config.Discoveries.LastOrDefault(x => x.Kind == e.Kind && x.Actor.ContentId == e.Actor.ContentId && x.Address?.HouseId == e.Address?.HouseId && x.Patch == e.Patch && x.Bed == e.Bed && x.Collection?.Category == e.Collection?.Category && x.Storage?.Key == e.Storage?.Key && x.GardenTarget?.Argument == e.GardenTarget?.Argument);
-        if (last is not null && (!(e.Kind is "garden.empty" or "garden.ready" or "garden.observed") || e.At - last.At < TimeSpan.FromSeconds(2)) && !(e.GardenTarget is not null && e.At-last.At > TimeSpan.FromDays(30)) && !(e.Kind is "garden.ready" or "garden.observed" or "garden.empty" && config.Planting.Any(p => p.Actor.ContentId == e.Actor.ContentId && p.Address.HouseId == e.Address?.HouseId && p.Patch == e.Patch && p.Bed == e.Bed && p.ConfirmedAt > last.At)) && JsonSerializer.Serialize(new { last.Actor, last.Address, last.House, last.Character, last.Crop, last.Collection, last.Fashion, last.Voyage, last.GardenTarget, last.Storage }) == JsonSerializer.Serialize(new { e.Actor, e.Address, e.House, e.Character, e.Crop, e.Collection, e.Fashion, e.Voyage, e.GardenTarget, e.Storage })) return;
+        var last = config.Discoveries.LastOrDefault(x => x.Kind == e.Kind && x.Actor.ContentId == e.Actor.ContentId && x.Address?.HouseId == e.Address?.HouseId && x.Patch == e.Patch && x.Bed == e.Bed && x.Collection?.Category == e.Collection?.Category && x.Storage?.Key == e.Storage?.Key && x.GardenTarget?.Argument == e.GardenTarget?.Argument && x.Company?.Id == e.Company?.Id && x.Company?.Profile?.Source == e.Company?.Profile?.Source);
+        if (last is not null && (!(e.Kind is "garden.empty" or "garden.ready" or "garden.observed") || e.At - last.At < TimeSpan.FromSeconds(2)) && !(e.GardenTarget is not null && e.At-last.At > TimeSpan.FromDays(30)) && !(e.Kind is "garden.ready" or "garden.observed" or "garden.empty" && config.Planting.Any(p => p.Actor.ContentId == e.Actor.ContentId && p.Address.HouseId == e.Address?.HouseId && p.Patch == e.Patch && p.Bed == e.Bed && p.ConfirmedAt > last.At)) && JsonSerializer.Serialize(new { last.Actor, last.Address, last.House, last.Character, last.Crop, last.Collection, last.Fashion, last.Voyage, last.GardenTarget, last.Storage, last.Company }) == JsonSerializer.Serialize(new { e.Actor, e.Address, e.House, e.Character, e.Crop, e.Collection, e.Fashion, e.Voyage, e.GardenTarget, e.Storage, e.Company })) return;
         config.Discoveries.Add(e);
         if(collectingStorage)storageChanged=true;else Pi.SavePluginConfig(config);
     }
@@ -493,7 +494,7 @@ public sealed partial class Plugin : IDalamudPlugin
         {
             for (var i = 0; i < (int)members->EntryCount; i++)
                 if (members->CharData[i].ContentId == Player.ContentId && members->CharData[i].HomeWorld == actor.HomeWorldId)
-                    fc = new(proxy->Id.ToString(CultureInfo.InvariantCulture), proxy->NameString, members->CharData[i].FCTagString, proxy->HomeWorldId, proxy->MasterString);
+                    fc = new(proxy->Id.ToString(CultureInfo.InvariantCulture), proxy->NameString, members->CharData[i].FCTagString, proxy->HomeWorldId, proxy->MasterString, new(proxy->Rank, proxy->TotalMembers, "member-list", actor.HomeWorldName ?? "", GrandCompany: CompanyGrandName((byte)proxy->GrandCompany)));
         }
         if (fc is not null && string.IsNullOrWhiteSpace(fc.Name)) fc = null;
         // The company profile may describe a different FC. Use it for that placard only;
@@ -506,6 +507,7 @@ public sealed partial class Plugin : IDalamudPlugin
             if (isFc && proxy != null && proxy->Id != 0 && proxy->HomeWorldId == sign.Address.WorldId &&
                 string.Equals(proxy->NameString.Trim(), sign.OwnerName.Trim(), StringComparison.OrdinalIgnoreCase))
                 placardFc = new(proxy->Id.ToString(CultureInfo.InvariantCulture), proxy->NameString, sign.FcTag, proxy->HomeWorldId, proxy->MasterString);
+            if (isFc && observedCompany is { } viewed && now - observedCompanyAt < TimeSpan.FromSeconds(10) && CompanyProfileIdentity.MatchesPlacard(viewed, sign)) placardFc = viewed;
             KeepDiscovery(new(Guid.NewGuid().ToString("N"), "house.placard", now, actor, sign.Address,
                 House: new(isFc ? "Free Company house" : "Private house", sign.Size, "observed-placard", placardFc, sign.Name, sign.OwnerName)));
         }
@@ -516,6 +518,7 @@ public sealed partial class Plugin : IDalamudPlugin
         var info = new CharacterDetails(Player.ClassJob.RowId, jobName, Player.Level, jobs.Select(j => j.Level).DefaultIfEmpty(Player.Level).Max(),
             Player.Race.Value.Masculine.ToString(), Player.Tribe.Value.Masculine.ToString(), (Player.Sex == 0 ? "Male" : "Female"), jobs, fc, jobs.Where(j => j.Id < 8 || j.Id > 18).Select(j => j.Level).DefaultIfEmpty(0).Max());
         KeepDiscovery(new(Guid.NewGuid().ToString("N"), "character.updated", now, actor, null, Character: info));
+        if (SyncValidation.CompanyReady(fc)) KeepDiscovery(new(Guid.NewGuid().ToString("N"), "company.observed", now, actor, null, Company: fc));
         var manager = HousingManager.Instance();
         if (manager == null) return;
         var loaded = manager->CurrentTerritory != null && manager->CurrentTerritory->IsLoaded();

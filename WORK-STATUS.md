@@ -1,44 +1,32 @@
-# Equinox Empire — implementation and live-validation status
+Equinox Empire — 23-point status, 2 October 2026
+Journal V7.11.11 / Companion 0.5.1.2
 
-Journal V7.11.3 / Companion 0.5.1.1, 2 October 2026. Updated against all 23 requests and later corrections, including numbered storage locations.
+Implemented means source and local checks passed. It does not mean tested inside your running game. The whole 23-point list is NOT yet complete end to end.
 
-Implemented means source changes and relevant local checks, not proof of live FFXIV behavior. This remains an in-game validation release.
+1. Houses, paired owners and FC master: authoritative placard/ownership paths exist. NEW: dedicated Company Profile agent reader plus FC Members reader, stable observations, unsigned FC IDs, matched estate updates, no visitor membership. Needs live placard -> magnifying glass -> website test. Earlier checklist overstated dedicated Company Profile support; added in 0.5.1.2.
+2. Gardening: simplified care summary, Tend & harvest, optional bed details and Plan or adjust. Game observations outrank manual imports. Still requires live tests of different batches, harvest/empty-bed refresh and members without harvest permission; crop-to-bed identification needs calibration.
+3. Cloudflare/sync: small idempotent batches, held-record isolation and lightweight shared roster implemented. NEW FC events wait for website protocol 4, preserving normal older-version sync. Actual free-plan CPU and two-person production load not measured here. Full journal/garden/collection/FC profile application requires the signed-in website open.
+4. Navigation: character/account navigation, browser history and selected pages implemented and locally tested.
+5. Tasks/timers/Fashion: Current checklist merged into Tasks & Timers; expandable section, Add task, checkbox hover/hold explanations and manual fallback with newer conclusive game correction. Fashion records judged participation and score, without choosing 80/100 on the website. Live Fashion and timer checks remain.
+6. Collections: unlock and equipment catalogues, hairstyles, Obtained with Not learned marker, personal storage locations and separate FC Chest availability implemented. Full equipment source classification remains missing. Unopened/unobserved containers are unknown; learned hairstyles do not prove race/sex usability.
+7. Events: shared catalogue, Hide/Show, eligibility sync hints, yearly history mappings and canonical identities implemented. Complete quest/eligibility/reward coverage for EVERY event and rerun is not finished. Reused quest flags cannot prove a historical completion year.
+8. Person naming: one Rename Person control in the sidebar, locally checked.
+9. Plugin window: minimum size and Dalamud window controls implemented. Pin/opacity/blur behavior needs live interaction check.
+10. Character and FC details: read-only full-width character facts, world/DC/region, inline collapsed jobs, Collection shortcut and clickable internal FC page. Lodestone identity matching, visible retry/error and sync-race fix implemented. NEW native FC profile details merge with Lodestone, preserve unknown/private data. Actual missing-character-detail case needs production retest; direct native CHARACTER Lodestone ID extraction remains unverified (name + home-world resolver used).
+11. Plugin character website links: implemented; live signed-in navigation check remains.
+12. Icons: blue Companion icon and blue Journal book, website favicon/footer, item/job/reward icons implemented. Installer question-mark outcome remains UNRESOLVED despite valid packaged 512px PNG/URLs. Do not label fixed without seeing the installer display it.
+13. Guests: owner-selected characters/houses/photos, revocable links, protected galleries and moderated Guest Welcome Book implemented and authorization-tested. Guests see published selection snapshots.
+14. Retention: acknowledged history older than 60 days pruned while current entity state and unsent actions survive. NEW FC profile records retain latest state per FC and reader. Long-running growth check remains.
+15. Copy/buttons: updated to present behavior, including FC sync status and unmatched-profile review. Ongoing UI review, not a claim of complete proofreading in game.
+16. Submarines: dedicated plugin tab and website voyage timers implemented. Actual workshop capture/return-time behavior needs in-game verification.
+17. Automatic completion: quest/Fashion detection, Nocturne final quest and aliases, fresh-negative/manual correction and year-aware history implemented. User confirmed collections and historical entries working in some cases. All events/future mappings are not guaranteed; old reruns may lack occurrence evidence.
+18. Rewards/wishlist: matched icons/item IDs, held/learned and recorded gear, grouped Lucian outfit and orchestrion rewards implemented and tested. User confirmed Regalia protection; all reward groups need coverage review. Unmapped/ambiguous rewards stay unconfirmed.
+19. Pairing/reconnect: shared key, normalized startup, separate clients, retry/acknowledgment and incomplete-record isolation implemented. Two-client local tests pass; user/partner game restart and reconnect scenario remains to verify.
+20. House chat/reminders: green owner/FC context and red 30-day reminders implemented. Live colors/names/eligibility check remains; recorded visits are not authoritative game demolition status.
+21. Automatic linking: verified owned/paired-known estates create/link automatically; duplicate/unknown identity waits for review. NEW Company Profile reading does not join the visitor to that FC. Retest previously waiting paired FC houses after opening placard + profile.
+22. Unknown estate/FC names: authoritative placard names and dedicated viewed Company Profile matching now implemented. Live scenario from supplied screenshot still needed.
+23. Cloud picture entries: hashed-name explanation, preview and reference-safe cleanup implemented; shared/guest references and save races tested.
 
-| # | Implementation | Validation or remaining boundary |
-|---|---|---|
-| 1 | Game estate names take precedence, private owner/FC member entry eligibility, paired placards and Company Profile master identity | Packet/profile observations need live testing; missing FC data does not prove departure |
-| 2 | Daily gardening route, grouped manual corrections, observed planting/tending/maturity and empty numbered beds | Reopen a bed after harvest; no-permission messages require previously calibrated target/bed mapping |
-| 3 | Small idempotent batches, fixed database query count, compact background roster, independent readers, storage protocol negotiation, retained pending actions | Production Cloudflare CPU must be measured; full journal/gardens still apply with website open |
-| 4 | Character/account navigation and history integration | Browser navigation checks pass; nested real-use feedback remains useful |
-| 5 | Unified timers; Fashion completion from actual judged participation, with score shown and no 80/100 selector | Native Fashion and timer observations need live validation |
-| 6 | 3,116 unlock catalogue entries plus 29,057 equipment entries; single Obtained filter; Not learned marker; hairstyles restored; cached personal storage and separate shared FC pages | Equipment sources not fully classified; missing means not found in recorded storage, not proof every unopened container is empty |
-| 7 | Catalogue events on all accounts, compact Hide/Show, simplified expanded actions, year-specific history from Altoholic; canonical event identities and explicit mapped quest IDs; unknown eligibility prompts login/sync | Reused quest bits cannot establish an old rerun year; ambiguous mappings stay unconfirmed; complete access rules are not available for every activity |
-| 8 | Single Rename Person control in left sidebar; style preview name read-only | Browser verified |
-| 9 | Minimum plugin size and native pin/clickthrough/blur controls | Requires in-game interaction test |
-| 10 | Game-controlled character details, compact jobs with unchanged icon size, FC page, cached exact-name/world Lodestone lookup and portrait fallback | Official-site outages leave lookup unconfirmed; personal notes and portraits remain user-controlled |
-| 11 | Companion character-to-website links | Requires signed-in user's browser for private journal |
-| 12 | Reward/collection/job game icons; approved plugin artwork normalized to 512px and versioned manifest/feed icon URL; website logo moved below footer copyright | Remote collection icons are optional online assets. Installer icon was still missing for user: valid 512px URL/manifest verified; Dalamud caches failed loads, restart required to retry; live outcome not yet confirmed |
-| 13 | Per-person revocable selection, individual owner-selected photos, token-scoped image access, moderated Guest Welcome Book | Snapshots change on owner publication; no silent public exposure of later uploads |
-| 14 | 60-day acknowledged history pruning; latest state per container and unsent actions retained | Long-running live growth still needs observation |
-| 15 | Revised status, storage, Fashion, estate, version and guest copy | No claim an unknown native observation is confirmed |
-| 16 | Dedicated Submarines plugin tab, newest FC observation, website timers and compact background voyage propagation | Workshop capture is passive and requires loaded data; live test outstanding |
-| 17 | Collection/quest/reward/Fashion automatic observations, year-aware quest history and repeat transitions | Nocturne headline alias and final quest 68696 fixed; prior completion counts without inventing a year/date. Other reruns require occurrence evidence; unmapped future events remain unconfirmed |
-| 18 | Wishlist follows learned/held collectibles and recorded equipment, with icons and Not learned marker | FFXV outfit (4 items), orchestrion group (6 rolls), hairstyle aliases and item/key matches tested. Partial groups remain incomplete; ambiguous or unmapped rewards stay unconfirmed |
-| 19 | Same pairing key, normalized startup, acknowledgments, retries, held records isolated and logged once per session | Two-client contract tests pass; live reconnect test outstanding |
-| 20 | Green entry with paired owner/FC context; daily red 30-day eligible-entry reminders | In-game color/threshold check; demolition countdown itself remains game-owned |
-| 21 | Automatic unique name/home-world matching and creation/linking of verified owned/paired-known estates | Unknown characters require a person/account assignment, avoiding invented ownership |
-| 22 | Authoritative placard names and matched FC profile/master details | Reproduce supplied scenarios in game on this version |
-| 23 | Hashed cloud-picture explanation, previews and reference-safe cleanup; guest-selected photos protected too | Cleanup race, revocation and guest authorization tests pass |
+Next live check: deploy V7.11.11 first, open/sign into the journal and save once. Update Companion to 0.5.1.2 and refresh shared profiles. Open the FC estate placard, click the owner magnifying glass, leave Company Profile visible at least 5 seconds; then open the character's FC page on the website. Test an FC belonging to a paired character and a stranger: the visitor must never become a member and the visit timer must not advance from just reading.
 
-Storage labels report Inventory page, Armoury equipment section, Glamour Dresser, Armoire, retainer name and inventory page, or shared FC Chest page. Unloaded containers never become empty snapshots. FC Chest availability never marks personal ownership.
-
-Verification: .NET build zero warnings/errors; plugin gate tests; cloud/auth/storage tests; companion observation tests; roster and two-client tests; desktop/mobile browser collection, unused-item marker, jobs, FC navigation, event visibility, guest photo selection and message tests; clean public seed and hosted/offline consistency checks. Real game and production Cloudflare validation cannot be run in this environment.
-
-Delivery uses the existing GitHub installer feed. Website ZIP is for the existing Cloudflare Pages deployment, preserving DB/PICTURES bindings, password, key and journal. Deploy website first and save once to advertise protocol 3. Nothing here rotates the key or replaces user data.
-
-References consulted: [Altoholic](https://github.com/Sohtoren/Altoholic), [FFXIVClientStructs](https://github.com/aers/FFXIVClientStructs), [SubmarineTracker](https://github.com/Infiziert90/SubmarineTracker), [AutoRetainer](https://github.com/PunishXIV/AutoRetainer), [FFXIVGachaSpreadsheet](https://github.com/Infiziert90/FFXIVGachaSpreadsheet), [FFXIV Collect](https://ffxivcollect.com/), [game-sheet extraction](https://github.com/xivapi/ffxiv-datamining), [DalamudPackager](https://github.com/goatcorp/DalamudPackager). Reference projects inform passive observation and factual mappings; Equinox does not require them installed or trigger their automation.
-
-## V7.11.3 follow-up audit
-Actual user backup reproduced the Done checkbox stall (~12 seconds). Indexed reward matching reduced it to ~0.35 seconds in local browser tests; retained in V7.11.3. Unknown Fashion/level/quest data no longer grants eligibility or asserts an unmet quest. Yo-kai alternative prerequisites short-circuit when one completion is known. FFXV source headline is mapped to A Nocturne for Heroes; its stored quest completion is recognized. Grouped rewards expose individual item status and require every member before automatic Obtained. Sources for the Lucian outfit are classified as event rewards. Orchestrion icons use the game item icon. Existing history/checkmarks are preserved.
-
-Not all 23 points can be declared end-to-end complete: production CPU, installed icon retry and native observation scenarios need user environment validation. Equipment source classification and coverage of every event/reward remain incomplete. No future or ambiguous mapping is invented. No new Companion binary is necessary for the website matching fixes; current published build is 0.5.1.1.
+Current checks: plugin build 0 warnings/errors; gate tests including unsigned FC IDs and mismatched estate rejection; server payload validation, stale observations, preserved voyages/storage, visitor isolation; browser FC game-field display and unmatched-profile inbox; hosted/offline parity. Live FFXIV and production Cloudflare not verified here.

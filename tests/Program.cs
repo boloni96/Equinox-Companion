@@ -273,3 +273,17 @@ Check("storage accepted by protocol3", SyncValidation.SupportedByWebsite("storag
 Check("named retainer inventory accepted", SyncValidation.CanSend(collectionEvent with { Kind="storage.observed", Collection=null, Storage=new("retainer:123:10003", "Retainer Example · Inventory 4", [12345]) }, time).ToString(), "True");
 Check("empty loaded container accepted", SyncValidation.CanSend(collectionEvent with { Kind="storage.observed", Collection=null, Storage=new("bag:0", "Inventory 1", []) }, time).ToString(), "True");
 Check("shared chest has explicit scope", SyncValidation.CanSend(collectionEvent with { Kind="storage.observed", Collection=null, Storage=new("fc:123:20004", "Available in FC Chest · Inventory 5", [12345]) }, time).ToString(), "True");
+
+var profileCompany = new FreeCompanyDetails("9281074407080476924", "Company Test", "TEST", 410, "Master Test", new(30, 5, "company-profile", "Rafflesia", "2021-05-24T00:00:00Z", "Our company", EstateName: "Test Estate"));
+Check("unsigned FC profile identity", CompanyProfileIdentity.Id(unchecked((long)9281074407080476924UL)), "9281074407080476924");
+Check("FC profile complete", SyncValidation.CompanyReady(profileCompany).ToString(), "True");
+Check("FC profile loading rank rejected", SyncValidation.CompanyReady(profileCompany with { Profile=profileCompany.Profile! with {Rank=0} }).ToString(), "False");
+Check("FC profile held for older website", SyncValidation.SupportedByWebsite("company.observed", 3).ToString(), "False");
+Check("FC profile supported after website update", SyncValidation.SupportedByWebsite("company.observed", 4).ToString(), "True");
+var companySign = new PlacardDetails("visitor", new("0000000000000001",410,641,1,2,0,false,false),"Test Estate","Small",2,"Company Test");
+Check("FC profile matches viewed estate", CompanyProfileIdentity.MatchesPlacard(profileCompany,companySign).ToString(),"True");
+Check("FC profile rejects another world", CompanyProfileIdentity.MatchesPlacard(profileCompany,companySign with {Address=companySign.Address with {WorldId=411}}).ToString(),"False");
+Check("FC profile rejects another company", CompanyProfileIdentity.MatchesPlacard(profileCompany,companySign with {OwnerName="Other Company"}).ToString(),"False");
+Check("FC profile rejects another estate", CompanyProfileIdentity.MatchesPlacard(profileCompany,companySign with {Name="Other Estate"}).ToString(),"False");
+
+Check("combined profile categories readable", CompanyProfileIdentity.Flags(5,["Tank","Healer","DPS"]),"Tank, DPS");

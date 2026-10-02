@@ -14,8 +14,23 @@ public sealed record PlantIntent(string EventId, DateTimeOffset At, GardenSnapsh
         return new(EventId, at, Target.Actor, Target.Address, parameters[0]!.Value, parameters[1]!.Value, Plant);
     }
 }
-public sealed record FreeCompanyDetails(string Id, string Name, string Tag, ushort WorldId, string MasterName = "");
+public sealed record FreeCompanyDetails(string Id, string Name, string Tag, ushort WorldId, string MasterName = "", CompanyProfileDetails? Profile = null);
 public sealed record HouseDetails(string Type, string Size, string Evidence, FreeCompanyDetails? FreeCompany = null, string EstateName = "", string OwnerName = "");
 public sealed record PlacardDetails(string CharacterId, Address Address, string Name, string Size, byte EstateType, string OwnerName = "", string FcTag = "", DateTimeOffset At = default);
 public sealed record JobDetails(uint Id, string Name, int Level);
 public sealed record CharacterDetails(uint JobId, string JobName, int Level, int HighestLevel, string Race, string Tribe, string Sex, JobDetails[] Jobs, FreeCompanyDetails? FreeCompany = null, int HighestBattleLevel = 0);
+
+public sealed record CompanyProfileDetails(int Rank, int ActiveMembers, string Source, string HomeWorld,
+    string? FormedAt = null, string? Slogan = null, string? GrandCompany = null, string? Recruitment = null,
+    string? Active = null, string? Focus = null, string? Seeking = null, string? EstateName = null);
+public static class CompanyProfileIdentity
+{
+    public static string Flags(int bits, string[] labels) => bits == 0 ? "Not specified" : string.Join(", ", labels.Where((_,i)=>(bits & (1<<i))!=0));
+    // Native RequestId is signed, while FC/Lodestone IDs use the entire unsigned 64-bit value.
+    public static string Id(long requestId) => unchecked((ulong)requestId).ToString(System.Globalization.CultureInfo.InvariantCulture);
+    public static bool MatchesPlacard(FreeCompanyDetails company, PlacardDetails sign) =>
+        company.WorldId == sign.Address.WorldId &&
+        string.Equals(company.Name.Trim(), sign.OwnerName.Trim(), StringComparison.OrdinalIgnoreCase) &&
+        (string.IsNullOrWhiteSpace(company.Profile?.EstateName) || string.IsNullOrWhiteSpace(sign.Name) ||
+         string.Equals(company.Profile.EstateName.Trim(), sign.Name.Trim(), StringComparison.OrdinalIgnoreCase));
+}
