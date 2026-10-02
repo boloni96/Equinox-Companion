@@ -1,3 +1,15 @@
+# Companion 0.5.1.7 — Account groups and character refresh
+
+Keeps each person as a tab. Each account expands/collapses and remembers its state. Inside are Regulars (boosted/ready, including no FC), Floaters (boost needed and FC member), and Empty (boost needed without FC membership). Uses Journal boost-needed/eligibility markers, not proof of a purchased boost. Search includes account names and temporarily opens matching accounts. Existing per-character housing colours and ordering remain within their groups. Journal V7.11.15 supplies stable account IDs and group metadata; older cached data falls back to ~ names and linked FC estates.
+
+Game character observations refresh on login and hourly even if unchanged, in the background. Actual changes still send sooner. Includes pending 0.5.1.6 Fashion Report picture zoom/pan and default tab order. Native in-game layout/observation testing remains necessary.
+
+# Companion 0.5.1.6 — House dividers and base tab order
+
+Fashion Report supports mouse-wheel zoom (1–8×), left-drag panning, cursor-centered zoom, bounded panning and Reset view. Click without dragging still expands/shrinks the window.
+
+Adds a horizontal divider between estate detail groups in local and shared person views. Base order: Tests, Characters & housing, person tabs in journal order, Submarines, Settings. Existing saved custom order remains intact. New person tabs are inserted before Submarines.
+
 # Companion 0.5.1.5 — Persistent tab order
 
 Other visits now has its own scroll area, capped at six text rows, with newest visits first and a count. No visit records are deleted.

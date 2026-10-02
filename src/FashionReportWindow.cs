@@ -22,6 +22,10 @@ public sealed partial class Plugin
         private DateTimeOffset lastAttempt;
         private bool expanded;
         private bool resize;
+        private float zoom = 1;
+        private Vector2 pan;
+        private bool dragged;
+        private bool picturePressed;
         public FashionReportWindow() : base("Fashion Report###EquinoxFashion")
         {
             Size = new Vector2(720, 490);
@@ -66,7 +70,7 @@ public sealed partial class Plugin
                     picture?.Dispose();
                     (picture, title) = loading.Result;
                     lastLoaded = DateTimeOffset.UtcNow;
-                    status = "Click the picture to expand or shrink. · Kaiyoko Star / Fashion Report XIV";
+                    status = "Scroll to zoom · Drag to move · Click to expand/shrink. · Kaiyoko Star / Fashion Report XIV";
                 }
                 else
                 {
@@ -91,13 +95,46 @@ public sealed partial class Plugin
             ImGui.EndDisabled();
             ImGui.SameLine();
             if (ImGui.Button("Open in browser")) OpenFashionBrowser();
+            ImGui.SameLine();
+            if (ImGui.Button("Reset view")) { zoom = 1; pan = Vector2.Zero; }
             ImGui.TextWrapped(status);
             if (picture is null) return;
-            var space = ImGui.GetContentRegionAvail();
-            var scale = Math.Max(0.01f, Math.Min(space.X / picture.Width, space.Y / picture.Height));
-            ImGui.Image(picture.Handle, new Vector2(picture.Width, picture.Height) * scale);
-            if (ImGui.IsItemHovered()) ImGui.SetTooltip(expanded ? "Click to shrink" : "Click to expand");
-            if (ImGui.IsItemClicked()) { expanded = !expanded; resize = true; }
+            var available = ImGui.GetContentRegionAvail();
+            if (available.X < 1 || available.Y < 1) return;
+            if (ImGui.BeginChild("ReportViewport", available, false, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse))
+            {
+                var origin = ImGui.GetCursorScreenPos();
+                var space = Vector2.Max(ImGui.GetContentRegionAvail(), Vector2.One);
+                var fit = Math.Min(space.X / picture.Width, space.Y / picture.Height);
+                var clicked = ImGui.InvisibleButton("ReportCanvas", space, ImGuiButtonFlags.MouseButtonLeft);
+                var currentSize = new Vector2(picture.Width, picture.Height) * fit * zoom;
+                var currentPosition = origin + (space - currentSize) / 2 + pan;
+                var hovered = ImGui.IsItemHovered() && ImGui.IsMouseHoveringRect(Vector2.Max(origin, currentPosition), Vector2.Min(origin + space, currentPosition + currentSize));
+                if (ImGui.IsItemActivated()) { dragged = false; picturePressed = hovered; }
+                if (hovered && ImGui.GetIO().MouseWheel != 0)
+                {
+                    var before = zoom;
+                    zoom = Math.Clamp(zoom * MathF.Pow(1.2f, ImGui.GetIO().MouseWheel), 1, 8);
+                    var relative = ImGui.GetMousePos() - origin - space / 2;
+                    pan = relative - (relative - pan) * (zoom / before);
+                }
+                if (picturePressed && ImGui.IsItemActive() && ImGui.IsMouseDragging(ImGuiMouseButton.Left))
+                {
+                    dragged = true;
+                    pan += ImGui.GetIO().MouseDelta;
+                }
+                if (clicked && picturePressed && !dragged) { expanded = !expanded; resize = true; }
+                var size = new Vector2(picture.Width, picture.Height) * fit * zoom;
+                var bounds = Vector2.Max((size - space) / 2, Vector2.Zero);
+                pan = Vector2.Clamp(pan, -bounds, bounds);
+                var position = origin + (space - size) / 2 + pan;
+                var draw = ImGui.GetWindowDrawList();
+                draw.PushClipRect(origin, origin + space, true);
+                draw.AddImage(picture.Handle, position, position + size);
+                draw.PopClipRect();
+                if (hovered && !ImGui.IsItemActive()) ImGui.SetTooltip($"Zoom {zoom:0.0}× · Scroll to zoom · Drag to move · Click to {(expanded ? "shrink" : "expand")}");
+            }
+            ImGui.EndChild();
         }
         public void Dispose()
         {

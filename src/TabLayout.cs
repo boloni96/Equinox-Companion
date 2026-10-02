@@ -10,17 +10,17 @@ public sealed partial class Plugin
         {
             ("tests", "Tests###equinox-tests", DrawTests),
             ("housing", "Characters & housing###equinox-housing", DrawHousing),
-            ("submarines", "Submarines###equinox-submarines", DrawSubmarines),
         };
         foreach (var profile in config.SharedRoster?.People ?? [])
             tabs.Add(("person:" + profile.Id, profile.Name.Replace("##", "") + "###person-" + profile.Id, () => DrawSharedPerson(profile)));
+        tabs.Add(("submarines", "Submarines###equinox-submarines", DrawSubmarines));
         tabs.Add(("settings", "Settings###equinox-settings", DrawSettings));
         config.TabOrder ??= [];
         // Retain absent people so a temporarily unavailable roster cannot erase their positions.
         var order = config.TabOrder.Distinct().ToList();
         foreach (var tab in tabs.Where(t => !order.Contains(t.Id)))
         {
-            var settings = order.IndexOf("settings");
+            var settings = tab.Id.StartsWith("person:") && order.Contains("submarines") ? order.IndexOf("submarines") : order.IndexOf("settings");
             if (settings >= 0 && tab.Id != "settings") order.Insert(settings, tab.Id);
             else order.Add(tab.Id);
         }

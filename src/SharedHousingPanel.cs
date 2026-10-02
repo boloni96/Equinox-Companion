@@ -85,9 +85,32 @@ public sealed partial class Plugin
         ImGui.InputText("Find character / server",ref sharedSearch,100);
         var now=DateTimeOffset.UtcNow;
         var characters = OrderedSharedCharacters(person);
-        foreach(var c in characters)
+        var searching = !string.IsNullOrWhiteSpace(sharedSearch);
+        var visibleCharacters = characters.Where(c => !searching || (c.Name+" "+c.World+" "+c.Dc+" "+c.Region+" "+c.Account).Contains(sharedSearch,StringComparison.OrdinalIgnoreCase)).ToArray();
+        config.SharedAccountExpanded ??= [];
+        foreach (var account in visibleCharacters.GroupBy(SharedCharacterGrouping.AccountKey))
         {
-            if (!string.IsNullOrWhiteSpace(sharedSearch) && !(c.Name+" "+c.World+" "+c.Dc+" "+c.Region).Contains(sharedSearch,StringComparison.OrdinalIgnoreCase)) continue;
+            ImGui.PushID("account-" + account.Key);
+            var key = person.Id + ":" + account.Key;
+            var expanded = searching || config.SharedAccountExpanded.GetValueOrDefault(key);
+            ImGui.SetNextItemOpen(expanded, ImGuiCond.Always);
+            var open = ImGui.CollapsingHeader($"{account.First().Account} · {account.Count()} characters###account");
+            if (!searching && open != expanded)
+            {
+                config.SharedAccountExpanded[key] = open;
+                Pi.SavePluginConfig(config);
+            }
+            if (open)
+            {
+                ImGui.Indent();
+                foreach (var group in new[] { "Regulars", "Floaters", "Empty" })
+                {
+                    var grouped = account.Where(c => SharedCharacterGrouping.Group(c) == group).ToArray();
+                    if (grouped.Length == 0) continue;
+                    ImGui.Spacing(); ImGui.Separator();
+                    ImGui.TextUnformatted($"{group} · {grouped.Length}");
+                    foreach (var c in grouped)
+                    {
             ImGui.PushID(c.Id);
             var houses = c.Houses.OrderBy(h => HouseDisplayOrder(h.Type)).ToArray();
             var timerHouses = houses.Where(h => CountsForCharacter(c, h)).ToArray();
@@ -99,8 +122,11 @@ public sealed partial class Plugin
                 if (ImGui.SmallButton("Open character in Journal"))
                     Dalamud.Utility.Util.OpenLink("https://equinoxjournal.pages.dev/#character=" + Uri.EscapeDataString(c.Id));
                 if(c.Houses.Length==0)ImGui.TextDisabled("No house recorded in the shared Journal.");
+                var firstEstate = true;
                 foreach(var h in houses)
                 {
+                    if (!firstEstate) { ImGui.Spacing(); ImGui.Separator(); ImGui.Spacing(); }
+                    firstEstate = false;
                     var sharedPrivate = h.Type == "Private house" && !CountsForCharacter(c, h);
                     if (sharedPrivate) ImGui.TextDisabled("Shared private house / ownership unconfirmed — your entry does not reset its timer.");
                     var band=h.Paused?HousingBand.Unknown:HousingStatus.Band(h.LastEntry,now);
@@ -121,9 +147,15 @@ public sealed partial class Plugin
                 }
             }
             ImGui.PopID();
+                    }
+                }
+                ImGui.Unindent();
+            }
+            ImGui.PopID();
         }
+        if (characters.Length > 0 && visibleCharacters.Length == 0) ImGui.TextDisabled("No characters match this search.");
         if(characters.Length==0)ImGui.TextDisabled("No visible characters in this profile. Check Settings for hidden characters.");
-        ImGui.TextWrapped("Shared view refreshes once a minute while open, or also in the background if enabled in Settings. Keep the website open to process new game events and publish the updated Journal. Saved copies remain available offline.");
+        ImGui.TextWrapped("Shared view refreshes every 15 seconds while open, or also in the background if enabled in Settings. Keep the website open to process new game events and publish the updated Journal. Saved copies remain available offline.");
         ImGui.PopID();
     }
 }

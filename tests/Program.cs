@@ -287,3 +287,10 @@ Check("FC profile rejects another company", CompanyProfileIdentity.MatchesPlacar
 Check("FC profile rejects another estate", CompanyProfileIdentity.MatchesPlacard(profileCompany,companySign with {Name="Other Estate"}).ToString(),"False");
 
 Check("combined profile categories readable", CompanyProfileIdentity.Flags(5,["Tank","Healer","DPS"]),"Tank, DPS");
+
+var groupedCharacter = new SharedCharacter("group-test", "Test", "Rafflesia", "Dynamis", "NA", "MAIN", [], "main-id", false, false);
+Check("boosted without FC remains Regulars", SharedCharacterGrouping.Group(groupedCharacter), "Regulars");
+Check("boosted FC member remains Regulars", SharedCharacterGrouping.Group(groupedCharacter with { FcMember = true }), "Regulars");
+Check("unboosted FC member is Floater", SharedCharacterGrouping.Group(groupedCharacter with { NeedsBoost = true, FcMember = true }), "Floaters");
+Check("unboosted without FC is Empty", SharedCharacterGrouping.Group(groupedCharacter with { NeedsBoost = true }), "Empty");
+Check("stable account identity", SharedCharacterGrouping.AccountKey(groupedCharacter), "main-id");

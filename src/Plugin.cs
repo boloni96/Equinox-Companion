@@ -53,6 +53,7 @@ public sealed partial class Plugin : IDalamudPlugin
     private readonly ConcurrentQueue<PlacardDetails> placards = new();
     private readonly Dictionary<string, PlacardDetails> estateNames = [];
     private DateTimeOffset nextDiscovery;
+    private DateTimeOffset nextCharacterRefresh;
     private string discoveryStatus = "Open your FC member list once if its name is not loaded.";
     private Address? currentAddress;
     private bool ObservingGardens => !faulted && (recording || config.TrackGardens);
@@ -229,6 +230,7 @@ public sealed partial class Plugin : IDalamudPlugin
         if (character != Player.ContentId)
         {
             gate.Reset(); StopRecording(); character = Player.ContentId;
+            nextDiscovery = default; nextCharacterRefresh = default;
             fashionWindow.Tick(login: true);
         }
         fashionWindow.Tick();
@@ -497,11 +499,11 @@ public sealed partial class Plugin : IDalamudPlugin
         }
     }
 
-    private void KeepDiscovery(SyncEvent e)
+    private void KeepDiscovery(SyncEvent e, bool force = false)
     {
         if (!SyncValidation.CanSend(e, DateTimeOffset.UtcNow)) return;
         var last = config.Discoveries.LastOrDefault(x => x.Kind == e.Kind && x.Actor.ContentId == e.Actor.ContentId && x.Address?.HouseId == e.Address?.HouseId && x.Patch == e.Patch && x.Bed == e.Bed && x.Collection?.Category == e.Collection?.Category && x.Storage?.Key == e.Storage?.Key && x.GardenTarget?.Argument == e.GardenTarget?.Argument && x.Company?.Id == e.Company?.Id && x.Company?.Profile?.Source == e.Company?.Profile?.Source);
-        if (last is not null && (!(e.Kind is "garden.empty" or "garden.ready" or "garden.observed") || e.At - last.At < TimeSpan.FromSeconds(2)) && !(e.GardenTarget is not null && e.At-last.At > TimeSpan.FromDays(30)) && !(e.Kind is "garden.ready" or "garden.observed" or "garden.empty" && config.Planting.Any(p => p.Actor.ContentId == e.Actor.ContentId && p.Address.HouseId == e.Address?.HouseId && p.Patch == e.Patch && p.Bed == e.Bed && p.ConfirmedAt > last.At)) && JsonSerializer.Serialize(new { last.Actor, last.Address, last.House, last.Character, last.Crop, last.Collection, last.Fashion, last.Voyage, last.GardenTarget, last.Storage, last.Company }) == JsonSerializer.Serialize(new { e.Actor, e.Address, e.House, e.Character, e.Crop, e.Collection, e.Fashion, e.Voyage, e.GardenTarget, e.Storage, e.Company })) return;
+        if (!force && last is not null && (!(e.Kind is "garden.empty" or "garden.ready" or "garden.observed") || e.At - last.At < TimeSpan.FromSeconds(2)) && !(e.GardenTarget is not null && e.At-last.At > TimeSpan.FromDays(30)) && !(e.Kind is "garden.ready" or "garden.observed" or "garden.empty" && config.Planting.Any(p => p.Actor.ContentId == e.Actor.ContentId && p.Address.HouseId == e.Address?.HouseId && p.Patch == e.Patch && p.Bed == e.Bed && p.ConfirmedAt > last.At)) && JsonSerializer.Serialize(new { last.Actor, last.Address, last.House, last.Character, last.Crop, last.Collection, last.Fashion, last.Voyage, last.GardenTarget, last.Storage, last.Company }) == JsonSerializer.Serialize(new { e.Actor, e.Address, e.House, e.Character, e.Crop, e.Collection, e.Fashion, e.Voyage, e.GardenTarget, e.Storage, e.Company })) return;
         config.Discoveries.Add(e);
         if(collectingStorage)storageChanged=true;else Pi.SavePluginConfig(config);
     }
@@ -542,7 +544,11 @@ public sealed partial class Plugin : IDalamudPlugin
         var jobName = DataManager.GetExcelSheet<Lumina.Excel.Sheets.ClassJob>(Dalamud.Game.ClientLanguage.English).GetRowOrDefault(Player.ClassJob.RowId)?.Abbreviation.ToString() ?? "";
         var info = new CharacterDetails(Player.ClassJob.RowId, jobName, Player.Level, jobs.Select(j => j.Level).DefaultIfEmpty(Player.Level).Max(),
             Player.Race.Value.Masculine.ToString(), Player.Tribe.Value.Masculine.ToString(), (Player.Sex == 0 ? "Male" : "Female"), jobs, fc, jobs.Where(j => j.Id < 8 || j.Id > 18).Select(j => j.Level).DefaultIfEmpty(0).Max());
-        KeepDiscovery(new(Guid.NewGuid().ToString("N"), "character.updated", now, actor, null, Character: info));
+        if (SyncValidation.CharacterReady(info))
+        {
+            KeepDiscovery(new(Guid.NewGuid().ToString("N"), "character.updated", now, actor, null, Character: info), now >= nextCharacterRefresh);
+            if (now >= nextCharacterRefresh) nextCharacterRefresh = now.AddHours(1);
+        }
         if (SyncValidation.CompanyReady(fc)) KeepDiscovery(new(Guid.NewGuid().ToString("N"), "company.observed", now, actor, null, Company: fc));
         var manager = HousingManager.Instance();
         if (manager == null) return;

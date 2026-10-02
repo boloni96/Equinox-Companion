@@ -48,8 +48,11 @@ public sealed partial class Plugin
             {
                 ImGui.TextDisabled(location);
                 if (estates.Length == 0) ImGui.TextWrapped("No owned estate confirmed yet. Open its placard and enter; FC details may need the member list opened once.");
+                var firstEstate = true;
                 foreach (var estate in estates)
                 {
+                    if (!firstEstate) { ImGui.Spacing(); ImGui.Separator(); ImGui.Spacing(); }
+                    firstEstate = false;
                     var h = estate.House!; var a = WithAddressNames(estate.Address!);
                     var entry = HousingStatus.LastEligibleEntry(estate, config.Discoveries, config.Houses);
                     var ownEntry = config.Houses.Where(v => v.Actor.ContentId == actor.ContentId && v.Address.HouseId == a.HouseId && v.Kind == "house.entered")

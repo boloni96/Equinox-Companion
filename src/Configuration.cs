@@ -3,6 +3,7 @@ namespace EquinoxCompanion;
 [Serializable]
 public sealed class Configuration : IPluginConfiguration
 {
+    public Dictionary<string, bool> SharedAccountExpanded { get; set; } = [];
     public List<string> TabOrder { get; set; } = [];
     public bool HouseCharactersFirst { get; set; } = true;
     public Dictionary<string, List<string>> HiddenCharacters { get; set; } = [];
