@@ -11,7 +11,7 @@ public static class SyncValidation
         !string.IsNullOrWhiteSpace(e.Actor?.ContentId) && records.Any(newer =>
             newer.Kind == "character.updated" && newer.Actor?.ContentId == e.Actor.ContentId &&
             newer.At > e.At && CanSend(newer, now));
-    public static bool SupportedByWebsite(string kind, int version) => version >= 2 ||
+    public static bool SupportedByWebsite(string kind, int version) => kind == "storage.observed" ? version >= 3 : version >= 2 ||
         kind is "house.entered" or "garden.tended" or "garden.ready" or "garden.observed" or "garden.planted" or "house.discovered" or "character.updated";
     private static bool Text(string? s) => !string.IsNullOrWhiteSpace(s) && s.Length <= 100;
     public static bool ActorReady(Actor? a) => a is not null &&
@@ -42,6 +42,7 @@ public static class SyncValidation
     {
         if (!Regex.IsMatch(e.Id ?? "", "^[a-f0-9]{32}$") || !ActorReady(e.Actor) || e.At.Year < 2020 || e.At > now.AddMinutes(5)) return false;
         if (e.Kind == "character.updated") return CharacterReady(e.Character);
+        if (e.Kind == "storage.observed") return e.Storage is {} storage && Regex.IsMatch(storage.Key ?? "", @"^(bag:\d{1,5}|armoire|dresser|(?:retainer|fc):[1-9]\d{0,19}:\d{1,5})$") && Text(storage.Name) && storage.Items is { Length: <= 8000 } && storage.Items.All(i=>i is >0 and <1000000);
         if (e.Kind == "collection.observed") return e.Collection is { } collection &&
             new[] { "mount", "minion", "orchestrion", "emote", "barding", "card", "ornament", "framerkit", "quest", "hairstyle" }.Contains(collection.Category) &&
             collection.Known is { Length: > 0 and <= 5000 } && collection.Unlocked is { Length: <= 5000 } && collection.Obtained is { Length: <= 5000 } && collection.Known.All(id=>id is > 0 and < 1000000) &&

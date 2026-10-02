@@ -1,31 +1,19 @@
-# Equinox Journal V7.10.2 / Companion 0.5.0.2
+# Companion 0.5.1.0 / Journal V7.11.0
 
-Release prepared 2 October 2026. Recovered V7.10.1/0.5.0.1 source and continued work. Companion 0.5.0.2 is distributed through the existing GitHub installer feed. Journal V7.10.2 remains a manual Cloudflare package; publishing this plugin does not deploy the website.
+This is an in-game validation release. Build and automated checks pass; native game observations still require live verification.
 
-## Changes in this checkpoint
+Deploy Journal V7.11.0 to the existing Cloudflare Pages project, open and save it once, then refresh shared profiles in Companion. Keep both users on the existing pairing key. Storage events are held locally until the website advertises protocol 3; existing supported events continue syncing.
 
-- When automatic game application is enabled and the updated journal has saved once, linked house-entry times and authoritative estate names can propagate between paired plugins with the website closed.
-- Private tenants do not reset owner timers. FC entries require membership. A verified FC change removes the old membership from the live view; absent FC information does not prove departure. Changed estate ownership removes the old owner timer until the full journal reconciles the house.
-- This is a compact housing view. Full journal history, gardens, collections, new house discovery and unresolved links still apply when the website is open. No picture or full journal reads/writes are performed by the live roster route.
-- Live observations are bounded to 5,000 cached identities; durable events stay queued if that cache is full. Website save races, old events, reused IDs and reviewed/dismissed events are guarded.
-- Reconnect uploads use a fixed three-statement ingestion batch, including live projection updates, instead of one or more database calls per event. Conditional profile reads use the server's complete ETag.
+- Restored the missing hairstyle catalogue and added release checks so hairstyles cannot silently disappear again.
+- Remember loaded personal inventory, equipped gear, Armoury Chest, saddlebags, Armoire, Glamour Dresser and individual retainers. Unopened containers are not cleared. Retainer and FC Chest observations require a loaded, identified context.
+- Locations include inventory page numbers, retainer names and retainer inventory numbers. Shared FC Chest pages are displayed separately from personal ownership.
+- Dedicated Submarines tab uses the newest observation per FC. Header status sits beside the approved icon.
+- Same approved icon normalized to 512×512; compiled manifest and feed include IconUrl. Original artwork remains in assets/companion-icon-original.png.
+- Incomplete login records are logged once per session, retained for diagnostics and never allowed to block valid actions.
+- Current storage snapshots survive the 60-day acknowledged-history pruning. Storage writes are batched to avoid repeatedly writing the full config during one observation pass.
 
-## Validation
+The website adds equipment/clothing, one Obtained filter with Not learned markers, compact job rows, game-observed Fashion completion, automatic exact Lodestone matching, event history by year, all-account catalogue coverage, per-photo guest sharing, a moderated Guest Welcome Book, and protected photo cleanup.
 
-Passed: cloud storage/authentication regressions; companion event contracts and garden isolation; shared roster privacy and eligibility; new background two-client housing tests; a 50-event reconnect batch below the query limit; cache-cap and durable-event preservation tests; catalogue/event/Fashion/guestbook regressions. Companion compiles against the recovered Dalamud API 15 references with zero warnings and errors; synthetic gate tests pass.
+Live checks: update both clients; open each storage location and retainer; move an item between inventory and retainer then use/unlock it; verify per-character isolation after switching characters; read private/FC placards and Company Profile; open a numbered garden bed without harvest permission; speak to Masked Rose after judging; open workshop voyages; verify paired green entry notices/red 30-day reminders. Housing times remain recorded-entry estimates; game demolition status is authoritative.
 
-Native game behavior and production Cloudflare CPU remain unverified. All 23 requested points are NOT yet complete. WORK-STATUS.md retains the remaining work.
-
-## Installation
-
-1. Export a journal JSON backup.
-2. Upload the CONTENTS of EquinoxJournal-Cloudflare-V7.10.2.zip to the existing Cloudflare Pages project. Keep DB, PICTURES, the journal password, pairing key and stored data unchanged.
-3. Open the updated website, sign in, enable automatic game application, and allow one cloud save to finish.
-4. Update Companion from the existing main/repo.json GitHub feed when the feed shows 0.5.0.2. The same pairing key stays on both clients.
-5. Test a private owner entry, a tenant entry, an FC-member entry, an estate name update, and second-client refresh with the website closed. Reopen the website to apply the detailed queued history.
-
-## Remaining work
-
-See the 23-point table in WORK-STATUS.md. Principal gaps: exact automatic Lodestone/portrait resolution; complete collection and event requirements/reward mappings; immediate harvest detection; full journal application while the browser is closed; guest photographs/automatic publication; and live FFXIV validation. Unknown character ownership still requires an explicit person/account link.
-
-No pairing key should be regenerated and no queue cleared as a first troubleshooting step.
+Equipment sources are not yet fully classified. Unknown/ambiguous quest and reward mappings remain unconfirmed. Reused quest bits cannot prove which past rerun was completed. Unlinked characters still require a person/account assignment. Full journal and garden application requires the website open; compact known-estate and voyage updates can reach paired plugins in the background.

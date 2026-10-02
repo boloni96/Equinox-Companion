@@ -268,3 +268,8 @@ Check("old website holds new collection observations", SyncValidation.SupportedB
 Check("old website holds empty-bed observations", SyncValidation.SupportedByWebsite("garden.empty", 1).ToString(), "False");
 Check("updated website accepts new observations", SyncValidation.SupportedByWebsite("garden.empty", 2).ToString(), "True");
 Check("hairstyle uses collection contract", SyncValidation.CanSend(collectionEvent with { Collection = new("hairstyle", [637], [637], []) }, time).ToString(), "True");
+Check("storage waits for protocol3", SyncValidation.SupportedByWebsite("storage.observed",2).ToString(), "False");
+Check("storage accepted by protocol3", SyncValidation.SupportedByWebsite("storage.observed",3).ToString(), "True");
+Check("named retainer inventory accepted", SyncValidation.CanSend(collectionEvent with { Kind="storage.observed", Collection=null, Storage=new("retainer:123:10003", "Retainer Example · Inventory 4", [12345]) }, time).ToString(), "True");
+Check("empty loaded container accepted", SyncValidation.CanSend(collectionEvent with { Kind="storage.observed", Collection=null, Storage=new("bag:0", "Inventory 1", []) }, time).ToString(), "True");
+Check("shared chest has explicit scope", SyncValidation.CanSend(collectionEvent with { Kind="storage.observed", Collection=null, Storage=new("fc:123:20004", "Available in FC Chest · Inventory 5", [12345]) }, time).ToString(), "True");

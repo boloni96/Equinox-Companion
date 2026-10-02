@@ -2,6 +2,7 @@
 import argparse
 import json
 import re
+import struct
 import time
 import zipfile
 from pathlib import Path
@@ -16,6 +17,20 @@ def package(build, output, repository, tag, ref=None):
         raise ValueError("Release tag must equal v plus the compiled AssemblyVersion")
     if manifest["InternalName"] != "EquinoxCompanion" or manifest["DalamudApiLevel"] != 15:
         raise ValueError("Unexpected plugin identity/API; review compatibility before publishing")
+    icon = (build / "icon.png").read_bytes()
+    if icon[:8] != b"\x89PNG\r\n\x1a\n":
+        raise ValueError("Plugin icon must be PNG")
+    width, height = struct.unpack(">II", icon[16:24])
+    if width != height or not 64 <= width <= 512:
+        raise ValueError("Dalamud icon must be square and between 64 and 512 pixels")
+    if not manifest.get("IconUrl"):
+        raise ValueError("Compiled manifest must include the plugin icon URL")
+    catalogue=json.loads((build / "collection-ids.json").read_text())
+    categories={x["category"] for x in catalogue}
+    if not {"mount","minion","orchestrion","emote","barding","card","ornament","framerkit","hairstyle","quest"}.issubset(categories):
+        raise ValueError("Incomplete collection catalogue, including hairstyles")
+    if len({(x["category"],x["id"]) for x in catalogue}) != len(catalogue):
+        raise ValueError("Duplicate collection identity")
     dll = build / "EquinoxCompanion.dll"
     if not dll.is_file() or dll.read_bytes()[:2] != b"MZ":
         raise ValueError("Compiled plugin DLL is missing or invalid")
@@ -28,8 +43,9 @@ def package(build, output, repository, tag, ref=None):
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_./-]*", ref) or ".." in ref:
             raise ValueError("Invalid repository ref")
         link = f"https://raw.githubusercontent.com/{repository}/{ref}/dist/{tag}/EquinoxCompanion.zip"
+    (output / "icon.png").write_bytes(icon)
     entry = dict(manifest)
-    entry.update(IconUrl=f"https://raw.githubusercontent.com/{repository}/{ref or tag}/src/icon.png", RepoUrl=f"https://github.com/{repository}", IsHide=False,
+    entry.update(IconUrl=manifest["IconUrl"], RepoUrl=f"https://github.com/{repository}", IsHide=False,
                  IsTestingExclusive=False, DownloadLinkInstall=link,
                  DownloadLinkUpdate=link, DownloadLinkTesting=link,
                  LastUpdate=int(time.time()))

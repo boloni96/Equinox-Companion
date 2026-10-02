@@ -69,6 +69,8 @@ public sealed partial class Plugin
     }
     private void DrawGeneralSettings()
     {
+        ImGui.TextWrapped(collectionStatus);
+        ImGui.TextWrapped("Storage is remembered per character after it loads in game. Open the Armoire, Glamour Dresser and each retainer to refresh them.");
         var collections = config.SyncCollections;
         if (ImGui.Checkbox("Sync collection unlocks and reward items", ref collections)) { config.SyncCollections = collections; Pi.SavePluginConfig(config); }
         var activities = config.SyncActivities;
