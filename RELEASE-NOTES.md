@@ -1,3 +1,7 @@
+# Companion 0.5.1.8 — Private, FC, Shared house order
+
+Expanded character estates now use [Private], [FC], and [Shared], ordered Private first, the character's FC second, then all shared estates in their existing relative order. Shared applies to private and FC estates. The underlying estate type and access explanation remain in the hover details. Shared rows no longer have a repeated warning line above their name. Colour bars exclude shared estates. Journal V7.11.16 publishes character/estate FC identities to distinguish the character's own FC from a different shared FC. Older caches can identify FC masters; other unverified FC relations temporarily show Shared until the new roster is saved.
+
 # Companion 0.5.1.7 — Account groups and character refresh
 
 Keeps each person as a tab. Each account expands/collapses and remembers its state. Inside are Regulars (boosted/ready, including no FC), Floaters (boost needed and FC member), and Empty (boost needed without FC membership). Uses Journal boost-needed/eligibility markers, not proof of a purchased boost. Search includes account names and temporarily opens matching accounts. Existing per-character housing colours and ordering remain within their groups. Journal V7.11.15 supplies stable account IDs and group metadata; older cached data falls back to ~ names and linked FC estates.

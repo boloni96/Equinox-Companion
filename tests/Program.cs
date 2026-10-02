@@ -294,3 +294,13 @@ Check("boosted FC member remains Regulars", SharedCharacterGrouping.Group(groupe
 Check("unboosted FC member is Floater", SharedCharacterGrouping.Group(groupedCharacter with { NeedsBoost = true, FcMember = true }), "Floaters");
 Check("unboosted without FC is Empty", SharedCharacterGrouping.Group(groupedCharacter with { NeedsBoost = true }), "Empty");
 Check("stable account identity", SharedCharacterGrouping.AccountKey(groupedCharacter), "main-id");
+var memberDisplay = houseOwner with { FcId = "123" };
+var ownFcDisplay = sharedPrivate with { Id = "fc", Type = "Free Company house", FcId = "123", OwnerName = "Another Master" };
+var sharedFcDisplay = ownFcDisplay with { Id = "shared-fc", FcId = "999" };
+Check("private owner display", SharedHousePresentation.Label(memberDisplay,sharedPrivate,true),"Private");
+Check("private tenant display", SharedHousePresentation.Label(memberDisplay,sharedPrivate,false),"Shared");
+Check("own FC member display", SharedHousePresentation.Label(memberDisplay,ownFcDisplay,false),"FC");
+Check("other FC shared display", SharedHousePresentation.Label(memberDisplay,sharedFcDisplay,false),"Shared");
+Check("unknown FC membership shared display", SharedHousePresentation.Label(houseTenant,ownFcDisplay,false),"Shared");
+var mixedEstates = new[]{(House: sharedPrivate with {Id="shared-private"}, Own:false),(House:sharedFcDisplay, Own:false),(House:ownFcDisplay, Own:false),(House:sharedPrivate, Own:true)};
+Check("Private FC then all Shared stable order",string.Join(",",mixedEstates.OrderBy(x=>SharedHousePresentation.Order(SharedHousePresentation.Label(memberDisplay,x.House,x.Own))).Select(x=>x.House.Id)),"house,fc,shared-private,shared-fc");

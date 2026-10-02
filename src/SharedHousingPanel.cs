@@ -112,8 +112,9 @@ public sealed partial class Plugin
                     foreach (var c in grouped)
                     {
             ImGui.PushID(c.Id);
-            var houses = c.Houses.OrderBy(h => HouseDisplayOrder(h.Type)).ToArray();
-            var timerHouses = houses.Where(h => CountsForCharacter(c, h)).ToArray();
+            string HouseLabel(SharedHouse h) => SharedHousePresentation.Label(c, h, h.Type == "Private house" && CountsForCharacter(c, h));
+            var houses = c.Houses.OrderBy(h => SharedHousePresentation.Order(HouseLabel(h))).ToArray();
+            var timerHouses = houses.Where(h => HouseLabel(h) != "Shared" && CountsForCharacter(c, h)).ToArray();
             HousingBand? Status(string type) => SummarizeBands(timerHouses.Where(h=>h.Type==type).Select(h=>h.Paused?HousingBand.Unknown:HousingStatus.Band(h.LastEntry,now)));
             if (DrawSplitHeader(c.Name+" · "+SharedLocation(c)+"###character",Status("Private house"),Status("Free Company house"),
                 timerHouses.Select(h=>EntryHover(h.Type,h.Ward,h.Plot,h.LastEntry,now,h.Paused))))
@@ -127,15 +128,16 @@ public sealed partial class Plugin
                 {
                     if (!firstEstate) { ImGui.Spacing(); ImGui.Separator(); ImGui.Spacing(); }
                     firstEstate = false;
-                    var sharedPrivate = h.Type == "Private house" && !CountsForCharacter(c, h);
-                    if (sharedPrivate) ImGui.TextDisabled("Shared private house / ownership unconfirmed — your entry does not reset its timer.");
+                    var label = HouseLabel(h);
                     var band=h.Paused?HousingBand.Unknown:HousingStatus.Band(h.LastEntry,now);
-                    ImGui.TextColored(BandColour(band),$"[{(h.Type=="Private house"?"Private":"FC")}] {(string.IsNullOrWhiteSpace(h.Name)?"Estate name unknown":h.Name)} · {BandLabel(band)}");
+                    ImGui.TextColored(BandColour(band),$"[{label}] {(string.IsNullOrWhiteSpace(h.Name)?"Estate name unknown":h.Name)} · {BandLabel(band)}");
                     if(ImGui.IsItemHovered())
                     {
                         ImGui.BeginTooltip();
                         ImGui.TextUnformatted($"{h.World} · {h.District} · W{h.Ward} P{h.Plot} · {h.Size}");
                         ImGui.TextUnformatted($"Owner / FC master: {h.OwnerName}");
+                        ImGui.TextUnformatted($"Estate type: {h.Type}");
+                        if (label == "Shared") ImGui.TextUnformatted(h.Type == "Private house" ? "Shared access / ownership unconfirmed. Only the owner resets the timer." : "Shared access / FC membership unconfirmed. Only FC members reset the timer.");
                         if(!string.IsNullOrWhiteSpace(h.FcName))ImGui.TextUnformatted($"FC: {h.FcName} <{h.FcTag}>");
                         if(h.LastEntry is not null)ImGui.TextUnformatted($"45-day estimate: {h.LastEntry.Value.AddDays(45).ToLocalTime():g}");
                         ImGui.TextUnformatted("Based on shared recorded entries, not the game's live countdown.");
