@@ -1,0 +1,11 @@
+Equinox Companion 0.5.1.13 — crossbreeding starter instructions
+
+/planting now separates bed positions from planting step numbers. Displays cheap-soil starter and later replant instructions from Journal 7.11.25, full-plan supplies, unknown-crop checks and starter-planted/replant-pending status. Older saved plans remain readable. Keep the same pairing key.
+
+Deploy Journal 7.11.25 and save the garden plan again before starting a fresh planting sequence. Live game verification remains to be done; local build and gate tests passed.
+
+Also includes website save notifications, a choice of starting seed for alternating layouts, and an always-visible plugin batch guide without an extra collapse control. Planting tips appear beneath the plugin layout.
+
+Each batch shows recorded-crop and planned full-harvest totals, including ordinary produce. Crossbred seed ranges use the yield of the resulting seed and the planted soil. Alternate-result maxima overlap and must not be added. Unknown crop/soil yields stay unknown. These are full-cycle potentials, not inventory received or confirmed cross results. Yield source: FFXIV Gardening seed details and documentation (soil columns verified 2026-10-02).
+
+Confirmed starters appear green while required neighbours are pending, red when the guide's other required plantings are confirmed, and green after the final crop/soil is confirmed. Plugin hover details hold instructions and timers. Keep the website open: colours update through its sync, not from an unconfirmed click.

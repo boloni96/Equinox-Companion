@@ -341,3 +341,12 @@ Check("fertilizer cannot masquerade as tending",fertilizeIntent.Confirm(4017,tim
 Check("fertilizer wrong bed rejected",fertilizeIntent.Confirm(4016,time.AddSeconds(1),Sample(0,"bed-b"))?.Kind,null);
 Check("fertilizer old website holds safely",SyncValidation.SupportedByWebsite("garden.fertilized",5).ToString(),"False");
 Check("fertilizer protocol6 enabled",SyncValidation.SupportedByWebsite("garden.fertilized",6).ToString(),"True");
+
+var starterJson = """{"bed":1,"crop":"Krakka Root","soil":"Grade 3 Thanalan Topsoil","status":"starter","order":1,"replantOrder":9,"starterSoil":"Potting Soil","checkExisting":true}""";
+var starterBed = JsonSerializer.Deserialize<SharedGardenBed>(starterJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
+Check("starter guide order survives sync", starterBed.Order.ToString(), "1");
+Check("starter return step survives sync", starterBed.ReplantOrder.ToString(), "9");
+Check("starter soil survives sync", starterBed.StarterSoil, "Potting Soil");
+Check("starter unknown warning survives sync", starterBed.CheckExisting.ToString(), "True");
+var legacyBed = JsonSerializer.Deserialize<SharedGardenBed>("""{"bed":1,"crop":"Krakka Root","soil":"Potting Soil"}""", new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
+Check("older saved guide remains readable", legacyBed.ReplantOrder.ToString(), "0");

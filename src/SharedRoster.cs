@@ -1,5 +1,5 @@
 namespace EquinoxCompanion;
-public sealed record SharedRoster(long Revision, DateTimeOffset Updated, SharedPerson[] People, SharedVoyage[]? Voyages = null, int ProtocolVersion = 1, SharedGardenPlan[]? GardenPlans = null, SharedGardenCare[]? GardenCare = null);
+public sealed record SharedRoster(long Revision, DateTimeOffset Updated, SharedPerson[] People, SharedVoyage[]? Voyages = null, int ProtocolVersion = 1, SharedGardenPlan[]? GardenPlans = null, SharedGardenCare[]? GardenCare = null, SharedGardenYield[]? GardenYields = null);
 public sealed record SharedVoyage(string FcId, string FcName, DateTimeOffset At, SubmarineDetails[] Submarines);
 public sealed record SharedPerson(string Id, string Name, SharedCharacter[] Characters);
 public sealed record SharedCharacter(string Id, string Name, string World, string Dc, string Region, string Account, SharedHouse[] Houses, string AccountId = "", bool? NeedsBoost = null, bool? FcMember = null, string FcId = "");
@@ -50,7 +50,7 @@ public static class SharedHousePresentation
 }
 
 public sealed record SharedGardenPlan(string HouseId, string HouseName, string World, string District, int Ward, int Plot, int Batch, string Target, DateTimeOffset At, SharedGardenBed[] Beds, string GameHouseId = "", int Capacity = 1);
-public sealed record SharedGardenBed(int Bed, string Crop, string Soil, string Status, string ActualCrop, string ActualSoil, DateTimeOffset? Planted, DateTimeOffset? Watered, double Days, bool Ready, DateTimeOffset? NextTend = null, DateTimeOffset? HarvestAt = null);
+public sealed record SharedGardenBed(int Bed, string Crop, string Soil, string Status, string ActualCrop, string ActualSoil, DateTimeOffset? Planted, DateTimeOffset? Watered, double Days, bool Ready, DateTimeOffset? NextTend = null, DateTimeOffset? HarvestAt = null, int Order = 0, int ReplantOrder = 0, string StarterSoil = "", bool CheckExisting = false);
 
 public static class SharedGardenLocation
 {
@@ -101,3 +101,5 @@ public static class GardenCareStatus
         return bed.HarvestAt <= now ? "check maturity" : null;
     }
 }
+
+public sealed record SharedGardenYield(string HouseId, int Batch, string Actual, string Planned, string Seeds);

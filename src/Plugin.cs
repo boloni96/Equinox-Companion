@@ -752,7 +752,7 @@ public sealed partial class Plugin : IDalamudPlugin
     {
         ImGui.TextUnformatted("Website connection");
         DrawSavedPairingKey();
-                ImGui.TextWrapped("Use Journal V7.11.18 for all current features. Keep your existing pairing key. Both installations use the same key for this shared Journal.");
+                ImGui.TextWrapped("Use Journal V7.11.25 for all current features. Keep your existing pairing key. Both installations use the same key for this shared Journal.");
                 ImGui.InputText("Pairing key", ref pairingInput, 128, ImGuiInputTextFlags.Password);
                 if (ImGui.Button("Save pairing key") && syncTask is null)
                 {
