@@ -1,6 +1,6 @@
 # Equinox Empire — implementation and live-validation status
 
-Journal V7.11.1 / Companion 0.5.1.1, 2 October 2026. Updated against all 23 requests and later corrections, including numbered storage locations.
+Journal V7.11.3 / Companion 0.5.1.1, 2 October 2026. Updated against all 23 requests and later corrections, including numbered storage locations.
 
 Implemented means source changes and relevant local checks, not proof of live FFXIV behavior. This remains an in-game validation release.
 
@@ -12,18 +12,18 @@ Implemented means source changes and relevant local checks, not proof of live FF
 | 4 | Character/account navigation and history integration | Browser navigation checks pass; nested real-use feedback remains useful |
 | 5 | Unified timers; Fashion completion from actual judged participation, with score shown and no 80/100 selector | Native Fashion and timer observations need live validation |
 | 6 | 3,116 unlock catalogue entries plus 29,057 equipment entries; single Obtained filter; Not learned marker; hairstyles restored; cached personal storage and separate shared FC pages | Equipment sources not fully classified; missing means not found in recorded storage, not proof every unopened container is empty |
-| 7 | Catalogue events on all accounts, compact Hide/Show, simplified expanded actions, year-specific history from Altoholic | Reused quest bits cannot establish an old rerun year; ambiguous mappings stay unconfirmed; complete access rules are not available for every activity |
+| 7 | Catalogue events on all accounts, compact Hide/Show, simplified expanded actions, year-specific history from Altoholic; canonical event identities and explicit mapped quest IDs; unknown eligibility prompts login/sync | Reused quest bits cannot establish an old rerun year; ambiguous mappings stay unconfirmed; complete access rules are not available for every activity |
 | 8 | Single Rename Person control in left sidebar; style preview name read-only | Browser verified |
 | 9 | Minimum plugin size and native pin/clickthrough/blur controls | Requires in-game interaction test |
 | 10 | Game-controlled character details, compact jobs with unchanged icon size, FC page, cached exact-name/world Lodestone lookup and portrait fallback | Official-site outages leave lookup unconfirmed; personal notes and portraits remain user-controlled |
 | 11 | Companion character-to-website links | Requires signed-in user's browser for private journal |
-| 12 | Reward/collection/job game icons; approved plugin artwork normalized to 512px and versioned manifest/feed icon URL; website logo moved below footer copyright | Remote collection icons are optional online assets; not an offline icon cache |
+| 12 | Reward/collection/job game icons; approved plugin artwork normalized to 512px and versioned manifest/feed icon URL; website logo moved below footer copyright | Remote collection icons are optional online assets. Installer icon was still missing for user: valid 512px URL/manifest verified; Dalamud caches failed loads, restart required to retry; live outcome not yet confirmed |
 | 13 | Per-person revocable selection, individual owner-selected photos, token-scoped image access, moderated Guest Welcome Book | Snapshots change on owner publication; no silent public exposure of later uploads |
 | 14 | 60-day acknowledged history pruning; latest state per container and unsent actions retained | Long-running live growth still needs observation |
 | 15 | Revised status, storage, Fashion, estate, version and guest copy | No claim an unknown native observation is confirmed |
 | 16 | Dedicated Submarines plugin tab, newest FC observation, website timers and compact background voyage propagation | Workshop capture is passive and requires loaded data; live test outstanding |
-| 17 | Collection/quest/reward/Fashion automatic observations, year-aware quest history and repeat transitions | Every reward and repeated event cannot be inferred safely; unknowns remain unconfirmed |
-| 18 | Wishlist follows learned/held collectibles and recorded equipment, with icons and Not learned marker | Exact unique name or item/key match required; ambiguous names are not guessed |
+| 17 | Collection/quest/reward/Fashion automatic observations, year-aware quest history and repeat transitions | Nocturne headline alias and final quest 68696 fixed; prior completion counts without inventing a year/date. Other reruns require occurrence evidence; unmapped future events remain unconfirmed |
+| 18 | Wishlist follows learned/held collectibles and recorded equipment, with icons and Not learned marker | FFXV outfit (4 items), orchestrion group (6 rolls), hairstyle aliases and item/key matches tested. Partial groups remain incomplete; ambiguous or unmapped rewards stay unconfirmed |
 | 19 | Same pairing key, normalized startup, acknowledgments, retries, held records isolated and logged once per session | Two-client contract tests pass; live reconnect test outstanding |
 | 20 | Green entry with paired owner/FC context; daily red 30-day eligible-entry reminders | In-game color/threshold check; demolition countdown itself remains game-owned |
 | 21 | Automatic unique name/home-world matching and creation/linking of verified owned/paired-known estates | Unknown characters require a person/account assignment, avoiding invented ownership |
@@ -37,3 +37,8 @@ Verification: .NET build zero warnings/errors; plugin gate tests; cloud/auth/sto
 Delivery uses the existing GitHub installer feed. Website ZIP is for the existing Cloudflare Pages deployment, preserving DB/PICTURES bindings, password, key and journal. Deploy website first and save once to advertise protocol 3. Nothing here rotates the key or replaces user data.
 
 References consulted: [Altoholic](https://github.com/Sohtoren/Altoholic), [FFXIVClientStructs](https://github.com/aers/FFXIVClientStructs), [SubmarineTracker](https://github.com/Infiziert90/SubmarineTracker), [AutoRetainer](https://github.com/PunishXIV/AutoRetainer), [FFXIVGachaSpreadsheet](https://github.com/Infiziert90/FFXIVGachaSpreadsheet), [FFXIV Collect](https://ffxivcollect.com/), [game-sheet extraction](https://github.com/xivapi/ffxiv-datamining), [DalamudPackager](https://github.com/goatcorp/DalamudPackager). Reference projects inform passive observation and factual mappings; Equinox does not require them installed or trigger their automation.
+
+## V7.11.3 follow-up audit
+Actual user backup reproduced the Done checkbox stall (~12 seconds). Indexed reward matching reduced it to ~0.35 seconds in local browser tests; retained in V7.11.3. Unknown Fashion/level/quest data no longer grants eligibility or asserts an unmet quest. Yo-kai alternative prerequisites short-circuit when one completion is known. FFXV source headline is mapped to A Nocturne for Heroes; its stored quest completion is recognized. Grouped rewards expose individual item status and require every member before automatic Obtained. Sources for the Lucian outfit are classified as event rewards. Orchestrion icons use the game item icon. Existing history/checkmarks are preserved.
+
+Not all 23 points can be declared end-to-end complete: production CPU, installed icon retry and native observation scenarios need user environment validation. Equipment source classification and coverage of every event/reward remain incomplete. No future or ambiguous mapping is invented. No new Companion binary is necessary for the website matching fixes; current published build is 0.5.1.1.
