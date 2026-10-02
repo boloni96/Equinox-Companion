@@ -1,3 +1,11 @@
+# Companion 0.5.1.5 — Persistent tab order
+
+Other visits now has its own scroll area, capped at six text rows, with newest visits first and a count. No visit records are deleted.
+
+Command renamed to `/fashionr` because the game already uses `/fashion` for fashion accessories. `/equinox fashion` remains available.
+
+Settings is last by default, after person tabs. Dragged tab order is saved to plugin configuration after releasing the mouse and restored after restart/update. Stable person IDs preserve order across renames; temporarily missing people retain their saved positions. New tabs start before Settings. Existing saved custom order takes priority.
+
 # Companion 0.5.1.4 — Fashion login refresh
 
 Checks the shared Fashion Report picture on character login and once per hour while logged in, even with its window closed. Login does not open the window or print the chat link. `/fashion` opens the in-game picture and prints the optional browser link. Keeps the existing picture on failure. Native game testing still required.

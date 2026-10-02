@@ -92,14 +92,19 @@ public sealed partial class Plugin
                 }
                 var ids = estates.Select(d => d.Address!.HouseId).ToHashSet();
                 var other = config.Houses.Where(v => v.Actor.ContentId == actor.ContentId && !ids.Contains(v.Address.HouseId))
-                    .GroupBy(v => v.Address.HouseId).Select(g => g.OrderByDescending(v => v.ObservedAt).First()).ToArray();
-                if (other.Length > 0 && ImGui.TreeNode("Other visits (ownership unconfirmed)"))
+                    .GroupBy(v => v.Address.HouseId).Select(g => g.OrderByDescending(v => v.ObservedAt).First()).OrderByDescending(v => v.ObservedAt).ToArray();
+                if (other.Length > 0 && ImGui.TreeNode($"Other visits ({other.Length}) · ownership unconfirmed###other-visits"))
                 {
-                    foreach (var v in other)
+                    var height = ImGui.GetTextLineHeightWithSpacing() * Math.Min(other.Length, 6) + ImGui.GetStyle().WindowPadding.Y * 2;
+                    if (ImGui.BeginChild("OtherVisitsScroll", new Vector2(0, height), true))
                     {
-                        var a = WithAddressNames(v.Address);
-                        ImGui.TextWrapped($"{a.WorldName} · {a.DistrictName} · W{a.Ward} P{a.Plot} · {v.ObservedAt.ToLocalTime():g}");
+                        foreach (var v in other)
+                        {
+                            var a = WithAddressNames(v.Address);
+                            ImGui.TextWrapped($"{a.WorldName} · {a.DistrictName} · W{a.Ward} P{a.Plot} · {v.ObservedAt.ToLocalTime():g}");
+                        }
                     }
+                    ImGui.EndChild();
                     ImGui.TreePop();
                 }
             }

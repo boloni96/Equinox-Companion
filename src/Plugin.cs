@@ -159,8 +159,8 @@ public sealed partial class Plugin : IDalamudPlugin
         if (config.TrackGardens) { callbackHook?.Enable(); plantHook?.Enable(); }
         Commands.AddHandler("/equinox", new CommandInfo(OnCommand) { HelpMessage = "Open Equinox Companion, shared profiles, housing and settings." });
         fashionBrowserLink = Chat.AddChatLinkHandler(10513, (_, _) => OpenFashionBrowser());
-        fashionCommandRegistered = Commands.AddHandler("/fashion", new CommandInfo(OnFashionCommand) { HelpMessage = "Open the current Fashion Report V1 picture in game." });
-        if (!fashionCommandRegistered) Log.Warning("/fashion is already registered by another plugin. Use /equinox fashion instead.");
+        fashionCommandRegistered = Commands.AddHandler("/fashionr", new CommandInfo(OnFashionCommand) { HelpMessage = "Open the current Fashion Report V1 picture in game." });
+        if (!fashionCommandRegistered) Log.Warning("/fashionr is already registered by another plugin. Use /equinox fashion instead.");
         mainWindow = new CompanionWindow(this); windows.AddWindow(mainWindow);
         fashionWindow = new FashionReportWindow(); windows.AddWindow(fashionWindow);
         Pi.UiBuilder.Draw += Draw;
@@ -727,34 +727,7 @@ public sealed partial class Plugin : IDalamudPlugin
             ImGui.TextDisabled($"Equinox Companion v{typeof(Plugin).Assembly.GetName().Version}");
             DrawSharedStatus();
             ImGui.EndGroup();
-            if (ImGui.BeginTabBar("CompanionSections", ImGuiTabBarFlags.Reorderable))
-            {
-                if (ImGui.BeginTabItem("Tests"))
-                {
-                    DrawTests();
-                    ImGui.EndTabItem();
-                }
-                if (ImGui.BeginTabItem("Characters & housing"))
-                {
-                    DrawHousing();
-                    ImGui.EndTabItem();
-                }
-                if (ImGui.BeginTabItem("Submarines")) { DrawSubmarines(); ImGui.EndTabItem(); }
-                if (ImGui.BeginTabItem("Settings"))
-                {
-                    DrawSettings();
-                    ImGui.EndTabItem();
-                }
-                foreach (var profile in config.SharedRoster?.People ?? [])
-                {
-                    if (ImGui.BeginTabItem(profile.Name.Replace("##", "") + "###person-" + profile.Id))
-                    {
-                        DrawSharedPerson(profile);
-                        ImGui.EndTabItem();
-                    }
-                }
-                ImGui.EndTabBar();
-            }
+            DrawOrderedTabs();
     }
 
     private void DrawConnection()
@@ -880,7 +853,7 @@ public sealed partial class Plugin : IDalamudPlugin
         Pi.UiBuilder.OpenMainUi -= Open;
         Pi.UiBuilder.OpenConfigUi -= Open;
         Commands.RemoveHandler("/equinox");
-        if (fashionCommandRegistered) Commands.RemoveHandler("/fashion");
+        if (fashionCommandRegistered) Commands.RemoveHandler("/fashionr");
         Chat.RemoveChatLinkHandler(10513);
     }
 }
