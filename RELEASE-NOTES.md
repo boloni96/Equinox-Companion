@@ -1,3 +1,9 @@
+# Companion 0.5.1.11 — Separate planting window
+
+/planting now opens an independent movable, resizable and pinnable window, like /fashionr. It does not open the main Companion window or select a tab. Removed the Garden plans tab. The guide still requires the current identified paired estate and shows one batch at a time with batch buttons. Leaving/loading the estate prevents showing its old guide. Shared data continues refreshing while this window is open even when background profile refresh is disabled. Window position/size uses the normal Dalamud window persistence.
+
+Website V7.11.18 or newer; latest website package is V7.11.19 with compact hover/focus/touch bed details. No website update is needed solely for this plugin window change. Plugin builds successfully; live window behavior needs an in-game check.
+
 # Companion 0.5.1.10 — House planting guide and care reminders
 
 Use /planting only at an identified paired estate. It opens that house’s garden guide, one numbered 3x3 batch layout at a time, with Batch 1/2/3 buttons according to capacity. No manual house picker and no previous-estate guide during loading or outside housing. /equinox planting is the fallback if another plugin owns /planting. Website V7.11.18 shows all capacity batches side by side and saves planned seeds/soil separately from observed crops.

@@ -13,7 +13,6 @@ public sealed partial class Plugin
         };
         foreach (var profile in config.SharedRoster?.People ?? [])
             tabs.Add(("person:" + profile.Id, profile.Name.Replace("##", "") + "###person-" + profile.Id, () => DrawSharedPerson(profile)));
-        tabs.Add(("gardens", "Garden plans###equinox-gardens", DrawGardenPlans));
         tabs.Add(("submarines", "Submarines###equinox-submarines", DrawSubmarines));
         tabs.Add(("settings", "Settings###equinox-settings", DrawSettings));
         config.TabOrder ??= [];
@@ -30,8 +29,7 @@ public sealed partial class Plugin
         foreach (var tab in tabs.OrderBy(t => order.IndexOf(t.Id)))
         {
             ids[ImGui.GetID(tab.Label)] = tab.Id;
-            if (!ImGui.BeginTabItem(tab.Label, requestedTab == tab.Id ? ImGuiTabItemFlags.SetSelected : ImGuiTabItemFlags.None)) continue;
-            if (requestedTab == tab.Id) requestedTab = null;
+            if (!ImGui.BeginTabItem(tab.Label)) continue;
             tab.Draw();
             ImGui.EndTabItem();
         }

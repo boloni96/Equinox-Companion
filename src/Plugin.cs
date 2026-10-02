@@ -167,6 +167,7 @@ public sealed partial class Plugin : IDalamudPlugin
         if (!fashionCommandRegistered) Log.Warning("/fashionr is already registered by another plugin. Use /equinox fashion instead.");
         mainWindow = new CompanionWindow(this); windows.AddWindow(mainWindow);
         fashionWindow = new FashionReportWindow(); windows.AddWindow(fashionWindow);
+        plantingWindow = new PlantingGuideWindow(this); windows.AddWindow(plantingWindow);
         Pi.UiBuilder.Draw += Draw;
         Pi.UiBuilder.OpenMainUi += Open;
         Pi.UiBuilder.OpenConfigUi += Open;

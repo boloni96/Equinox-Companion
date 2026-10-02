@@ -1,9 +1,24 @@
 using Dalamud.Bindings.ImGui;
 using System.Numerics;
+using Dalamud.Interface.Windowing;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
-    private string? requestedTab;
+    private PlantingGuideWindow plantingWindow = null!;
+    private sealed class PlantingGuideWindow : Window
+    {
+        private readonly Plugin plugin;
+        public PlantingGuideWindow(Plugin plugin) : base("Planting guide###EquinoxPlanting")
+        {
+            this.plugin = plugin;
+            Size = new Vector2(720, 540);
+            SizeCondition = ImGuiCond.FirstUseEver;
+            SizeConstraints = new WindowSizeConstraints { MinimumSize = new Vector2(360, 280), MaximumSize = new Vector2(float.MaxValue) };
+            AllowPinning = true;
+            AllowBackgroundBlur = true;
+        }
+        public override void Draw() => plugin.DrawGardenPlans();
+    }
     private string? plantingHouseId;
     private int plantingBatch = 1;
     private string? previousPlantingHouse;
@@ -12,7 +27,7 @@ public sealed partial class Plugin
         nextRosterRead = default;
         plantingHouseId = config.SyncEnabled && config.PairingKey.Length == 64 ? SharedGardenLocation.Match(currentAddress, GardenPlanSources()) : null;
         if (plantingHouseId is null) { Chat.Print("[Equinox] /planting is available only at an identified paired house."); return; }
-        visible = true; requestedTab = "gardens";
+        plantingWindow.IsOpen = true;
     }
     private SharedGardenPlan[] GardenPlanSources()
     {

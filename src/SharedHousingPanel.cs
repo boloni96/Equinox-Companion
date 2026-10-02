@@ -22,7 +22,7 @@ public sealed partial class Plugin
             if (rosterTask.IsFaulted) errorJournal.Record("shared-roster", "Shared roster task failed.", exceptionType: rosterTask.Exception?.GetBaseException().GetType().Name);
             rosterTask = null;
         }
-        if ((!visible && !config.RefreshSharedInBackground) || !config.SyncEnabled || config.PairingKey.Length != 64 || rosterTask is not null || now < nextRosterRead) return;
+        if ((!visible && plantingWindow?.IsOpen != true && !config.RefreshSharedInBackground) || !config.SyncEnabled || config.PairingKey.Length != 64 || rosterTask is not null || now < nextRosterRead) return;
         nextRosterRead = now.AddSeconds(15);
         rosterTaskKey = config.PairingKey;
         rosterTask = sync.ReadRoster(rosterTaskKey, config.SharedRoster?.Revision);
