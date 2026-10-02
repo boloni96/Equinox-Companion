@@ -21,3 +21,7 @@ See [RELEASE-NOTES.md](RELEASE-NOTES.md) for setup, changes, limitations and liv
 Private journal exports, pairing keys and diagnostic recordings must not be committed to this repository.
 
 Company Profile support requires Journal V7.11.11. Deploy and save the website first, then refresh shared profiles in Companion.
+
+
+### Fashion Report picture window
+Use `/fashion` to open the current V1 picture inside the game. Click the picture to expand or shrink it. A clickable browser link is also printed in local chat. Refresh downloads the current image; Open in browser is optional. `/equinox fashion` works if another plugin owns `/fashion`. The shortcut never marks the task complete. Downloads happen asynchronously on demand, with an in-memory image reused for 15 minutes and automatic refresh every 15 minutes while the picture window is open. Closing the window does not interrupt character sync.

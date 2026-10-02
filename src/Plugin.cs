@@ -158,7 +158,11 @@ public sealed partial class Plugin : IDalamudPlugin
         catch (Exception ex) { errorJournal.Record("plugin", "Fashion observer unavailable", exceptionType: ex.GetType().Name); }
         if (config.TrackGardens) { callbackHook?.Enable(); plantHook?.Enable(); }
         Commands.AddHandler("/equinox", new CommandInfo(OnCommand) { HelpMessage = "Open Equinox Companion, shared profiles, housing and settings." });
+        fashionBrowserLink = Chat.AddChatLinkHandler(10513, (_, _) => OpenFashionBrowser());
+        fashionCommandRegistered = Commands.AddHandler("/fashion", new CommandInfo(OnFashionCommand) { HelpMessage = "Open the current Fashion Report V1 picture in game." });
+        if (!fashionCommandRegistered) Log.Warning("/fashion is already registered by another plugin. Use /equinox fashion instead.");
         mainWindow = new CompanionWindow(this); windows.AddWindow(mainWindow);
+        fashionWindow = new FashionReportWindow(); windows.AddWindow(fashionWindow);
         Pi.UiBuilder.Draw += Draw;
         Pi.UiBuilder.OpenMainUi += Open;
         Pi.UiBuilder.OpenConfigUi += Open;
@@ -169,7 +173,26 @@ public sealed partial class Plugin : IDalamudPlugin
     }
 
     private void Open() => visible = true;
-    private void OnCommand(string command, string args) => visible = !visible;
+    private readonly bool fashionCommandRegistered;
+    private readonly Dalamud.Game.Text.SeStringHandling.Payloads.DalamudLinkPayload fashionBrowserLink;
+    private void OnCommand(string command, string args)
+    {
+        if (args.Trim().Equals("fashion", StringComparison.OrdinalIgnoreCase)) OnFashionCommand(command, args);
+        else visible = !visible;
+    }
+    private void OnFashionCommand(string command, string args)
+    {
+        fashionWindow.OpenReport();
+        Chat.Print(new Dalamud.Game.Text.SeStringHandling.SeStringBuilder()
+            .AddText("[Equinox] ").Add(fashionBrowserLink).AddUiForeground(45)
+            .AddText("Click here to open Fashion Report in your browser")
+            .AddUiForegroundOff().Add(Dalamud.Game.Text.SeStringHandling.Payloads.RawPayload.LinkTerminator).Build());
+    }
+    private static void OpenFashionBrowser()
+    {
+        try { Dalamud.Utility.Util.OpenLink("https://fashionreportxiv.com/hint.png?equinox=" + DateTimeOffset.UtcNow.ToUnixTimeSeconds()); }
+        catch (Exception ex) { Log.Error(ex, "Could not open Fashion Report in the browser."); Chat.PrintError("[Equinox] Could not open the browser. Visit https://fashionreportxiv.com/hint.png"); }
+    }
 
     private Actor ReadActor() => new(Player.ContentId.ToString(CultureInfo.InvariantCulture),
         Player.CharacterName, Player.HomeWorld.RowId, Player.CurrentWorld.RowId, WorldName(Player.HomeWorld.RowId), WorldName(Player.CurrentWorld.RowId));
@@ -851,8 +874,11 @@ public sealed partial class Plugin : IDalamudPlugin
         Framework.Update -= Update;
         Pi.UiBuilder.Draw -= Draw;
         windows.RemoveAllWindows();
+        fashionWindow.Dispose();
         Pi.UiBuilder.OpenMainUi -= Open;
         Pi.UiBuilder.OpenConfigUi -= Open;
         Commands.RemoveHandler("/equinox");
+        if (fashionCommandRegistered) Commands.RemoveHandler("/fashion");
+        Chat.RemoveChatLinkHandler(10513);
     }
 }

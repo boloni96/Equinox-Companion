@@ -1,3 +1,9 @@
+# Companion 0.5.1.3 — Fashion picture window
+
+`/fashion` opens the current V1 report inside the game and prints a clickable browser link in local chat. Click the image to expand/shrink; resize, pin, refresh, or open in browser. Week/theme are read from Fashion Report XIV metadata. Refreshes every 15 minutes while open and when reopening a stale picture. Downloads run asynchronously; previous image retained if refresh fails; textures released on replacement/unload. `/equinox fashion` is the fallback if another plugin owns `/fashion`. Does not mark Fashion complete. Published through the normal repo.json installer feed; user will test native behavior in game.
+
+Local compilation passed. Actual game rendering, click sizing and chat link still require testing in Dalamud.
+
 # Companion 0.5.1.2 — Company Profile sync
 
 Reads the separate Company Profile window opened from an estate placard, as well as the existing FC Members source. Sends master, rank, member count, founding date, slogan, Grand Company, activity, focus, recruitment and estate name when observed. Matches a viewed profile to a recent estate placard without assigning the visiting character FC membership. Preserves unsigned 64-bit FC/Lodestone identity.
