@@ -118,7 +118,7 @@ public sealed partial class Plugin : IDalamudPlugin
             .Select(h => new SyncEvent(h.EventId, h.Kind, h.ObservedAt, WithWorldNames(h.Actor), WithAddressNames(h.Address)))
             .Concat(config.Tending.Where(t => !sent.Contains(t.EventId)).Select(t => new SyncEvent(t.EventId, "garden.tended", t.ConfirmedAt, WithWorldNames(t.Actor), WithAddressNames(t.Address), t.Patch, t.Bed)))
             .Concat(config.Planting.Where(t => !sent.Contains(t.EventId)).Select(t => new SyncEvent(t.EventId, "garden.planted", t.ConfirmedAt, WithWorldNames(t.Actor), WithAddressNames(t.Address), t.Patch, t.Bed, t.Plant)))
-            .Concat(config.Discoveries.Where(e => !sent.Contains(e.Id) && (e.Kind is "garden.ready" or "garden.observed" or "garden.unmapped" or "garden.empty" ? config.TrackGardens : e.Kind == "character.updated" ? config.SyncCharacterDetails : e.Kind == "collection.observed" ? config.SyncCollections : e.Kind is "fashion.observed" or "submarines.observed" ? config.SyncActivities : config.SyncHouseDetails)))
+            .Concat(config.Discoveries.Where(e => !sent.Contains(e.Id) && (e.Kind is "garden.ready" or "garden.observed" or "garden.unmapped" or "garden.empty" ? config.TrackGardens : e.Kind == "character.updated" ? config.SyncCharacterDetails : e.Kind is "collection.observed" or "storage.observed" ? config.SyncCollections : e.Kind is "fashion.observed" or "submarines.observed" ? config.SyncActivities : config.SyncHouseDetails)))
             .Where(e => !SyncValidation.SupersededIncompleteCharacter(e, config.Discoveries, now))
             .OrderBy(e => e.At).ToArray();
         var held = pending.Where(e => !SyncValidation.CanSend(e, now)).ToArray();
@@ -216,6 +216,7 @@ public sealed partial class Plugin : IDalamudPlugin
             nextDiscovery = now.AddSeconds(5);
             ObserveSafely("details", () => ObserveDetails(now));
             ObserveSafely("collections", () => ObserveCollections(now));
+            ObserveSafely("storage", () => ObserveStorage(now));
             ObserveSafely("voyages", () => ObserveActivities(now));
             ObserveSafely("fashion", DrainFashionObservations);
         }
@@ -472,11 +473,10 @@ public sealed partial class Plugin : IDalamudPlugin
     private void KeepDiscovery(SyncEvent e)
     {
         if (!SyncValidation.CanSend(e, DateTimeOffset.UtcNow)) return;
-        var last = config.Discoveries.LastOrDefault(x => x.Kind == e.Kind && x.Actor.ContentId == e.Actor.ContentId && x.Address?.HouseId == e.Address?.HouseId && x.Patch == e.Patch && x.Bed == e.Bed && x.Collection?.Category == e.Collection?.Category && x.GardenTarget?.Argument == e.GardenTarget?.Argument);
-        if (last is not null && (!(e.Kind is "garden.empty" or "garden.ready" or "garden.observed") || e.At - last.At < TimeSpan.FromSeconds(2)) && !(e.GardenTarget is not null && e.At-last.At > TimeSpan.FromDays(30)) && !(e.Kind is "garden.ready" or "garden.observed" or "garden.empty" && config.Planting.Any(p => p.Actor.ContentId == e.Actor.ContentId && p.Address.HouseId == e.Address?.HouseId && p.Patch == e.Patch && p.Bed == e.Bed && p.ConfirmedAt > last.At)) && JsonSerializer.Serialize(new { last.Actor, last.Address, last.House, last.Character, last.Crop, last.Collection, last.Fashion, last.Voyage, last.GardenTarget }) == JsonSerializer.Serialize(new { e.Actor, e.Address, e.House, e.Character, e.Crop, e.Collection, e.Fashion, e.Voyage, e.GardenTarget })) return;
+        var last = config.Discoveries.LastOrDefault(x => x.Kind == e.Kind && x.Actor.ContentId == e.Actor.ContentId && x.Address?.HouseId == e.Address?.HouseId && x.Patch == e.Patch && x.Bed == e.Bed && x.Collection?.Category == e.Collection?.Category && x.Storage?.Key == e.Storage?.Key && x.GardenTarget?.Argument == e.GardenTarget?.Argument);
+        if (last is not null && (!(e.Kind is "garden.empty" or "garden.ready" or "garden.observed") || e.At - last.At < TimeSpan.FromSeconds(2)) && !(e.GardenTarget is not null && e.At-last.At > TimeSpan.FromDays(30)) && !(e.Kind is "garden.ready" or "garden.observed" or "garden.empty" && config.Planting.Any(p => p.Actor.ContentId == e.Actor.ContentId && p.Address.HouseId == e.Address?.HouseId && p.Patch == e.Patch && p.Bed == e.Bed && p.ConfirmedAt > last.At)) && JsonSerializer.Serialize(new { last.Actor, last.Address, last.House, last.Character, last.Crop, last.Collection, last.Fashion, last.Voyage, last.GardenTarget, last.Storage }) == JsonSerializer.Serialize(new { e.Actor, e.Address, e.House, e.Character, e.Crop, e.Collection, e.Fashion, e.Voyage, e.GardenTarget, e.Storage })) return;
         config.Discoveries.Add(e);
-
-        Pi.SavePluginConfig(config);
+        if(collectingStorage)storageChanged=true;else Pi.SavePluginConfig(config);
     }
 
     private unsafe void ObserveDetails(DateTimeOffset now)
@@ -694,8 +694,10 @@ public sealed partial class Plugin : IDalamudPlugin
     {
         var icon = Textures.GetFromFile(System.IO.Path.Combine(Pi.AssemblyLocation.DirectoryName!, "icon.png")).GetWrapOrDefault();
         if (icon is not null) { ImGui.Image(icon.Handle, new Vector2(40, 40)); ImGui.SameLine(); }
+            ImGui.BeginGroup();
             ImGui.TextDisabled($"Equinox Companion v{typeof(Plugin).Assembly.GetName().Version}");
             DrawSharedStatus();
+            ImGui.EndGroup();
             if (ImGui.BeginTabBar("CompanionSections", ImGuiTabBarFlags.Reorderable))
             {
                 if (ImGui.BeginTabItem("Tests"))
@@ -708,7 +710,7 @@ public sealed partial class Plugin : IDalamudPlugin
                     DrawHousing();
                     ImGui.EndTabItem();
                 }
-                if (ImGui.BeginTabItem("Collections & timers")) { DrawCollectionTimers(); ImGui.EndTabItem(); }
+                if (ImGui.BeginTabItem("Submarines")) { DrawSubmarines(); ImGui.EndTabItem(); }
                 if (ImGui.BeginTabItem("Settings"))
                 {
                     DrawSettings();

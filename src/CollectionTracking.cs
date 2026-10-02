@@ -102,28 +102,27 @@ public sealed partial class Plugin
         if (subs.Count > 0) KeepDiscovery(new(Guid.NewGuid().ToString("N"), "submarines.observed", now, actor, null, Voyage: new(fc.Id,subs.ToArray())));
     }
 
-    private void DrawCollectionTimers()
+    private void DrawSubmarines()
     {
-        ImGui.TextWrapped(collectionStatus);
-        ImGui.TextWrapped("Collections are observed while logged in. Open the voyage panel to refresh submarine returns; speak to Masked Rose to refresh Fashion Report.");
-        foreach(var fc in config.SharedRoster?.Voyages ?? [])
+        ImGui.TextWrapped("Open the FC workshop voyage panel to refresh timers. Paired observations are shared automatically.");
+        var observations = new List<SharedVoyage>(config.SharedRoster?.Voyages ?? []);
+        foreach (var e in config.Discoveries.Where(x => x.Voyage is not null))
         {
-            ImGui.Separator(); ImGui.TextUnformatted($"{fc.FcName} · shared observation {fc.At.LocalDateTime:g}");
-            foreach(var s in fc.Submarines ?? [])
-            {
-                var left=DateTimeOffset.FromUnixTimeSeconds(s.ReturnTime)-DateTimeOffset.UtcNow;
-                ImGui.TextUnformatted($"{s.Name} · rank {s.Rank} · {(s.ReturnTime==0?"No voyage recorded":left<=TimeSpan.Zero?"Return due":$"{(int)left.TotalHours}h {left.Minutes}m remaining")}");
-            }
+            var fc = config.Discoveries.LastOrDefault(x => x.Character?.FreeCompany?.Id == e.Voyage!.FcId)?.Character?.FreeCompany;
+            observations.Add(new(e.Voyage!.FcId, fc?.Name ?? "Free Company", e.At, e.Voyage.Submarines));
         }
-        foreach (var e in config.Discoveries.Where(x=>x.Voyage is not null).GroupBy(x=>x.Voyage!.FcId).Select(g=>g.MaxBy(x=>x.At)!))
+        foreach (var group in observations.GroupBy(x => x.FcId))
         {
-            ImGui.Separator(); ImGui.TextUnformatted($"FC {e.Voyage!.FcId} · observed {e.At.LocalDateTime:g}");
-            foreach(var s in e.Voyage.Submarines)
+            var latest = group.MaxBy(x => x.At)!;
+            ImGui.Separator();
+            ImGui.TextUnformatted($"{latest.FcName} · observed {latest.At.LocalDateTime:g}");
+            foreach (var s in latest.Submarines)
             {
-                var remaining=DateTimeOffset.FromUnixTimeSeconds(s.ReturnTime)-DateTimeOffset.UtcNow;
-                var label=s.ReturnTime==0?"No voyage recorded":remaining<=TimeSpan.Zero?"Return due — confirm in workshop":$"Returns in {(int)remaining.TotalHours}h {remaining.Minutes}m";
+                var remaining = DateTimeOffset.FromUnixTimeSeconds(s.ReturnTime) - DateTimeOffset.UtcNow;
+                var label = s.ReturnTime == 0 ? "No voyage recorded" : remaining <= TimeSpan.Zero ? "Return due — confirm in workshop" : $"Returns in {(int)remaining.TotalHours}h {remaining.Minutes}m";
                 ImGui.TextUnformatted($"{s.Name} · rank {s.Rank} · {label}");
             }
         }
+        if (observations.Count == 0) ImGui.TextWrapped("No submarines observed yet.");
     }
 }
