@@ -11,7 +11,7 @@ public static class TabOrderPolicy
         }
         foreach(var id in ids.Where(id=>!order.Contains(id)))
         {
-            var before=id.StartsWith("person:")?order.IndexOf("submarines"):order.IndexOf("settings");
+            var before=id.StartsWith("person:")||id=="planting"?order.IndexOf("submarines"):order.IndexOf("settings");
             if(before>=0)order.Insert(before,id);else order.Add(id);
         }
         order.RemoveAll(x=>x=="settings");order.Add("settings");

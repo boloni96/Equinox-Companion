@@ -810,3 +810,47 @@ Check("delayed preharvest ready message cannot restore crop",afterStaleReady.Bed
 var onlyEight=GardenLive.Apply(localDone,[harvestEvents[7]],x=>x);
 Check("harvest bed eight leaves other crops alone",onlyEight.Beds.Take(7).All(b=>b.ActualCrop!="Empty").ToString(),"True");
 Check("duplicate harvest response stays empty",GardenLive.Apply(fullyHarvested,harvestEvents,x=>x).Beds[7].ActualCrop,"Empty");
+
+
+// All-garden overview: ownership grouping and timer presentation reuse observed bed state.
+var overviewHouse=new SharedHouse(livePlan.HouseId,livePlan.GameHouseId,"Private house","Garden house",livePlan.World,livePlan.District,livePlan.Ward,livePlan.Plot,"Small","Owner Example","","",null,false);
+var overviewOwner=new SharedCharacter("overview-owner","Owner Example",livePlan.World,"","","Main",[overviewHouse]);
+var overviewTenant=overviewOwner with {Id="overview-tenant",Name="Tenant Example"};
+var overviewPeople=new[]{new SharedPerson("tenant-profile","Tenant profile",[overviewTenant]),new SharedPerson("owner-profile","Owner profile",[overviewOwner])};
+var overviewGroups=GardenOverview.Houses(overviewPeople,[localDone]);
+Check("overview shared estate counted once",overviewGroups.Length.ToString(),"1");
+Check("overview estate grouped under actual owner",overviewGroups[0].Character?.Id,"overview-owner");
+Check("overview both linked gardeners retained",overviewGroups[0].LinkedCharacters.Length.ToString(),"2");
+Check("overview household grouped under owners person",overviewGroups[0].Person?.Id,"owner-profile");
+Check("overview missing character does not lose garden",GardenOverview.Houses([],[localDone]).Length.ToString(),"1");
+var overviewFc=overviewHouse with {Type="Free Company house",OwnerName="Master Example",FcId="fc-overview",FcName="Garden FC"};
+var overviewMember=overviewTenant with {Houses=[overviewFc],FcId="fc-overview"};
+var overviewMaster=overviewOwner with {Name="Master Example",Houses=[overviewFc],FcId="fc-overview"};
+var fcGroups=GardenOverview.Houses([new("p","Profile",[overviewMember,overviewMaster])],[localDone]);
+Check("overview FC shown once",fcGroups.Length.ToString(),"1");
+Check("overview FC master preferred",fcGroups[0].Character?.Name,"Master Example");
+var ovNow=liveAt.AddMinutes(11);
+var ovFresh=GardenOverview.Bed(localDone,localDone.Beds[0],ovNow);
+Check("overview freshly planted permanent crop needs care",ovFresh.Care,"First tend due");
+Check("overview fresh permanent crop counted due",ovFresh.TendDue.ToString(),"True");
+var ovCared=GardenOverview.Bed(finallyTended,finallyTended.Beds[0],ovNow);
+Check("overview real tend starts twelve hour countdown",ovCared.Care,"In 12h 0m");
+Check("overview due returns at twelve hours",GardenOverview.Bed(finallyTended,finallyTended.Beds[0],ovNow.AddHours(12)).Care,"Due now");
+Check("overview known empty has no timer",GardenOverview.Bed(fullyHarvested,fullyHarvested.Beds[0],ovNow.AddMinutes(15)).Care,"—");
+Check("overview dead confirmed has removal guidance",GardenOverview.Bed(localDone,localDone.Beds[0] with {Ready=false,DeadConfirmedAt=ovNow},ovNow).Harvest,"Remove crop");
+var ovReady=GardenOverview.Bed(localDone,localDone.Beds[0] with {Ready=true},ovNow);
+Check("overview ready crop has no tending",ovReady.Care,"Not needed");
+Check("overview ready crop shows game confirmed result",ovReady.Harvest,"Ready");
+Check("overview kept mature stays distinct",GardenOverview.Bed(localDone,localDone.Beds[0] with {Ready=true,KeepMature=true},ovNow).Harvest,"Kept mature");
+Check("overview temporary starter suppresses care",GardenOverview.Bed(newlyPlanted,newlyPlanted.Beds[0],ovNow).Care,"Not needed");
+Check("overview final step nine restores care",GardenOverview.Bed(localDone,localDone.Beds[0],ovNow).TendDue.ToString(),"True");
+var ovUnknown=GardenOverview.Bed(livePlan,livePlan.Beds[0] with {ActualCrop="Not synced yet",Planted=null,Watered=null,Ready=false,NextTend=null,HarvestAt=null},ovNow);
+Check("overview unknown never becomes empty",ovUnknown.Status,"Awaiting sync");
+Check("overview predicted maturity is not confirmed ready",GardenOverview.Bed(localDone,localDone.Beds[0] with {Watered=ovNow,HarvestAt=ovNow},ovNow).Harvest,"Check maturity");
+Check("overview countdown days",GardenOverview.Remaining(ovNow.AddDays(2).AddHours(3).AddMinutes(4),ovNow),"2d 3h 4m");
+Check("overview no negative countdown",GardenOverview.Remaining(ovNow.AddSeconds(-1),ovNow),"now");
+Check("overview empty summary remains honest",GardenOverview.Summary([fullyHarvested],ovNow.AddMinutes(15)),"8 empty");
+Check("overview no gardens does not throw",GardenOverview.Summary([],ovNow),"No care action due");
+var plantingTabOrder=TabOrderPolicy.Reconcile(["housing","person:a","submarines","settings"],["housing","person:a","planting","submarines","settings"],false);
+Check("new planting tab precedes submarines",string.Join("|",plantingTabOrder),"housing|person:a|planting|submarines|settings");
+Check("planting tab custom order persists",string.Join("|",TabOrderPolicy.Reconcile(["planting","housing","person:a","submarines","settings"],["housing","person:a","planting","submarines","settings"],false)),"planting|housing|person:a|submarines|settings");
