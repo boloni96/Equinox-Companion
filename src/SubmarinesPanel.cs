@@ -20,6 +20,9 @@ public sealed partial class Plugin
         }
         var direct=observations.GroupBy(v=>v.FcId).ToDictionary(g=>g.Key,g=>g.MaxBy(v=>v.At)!);
         var caches=CachedSubmarineRecords().ToDictionary(c=>c.CharacterId);
+        var supplies=SubmarineSupplyRecords();
+        if(ImGui.SmallButton("Refresh submarine data")){autoRetainerForceRead=true;autoRetainerCharacters.Clear();nextAutoRetainerRead=default;nextRosterRead=default;}
+        if(ImGui.IsItemHovered())ImGui.SetTooltip("Read available cached records and refresh the paired Journal. Offline characters retain their last recorded values.");
         var represented=new HashSet<string>();var shown=0;
         var people=config.SharedRoster?.People??[];
         int PersonRank(SharedPerson p){var i=config.TabOrder.IndexOf("person:"+p.Id);return i<0?int.MaxValue:i;}
@@ -29,14 +32,14 @@ public sealed partial class Plugin
         {
             var characters=OrderedSharedCharacters(person);
             var accounts=characters.GroupBy(SharedCharacterGrouping.AccountKey).ToArray();
-            var hasData=characters.Any(c=>c.FcMember!=false&&direct.ContainsKey(c.FcId)||caches.ContainsKey(c.Id));
+            var hasData=characters.Any(c=>c.FcMember!=false&&direct.ContainsKey(c.FcId)||caches.ContainsKey(c.Id)||supplies.ContainsKey(c.Id));
             if(!ImGui.BeginTabItem(person.Name.Replace("##","")+"###submarine-person-"+person.Id))continue;
             ImGui.PushID(person.Id);
             ImGui.BeginChild("submarine-person-scroll",System.Numerics.Vector2.Zero);
-            if(!hasData)ImGui.TextWrapped("No submarines observed for this person yet.");
+            if(!hasData)ImGui.TextWrapped("No submarine or supply records for this person yet.");
             foreach(var account in accounts)
             {
-                var rows=account.Where(c=>c.FcMember!=false&&direct.ContainsKey(c.FcId)||caches.ContainsKey(c.Id)).OrderBy(c=>Array.IndexOf(new[]{"Regulars","Floaters","Empty","Pending sync"},SharedCharacterGrouping.Group(c))).ToArray();
+                var rows=account.Where(c=>c.FcMember!=false&&direct.ContainsKey(c.FcId)||caches.ContainsKey(c.Id)||supplies.ContainsKey(c.Id)).OrderBy(c=>Array.IndexOf(new[]{"Regulars","Floaters","Empty","Pending sync"},SharedCharacterGrouping.Group(c))).ToArray();
                 if(rows.Length==0)continue;
                 foreach(var c in rows)if(c.FcMember!=false&&direct.ContainsKey(c.FcId))represented.Add(c.FcId);
                 shown+=rows.Length;
@@ -50,14 +53,22 @@ public sealed partial class Plugin
                 {
                     ImGui.PushID(c.Id);
                     ImGui.SetNextItemOpen(false,ImGuiCond.Once);
-                    if(ImGui.TreeNode($"{c.Name} · {c.World}###character"))
+                    caches.TryGetValue(c.Id,out var cache);direct.TryGetValue(c.FcId,out var observed);if(c.FcMember==false)observed=null;
+                    supplies.TryGetValue(c.Id,out var supplyRecord);var supply=SubmarineSupplyStatus.Select(c.FcId,supplyRecord,cache);
+                    var returnTimes=(observed?.Submarines.Select(s=>s.ReturnTime)??cache?.Data.Submarines.Select(s=>s.ReturnTime)??[]).Where(t=>t>0).ToArray();
+                    var timer=returnTimes.Length>0?" · "+VoyageTimer(returnTimes.Min()):"";
+                    var expanded=ImGui.TreeNode($"{c.Name} · {c.World}{timer}###character");
+                    if(ImGui.IsItemHovered())ImGui.SetTooltip(SubmarineSupplyStatus.Summary(supply)+(supply is null?"":"\n"+SubmarineSupplyStatus.Freshness(supply,DateTimeOffset.UtcNow)));
+                    if(expanded)
                     {
-                        caches.TryGetValue(c.Id,out var cache);direct.TryGetValue(c.FcId,out var observed);if(c.FcMember==false)observed=null;
+                        ImGui.TextWrapped(SubmarineSupplyStatus.Summary(supply));
+                        if(supply is not null)ImGui.TextWrapped(SubmarineSupplyStatus.Freshness(supply,DateTimeOffset.UtcNow));
                         ImGui.TextWrapped((observed?.FcName??cache?.FcName??"Free Company")+" · FC fleet");
                         if(cache is not null)
                         {
                             var v=cache.Data;
-                            ImGui.TextWrapped($"Carried supplies: {v.Ceruleum?.ToString()??"unknown"} ceruleum tanks · {v.RepairKits?.ToString()??"unknown"} repair kits · {v.Slots?.ToString()??"unknown"} submarine slots");
+                            ImGui.TextWrapped($"Submarine capacity: {v.Slots?.ToString()??"unknown"} slots");
+                            if(supply?.Observed==true)ImGui.TextWrapped($"Cached supplies: {v.Ceruleum?.ToString()??"?"} tanks · {v.RepairKits?.ToString()??"?"} repairs · {v.InventorySpace?.ToString()??"?"} free inventory slots");
                             ImGui.TextDisabled($"Cache imported {cache.ImportedAt.LocalDateTime:g}; game observation time unknown.");
                         }
                         if(observed is not null)ImGui.TextDisabled($"Workshop observed {observed.At.LocalDateTime:g}");

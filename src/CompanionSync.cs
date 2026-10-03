@@ -4,7 +4,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 namespace EquinoxCompanion;
 
-public sealed record SyncEvent(string Id, string Kind, DateTimeOffset At, Actor Actor, Address? Address, int? Patch = null, int? Bed = null, PlantDetails? Plant = null, HouseDetails? House = null, CharacterDetails? Character = null, CropDetails? Crop = null, CollectionDetails? Collection = null, FashionDetails? Fashion = null, VoyageDetails? Voyage = null, GardenTargetDetails? GardenTarget = null, StorageDetails? Storage = null, FreeCompanyDetails? Company = null, CachedVoyage? CachedVoyage = null, GardenPlanChange? PlanEdit = null);
+public sealed record SyncEvent(string Id, string Kind, DateTimeOffset At, Actor Actor, Address? Address, int? Patch = null, int? Bed = null, PlantDetails? Plant = null, HouseDetails? House = null, CharacterDetails? Character = null, CropDetails? Crop = null, CollectionDetails? Collection = null, FashionDetails? Fashion = null, VoyageDetails? Voyage = null, GardenTargetDetails? GardenTarget = null, StorageDetails? Storage = null, FreeCompanyDetails? Company = null, CachedVoyage? CachedVoyage = null, GardenPlanChange? PlanEdit = null, SubmarineSupplies? Supplies = null);
 public sealed record GardenTargetDetails(uint Argument, float X, float Y, float Z);
 public sealed record StorageDetails(string Key, string Name, uint[] Items);
 public sealed record CollectionDetails(string Category, uint[] Known, uint[] Unlocked, uint[] Obtained);
@@ -70,6 +70,8 @@ public sealed class CompanionSync : IDisposable
                 return new(null, "Invalid garden plan response; showing saved copy.");
             if (roster.GardenCare is { Length: > 1000 } || roster.GardenCare?.Any(g => g is null || g.CharacterIds is null || g.Beds is null || g.Beds.Length > 8 || g.Beds.Any(b => b is null || b.Bed < 1 || b.Bed > 8)) == true)
                 return new(null, "Invalid garden care response; showing saved copy.");
+            if(roster.SubmarineSupplies is {Length:>500} || roster.SubmarineSupplies?.Any(s=>s is null||string.IsNullOrWhiteSpace(s.CharacterId)||s.ObservedAt.Year<2020||s.ObservedAt>DateTimeOffset.UtcNow.AddMinutes(5)||!SubmarineSupplyStatus.Valid(s.Data))==true)
+                return new(null,"Invalid submarine supply response; showing saved copy.");
             rosterETag = response.Headers.ETag?.ToString();
             rosterETagKey = key;
             return new(roster, "Shared profiles updated.");

@@ -10,6 +10,7 @@ public sealed class AutoRetainerCharacter
     public ulong FCID { get; set; }
     public int? Ceruleum { get; set; }
     public int? RepairKits { get; set; }
+    public int? InventorySpace { get; set; }
     public int? NumSubSlots { get; set; }
     public AutoRetainerVessel[] OfflineSubmarineData { get; set; } = [];
     public Dictionary<string, AutoRetainerVesselDetails> AdditionalSubmarineData { get; set; } = [];
@@ -31,7 +32,7 @@ public sealed class AutoRetainerVesselDetails
     public byte[] Points { get; set; } = [];
 }
 public sealed record CachedSubmarine(string Name, int Rank, long ReturnTime, int[] PartItems, string[] PartNames, int[] Route, uint CurrentExp, uint NextLevelExp);
-public sealed record CachedVoyage(string FcId, string Source, int? Ceruleum, int? RepairKits, int? Slots, CachedSubmarine[] Submarines);
+public sealed record CachedVoyage(string FcId, string Source, int? Ceruleum, int? RepairKits, int? Slots, CachedSubmarine[] Submarines, int? InventorySpace = null);
 public sealed record SharedCachedVoyage(string CharacterId, string CharacterName, string World, string FcName, DateTimeOffset ImportedAt, CachedVoyage Data);
 public static class AutoRetainerCache
 {
@@ -48,13 +49,13 @@ public static class AutoRetainerCache
             int[] parts=d is null?[]:[d.Part1,d.Part2,d.Part3,d.Part4];
             return new CachedSubmarine(s.Name,d?.Level??0,s.ReturnTime,parts,parts.Select(p=>p>0?itemName((uint)p):"").ToArray(),d?.Points?.Select(p=>(int)p).ToArray()??[],d?.CurrentExp??0,d?.NextLevelExp??0);
         }).ToArray();
-        return new(source.FCID.ToString(),"autoretainer",source.Ceruleum,source.RepairKits,source.NumSubSlots,subs);
+        return new(source.FCID.ToString(),"autoretainer",source.Ceruleum,source.RepairKits,source.NumSubSlots,subs,source.InventorySpace);
     }
     public static bool Valid(CachedVoyage? v, DateTimeOffset now)
     {
         static bool Text(string? s)=>!string.IsNullOrWhiteSpace(s)&&s.Length<=100&&!s.Any(char.IsControl);
         static bool Count(int? n)=>n is null or >=0 and <=10000000;
-        return v is not null && System.Text.RegularExpressions.Regex.IsMatch(v.FcId??"",@"^[1-9]\d{0,19}$") && v.Source=="autoretainer" && Count(v.Ceruleum)&&Count(v.RepairKits)&&v.Slots is null or >=0 and <=4 &&
+        return v is not null && System.Text.RegularExpressions.Regex.IsMatch(v.FcId??"",@"^[1-9]\d{0,19}$") && v.Source=="autoretainer" && Count(v.Ceruleum)&&Count(v.RepairKits)&&v.InventorySpace is null or >=0 and <=140 &&v.Slots is null or >=0 and <=4 &&
             v.Submarines is {Length:<=4} && v.Submarines.Select(s=>s?.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count()==v.Submarines.Length && v.Submarines.All(s=>s is not null&&Text(s.Name)&&s.Rank is >=0 and <=200&&s.ReturnTime>=0&&s.ReturnTime<=now.AddDays(30).ToUnixTimeSeconds()&&s.PartItems is {Length:0 or 4}&&s.PartItems.All(p=>p is >=0 and <1000000)&&s.PartNames is not null&&s.PartNames.Length==s.PartItems.Length&&s.PartNames.All(p=>p is not null&&p.Length<=100&&!p.Any(char.IsControl))&&s.Route is {Length:<=5}&&s.Route.All(p=>p is >=0 and <=255));
     }
 }

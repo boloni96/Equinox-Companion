@@ -5,6 +5,7 @@ public sealed partial class Plugin
     private DateTimeOffset nextAutoRetainerRead;
     private Queue<ulong> autoRetainerCharacters = new();
     private int autoRetainerMatched;
+    private bool autoRetainerForceRead=true;
     private string autoRetainerStatus = "Waiting for submarine data and the paired character list.";
     private void UpdateAutoRetainer(DateTimeOffset now)
     {
@@ -32,18 +33,18 @@ public sealed partial class Plugin
                     if(AutoRetainerCache.Valid(cache,now))
                     {
                         var actor=new Actor(cid.ToString(),match.Name,world,world,match.World,match.World);
-                        KeepDiscovery(new(Guid.NewGuid().ToString("N"),"submarines.cached",now,actor,null,CachedVoyage:cache));
+                        KeepDiscovery(new(Guid.NewGuid().ToString("N"),"submarines.cached",now,actor,null,CachedVoyage:cache),autoRetainerForceRead);
                         autoRetainerMatched++;
                     }
                 }
             }
             autoRetainerStatus=$"Submarine data: {autoRetainerMatched} matched character record(s); {autoRetainerCharacters.Count} remaining.";
-            if(autoRetainerCharacters.Count==0){nextAutoRetainerRead=now.AddMinutes(1);autoRetainerStatus=$"Submarine data: {autoRetainerMatched} matched character record(s). Last scan {now.LocalDateTime:t}.";}
+            if(autoRetainerCharacters.Count==0){autoRetainerForceRead=false;nextAutoRetainerRead=now.AddMinutes(1);autoRetainerStatus=$"Submarine data: {autoRetainerMatched} matched character record(s). Last scan {now.LocalDateTime:t}.";}
         }
         catch(Exception ex)
         {
-            autoRetainerCharacters.Clear();nextAutoRetainerRead=now.AddMinutes(1);
-            autoRetainerStatus="Background submarine data is unavailable. Open the workshop voyage panel to refresh direct observations.";
+            nextAutoRetainerRead=autoRetainerCharacters.Count>0?now.AddMilliseconds(100):now.AddMinutes(1);
+            autoRetainerStatus=autoRetainerCharacters.Count>0?"One cached character could not be read; continuing with the remaining characters.":"Background submarine data is unavailable. Open the workshop voyage panel to refresh direct observations.";
             Log.Debug(ex,"Optional AutoRetainer cache read deferred");
         }
     }
@@ -54,7 +55,7 @@ public sealed partial class Plugin
         var records=new List<SharedCachedVoyage>(roster?.CachedVoyages??[]);
         foreach(var e in config.Discoveries.Where(e=>e.CachedVoyage is not null))
         {
-            var matches=chars.Where(c=>c.Name==e.Actor.Name&&c.World==e.Actor.HomeWorldName).Take(2).ToArray();
+            var matches=chars.Where(c=>string.Equals(c.Name,e.Actor.Name,StringComparison.OrdinalIgnoreCase)&&string.Equals(c.World,e.Actor.HomeWorldName,StringComparison.OrdinalIgnoreCase)).Take(2).ToArray();
             var c=matches.Length==1?matches[0]:null;
             if(c is null||c.FcMember==false||c.FcId!=e.CachedVoyage!.FcId)continue;
             var fc=config.Discoveries.LastOrDefault(e=>e.Character?.FreeCompany?.Id==c.FcId)?.Character?.FreeCompany?.Name??c.FcId;

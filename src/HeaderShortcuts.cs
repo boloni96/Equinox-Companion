@@ -15,6 +15,8 @@ public sealed partial class Plugin
         draw.AddLine(a,b,dark,8*scale);draw.AddLine(b,c,dark,8*scale);
         draw.AddLine(a,b,green,5*scale);draw.AddLine(b,c,green,5*scale);
     }
+    private static void DrawFashionBorder(Vector2 at,float size,float opacity=1) =>
+        ImGui.GetWindowDrawList().AddRect(at+new Vector2(1),at+new Vector2(size-1),ImGui.ColorConvertFloat4ToU32(new Vector4(.25f,1,.15f,opacity)),5,ImDrawFlags.None,2);
     private void DrawHeaderShortcut(bool fashion, float size)
     {
         var name = fashion ? "Fashion Report" : "Planting";
@@ -33,7 +35,7 @@ public sealed partial class Plugin
             draw.AddLine(at + new Vector2(32,29)*scale, at + new Vector2(12,45)*scale, gold, 2);
             draw.AddLine(at + new Vector2(12,45)*scale, at + new Vector2(52,45)*scale, gold, 2);
             draw.AddLine(at + new Vector2(52,45)*scale, at + new Vector2(32,29)*scale, gold, 2);
-            if(complete)DrawFashionCheck(at,size);
+            if(complete){DrawFashionCheck(at,size);DrawFashionBorder(at,size);}
         }
         else
         {

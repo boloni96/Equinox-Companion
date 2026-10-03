@@ -1004,3 +1004,38 @@ Check("house checked before seven day boundary",HouseShortcutSelection.Checked(o
 Check("house check disappears at seven days",HouseShortcutSelection.Checked(own40 with {LastEntry=updateNow.AddDays(-7)},updateNow).ToString(),"False");
 Check("FC and private check independent",HouseShortcutSelection.Checked(fc40,updateNow).ToString(),"False");
 Check("current week score shown in hover",FashionCompletion.Tooltip(updateActor,[new(Guid.NewGuid().ToString("N"),"fashion.observed",updateNow,updateActor,null,Fashion:new(93,3,1,FashionCompletion.Cycle(updateNow).ToString("O")))],[],updateNow).Contains("93/100").ToString(),"True");
+
+// Supply counts are character inventory, never FC totals or submarine capacity.
+var supplyNow=DateTimeOffset.Parse("2026-10-03T22:00:00Z");
+var liveSupply=new SharedSubmarineSupplies("ar-c",supplyNow,new("987",0,2,37,140));
+var cachedSupply=new SharedCachedVoyage("ar-c","Member","Rafflesia","Empire",supplyNow.AddMinutes(2),arCache with {InventorySpace=90});
+Check("AR imports free inventory space independently of sub slots",AutoRetainerCache.Copy(new AutoRetainerCharacter{FCID=987,NumSubSlots=4,InventorySpace=67},_=>"").InventorySpace.ToString(),"67");
+Check("AR unknown bag space stays unknown",arCache.InventorySpace is null?"unknown":"known","unknown");
+Check("AR impossible bag space rejected",AutoRetainerCache.Valid(arCache with{InventorySpace=141},supplyNow).ToString(),"False");
+Check("valid zero tanks and bounded slots",SubmarineSupplyStatus.Valid(liveSupply.Data).ToString(),"True");
+Check("occupied inventory over capacity rejected",SubmarineSupplyStatus.Valid(liveSupply.Data with{InventorySpace=141}).ToString(),"False");
+Check("negative supplies rejected",SubmarineSupplyStatus.Valid(liveSupply.Data with{RepairKits=-1}).ToString(),"False");
+Check("actual supplies win over newly imported stale cache",SubmarineSupplyStatus.Select("987",liveSupply,cachedSupply)?.Ceruleum.ToString(),"0");
+Check("direct supplies preserve real observation time",SubmarineSupplyStatus.Select("987",liveSupply,cachedSupply)?.At.ToString("O"),supplyNow.ToString("O"));
+Check("cache fallback has no claimed observation",SubmarineSupplyStatus.Select("987",null,cachedSupply)?.Observed.ToString(),"False");
+Check("wrong FC supply excluded",SubmarineSupplyStatus.Select("999",liveSupply,cachedSupply) is null?"excluded":"included","excluded");
+Check("supply cache is visibly undated",SubmarineSupplyStatus.Freshness(SubmarineSupplyStatus.Select("987",null,cachedSupply)!,supplyNow).Contains("observation time unknown").ToString(),"True");
+Check("supply direct stale reading explained",SubmarineSupplyStatus.Freshness(SubmarineSupplyStatus.Select("987",liveSupply,cachedSupply)!,supplyNow.AddDays(2)).Contains("older reading").ToString(),"True");
+var supplyEvent=new SyncEvent(Guid.NewGuid().ToString("N"),"submarines.supplies",supplyNow,fashionActor,null,Supplies:liveSupply.Data);
+Check("supply event valid without estate",SyncValidation.CanSend(supplyEvent,supplyNow).ToString(),"True");
+Check("supply event waits for protocol13",SyncValidation.SupportedByWebsite("submarines.supplies",12).ToString(),"False");
+Check("supply protocol13 accepted",SyncValidation.SupportedByWebsite("submarines.supplies",13).ToString(),"True");
+Check("supply event isolated from estate events",SyncValidation.CanSend(supplyEvent with{Address=address},supplyNow).ToString(),"False");
+var fashionStart=DateTimeOffset.Parse("2026-10-02T08:00:00Z");var fashionEnd=DateTimeOffset.Parse("2026-10-06T08:00:00Z");
+Check("fashion starts exactly Friday08UTC",FashionCompletion.Window(fashionNow).Start.ToString("O"),fashionStart.ToString("O"));
+Check("fashion ends exactly Tuesday08UTC",FashionCompletion.Window(fashionNow).End.ToString("O"),fashionEnd.ToString("O"));
+Check("fashion closed just before judging",FashionCompletion.IsOpen(fashionStart.AddTicks(-1)).ToString(),"False");
+Check("fashion open at judging start",FashionCompletion.IsOpen(fashionStart).ToString(),"True");
+Check("fashion completion remains to final event instant",FashionCompletion.IsComplete(fashionActor,[fashionEvent],[],fashionEnd.AddTicks(-1)).ToString(),"True");
+Check("fashion check and border clear exactly at event end",FashionCompletion.IsComplete(fashionActor,[fashionEvent],[sharedFashion],fashionEnd).ToString(),"False");
+Check("fashion remains unchecked between events",FashionCompletion.IsComplete(fashionActor,[fashionEvent],[sharedFashion],fashionEnd.AddDays(1)).ToString(),"False");
+Check("fashion tooltip includes exact event end",FashionCompletion.Tooltip(fashionActor,[fashionEvent],[],fashionNow).Contains("Event ends:").ToString(),"True");
+Check("closed fashion tooltip explains closure",FashionCompletion.Tooltip(fashionActor,[fashionEvent],[],fashionEnd).Contains("judging is closed").ToString(),"True");
+
+var sharedZero=sharedFashion with{Characters=[sharedFashion.Characters[0] with{FashionCompletedAt=null,FashionScore=0,FashionCycle=FashionCompletion.Cycle(fashionNow),FashionObservedAt=fashionNow}]};
+Check("newer shared incomplete score clears older local check",FashionCompletion.IsComplete(fashionActor,[fashionEvent],[sharedZero],fashionNow).ToString(),"False");

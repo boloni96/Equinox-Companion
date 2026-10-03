@@ -77,3 +77,11 @@ recorded session plus inspected game APIs, before this becomes automatic.
 
 Altoholic was a useful user-provided example. This prototype does not integrate
 with it or claim to reproduce its implementation.
+
+## Companion 0.5.1.41 / Journal V7.11.52 (protocol 13)
+
+`submarines.supplies` is an address-free, paired-character observation with `supplies: {fcId, ceruleum, repairKits, inventorySpace, inventoryCapacity}`. Counts refer only to the four loaded carried bags, never retainers/saddlebags or the FC chest. Supplies are selected by character and confirmed FC, accepted chronologically, and projected to all paired plugins. The live key is character CID + home world.
+
+`submarines.cached.cachedVoyage.inventorySpace` is nullable and separate from `slots` (submarine capacity). An import timestamp is not a game observation. Direct supply records take precedence without deleting the independent cached reading. Offline records remain available across persons and accounts; explicit FC departures suppress the old records.
+
+Fashion completion icons use the current judging window (Friday 08:00 UTC through Tuesday 08:00 UTC, end exclusive). The green border and checkmark use the same predicate. Fashion live projection now retains the current cycle's score event and rejects an older score replacing a newer one.

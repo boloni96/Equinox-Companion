@@ -84,13 +84,14 @@ public sealed partial class Plugin
         if (!config.SyncActivities) return;
         var actor = ReadActor();
         if (!SyncValidation.ActorReady(actor)) return;
+        ObserveSubmarineSupplies(actor,now);
         var manager = HousingManager.Instance();
         if (manager == null || manager->WorkshopTerritory == null || manager->CurrentTerritory == null || !manager->CurrentTerritory->IsLoaded()) return;
         var owned = HousingManager.GetOwnedHouseId(FFXIVClientStructs.FFXIV.Client.Game.EstateType.FreeCompanyEstate);
         var here = manager->WorkshopTerritory->HouseId;
         if (owned.Id == 0 || owned.Id == ulong.MaxValue || here.WorldId != owned.WorldId || here.WardIndex != owned.WardIndex || here.PlotIndex != owned.PlotIndex || here.TerritoryTypeId != owned.TerritoryTypeId) return;
-        var fc = config.Discoveries.LastOrDefault(x=>x.Kind=="character.updated" && x.Actor.ContentId==actor.ContentId)?.Character?.FreeCompany;
-        if (fc is null) return;
+        var fcId = CurrentSubmarineFc(actor);
+        if (fcId is null) return;
         var subs = new List<SubmarineDetails>();
         for (var i=0;i<4;i++)
         {
@@ -99,7 +100,7 @@ public sealed partial class Plugin
             subs.Add(new(i,s.NameString,s.RankId,s.ReturnTime,s.RegisterTime,[s.HullId,s.SternId,s.BowId,s.BridgeId],s.CurrentExplorationPoints.ToArray()));
         }
         // An unloaded panel is not evidence that all vessels have been deleted.
-        if (subs.Count > 0) KeepDiscovery(new(Guid.NewGuid().ToString("N"), "submarines.observed", now, actor, null, Voyage: new(fc.Id,subs.ToArray())));
+        if (subs.Count > 0) KeepDiscovery(new(Guid.NewGuid().ToString("N"), "submarines.observed", now, actor, null, Voyage: new(fcId,subs.ToArray())));
     }
 
 }
