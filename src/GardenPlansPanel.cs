@@ -103,14 +103,10 @@ public sealed partial class Plugin
             draw.PushClipRect(at,at+new Vector2(tile),true);
             draw.AddRectFilled(new Vector2(at.X+captionInset,bedLabelAt.Y-1),at+new Vector2(tile-captionInset,tile-captionInset+1),0xdd201710);
             draw.AddText(bedLabelAt,0xffffffff,label);draw.PopClipRect();
-            // Bed details are attached only to the small plan icon, never the whole bed.
-            var infoSize=tile/4;
-            var infoAt=at+new Vector2(91,7)*tile/128;
-            ImGui.SetCursorScreenPos(infoAt);
-            ImGui.InvisibleButton("Bed information##garden-info-"+n,new Vector2(infoSize));
-            var infoHover=ImGui.IsItemHovered();
-            if(infoHover)draw.AddRect(infoAt,infoAt+new Vector2(infoSize),0xffe6a4c1,3);
-            if(infoHover||ImGui.IsItemFocused()){ImGui.BeginTooltip();ImGui.PushTextWrapPos(ImGui.GetFontSize()*28);ImGui.TextWrapped($"Bed {n}");DrawGardenItem(b.ActualCrop,false,"Actual: ");if(b.ActualCrop is "" or "Not synced yet" or "Crop not identified")DrawGardenInfoLabel("unknown","Crop unidentified. Open this numbered bed in game so Companion can inspect it. If the game does not reveal its name, confirm the crop manually on the website; tending alone may not identify it.");if(wrong&&gardenWrongBed is {} correction)DrawGardenInfoLabel("warning",$"Opened the wrong bed. Close this menu and open Bed {correction.NextBed}, outlined as the next planting bed. No planting action was recorded.");DrawGardenItem(b.ActualSoil,true,"Actual soil: ");if(b.Crop.Length>0)DrawGardenInfoLabel("plan",$"Plan: {b.Crop} · {b.Soil} · {b.Status}");if(b.ReplantOrder>0)ImGui.TextWrapped($"Step {b.Order}: {b.StarterSoil}. Step {b.ReplantOrder}: remove only starter, then replant with {b.Soil}.");if(b.Planted is {} planted)DrawGardenInfoLabel("seed",$"Planted: {planted.ToLocalTime():g}");if(b.LastFertilized is {} fed)DrawGardenInfoLabel("fertilized",$"Last fertilized: {fed.ToLocalTime():g}");if(b.ObservedAt is {} seen)DrawGardenInfoLabel("sync",$"Last observed: {seen.ToLocalTime():g}");if(b.Watered is {} watered)DrawGardenInfoLabel("clock",$"Latest care: {watered.ToLocalTime():g}");DrawGardenInfoLabel("actor","Tended by: "+(b.TendedBy.Length>0?b.TendedBy:"Gardener not recorded"));if(b.Watered is {} dw&&b.WiltHours is {} wh&&GardenTiming.DeathRisk(b.Ready,dw.AddHours(wh+24),b.HarvestAt,DateTimeOffset.UtcNow))ImGui.TextWrapped("Dead (estimated) — check in game before removing.");if(GardenVisualState(b,false,DateTimeOffset.UtcNow)=="wilt-estimated")ImGui.TextWrapped("Wilting (estimated) — check in game.");if(b.Ready)DrawGardenInfoLabel("mature","Confirmed ready to harvest");else{if(b.NextTend is {} tend)DrawGardenInfoLabel("tend",$"Tending suggested: {tend.ToLocalTime():g}");if(b.HarvestAt is {} harvest)DrawGardenInfoLabel("check-maturity",$"Maturity estimate: {harvest.ToLocalTime():g}");}if(!b.Ready&&b.Watered is {} lastCare&&b.WiltHours is >0)ImGui.TextWrapped($"Death estimate: {lastCare.AddHours(b.WiltHours.Value+24).ToLocalTime():g} · check in game");DrawGardenInfoLabel("check-status","Care state: "+GardenVisualState(b,false,DateTimeOffset.UtcNow).Replace('-',' '));ImGui.TextWrapped("Green confirms planting, not guaranteed crossbred seeds. Unsynced confirmed actions appear locally first.");ImGui.PopTextWrapPos();ImGui.EndTooltip();}
+            DrawGardenHoverTarget($"Planting plan##garden-plan-{n}", at+new Vector2(91,7)*tile/128, tile/4,
+                () => DrawGardenPlanTooltip(b, wrong));
+            DrawGardenHoverTarget($"Crop and care##garden-care-{n}", at+new Vector2(88,52)*tile/128, tile/4,
+                () => DrawGardenCareTooltip(b,showPlan,wrong));
         }
         ImGui.SetCursorScreenPos(origin+new Vector2(0,board));ImGui.Dummy(new Vector2(board,4));
         if(ImGui.CollapsingHeader("Tips, supplies and harvest potential")){
@@ -122,4 +118,67 @@ public sealed partial class Plugin
 
         }
     }
+    private static void DrawGardenHoverTarget(string id, Vector2 at, float size, Action contents)
+    {
+        ImGui.SetCursorScreenPos(at);
+        ImGui.InvisibleButton(id, new Vector2(size));
+        var hovered = ImGui.IsItemHovered();
+        if (hovered) ImGui.GetWindowDrawList().AddRect(at, at+new Vector2(size), 0xffe6a4c1, 3);
+        if (!hovered && !ImGui.IsItemFocused()) return;
+        ImGui.BeginTooltip();
+        ImGui.PushTextWrapPos(ImGui.GetFontSize()*28);
+        contents();
+        ImGui.PopTextWrapPos();
+        ImGui.EndTooltip();
+    }
+    private void DrawGardenPlanTooltip(SharedGardenBed b, bool wrong)
+    {
+        ImGui.TextUnformatted($"Bed {b.Bed} · Planting plan");
+        if (wrong && gardenWrongBed is {} correction)
+            DrawGardenInfoLabel("warning", $"Wrong bed opened. Close this menu and open Bed {correction.NextBed}, outlined as the next planting bed. No planting action was recorded.");
+        if (b.Crop.Length == 0)
+        {
+            ImGui.TextWrapped("No planting plan for this bed. Choose Start garden on the website to create one.");
+            return;
+        }
+        DrawGardenItem(b.Crop, true, "Planned crop: ");
+        DrawGardenItem(b.Soil, true, "Final planned soil: ");
+        DrawGardenInfoLabel("plan", "Plan status: " + b.Status.Replace('-', ' '));
+        if (b.ReplantOrder > 0)
+            ImGui.TextWrapped($"Step {b.Order}: plant the temporary starter with {b.StarterSoil}. Step {b.ReplantOrder}: after the other required beds, remove only that starter and replant with {b.Soil}.");
+        else if (b.Order > 0) ImGui.TextWrapped($"Planting step: {b.Order}");
+        if (b.Status == "different")
+            DrawGardenInfoLabel("warning", $"Different from plan: {b.ActualCrop} · {(b.ActualSoil.Length > 0 ? b.ActualSoil : "soil not recorded")}");
+        if (b.CheckExisting) ImGui.TextWrapped("Check the existing crop in game before replacing it.");
+    }
+    private void DrawGardenCareTooltip(SharedGardenBed b, bool showPlan, bool wrong)
+    {
+        ImGui.TextUnformatted($"Bed {b.Bed} · Crop and care");
+        var icon = GardenCareIcon(b,showPlan,wrong);
+        DrawGardenInfoLabel(icon,GardenCareHint(icon));
+        DrawGardenItem(b.ActualCrop, false, "Actual crop: ");
+        if (b.ActualCrop == "Empty" && !b.Ready)
+        {
+            if (b.LastClearedAt is {} cleared) DrawGardenInfoLabel("clock", $"Cleared: {cleared.ToLocalTime():g}");
+            if (b.ObservedAt is {} emptySeen) DrawGardenInfoLabel("sync", $"Last observed: {emptySeen.ToLocalTime():g}");
+            return;
+        }
+        if (b.ActualCrop is "" or "Not synced yet" or "Crop not identified")
+            DrawGardenInfoLabel("unknown", "Crop unidentified. Open this numbered bed in game to inspect it. If its name remains unknown, confirm it manually on the website; tending alone may not identify it.");
+        DrawGardenItem(b.ActualSoil.Length > 0 ? b.ActualSoil : "Not recorded", true, "Actual soil: ");
+        var state = GardenVisualState(b, false, DateTimeOffset.UtcNow);
+        if (icon == "warning") DrawGardenInfoLabel("check-status", "Care state: " + state.Replace('-', ' '));
+        if (b.Planted is {} planted) DrawGardenInfoLabel("seed", $"Planted: {planted.ToLocalTime():g}");
+        if (b.Watered is {} watered) DrawGardenInfoLabel("clock", $"Latest care: {watered.ToLocalTime():g}");
+        DrawGardenInfoLabel("actor", "Tended by: " + (b.TendedBy.Length > 0 ? b.TendedBy : "Gardener not recorded"));
+        if (b.LastFertilized is {} fed) DrawGardenInfoLabel("fertilized", $"Last fertilized: {fed.ToLocalTime():g}");
+        if (!b.Ready)
+        {
+            if (b.NextTend is {} tend) DrawGardenInfoLabel("tend", $"Tending suggested: {tend.ToLocalTime():g}");
+            if (b.HarvestAt is {} harvest) DrawGardenInfoLabel("check-maturity", $"Maturity estimate: {harvest.ToLocalTime():g}");
+            if (b.Watered is {} lastCare && b.WiltHours is >0) ImGui.TextWrapped($"Death estimate: {lastCare.AddHours(b.WiltHours.Value+24).ToLocalTime():g} · check in game");
+        }
+        if (b.ObservedAt is {} seen) DrawGardenInfoLabel("sync", $"Last observed: {seen.ToLocalTime():g}");
+    }
+
 }

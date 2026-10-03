@@ -35,6 +35,27 @@ public sealed partial class Plugin
         if(image is not null)ImGui.GetWindowDrawList().AddImage(image.Handle,at,at+size);
     }
     private static string GardenVisualState(SharedGardenBed b,bool planVisible,DateTimeOffset now) => EquinoxCompanion.GardenVisualState.For(b,planVisible,now);
+    private static string GardenCareIcon(SharedGardenBed b, bool planVisible, bool wrongBed)
+    {
+        var actual=GardenVisualState(b,false,DateTimeOffset.UtcNow);
+        return wrongBed||planVisible&&b.Status=="different" ? "warning" : actual switch {"wet"=>"water","due"=>"tend","wilt-estimated"=>"wilting",_=>actual};
+    }
+    private static string GardenCareHint(string icon) => icon switch
+    {
+        "water" => "Recently tended · wet for 12h after recorded care.",
+        "tend" => "Tending suggested · tend this bed in game. 12h is a suggested interval, not a cooldown.",
+        "ready" => "Ready to harvest · harvest when the crop is no longer needed as a neighbour for the planting plan.",
+        "keep-mature" => "Keep this mature crop as a neighbour while completing the planting plan.",
+        "growing" => "Growing · maturity has not been confirmed. Follow the care times below.",
+        "empty" => "Empty · follow the planting plan when you are ready to plant.",
+        "unknown" => "Crop or bed state unknown · open this numbered bed in game to inspect it.",
+        "check-maturity" => "Check maturity · the growth estimate has elapsed; open this bed to confirm readiness.",
+        "at-risk" => "At risk (estimated) · check the crop and tend it if still growing.",
+        "wilting" => "Wilting (estimated) · inspect the crop in game and tend it if alive.",
+        "dead-estimated" => "Dead (estimated) · verify in game before removing the crop.",
+        "warning" => "Planting warning · check the plan icon above for the required crop, soil and bed.",
+        _ => "Check this bed in game for its current state."
+    };
     private void DrawGardenTile(SharedGardenBed b,bool planVisible,Vector2 at,float size,bool wrongBed=false)
     {
         LoadGardenPictures();var state=GardenVisualState(b,planVisible,DateTimeOffset.UtcNow);
@@ -51,8 +72,7 @@ public sealed partial class Plugin
         if(state is "empty" or "growing")GardenImage("assets/icons/"+state+".png",at+new Vector2(91,7)*size/128,new Vector2(size/4));
         else GardenImage("assets/overlays/"+state+".png",at,new(size));
         // Separate actual-care symbol; a planned crop never supplies the actual state.
-        var actual=GardenVisualState(b,false,DateTimeOffset.UtcNow);
-        var icon=wrongBed||planVisible&&b.Status=="different"?"warning":actual switch {"wet"=>"water","due"=>"tend","wilt-estimated"=>"wilting",_=>actual};
+        var icon=GardenCareIcon(b,planVisible,wrongBed);
         GardenImage("assets/icons/"+icon+".png",at+new Vector2(88,52)*size/128,new Vector2(size/4));
         if(planVisible&&b.Status is "starter" or "replant")GardenImage("assets/badges/"+b.Status+".png",at+new Vector2(8,48)*size/128,new Vector2(24)*size/128);
         if(planVisible){var marker=b.Status switch {"confirmed"=>"ready","starter"=>"starter","replant"=>"replant","different"=>"different",_=>null};
