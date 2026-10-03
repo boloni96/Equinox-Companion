@@ -46,7 +46,7 @@ public sealed partial class Plugin
         if(plantingWindow.IsOpen) minimizedLaunchers.Remove("Planting");
         DrawLauncher("Companion", 0, "icon.png");
         DrawLauncher("Fashion Report", 1, null);
-        DrawLauncher("Planting", 2, "garden-art/assets/icons/seedling.png");
+        DrawLauncher("Planting", 2, "garden-art/assets/icons/gardening-tools.png");
         if(pendingLauncher is {} pending && ImGui.GetTime()-launcherClickAt>ImGui.GetIO().MouseDoubleClickTime && !ImGui.IsMouseDown(ImGuiMouseButton.Left))
         {
             pendingLauncher=null;

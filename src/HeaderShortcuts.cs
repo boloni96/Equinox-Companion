@@ -24,7 +24,7 @@ public sealed partial class Plugin
         }
         else
         {
-            var texture = Textures.GetFromFile(Path.Combine(Pi.AssemblyLocation.DirectoryName!, "garden-art/assets/icons/seedling.png")).GetWrapOrDefault();
+            var texture = Textures.GetFromFile(Path.Combine(Pi.AssemblyLocation.DirectoryName!, "garden-art/assets/icons/gardening-tools.png")).GetWrapOrDefault();
             if (texture is not null) draw.AddImage(texture.Handle, at + new Vector2(3), at + new Vector2(size-3));
             else draw.AddText(at + new Vector2(4), 0xffffffff, "P");
         }

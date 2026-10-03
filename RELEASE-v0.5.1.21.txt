@@ -1,0 +1,7 @@
+Equinox Companion 0.5.1.21
+
+Planting uses a transparent watering-can-and-hoe icon in both the header and floating launcher. Both keep the existing /planting command behavior.
+
+Bed details now appear only over the small plan/info icon, including keyboard focus, instead of the whole bed. Actual crop and soil details use the existing item artwork.
+
+Release build and garden/transition tests verified. Native in-game appearance still requires testing.
