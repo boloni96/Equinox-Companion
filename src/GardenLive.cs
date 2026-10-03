@@ -11,6 +11,7 @@ public static class GardenLive
             if(e.Address is null || SharedGardenLocation.Match(e.Address,[plan])!=plan.HouseId || e.Patch!=(plan.PhysicalPatch>0?plan.PhysicalPatch:plan.Batch) || e.Bed is not (>=1 and <=8))continue;
             if(!beds.TryGetValue(e.Bed.Value,out var b))continue;
             if(b.ObservedAt is {} observed && e.At<=observed || b.Planted is {} planted && e.At<planted)continue;
+            if(b.ActualCrop=="Empty" && e.Kind is "garden.tended" or "garden.dead" or "garden.ready" or "garden.observed")b=b with {ActualCrop="Crop not identified"};
             if(e.Kind=="garden.planted" && e.Plant is {} p)
                 b=b with {ActualCrop=cropName(p.SeedName),ActualSoil=p.SoilName,Planted=e.At,Watered=e.At,NextTend=e.At.AddHours(12),Ready=false,PlantEvent=e.Id,TendedBy="",HarvestAt=(cropDays?.Invoke(p.SeedName)??0)>0?e.At.AddDays(cropDays!(p.SeedName)):null,Days=cropDays?.Invoke(p.SeedName)??0,WiltHours=cropWilt?.Invoke(p.SeedName),LastFertilized=null,ObservedAt=e.At};
             else if(e.Kind=="garden.tended")

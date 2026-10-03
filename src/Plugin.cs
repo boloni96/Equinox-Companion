@@ -122,7 +122,7 @@ public sealed partial class Plugin : IDalamudPlugin
             .Select(h => new SyncEvent(h.EventId, h.Kind, h.ObservedAt, WithWorldNames(h.Actor), WithAddressNames(h.Address)))
             .Concat(config.Tending.Where(t => !sent.Contains(t.EventId)).Select(t => new SyncEvent(t.EventId, "garden.tended", t.ConfirmedAt, WithWorldNames(t.Actor), WithAddressNames(t.Address), t.Patch, t.Bed)))
             .Concat(config.Planting.Where(t => !sent.Contains(t.EventId)).Select(t => new SyncEvent(t.EventId, "garden.planted", t.ConfirmedAt, WithWorldNames(t.Actor), WithAddressNames(t.Address), t.Patch, t.Bed, t.Plant)))
-            .Concat(config.Discoveries.Where(e => !sent.Contains(e.Id) && (e.Kind is "garden.ready" or "garden.observed" or "garden.unmapped" or "garden.empty" or "garden.dead" ? config.TrackGardens : e.Kind == "character.updated" ? config.SyncCharacterDetails : e.Kind is "collection.observed" or "storage.observed" ? config.SyncCollections : e.Kind == "submarines.cached" ? config.SyncAutoRetainer : e.Kind is "fashion.observed" or "submarines.observed" ? config.SyncActivities : config.SyncHouseDetails)))
+            .Concat(config.Discoveries.Where(e => !sent.Contains(e.Id) && (e.Kind is "garden.ready" or "garden.observed" or "garden.unmapped" or "garden.empty.unmapped" or "garden.mapped" or "garden.empty" or "garden.dead" ? config.TrackGardens : e.Kind == "character.updated" ? config.SyncCharacterDetails : e.Kind is "collection.observed" or "storage.observed" ? config.SyncCollections : e.Kind == "submarines.cached" ? config.SyncAutoRetainer : e.Kind is "fashion.observed" or "submarines.observed" ? config.SyncActivities : config.SyncHouseDetails)))
             .Where(e => !SyncValidation.SupersededIncompleteCharacter(e, config.Discoveries, now))
             .OrderBy(e => e.At).ToArray();
         var held = pending.Where(e => !SyncValidation.CanSend(e, now)).ToArray();
@@ -235,11 +235,13 @@ public sealed partial class Plugin : IDalamudPlugin
         
         if (!Player.IsLoaded || Player.ContentId == 0)
         {
+            gardenBedSync=null;
             companyCandidate = null; character = 0; currentAddress = null; gate.Reset(); snapshot = null; StopRecording();
             status = "Waiting for your character."; return;
         }
         if (character != Player.ContentId)
         {
+            gardenBedSync=null;
             gate.Reset(); StopRecording(); character = Player.ContentId;
             nextDiscovery = default; nextCharacterRefresh = default; characterReadyAt = now.AddSeconds(15); emptyCompanySamples = 0;
             fashionWindow.Tick(login: true);
@@ -248,6 +250,7 @@ public sealed partial class Plugin : IDalamudPlugin
         if (recording && now >= recordingUntil) StopRecording();
         if (Conditions[ConditionFlag.BetweenAreas] || Conditions[ConditionFlag.BetweenAreas51])
         {
+            gardenBedSync=null;
             companyCandidate = null; snapshot = null; currentAddress = null; Volatile.Write(ref pendingTend, null); Volatile.Write(ref pendingRemove, null); Volatile.Write(ref pendingPlant, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); messages.Clear(); menuMessages.Clear(); readyMenus.Clear(); cropChats.Clear(); cropMatcher.Clear(); status = "Waiting for the area to finish loading."; return;
         }
         ObserveSafely("company-profile", () => ObserveCompanyProfile(now));
@@ -279,6 +282,7 @@ public sealed partial class Plugin : IDalamudPlugin
             var inside = type == HousingTerritoryType.Indoor;
             var address = AddressOf(inside ? manager->GetCurrentIndoorHouseId() : manager->GetCurrentHouseId());
             currentAddress = address;
+            atOutdoorEstate = !inside && address is { Plot: > 0, Apartment: false, Workshop: false, Room: 0 };
             var actor = ReadActor();
             if (inside && address is not null)
             {
@@ -306,6 +310,9 @@ public sealed partial class Plugin : IDalamudPlugin
                 if (obj != null) { objectId = obj->HousingObjectId.Id; furnitureIndex = obj->HousingFurnitureIndex; }
             }
             var target = Targets.Target;
+            if(plantingWindow.IsOpen&&atOutdoorEstate&&gardenBedSync is {Complete:false} setup&&target is not null&&
+                setup.Matches(actor.ContentId,address,setup.Patch))
+                setup.CheckDistance(target.Position.X,target.Position.Y,target.Position.Z);
             uint? eventArgument = null; ushort? timelineState = null;
             if (target is not null && target.ObjectKind == ObjectKind.EventObj && target.BaseId == 2003757 && target.Address != 0)
             {
@@ -387,7 +394,7 @@ public sealed partial class Plugin : IDalamudPlugin
                                 var menu = new GardenMenu((nint)addon, now, candidate, title, options);
                                 Volatile.Write(ref activeGardenMenu, menu);
                                 RememberGuidanceBed(menu);
-                                if ((menu.ReadyLocation() is not null || menu.EmptyLocation() is not null || menu.DeadLocation() is not null) && readyMenus.Count < 128) readyMenus.Enqueue(menu);
+                                if (menu.Options.Any(x=>x is "Plant Seeds" or "Tend Crop" or "Harvest Crop" or "Remove Crop") && readyMenus.Count < 128) readyMenus.Enqueue(menu);
                             }
                         }
                     }
@@ -516,7 +523,7 @@ public sealed partial class Plugin : IDalamudPlugin
     {
         if (!SyncValidation.CanSend(e, DateTimeOffset.UtcNow)) return;
         var last = config.Discoveries.LastOrDefault(x => x.Kind == e.Kind && x.Actor.ContentId == e.Actor.ContentId && x.Address?.HouseId == e.Address?.HouseId && x.Patch == e.Patch && x.Bed == e.Bed && x.Collection?.Category == e.Collection?.Category && x.Storage?.Key == e.Storage?.Key && x.GardenTarget?.Argument == e.GardenTarget?.Argument && x.Company?.Id == e.Company?.Id && x.Company?.Profile?.Source == e.Company?.Profile?.Source);
-        if (!force && last is not null && (!(e.Kind is "garden.empty" or "garden.dead" or "garden.ready" or "garden.observed") || e.At - last.At < TimeSpan.FromSeconds(2)) && !(e.GardenTarget is not null && e.At-last.At > TimeSpan.FromDays(30)) && !(e.Kind is "garden.ready" or "garden.observed" or "garden.empty" or "garden.dead" && config.Planting.Any(p => p.Actor.ContentId == e.Actor.ContentId && p.Address.HouseId == e.Address?.HouseId && p.Patch == e.Patch && p.Bed == e.Bed && p.ConfirmedAt > last.At)) && JsonSerializer.Serialize(new { last.Actor, last.Address, last.House, last.Character, last.Crop, last.Collection, last.Fashion, last.Voyage, last.GardenTarget, last.Storage, last.Company, last.CachedVoyage }) == JsonSerializer.Serialize(new { e.Actor, e.Address, e.House, e.Character, e.Crop, e.Collection, e.Fashion, e.Voyage, e.GardenTarget, e.Storage, e.Company, e.CachedVoyage })) return;
+        if (!force && last is not null && (!(e.Kind is "garden.empty" or "garden.empty.unmapped" or "garden.dead" or "garden.ready" or "garden.observed") || e.At - last.At < TimeSpan.FromSeconds(2)) && !(e.GardenTarget is not null && e.At-last.At > TimeSpan.FromDays(30)) && !(e.Kind is "garden.ready" or "garden.observed" or "garden.empty" or "garden.dead" && config.Planting.Any(p => p.Actor.ContentId == e.Actor.ContentId && p.Address.HouseId == e.Address?.HouseId && p.Patch == e.Patch && p.Bed == e.Bed && p.ConfirmedAt > last.At)) && JsonSerializer.Serialize(new { last.Actor, last.Address, last.House, last.Character, last.Crop, last.Collection, last.Fashion, last.Voyage, last.GardenTarget, last.Storage, last.Company, last.CachedVoyage }) == JsonSerializer.Serialize(new { e.Actor, e.Address, e.House, e.Character, e.Crop, e.Collection, e.Fashion, e.Voyage, e.GardenTarget, e.Storage, e.Company, e.CachedVoyage })) return;
         config.Discoveries.Add(e);
         if(e.Kind.StartsWith("garden.") || e.Kind.StartsWith("house.")) GardenActionRecorded();
         if(collectingStorage)storageChanged=true;else Pi.SavePluginConfig(config);
@@ -650,7 +657,10 @@ public sealed partial class Plugin : IDalamudPlugin
     {
         while (readyMenus.TryDequeue(out var menu))
         {
+            ObserveBedSync(menu.Target,menu.OpenedAt,menu.NumberedLocation());
             cropMatcher.Add(menu);
+            if(menu.NumberedLocation() is {} numbered && menu.Target.Address is {} numberedAddress && GardenTargetOf(menu.Target) is {} mappedTarget)
+                KeepDiscovery(new(Guid.NewGuid().ToString("N"),"garden.mapped",menu.OpenedAt,WithWorldNames(menu.Target.Actor),WithAddressNames(numberedAddress),numbered.Patch,numbered.Bed,GardenTarget:mappedTarget));
             if (menu.DeadLocation() is { } dead && menu.Target.Address is { } deadAddress)
                 KeepDiscovery(new(Guid.NewGuid().ToString("N"), "garden.dead", menu.OpenedAt,
                     WithWorldNames(menu.Target.Actor), WithAddressNames(deadAddress), dead.Patch, dead.Bed, GardenTarget: GardenTargetOf(menu.Target)));
@@ -661,9 +671,19 @@ public sealed partial class Plugin : IDalamudPlugin
                 KeepDiscovery(new(Guid.NewGuid().ToString("N"), "garden.ready", menu.OpenedAt,
                     WithWorldNames(menu.Target.Actor), WithAddressNames(address), location.Patch, location.Bed, GardenTarget: GardenTargetOf(menu.Target)));
         }
-        while (cropChats.TryDequeue(out var chat)) cropMatcher.Add(chat);
+        while (cropChats.TryDequeue(out var chat))
+        {
+            if(GardenTargetMap.IsEmptyChat(chat))
+            {
+                ObserveBedSync(chat.Target,chat.At);
+                KeepDiscovery(new(Guid.NewGuid().ToString("N"),"garden.empty.unmapped",chat.At,WithWorldNames(chat.Target.Actor),WithAddressNames(chat.Target.Address!),GardenTarget:GardenTargetOf(chat.Target)));
+                cropChatStatus="Empty bed observed · matching its recorded patch and bed identity.";
+            }
+            else cropMatcher.Add(chat);
+        }
         foreach (var observed in cropMatcher.Drain(DateTimeOffset.UtcNow, IsKnownCropItem, true))
         {
+            ObserveBedSync(observed.Target,observed.At,observed.Patch>0?(observed.Patch,observed.Bed):null);
             KeepDiscovery(new(Guid.NewGuid().ToString("N"), observed.Patch == 0 ? "garden.unmapped" : "garden.observed", observed.At,
                 WithWorldNames(observed.Target.Actor), WithAddressNames(observed.Target.Address!), observed.Patch, observed.Bed, Crop: observed.Crop, GardenTarget: GardenTargetOf(observed.Target)));
             cropChatStatus = $"{observed.Crop.CropName} · patch {observed.Patch}, bed {observed.Bed} · ready to harvest";

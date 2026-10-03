@@ -1,5 +1,5 @@
 namespace EquinoxCompanion;
-public sealed record SharedRoster(long Revision, DateTimeOffset Updated, SharedPerson[] People, SharedVoyage[]? Voyages = null, int ProtocolVersion = 1, SharedGardenPlan[]? GardenPlans = null, SharedGardenCare[]? GardenCare = null, SharedGardenYield[]? GardenYields = null, SharedCachedVoyage[]? CachedVoyages = null, string GardenFrame = "wood", bool GardenCornerTrim = false);
+public sealed record SharedRoster(long Revision, DateTimeOffset Updated, SharedPerson[] People, SharedVoyage[]? Voyages = null, int ProtocolVersion = 1, SharedGardenPlan[]? GardenPlans = null, SharedGardenCare[]? GardenCare = null, SharedGardenYield[]? GardenYields = null, SharedCachedVoyage[]? CachedVoyages = null, string GardenFrame = "wood", bool GardenCornerTrim = false, SharedGardenTarget[]? GardenTargets = null);
 public sealed record SharedVoyage(string FcId, string FcName, DateTimeOffset At, SubmarineDetails[] Submarines);
 public sealed record SharedPerson(string Id, string Name, SharedCharacter[] Characters);
 public sealed record SharedCharacter(string Id, string Name, string World, string Dc, string Region, string Account, SharedHouse[] Houses, string AccountId = "", bool? NeedsBoost = null, bool? FcMember = null, string FcId = "");
@@ -65,7 +65,7 @@ public static class SharedGardenLocation
 }
 
 public sealed record SharedGardenCare(string HouseId, string GameHouseId, string HouseName, string World, string District, int Ward, int Plot, int Batch, string[] CharacterIds, SharedGardenCareBed[] Beds, int PhysicalPatch = 0);
-public sealed record SharedGardenCareBed(int Bed, bool Ready, bool KeepMature, DateTimeOffset? Watered, DateTimeOffset? NextTend, DateTimeOffset? HarvestAt, DateTimeOffset? DeathAt = null, double? WiltHours = null, string Crop = "", string Soil = "", DateTimeOffset? Planted = null, DateTimeOffset? ObservedAt = null, string TendedBy = "", DateTimeOffset? DeadConfirmedAt = null);
+public sealed record SharedGardenCareBed(int Bed, bool Ready, bool KeepMature, DateTimeOffset? Watered, DateTimeOffset? NextTend, DateTimeOffset? HarvestAt, DateTimeOffset? DeathAt = null, double? WiltHours = null, string Crop = "", string Soil = "", DateTimeOffset? Planted = null, DateTimeOffset? ObservedAt = null, string TendedBy = "", DateTimeOffset? DeadConfirmedAt = null, bool Empty = false, DateTimeOffset? LastClearedAt = null);
 public sealed record GardenChatNotice(string HouseId,string HouseName,int Batch,string Kind,DateTimeOffset? DeathAt);
 public static class GardenCareStatus
 {
@@ -110,6 +110,7 @@ public static class GardenCareStatus
     }
     public static string? Due(SharedGardenCareBed bed, DateTimeOffset now)
     {
+        if (bed.Empty) return null;
         if (bed.Ready) return bed.KeepMature ? null : "harvest";
         if(bed.DeadConfirmedAt is {} dead&&dead<=now&&(bed.Watered is null||bed.Watered<=dead)&&(bed.Planted is null||bed.Planted<=dead))return "dead";
         var next = bed.Watered?.AddHours(12) ?? bed.NextTend;

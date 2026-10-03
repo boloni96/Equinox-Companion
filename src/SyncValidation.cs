@@ -11,7 +11,7 @@ public static class SyncValidation
         !string.IsNullOrWhiteSpace(e.Actor?.ContentId) && records.Any(newer =>
             newer.Kind == "character.updated" && newer.Actor?.ContentId == e.Actor.ContentId &&
             newer.At > e.At && CanSend(newer, now));
-    public static bool SupportedByWebsite(string kind, int version) => kind == "garden.dead" ? version >= 9 : kind == "submarines.cached" ? version >= 7 : kind == "garden.fertilized" ? version >= 6 : kind == "company.observed" ? version >= 4 : kind == "storage.observed" ? version >= 3 : version >= 2 ||
+    public static bool SupportedByWebsite(string kind, int version) => kind is "garden.empty.unmapped" or "garden.mapped" ? version >= 10 : kind == "garden.dead" ? version >= 9 : kind == "submarines.cached" ? version >= 7 : kind == "garden.fertilized" ? version >= 6 : kind == "company.observed" ? version >= 4 : kind == "storage.observed" ? version >= 3 : version >= 2 ||
         kind is "house.entered" or "garden.tended" or "garden.ready" or "garden.observed" or "garden.planted" or "house.discovered" or "character.updated";
     private static bool Text(string? s) => !string.IsNullOrWhiteSpace(s) && s.Length <= 100;
     public static bool ActorReady(Actor? a) => a is not null &&
@@ -66,8 +66,10 @@ public static class SyncValidation
         if (e.Kind == "house.discovered") return h.Plot > 0 && h.Room == 0 && !h.Apartment && !h.Workshop && h.WorldId == e.Actor.HomeWorldId &&
             e.House is { Evidence: "owned-estate-id" } d && d.Size is "" or "Small" or "Medium" or "Large" &&
             (d.Type == "Private house" || d.Type == "Free Company house" && FC(d.FreeCompany) && d.FreeCompany!.WorldId == h.WorldId);
+        if(e.Kind=="garden.empty.unmapped")return !h.Apartment&&!h.Workshop&&h.Room==0&&h.Plot>0&&e.GardenTarget is {} emptyTarget&&float.IsFinite(emptyTarget.X)&&float.IsFinite(emptyTarget.Y)&&float.IsFinite(emptyTarget.Z);
         if (e.Kind == "garden.unmapped") return e.GardenTarget is {} target && float.IsFinite(target.X) && float.IsFinite(target.Y) && float.IsFinite(target.Z) && e.Crop is { Ready: true, Evidence: "garden-system-message-awaiting-calibration" } crop && Text(crop.CropName) && !crop.CropName.Any(char.IsControl);
         if (e.Patch is not (>= 1 and <= 3) || e.Bed is not (>= 1 and <= 8)) return false;
+        if(e.Kind=="garden.mapped")return !h.Apartment&&!h.Workshop&&h.Room==0&&h.Plot>0&&e.GardenTarget is {} mappedTarget&&float.IsFinite(mappedTarget.X)&&float.IsFinite(mappedTarget.Y)&&float.IsFinite(mappedTarget.Z);
         return e.Kind switch {
             "garden.tended" or "garden.dead" or "garden.ready" or "garden.empty" or "garden.fertilized" => !h.Apartment && !h.Workshop && h.Room == 0 && h.Plot > 0,
             "garden.observed" => e.Crop is { Ready: true, Evidence: "garden-menu-and-system-message" } c && Text(c.CropName) && !c.CropName.Contains('\n') && !c.CropName.Contains('\r'),

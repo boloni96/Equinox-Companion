@@ -39,7 +39,7 @@ public sealed partial class Plugin
                     if(projected is not null)
                     {
                         if(projected.ActualCrop=="Empty")continue;
-                        effective=effective with {Ready=projected.Ready,Watered=projected.Watered,NextTend=projected.NextTend,HarvestAt=projected.HarvestAt,WiltHours=projected.WiltHours,
+                        effective=effective with {Empty=false,Ready=projected.Ready,Watered=projected.Watered,NextTend=projected.NextTend,HarvestAt=projected.HarvestAt,WiltHours=projected.WiltHours,
                             DeadConfirmedAt=projected.DeadConfirmedAt,Planted=projected.Planted,
                             DeathAt=projected.Ready||GardenVisualState(projected,false,now)=="dead"?null:projected.Watered is {} care&&projected.WiltHours is {} wilt?care.AddHours(wilt+24):null};
                     }

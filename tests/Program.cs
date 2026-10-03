@@ -99,7 +99,7 @@ Check("missing target cannot confirm", intent.Confirm(4017, time.AddMilliseconds
 Check("duplicate response has same dedupe key", intent.Confirm(4017, time.AddMilliseconds(450), Sample(450, "bed-a"))?.EventId, intent.EventId);
 
 // Optional private replay input; never copy player diagnostics into the repository.
-if (args.Length > 0 && args[0] != "--queue")
+if (args.Length > 0 && args[0] != "--queue" && args[0] != "--garden-chat")
 {
     var opts = new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true };
     using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(args[0]));
@@ -522,3 +522,76 @@ Check("unchanged warning returns after relog",noticeSession.Add("same-bed-harves
 Check("no repeated warning after login summary",noticeSession.Add("same-bed-harvest").ToString(),"False");
 Check("different character gets own login reminder",noticeSession.ObserveCharacter(456).ToString(),"True");
 Check("shared warning can show for newly logged character",noticeSession.Add("same-bed-harvest").ToString(),"True");
+
+var setupTarget=unmappedTarget with {ObservedAt=time,Actor=realActor,Address=realAddress};
+var emptyChat=new CropChat(time,setupTarget,"There is nothing in this bed.");
+Check("visitor native empty text recognized",GardenTargetMap.IsEmptyChat(emptyChat).ToString(),"True");
+Check("player empty text rejected",GardenTargetMap.IsEmptyChat(emptyChat with {Sender="Player"}).ToString(),"False");
+Check("stale empty target rejected",GardenTargetMap.IsEmptyChat(emptyChat with {At=time.AddSeconds(3)}).ToString(),"False");
+var walk=new GardenBedSyncSession(realActor,realAddress,1,time);
+Check("walk refuses stale pre-start menu",walk.Observe(setupTarget,time.AddMilliseconds(-1)).ToString(),"False");
+Check("walk refuses other character",walk.Observe(setupTarget with {Actor=actor},time).ToString(),"False");
+Check("walk refuses other estate",walk.Observe(setupTarget with {Address=realAddress with {Plot=99}},time).ToString(),"False");
+Check("walk refuses wrong numbered bed",walk.Observe(setupTarget,time,(1,2)).ToString(),"False");
+Check("walk refuses wrong physical patch",walk.Observe(setupTarget,time,(2,1)).ToString(),"False");
+Check("walk accepts first inspected bed",walk.Observe(setupTarget,time,(1,1)).ToString(),"True");
+Check("walk repeat cannot advance",walk.Observe(setupTarget,time).ToString(),"False");
+Check("walk now requests bed two",walk.NextBed.ToString(),"2");
+for(var n=2;n<=8;n++)Check($"walk accepts visitor bed {n}",walk.Observe(setupTarget with {TargetId="bed-"+n,TargetDetails=setupTarget.TargetDetails! with {EventArgument=(uint)(5651+n),X=n}},time).ToString(),"True");
+Check("eight-bed walk completes",walk.Complete.ToString(),"True");
+Check("walk preserves sequential bed identity",string.Join(",",walk.Mappings.Select(e=>e.Bed)),"1,2,3,4,5,6,7,8");
+Check("completed walk ignores more observations",walk.Observe(setupTarget,time).ToString(),"False");
+Check("restart begins at one",new GardenBedSyncSession(realActor,realAddress,1,time).NextBed.ToString(),"1");
+var mappedEmpty=walk.Mappings[0] with {Kind="garden.empty.unmapped",Patch=null,Bed=null,At=time.AddSeconds(1)};
+var calibration=GardenTargetMap.FromNumbered(walk.Mappings[0])!;
+Check("visitor empty resolves mapped bed",GardenTargetMap.Resolve(mappedEmpty,[calibration]).Bed?.ToString(),"1");
+Check("visitor empty resolves actual empty",GardenTargetMap.Resolve(mappedEmpty,[calibration]).Kind,"garden.empty");
+Check("missing mapping never guesses",GardenTargetMap.Resolve(mappedEmpty,[]).Kind,"garden.empty.unmapped");
+Check("moved target never guesses",GardenTargetMap.Resolve(mappedEmpty,[calibration with {X=calibration.X+1}]).Kind,"garden.empty.unmapped");
+Check("invalid coordinates never match",GardenTargetMap.Resolve(mappedEmpty,[calibration with {X=float.NaN}]).Kind,"garden.empty.unmapped");
+Check("another house never matches",GardenTargetMap.Resolve(mappedEmpty,[calibration with {GameHouseId="other"}]).Kind,"garden.empty.unmapped");
+Check("expired coordinates never match",GardenTargetMap.Resolve(mappedEmpty,[calibration with {At=time.AddDays(-61)}]).Kind,"garden.empty.unmapped");
+Check("new moved mapping supersedes old location",GardenTargetMap.Resolve(mappedEmpty,[calibration,calibration with {At=time.AddSeconds(1),X=calibration.X+1}]).Kind,"garden.empty.unmapped");
+Check("empty beds produce no chat",GardenCareStatus.Due(careBed with {Empty=true,Ready=true},careNow),null);
+Check("new mapping protocol held on older website",SyncValidation.SupportedByWebsite("garden.mapped",9).ToString(),"False");
+Check("empty visitor protocol enabled",SyncValidation.SupportedByWebsite("garden.empty.unmapped",10).ToString(),"True");
+var visitorRoster=pairedRoster with {People=[new("p","P",[houseOwner with {Houses=[pairedHome]},houseTenant])]};
+Check("sync button hidden for owner",GardenBedSyncSession.IsVisitor(visitorRoster,houseOwner.Name,houseOwner.World,pairedHome.Id).ToString(),"False");
+Check("sync button available to house-unlinked paired visitor",GardenBedSyncSession.IsVisitor(visitorRoster,houseTenant.Name,houseTenant.World,pairedHome.Id).ToString(),"True");
+Check("sync button hidden for unknown character",GardenBedSyncSession.IsVisitor(visitorRoster,"Unknown",houseTenant.World,pairedHome.Id).ToString(),"False");
+Check("sync button hidden for linked member",GardenBedSyncSession.IsVisitor(visitorRoster with {People=[new("p","P",[houseTenant with {Houses=[pairedHome]}])]},houseTenant.Name,houseTenant.World,pairedHome.Id).ToString(),"False");
+var distanceWalk=new GardenBedSyncSession(realActor,realAddress,1,time);
+distanceWalk.Observe(setupTarget,time);
+Check("nearby garden target accepted",distanceWalk.CheckDistance(setupTarget.TargetDetails!.X+2,setupTarget.TargetDetails.Y,setupTarget.TargetDetails.Z).ToString(),"True");
+Check("far target resets walk",distanceWalk.CheckDistance(setupTarget.TargetDetails.X+20,setupTarget.TargetDetails.Y,setupTarget.TargetDetails.Z).ToString(),"False");
+Check("far reset shows bed one",distanceWalk.NextBed.ToString(),"1");
+Check("far reset discards temporary mappings",distanceWalk.Mappings.Count.ToString(),"0");
+Check("far target cannot become bed one accidentally",distanceWalk.Observe(setupTarget with {TargetDetails=setupTarget.TargetDetails with {X=setupTarget.TargetDetails.X+20}},time).ToString(),"False");
+Check("return to original garden resumes at one",distanceWalk.Observe(setupTarget,time).ToString(),"True");
+
+// Optional replay of a user's local exports; the private files are never bundled or published.
+if(args.Length>1 && args[0]=="--garden-chat")foreach(var path in args.Skip(1))
+{
+    using var walkExport=JsonDocument.Parse(File.ReadAllText(path));
+    var walkOptions=new JsonSerializerOptions{PropertyNameCaseInsensitive=true};
+    var walkChats=walkExport.RootElement.GetProperty("diagnostics").EnumerateArray().Where(x=>x.GetProperty("kind").GetString()=="garden.chatObservation")
+        .Select(x=>new CropChat(x.GetProperty("observedAt").GetDateTimeOffset(),x.GetProperty("data").GetProperty("candidateTarget").Deserialize<GardenSnapshot>(walkOptions)!,x.GetProperty("data").GetProperty("text").GetString()!,x.GetProperty("data").GetProperty("sender").GetString()!)).OrderBy(x=>x.At).ToArray();
+    Check("native replay contains eight inspected beds",walkChats.Length.ToString(),"8");
+    var nativeWalk=new GardenBedSyncSession(walkChats[0].Target.Actor,walkChats[0].Target.Address!,1,walkChats[0].At.AddSeconds(-1));
+    var nativeEmpty=0;var nativeNamed=0;
+    foreach(var chat in walkChats)
+    {
+        Check("native target advances one bed",nativeWalk.Observe(chat.Target,chat.At).ToString(),"True");
+        if(GardenTargetMap.IsEmptyChat(chat))nativeEmpty++;
+        else
+        {
+            var nativeMatcher=new CropChatMatcher();nativeMatcher.Add(chat);
+            var found=nativeMatcher.Drain(chat.At.AddMilliseconds(2200),name=>name is "Krakka Root" or "Mirror Apple",true);
+            Check("native named crop is read from system message",found.Count.ToString(),"1");nativeNamed++;
+        }
+    }
+    Check("native eight-bed setup completes",nativeWalk.Complete.ToString(),"True");
+    Check("native distinct arguments identify eight shared-position beds",nativeWalk.Mappings.Select(x=>x.GardenTarget!.Argument).Distinct().Count().ToString(),"8");
+    Check("native evidence identifies all eight beds",(nativeEmpty+nativeNamed).ToString(),"8");
+    Console.WriteLine($"PASS local native export replay: {nativeEmpty} empty, {nativeNamed} named ready crops; identities match the inspected sequence.");
+}

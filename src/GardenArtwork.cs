@@ -108,13 +108,20 @@ public sealed partial class Plugin
         if(path is not null){var texture=Textures.GetFromFile(Path.Combine(Pi.AssemblyLocation.DirectoryName!,"garden-art",path)).GetWrapOrDefault();if(texture is not null){ImGui.Image(texture.Handle,new Vector2(ImGui.GetTextLineHeight()));ImGui.SameLine();}}
         ImGui.TextWrapped(prefix+label);
     }
-    private IEnumerable<SyncEvent> LocalGardenActions()=>config.Planting.Select(p=>new SyncEvent(p.EventId,"garden.planted",p.ConfirmedAt,WithWorldNames(p.Actor),WithAddressNames(p.Address),p.Patch,p.Bed,p.Plant))
+    private IEnumerable<SyncEvent> LocalGardenActions()
+    {
+        var mappings=GardenMappings().ToArray();
+        return config.Planting.Select(p=>new SyncEvent(p.EventId,"garden.planted",p.ConfirmedAt,WithWorldNames(p.Actor),WithAddressNames(p.Address),p.Patch,p.Bed,p.Plant))
         .Concat(config.Tending.Select(t=>new SyncEvent(t.EventId,"garden.tended",t.ConfirmedAt,WithWorldNames(t.Actor),WithAddressNames(t.Address),t.Patch,t.Bed)))
-        .Concat(config.Discoveries.Where(e=>e.Kind is "garden.empty" or "garden.dead" or "garden.ready" or "garden.observed" or "garden.fertilized"));
+        .Concat(config.Discoveries.Where(e=>e.Kind is "garden.empty" or "garden.empty.unmapped" or "garden.unmapped" or "garden.dead" or "garden.ready" or "garden.observed" or "garden.fertilized")).Select(e=>GardenTargetMap.Resolve(e,mappings));
+    }
+    private IEnumerable<SharedGardenTarget> GardenMappings() => (config.SharedRoster?.GardenTargets??[])
+        .Concat(config.Discoveries.Select(GardenTargetMap.FromNumbered).OfType<SharedGardenTarget>())
+        .Concat((gardenBedSync?.Mappings??[]).Select(e=>GardenTargetMap.FromNumbered(e with {Address=WithAddressNames(e.Address!)})).OfType<SharedGardenTarget>());
     private void GardenActionRecorded(){if(syncFailures==0)nextSync=default;}
     private SharedGardenPlan EffectiveGardenPlan(SharedGardenPlan plan)
     {
-        var actions=$"{config.Planting.LastOrDefault()?.EventId}:{config.Tending.LastOrDefault()?.EventId}:{config.Discoveries.LastOrDefault()?.Id}";
+        var actions=$"{config.Planting.LastOrDefault()?.EventId}:{config.Tending.LastOrDefault()?.EventId}:{config.Discoveries.LastOrDefault()?.Id}:{gardenBedSync?.Mappings.LastOrDefault()?.Id}";
         if(projectedGardenRoster!=config.SharedRoster||projectedGardenActions!=actions){localGardenCache.Clear();projectedGardenRoster=config.SharedRoster;projectedGardenActions=actions;}
         var key=plan.HouseId+":"+plan.Batch+":"+plan.At.ToUnixTimeMilliseconds();
         if(localGardenCache.TryGetValue(key,out var cached))return cached;
