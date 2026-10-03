@@ -5,6 +5,18 @@ public sealed record GardenOverviewBed(int Bed, string Crop, string Status, stri
 
 public static class GardenOverview
 {
+    public static string[] Indicators(IEnumerable<SharedGardenPlan> plans,DateTimeOffset now)
+    {
+        var beds=plans.SelectMany(p=>p.Beds.Select(b=>Bed(p,b,now))).ToArray();
+        var icons=new List<string>();
+        if(beds.Any(b=>b.State=="ready"))icons.Add("ready");
+        if(beds.Any(b=>b.TendDue))icons.Add("tend");
+        if(beds.Any(b=>b.State is "dead" or "wilted" or "wilt-estimated" or "at-risk" or "dead-estimated"))icons.Add("at-risk");
+        if(beds.Any(b=>b.State=="check-maturity"))icons.Add("check-maturity");
+        if(beds.Any(b=>b.State=="unknown"||b.Status=="Growing"&&b.NextTend is null))icons.Add("unknown");
+        if(icons.Count==0&&beds.Any(b=>b.State is "wet" or "keep-mature"))icons.Add("matched");
+        return icons.ToArray();
+    }
     public static string Attention(IEnumerable<SharedGardenPlan> plans,DateTimeOffset now)
     {
         var beds=plans.SelectMany(p=>p.Beds.Select(b=>Bed(p,b,now))).ToArray();

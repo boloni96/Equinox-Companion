@@ -23,23 +23,33 @@ public sealed partial class Plugin
         var represented=new HashSet<string>();var shown=0;
         var people=config.SharedRoster?.People??[];
         int PersonRank(SharedPerson p){var i=config.TabOrder.IndexOf("person:"+p.Id);return i<0?int.MaxValue:i;}
+        foreach(var c in people.SelectMany(p=>p.Characters).Where(c=>c.FcMember!=false&&direct.ContainsKey(c.FcId)))represented.Add(c.FcId);
+        if(!ImGui.BeginTabBar("submarine-persons"))return;
         foreach(var person in people.OrderBy(PersonRank))
         {
             var characters=OrderedSharedCharacters(person);
             var accounts=characters.GroupBy(SharedCharacterGrouping.AccountKey).ToArray();
             var hasData=characters.Any(c=>c.FcMember!=false&&direct.ContainsKey(c.FcId)||caches.ContainsKey(c.Id));
-            if(!hasData)continue;
-            ImGui.PushID(person.Id);ImGui.Separator();ImGui.TextUnformatted(person.Name);
+            if(!ImGui.BeginTabItem(person.Name.Replace("##","")+"###submarine-person-"+person.Id))continue;
+            ImGui.PushID(person.Id);
+            ImGui.BeginChild("submarine-person-scroll",System.Numerics.Vector2.Zero);
+            if(!hasData)ImGui.TextWrapped("No submarines observed for this person yet.");
             foreach(var account in accounts)
             {
                 var rows=account.Where(c=>c.FcMember!=false&&direct.ContainsKey(c.FcId)||caches.ContainsKey(c.Id)).OrderBy(c=>Array.IndexOf(new[]{"Regulars","Floaters","Empty","Pending sync"},SharedCharacterGrouping.Group(c))).ToArray();
                 if(rows.Length==0)continue;
                 foreach(var c in rows)if(c.FcMember!=false&&direct.ContainsKey(c.FcId))represented.Add(c.FcId);
                 shown+=rows.Length;
+                ImGui.SetNextItemOpen(false,ImGuiCond.Once);
                 if(!ImGui.TreeNode($"{account.First().Account} · {rows.Length} characters###account-{account.Key}"))continue;
-                foreach(var c in rows)
+                foreach(var group in rows.GroupBy(SharedCharacterGrouping.Group))
+                {
+                ImGui.PushID(group.Key);ImGui.SetNextItemOpen(false,ImGuiCond.Once);
+                if(ImGui.TreeNode($"{group.Key} · {group.Count()}###group")){
+                foreach(var c in group)
                 {
                     ImGui.PushID(c.Id);
+                    ImGui.SetNextItemOpen(false,ImGuiCond.Once);
                     if(ImGui.TreeNode($"{c.Name} · {c.World}###character"))
                     {
                         caches.TryGetValue(c.Id,out var cache);direct.TryGetValue(c.FcId,out var observed);if(c.FcMember==false)observed=null;
@@ -77,10 +87,14 @@ public sealed partial class Plugin
                     }
                     ImGui.PopID();
                 }
+                ImGui.TreePop();}
+                ImGui.PopID();
+                }
                 ImGui.TreePop();
             }
-            ImGui.PopID();
+            ImGui.EndChild();ImGui.PopID();ImGui.EndTabItem();
         }
+        if(direct.Values.Any(v=>!represented.Contains(v.FcId))&&ImGui.BeginTabItem("Other fleets###submarine-unassigned")){
         foreach(var v in direct.Values.Where(v=>!represented.Contains(v.FcId)))
         {
             shown++;
@@ -89,6 +103,7 @@ public sealed partial class Plugin
             foreach(var sub in v.Submarines)if(ImGui.TreeNode($"{sub.Name} · {VoyageTimer(sub.ReturnTime)}###unassigned-sub-{sub.Slot}")){ImGui.TextUnformatted($"Rank {sub.Rank} · Parts: {string.Join(", ",sub.Parts)}");ImGui.TextUnformatted("Route: "+string.Join(", ",sub.Route));ImGui.TreePop();}
             ImGui.TreePop();
         }
-        if(shown==0)ImGui.TextWrapped("No submarines observed yet.");
+        ImGui.EndTabItem();}
+        ImGui.EndTabBar();
     }
 }

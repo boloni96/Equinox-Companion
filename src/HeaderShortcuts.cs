@@ -5,6 +5,7 @@ namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
     private bool CurrentFashionComplete() => Player.IsLoaded && FashionCompletion.IsComplete(ReadActor(),config.Discoveries,config.SharedRoster?.People??[],DateTimeOffset.UtcNow);
+    private string CurrentFashionTooltip() => FashionCompletion.Tooltip(Player.IsLoaded?ReadActor():null,config.Discoveries,config.SharedRoster?.People??[],DateTimeOffset.UtcNow);
     private static void DrawFashionCheck(Vector2 at,float size,float opacity=1)
     {
         var scale=size/64;var draw=ImGui.GetWindowDrawList();
@@ -40,7 +41,7 @@ public sealed partial class Plugin
             if (texture is not null) draw.AddImage(texture.Handle, at + new Vector2(3), at + new Vector2(size-3));
             else draw.AddText(at + new Vector2(4), 0xffffffff, "P");
         }
-        if (hover) ImGui.SetTooltip(fashion ? "Open Fashion Report · /fashionr"+(complete?"\nComplete this week for "+Player.CharacterName:"") : "Open planting guide · /planting\nRequires an identified paired estate, just like the command.");
+        if (hover) ImGui.SetTooltip(fashion ? "Open Fashion Report · /fashionr\n"+CurrentFashionTooltip() : "Open planting guide · /planting\nRequires an identified paired estate, just like the command.");
         if (!clicked) return;
         if (fashion) OnFashionCommand("/fashionr", "");
         else OnPlantingCommand("/planting", "");

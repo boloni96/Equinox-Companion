@@ -888,8 +888,9 @@ public sealed partial class Plugin : IDalamudPlugin
         if (ImGui.BeginTable("companion-header", 2, ImGuiTableFlags.SizingStretchProp))
         {
         var shortcutSize = ImGui.GetFontSize() * 2.1f;
+        var houseShortcuts=CurrentHouseShortcuts();
         ImGui.TableSetupColumn("Status", ImGuiTableColumnFlags.WidthStretch);
-        ImGui.TableSetupColumn("Shortcuts", ImGuiTableColumnFlags.WidthFixed, shortcutSize);
+        ImGui.TableSetupColumn("Shortcuts", ImGuiTableColumnFlags.WidthFixed, shortcutSize*(houseShortcuts.Length+1)+ImGui.GetStyle().ItemSpacing.X*houseShortcuts.Length);
         ImGui.TableNextColumn();
         var icon = Textures.GetFromFile(System.IO.Path.Combine(Pi.AssemblyLocation.DirectoryName!, "icon.png")).GetWrapOrDefault();
         if (icon is not null) { ImGui.Image(icon.Handle, new Vector2(40, 40)); ImGui.SameLine(); }
@@ -898,8 +899,10 @@ public sealed partial class Plugin : IDalamudPlugin
             DrawSharedStatus();
             ImGui.EndGroup();
         ImGui.TableNextColumn();
+        foreach(var house in houseShortcuts){DrawHouseShortcut(house,shortcutSize);ImGui.SameLine();}
+        var fashionX=ImGui.GetCursorPosX();
         DrawHeaderShortcut(true, shortcutSize);
-        DrawHeaderShortcut(false, shortcutSize);
+        ImGui.SetCursorPosX(fashionX);DrawHeaderShortcut(false, shortcutSize);
         ImGui.EndTable();
         }
             DrawOrderedTabs();

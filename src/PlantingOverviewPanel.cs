@@ -7,9 +7,25 @@ public sealed partial class Plugin
     private string plantingOverviewSearch="";
     private readonly Dictionary<string,bool> plantingOverviewAccounts=[];
     private static Vector4 OverviewColour(IEnumerable<SharedGardenPlan> plans,DateTimeOffset now) => GardenOverview.Attention(plans,now) switch {"dead"=>Red,"risk" or "check"=>Orange,"tend"=>new(.4f,.75f,1,1),"harvest"=>Green,_=>Grey};
+    private float DrawGardenIndicators(IEnumerable<SharedGardenPlan> plans,DateTimeOffset now,Vector2 at,float size)
+    {
+        var icons=GardenOverview.Indicators(plans,now);var draw=ImGui.GetWindowDrawList();
+        foreach(var icon in icons){var color=icon is "ready" or "matched"?Green:icon=="tend"?new Vector4(.25f,.65f,1,1):icon=="unknown"?Grey:Orange;
+            draw.AddRectFilled(at,at+new Vector2(size),ImGui.ColorConvertFloat4ToU32(new Vector4(color.X,color.Y,color.Z,.2f)),3);
+            GardenImage("assets/icons/"+icon+".png",at+new Vector2(1),new Vector2(size-2));
+            draw.AddRect(at,at+new Vector2(size),ImGui.ColorConvertFloat4ToU32(color),3);at.X+=size+3;}
+        return icons.Length*(size+3);
+    }
+    private void DrawOverviewIndicators(IEnumerable<SharedGardenPlan> plans,DateTimeOffset now)
+    {
+        var list=plans.ToArray();var icons=GardenOverview.Indicators(list,now);if(icons.Length==0)return;
+        ImGui.SameLine();var at=ImGui.GetCursorScreenPos();var size=ImGui.GetTextLineHeight();
+        ImGui.Dummy(new Vector2(icons.Length*(size+3),size));DrawGardenIndicators(list,now,at,size);
+        if(ImGui.IsItemHovered())ImGui.SetTooltip(GardenOverview.Summary(list,now));
+    }
     private void DrawPlantingOverview()
     {
-        ImGui.TextUnformatted("Planting · all shared gardens");
+        ImGui.TextUnformatted("Gardening · all shared gardens");
         if(config.SharedRoster is not {} roster){ImGui.TextWrapped("Connect your shared Journal in Settings to see everyone's houses and garden timers.");return;}
         ImGui.TextWrapped("Tend suggested every 12h. Harvest countdowns are estimates; Ready and Dead require game confirmation.");
         ImGui.TextDisabled("Name bars: T = next suggested tend · H = estimated harvest. Hover for every batch; click to expand.");
@@ -24,7 +40,7 @@ public sealed partial class Plugin
         var searching=!string.IsNullOrWhiteSpace(plantingOverviewSearch);
         bool Match(string text)=>!searching||text.Contains(plantingOverviewSearch,StringComparison.OrdinalIgnoreCase);
         int PersonRank(SharedPerson p){var i=config.TabOrder.IndexOf("person:"+p.Id);return i<0?int.MaxValue:i;}
-        ImGui.TextColored(new Vector4(.4f,.75f,1,1),"Blue: tend");ImGui.SameLine();ImGui.TextColored(Green,"Green: harvest");ImGui.SameLine();ImGui.TextColored(Orange,"Orange: check / risk");
+        ImGui.TextColored(new Vector4(.4f,.75f,1,1),"Blue: tend");ImGui.SameLine();ImGui.TextColored(Green,"Green: ready / cared for");ImGui.SameLine();ImGui.TextColored(Orange,"Orange: check / risk · mixed icons show together");
         if(!ImGui.BeginTabBar("planting-persons"))return;
         foreach(var person in people.OrderBy(PersonRank))
         {
@@ -89,7 +105,9 @@ public sealed partial class Plugin
         var position=ImGui.GetCursorScreenPos();
         var width=Math.Max(1,ImGui.GetContentRegionAvail().X);
         var nameWidth=width*.42f;
-        var timersWidth=Math.Max(1,width-nameWidth-ImGui.GetStyle().FramePadding.X*2);
+        var iconSize=ImGui.GetTextLineHeight();
+        var iconWidth=GardenOverview.Indicators(plans,now).Length*(iconSize+3);
+        var timersWidth=Math.Max(1,width-nameWidth-iconWidth-ImGui.GetStyle().FramePadding.X*2);
         var timers=string.Join(" | ",linked.SelectMany(h=>h.Batches.Select(b=>
             $"{(linked.Length>1?(h.House?.Type=="Free Company house"?"FC ":"Private "):"")}B{b.Batch}: {GardenOverview.HeaderSummary([b],now)}")));
         if(plans.Length==0)timers="No gardens recorded";
@@ -103,9 +121,10 @@ public sealed partial class Plugin
         ImGui.PopStyleColor();
         var hovered=ImGui.IsItemHovered();
         var draw=ImGui.GetWindowDrawList();
-        draw.PushClipRect(new Vector2(position.X+nameWidth,position.Y),new Vector2(position.X+width,position.Y+ImGui.GetFrameHeight()),true);
+        draw.PushClipRect(new Vector2(position.X+nameWidth,position.Y),new Vector2(position.X+width-iconWidth,position.Y+ImGui.GetFrameHeight()),true);
         draw.AddText(new Vector2(position.X+nameWidth,position.Y+ImGui.GetStyle().FramePadding.Y),ImGui.ColorConvertFloat4ToU32(colour),FitOverviewText(timers,timersWidth));
         draw.PopClipRect();
+        DrawGardenIndicators(plans,now,new Vector2(position.X+width-iconWidth,position.Y+ImGui.GetStyle().FramePadding.Y),iconSize);
         if(hovered)
         {
             ImGui.BeginTooltip();ImGui.PushTextWrapPos(ImGui.GetFontSize()*40);
@@ -163,6 +182,7 @@ public sealed partial class Plugin
         ImGui.PushStyleColor(ImGuiCol.Text,OverviewColour(house.Batches,now));
         var houseOpen=ImGui.TreeNode($"{owner.Replace("##","")}###house");
         ImGui.PopStyleColor();
+        DrawOverviewIndicators(house.Batches,now);
         if(houseOpen)
         {
             ImGui.TextWrapped($"{first.World} · {first.District} · W{first.Ward} P{first.Plot}");
@@ -175,6 +195,7 @@ public sealed partial class Plugin
                 ImGui.PushStyleColor(ImGuiCol.Text,OverviewColour([batch],now));
                 var expanded=ImGui.TreeNode($"Batch {batch.Batch}###batch");
                 ImGui.PopStyleColor();
+                DrawOverviewIndicators([batch],now);
                 ImGui.SameLine();
                 if(ImGui.SmallButton("Website plan"))Dalamud.Utility.Util.OpenLink(GardenCareStatus.WebsiteUrl(batch.HouseId,batch.Batch));
                 if(SharedGardenLocation.Match(currentAddress,[batch])==batch.HouseId)

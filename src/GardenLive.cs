@@ -4,7 +4,7 @@ public static class GardenLive
 {
     public static SharedGardenPlan Apply(SharedGardenPlan plan, IEnumerable<SyncEvent> events, Func<string,string> cropName, Func<string,double>? cropDays=null, Func<string,double?>? cropWilt=null)
     {
-        var beds=plan.Beds.ToDictionary(b=>b.Bed);
+        var beds=plan.Beds.Select(b=>b with {Crop=GardenCropIdentity.Canonical(b.Crop),ActualCrop=GardenCropIdentity.Canonical(b.ActualCrop)}).ToDictionary(b=>b.Bed);
         var complete=plan.CompletedAt;
         foreach(var e in events.OrderBy(e=>e.At))
         {
@@ -21,16 +21,16 @@ public static class GardenLive
                 b=b with {HarvestAt=harvest-TimeSpan.FromTicks((harvest-e.At).Ticks/100),LastFertilized=e.At,ObservedAt=e.At};
             else if(e.Kind=="garden.status"&&e.Crop is {Ready:false,Status:"growing" or "wilting" or "dead"} status)
             {
-                if(GardenVisualState.HasActualCrop(b)&&!string.Equals(b.ActualCrop,status.CropName,StringComparison.OrdinalIgnoreCase))
+                if(GardenVisualState.HasActualCrop(b)&&!GardenCropIdentity.Same(b.ActualCrop,status.CropName))
                     b=b with {Planted=null,Watered=null,NextTend=null,HarvestAt=null,Days=0,ActualSoil="",PlantEvent="",LastFertilized=null,TendedBy="",WiltHours=null};
-                b=b with {ActualCrop=status.CropName,Ready=false,KeepMature=false,GrowingObservedAt=status.Status=="growing"?e.At:null,WiltedAt=status.Status=="wilting"?e.At:null,DeadConfirmedAt=status.Status=="dead"?e.At:null,NextTend=status.Status=="dead"?null:b.NextTend,HarvestAt=status.Status=="dead"?null:b.HarvestAt,ObservedAt=e.At};
+                b=b with {ActualCrop=cropName(status.CropName),Ready=false,KeepMature=false,GrowingObservedAt=status.Status=="growing"?e.At:null,WiltedAt=status.Status=="wilting"?e.At:null,DeadConfirmedAt=status.Status=="dead"?e.At:null,NextTend=status.Status=="dead"?null:b.NextTend,HarvestAt=status.Status=="dead"?null:b.HarvestAt,ObservedAt=e.At};
             }
             else if(e.Kind=="garden.dead")
                 b=b with {Ready=false,KeepMature=false,DeadConfirmedAt=e.At,NextTend=null,HarvestAt=null,ObservedAt=e.At};
             else if(e.Kind=="garden.empty")
                 b=b with {ActualCrop="Empty",ActualSoil="",Planted=null,Watered=null,NextTend=null,HarvestAt=null,Ready=false,KeepMature=false,PlantEvent="",LastClearedAt=e.At,TendedBy="",LastFertilized=null,WiltHours=null,Days=0,ObservedAt=e.At};
             else if(e.Kind is "garden.ready" or "garden.observed")
-                b=b with {ActualCrop=e.Crop?.CropName??b.ActualCrop,Ready=true,NextTend=null,ObservedAt=e.At};
+                b=b with {ActualCrop=e.Crop is {} observedCrop?cropName(observedCrop.CropName):b.ActualCrop,Ready=true,NextTend=null,ObservedAt=e.At};
             else continue;
             if(e.Kind is "garden.planted" or "garden.tended" or "garden.empty" or "garden.ready" or "garden.observed")b=b with {DeadConfirmedAt=null,WiltedAt=null,GrowingObservedAt=e.Kind=="garden.tended"?e.At:null};
             else if(e.Kind=="garden.dead")b=b with {WiltedAt=null,GrowingObservedAt=null};
@@ -42,7 +42,7 @@ public static class GardenLive
     }
     public static SharedGardenBed[] Progress(SharedGardenBed[] beds,DateTimeOffset planAt)
     {
-        var result=beds.Select(b=>b.Crop.Length==0?b with {Status="actual"}:b with {Status=b.PlantEvent.Length==0||b.Planted<planAt||b.Planted is null||b.LastClearedAt>=b.Planted?"planned":b.ActualCrop!=b.Crop?"different":b.ActualSoil==b.Soil?"confirmed":b.ReplantOrder>0&&b.ActualSoil==b.StarterSoil?"starter":"different"}).ToArray();
+        var result=beds.Select(b=>b.Crop.Length==0?b with {Status="actual"}:b with {Status=b.PlantEvent.Length==0||b.Planted<planAt||b.Planted is null||b.LastClearedAt>=b.Planted?"planned":!GardenCropIdentity.Same(b.ActualCrop,b.Crop)?"different":b.ActualSoil==b.Soil?"confirmed":b.ReplantOrder>0&&b.ActualSoil==b.StarterSoil?"starter":"different"}).ToArray();
         for(var i=0;i<result.Length;i++)
         {
             var b=result[i];if(b.ReplantOrder==0)continue;

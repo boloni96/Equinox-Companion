@@ -125,7 +125,7 @@ public sealed partial class Plugin
             ImGui.PushStyleVar(ImGuiStyleVar.Alpha,ImGui.GetStyle().Alpha*.75f);
             if (ImGui.SmallButton("...")) ImGui.OpenPopup("Icon settings");
             ImGui.PopStyleVar();
-            if (hovered) ImGui.SetTooltip(name + " · Click to open · Double-click to close · Drag to move"+(fashionComplete?"\nComplete this week for "+Player.CharacterName:""));
+            if (hovered) ImGui.SetTooltip(name + " · Click to open · Double-click to close · Drag to move"+(name=="Fashion Report"?"\n"+CurrentFashionTooltip():""));
             if (ImGui.BeginPopup("Icon settings")) { DrawLauncherOptions(name, o); ImGui.EndPopup(); }
         }
         ImGui.End(); ImGui.PopStyleVar();

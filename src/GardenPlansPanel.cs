@@ -15,7 +15,7 @@ public sealed partial class Plugin
             AllowPinning=true;RespectCloseHotkey=true;AllowBackgroundBlur=true;
         }
         public override void PostDraw() => HandleNativeCollapse(this, () => plugin.MinimizeLauncher("Planting"));
-        public override void Draw() { plugin.DrawGardenPlans(); }
+        public override void Draw() { plugin.DrawGardenPlansWindow(); }
     }
     private string? plantingHouseId;
     private int plantingBatch=1;
@@ -55,7 +55,17 @@ public sealed partial class Plugin
             }).ToArray();
             plan=plan with {Beds=beds};if(existing>=0)result[existing]=plan;else result.Add(plan);
         }
-        return result.ToArray();
+        return result.Select(p=>{var revision=config.SharedRoster?.GardenPlanRevisions?.FirstOrDefault(r=>r.HouseId==p.HouseId&&r.Batch==p.Batch);
+            if(p.At==DateTimeOffset.MinValue&&revision is not null)p=p with {At=revision.At};
+            return GardenPlanEditing.Apply(p,config.Discoveries);}).ToArray();
+    }
+    private SharedGardenPlan? gardenActionsPlan;
+    private void DrawGardenPlansWindow()
+    {
+        gardenActionsPlan=null;
+        if(ImGui.BeginChild("garden-guide-content",new Vector2(0,Math.Max(100,ImGui.GetContentRegionAvail().Y-88))))DrawGardenPlans();
+        ImGui.EndChild();
+        if(gardenActionsPlan is {} plan)DrawGardenPlanActions(plan);
     }
     private void DrawGardenPlans()
     {
@@ -65,11 +75,19 @@ public sealed partial class Plugin
         var house=plans.Where(p=>p.HouseId==plantingHouseId).ToArray();
         var capacity=house.Max(p=>Math.Max(p.Batch,p.Capacity));
         var tabsAt=ImGui.GetCursorScreenPos();var tabsWidth=ImGui.GetContentRegionAvail().X;
-        var syncSize=Math.Max(36,ImGui.GetFrameHeight());var houseSize=syncSize*1.25f;var rowHeight=houseSize;
+        var syncSize=Math.Max(36,ImGui.GetFrameHeight());var houseSize=syncSize*1.25f;var rowHeight=houseSize+16;
         var tabWidth=Math.Min(85,Math.Max(40,(tabsWidth-houseSize-syncSize-5*ImGui.GetStyle().ItemSpacing.X)/capacity));
-        for(var i=1;i<=capacity;i++){if(i>1)ImGui.SameLine();if(ImGui.Selectable($"Batch {i}",plantingBatch==i,ImGuiSelectableFlags.None,new Vector2(tabWidth,ImGui.GetFrameHeight())))plantingBatch=i;}
+        for(var i=1;i<=capacity;i++){
+            ImGui.SetCursorScreenPos(tabsAt+new Vector2((i-1)*(tabWidth+ImGui.GetStyle().ItemSpacing.X),0));
+            var tabAt=ImGui.GetCursorScreenPos();
+            if(ImGui.Selectable($"Batch {i}",plantingBatch==i,ImGuiSelectableFlags.None,new Vector2(tabWidth,rowHeight)))plantingBatch=i;
+            var batch=house.FirstOrDefault(p=>p.Batch==i);if(batch is not null){var live=EffectiveGardenPlan(batch);
+                if(ImGui.IsItemHovered())ImGui.SetTooltip(GardenOverview.Summary([live],DateTimeOffset.UtcNow));
+                var iconCount=Math.Max(1,GardenOverview.Indicators([live],DateTimeOffset.UtcNow).Length);
+                DrawGardenIndicators([live],DateTimeOffset.UtcNow,tabAt+new Vector2(2,ImGui.GetFrameHeight()),Math.Min(16,(tabWidth-4)/iconCount-3));}
+        }
         var source=house.FirstOrDefault(p=>p.Batch==plantingBatch);if(source is null)return;
-        var plan=EffectiveGardenPlan(source);
+        var plan=EffectiveGardenPlan(source);gardenActionsPlan=plan;
         var sent=config.SentEvents.ToHashSet();
         var queued=LocalGardenActions().Where(e=>!sent.Contains(e.Id)&&e.Address is not null&&SharedGardenLocation.Match(e.Address,[plan])==plan.HouseId&&e.Patch==(plan.PhysicalPatch>0?plan.PhysicalPatch:plan.Batch)).Select(e=>e.Bed).ToHashSet();
         plan=plan with {Beds=plan.Beds.Select(b=>b with {Queued=queued.Contains(b.Bed)}).ToArray()};
@@ -111,6 +129,7 @@ public sealed partial class Plugin
         }
         }
         ImGui.SetCursorScreenPos(tabsAt+new Vector2(0,rowHeight+ImGui.GetStyle().ItemSpacing.Y));
+        DrawSavedGardenPlans(plan);
         if(gardenBedSync is {Complete:false})
         {
             ImGui.TextWrapped(gardenBedSync.Status);

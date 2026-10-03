@@ -20,7 +20,7 @@ public static class GardenVisualState
         "ready" or "keep-mature" => "plantMature",
         "dead" or "dead-estimated" => "plantDead",
         "wilt-estimated" or "wilted" or "at-risk" => "plantWilted",
-        _ => SeedlingEstimate(b,now)?"plantSeedling":"plantGrowing"
+        _ => GrowthPercent(b,now) is null?"seedIcon":SeedlingEstimate(b,now)?"plantSeedling":"plantGrowing"
     };
     public static string For(SharedGardenBed b,bool planVisible,DateTimeOffset now)
     {

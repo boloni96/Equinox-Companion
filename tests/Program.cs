@@ -695,7 +695,7 @@ foreach(var (percent,wet) in new[]{(0,false),(32,true),(33,false),(66,true),(99,
  var cropStage=artBed with {Planted=artNow.AddHours(-percent),HarvestAt=artNow.AddHours(100-percent),Watered=wet?artNow:null,NextTend=null,WiltHours=null,Ready=false,DeadConfirmedAt=null,WiltedAt=null};
  Check($"crop artwork {percent} percent wet={wet}",GardenVisualState.CropArtwork(cropStage,true,artNow),percent<33?"plantSeedling":"plantGrowing");
 }
-Check("unknown start keeps growing sprite after tending",GardenVisualState.CropArtwork(artBed with {Planted=null,HarvestAt=null,Watered=artNow},true,artNow),"plantGrowing");
+Check("unknown start uses neutral seed icon after tending",GardenVisualState.CropArtwork(artBed with {Planted=null,HarvestAt=null,Watered=artNow},true,artNow),"seedIcon");
 Check("wilt supersedes recent wet art",GardenVisualState.CropArtwork(artBed with {Watered=artNow.AddHours(-2),WiltedAt=artNow.AddHours(-1)},true,artNow),"plantWilted");
 Check("confirmed dead supersedes plan identity",GardenVisualState.CropArtwork(artBed with {Watered=artNow.AddHours(-2),DeadConfirmedAt=artNow.AddHours(-1),Ready=false},true,artNow),"plantDead");
 
@@ -955,3 +955,52 @@ Check("fashion check home world matches while visiting",FashionCompletion.IsComp
 Check("fashion check does not match same name other world",FashionCompletion.IsComplete(fashionActor with {HomeWorldName="Siren"},[],[sharedFashion],fashionNow).ToString(),"False");
 Check("fashion check newer game evidence wins",FashionCompletion.IsComplete(fashionActor,[fashionEvent with {Fashion=fashionEvent.Fashion! with {Score=0}}],[sharedFashion],fashionNow).ToString(),"False");
 Check("fashion cycle reset boundary",FashionCompletion.Cycle(DateTimeOffset.Parse("2026-10-06T08:00:00Z")).ToString("O"),"2026-10-06T08:00:00.0000000+00:00");
+
+// Combined release: crop aliases, immediate plan edits, mixed status and current-character shortcuts.
+var updateNow=DateTimeOffset.UtcNow;
+var updateActor=new Actor("123","Test Gardener",21,21,"Rafflesia","Rafflesia");
+var updateAddress=new Address("0000000000000001",21,339,15,9,0,false,false,"Rafflesia","Shirogane");
+var updateBed=new SharedGardenBed(1,"Royal Kukuru","Potting Soil","confirmed","Royal Kukuru","Potting Soil",updateNow.AddHours(-1),updateNow.AddMinutes(-30),6,false,updateNow.AddHours(11.5),updateNow.AddDays(6).AddHours(-1),PlantEvent:"old");
+var updatePlan=new SharedGardenPlan("test-house","Garden Estate","Rafflesia","Shirogane",15,9,1,"Thavnairian Onion",updateNow.AddHours(-2),Enumerable.Range(1,8).Select(n=>updateBed with {Bed=n}).ToArray(),PhysicalPatch:1);
+var aliasEvent=new SyncEvent(Guid.NewGuid().ToString("N"),"garden.status",updateNow,updateActor,updateAddress,1,1,Crop:new("Royal Kukuru Bean",false,"garden-menu-and-system-message","growing"));
+var aliasPlan=GardenLive.Apply(updatePlan,[aliasEvent],GardenCropIdentity.Canonical);
+Check("alias keeps planted",aliasPlan.Beds[0].Planted?.ToString("O"),updateBed.Planted?.ToString("O"));
+Check("alias keeps watered",aliasPlan.Beds[0].Watered?.ToString("O"),updateBed.Watered?.ToString("O"));
+Check("alias keeps confirmation",aliasPlan.Beds[0].Status,"confirmed");
+var favourite40=new GardenFavourite("curiel-royal","person","Owner","Curiel + Royal","Thavnairian Onion","Curiel Root","Royal Kukuru",["Thavnairian Onion"]);
+var definition40=GardenPlanEditing.Build(favourite40,updatePlan);
+Check("favourite creates clockwise bed1",definition40.Steps[0].Crop,"Curiel Root");
+Check("favourite starter replanted ninth",definition40.Steps[0].ReplantOrder.ToString(),"9");
+var swap40=GardenPlanEditing.Swap(definition40)!;
+Check("swap changes bed1",swap40.Steps[0].Crop,"Royal Kukuru");
+Check("swap changes bed2",swap40.Steps[1].Crop,"Curiel Root");
+Check("swap twice restores bed1",GardenPlanEditing.Swap(swap40)!.Steps[0].Crop,"Curiel Root");
+var edit40=new SyncEvent(Guid.NewGuid().ToString("N"),"garden.plan",updateNow,updateActor,updateAddress,PlanEdit:new(updatePlan.HouseId,1,updatePlan.At,swap40));
+Check("valid manual plan edit can sync",SyncValidation.CanSend(edit40,updateNow).ToString(),"True");
+Check("plan edit waits for protocol12",SyncValidation.SupportedByWebsite("garden.plan",11).ToString(),"False");
+Check("plan edit supported protocol12",SyncValidation.SupportedByWebsite("garden.plan",12).ToString(),"True");
+var edited40=GardenPlanEditing.Apply(updatePlan,[edit40]);
+Check("plan edit does not change actual",edited40.Beds[0].ActualCrop,updateBed.ActualCrop);
+Check("plan edit does not change care",edited40.Beds[0].Watered?.ToString("O"),updateBed.Watered?.ToString("O"));
+var reset40=edit40 with {Id=Guid.NewGuid().ToString("N"),At=updateNow.AddSeconds(1),PlanEdit=edit40.PlanEdit! with {BaseAt=updateNow,Plan=null}};
+var resetResult40=GardenPlanEditing.Apply(updatePlan,[edit40,reset40]);
+Check("reset only clears guidance",resetResult40.Beds[0].Crop,"");
+Check("reset keeps actual crop",resetResult40.Beds[0].ActualCrop,updateBed.ActualCrop);
+Check("reset keeps care clock",resetResult40.Beds[0].Watered?.ToString("O"),updateBed.Watered?.ToString("O"));
+Check("stale edit ignored",GardenPlanEditing.Apply(edited40,[edit40 with {PlanEdit=edit40.PlanEdit! with {Plan=definition40}}]).At.ToString("O"),edited40.At.ToString("O"));
+var mixed40=updatePlan with {Beds=[updateBed with {Ready=true},updateBed with {Bed=2,Watered=updateNow.AddHours(-13),Planted=updateNow.AddDays(-1)}]};
+var mixedIcons40=GardenOverview.Indicators([mixed40],updateNow);
+Check("mixed ready and tending icons together",(mixedIcons40.Contains("ready")&&mixedIcons40.Contains("tend")).ToString(),"True");
+Check("cared batch green check",GardenOverview.Indicators([updatePlan],updateNow).Contains("matched").ToString(),"True");
+var own40=new SharedHouse("home","0000000000000001","Private house","Estate","Rafflesia","Shirogane",15,9,"Small",updateActor.Name,"","",updateNow.AddDays(-1),false);
+var fc40=own40 with {Id="fc-home",Type="Free Company house",OwnerName="Other Master",FcId="fc",FcName="Test FC",LastEntry=updateNow.AddDays(-8)};
+var char40=new SharedCharacter("char",updateActor.Name,"Rafflesia","Dynamis","NA","Main",[own40,fc40],FcMember:true,FcId:"fc");
+SharedPerson[] people40=[new("person","Owner",[char40])];
+Check("current character gets two shortcuts",HouseShortcutSelection.For(updateActor,people40).Length.ToString(),"2");
+Check("different logged character gets no shortcuts",HouseShortcutSelection.For(updateActor with {Name="Other Character"},people40).Length.ToString(),"0");
+Check("no character no shortcuts",HouseShortcutSelection.For(null,people40).Length.ToString(),"0");
+Check("private tenant never gains private button",HouseShortcutSelection.For(updateActor,[new("person","Owner",[char40 with {Houses=[own40 with {OwnerName="Other"}]}])]).Length.ToString(),"0");
+Check("house checked before seven day boundary",HouseShortcutSelection.Checked(own40 with {LastEntry=updateNow.AddDays(-7).AddMilliseconds(1)},updateNow).ToString(),"True");
+Check("house check disappears at seven days",HouseShortcutSelection.Checked(own40 with {LastEntry=updateNow.AddDays(-7)},updateNow).ToString(),"False");
+Check("FC and private check independent",HouseShortcutSelection.Checked(fc40,updateNow).ToString(),"False");
+Check("current week score shown in hover",FashionCompletion.Tooltip(updateActor,[new(Guid.NewGuid().ToString("N"),"fashion.observed",updateNow,updateActor,null,Fashion:new(93,3,1,FashionCompletion.Cycle(updateNow).ToString("O")))],[],updateNow).Contains("93/100").ToString(),"True");

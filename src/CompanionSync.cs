@@ -4,7 +4,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 namespace EquinoxCompanion;
 
-public sealed record SyncEvent(string Id, string Kind, DateTimeOffset At, Actor Actor, Address? Address, int? Patch = null, int? Bed = null, PlantDetails? Plant = null, HouseDetails? House = null, CharacterDetails? Character = null, CropDetails? Crop = null, CollectionDetails? Collection = null, FashionDetails? Fashion = null, VoyageDetails? Voyage = null, GardenTargetDetails? GardenTarget = null, StorageDetails? Storage = null, FreeCompanyDetails? Company = null, CachedVoyage? CachedVoyage = null);
+public sealed record SyncEvent(string Id, string Kind, DateTimeOffset At, Actor Actor, Address? Address, int? Patch = null, int? Bed = null, PlantDetails? Plant = null, HouseDetails? House = null, CharacterDetails? Character = null, CropDetails? Crop = null, CollectionDetails? Collection = null, FashionDetails? Fashion = null, VoyageDetails? Voyage = null, GardenTargetDetails? GardenTarget = null, StorageDetails? Storage = null, FreeCompanyDetails? Company = null, CachedVoyage? CachedVoyage = null, GardenPlanChange? PlanEdit = null);
 public sealed record GardenTargetDetails(uint Argument, float X, float Y, float Z);
 public sealed record StorageDetails(string Key, string Name, uint[] Items);
 public sealed record CollectionDetails(string Category, uint[] Known, uint[] Unlocked, uint[] Obtained);

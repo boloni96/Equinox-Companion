@@ -12,7 +12,7 @@ public sealed partial class Plugin
         };
         foreach (var profile in config.SharedRoster?.People ?? [])
             tabs.Add(("person:" + profile.Id, profile.Name.Replace("##", "") + "###person-" + profile.Id, () => DrawSharedPerson(profile)));
-        tabs.Add(("planting", "Planting###equinox-planting", DrawPlantingOverview));
+        tabs.Add(("planting", "Gardening###equinox-planting", DrawPlantingOverview));
         tabs.Add(("submarines", "Submarines###equinox-submarines", DrawSubmarines));
         tabs.Add(("settings", "Settings###equinox-settings", DrawSettings));
         config.TabOrder ??= [];
