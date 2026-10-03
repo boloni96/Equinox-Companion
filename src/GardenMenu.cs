@@ -6,7 +6,7 @@ public sealed record GardenMenu(nint AddonAddress, DateTimeOffset OpenedAt,
     // Mature menus retain the growing menu's count metadata, but expose two choices.
     public static int VisibleOptionCount(int declared, int available, string? first, string? second)
     {
-        if (available >= 2 && (first == "Harvest Crop" || first == "Plant Seeds") && second == "Quit") return 2;
+        if (available >= 2 && (first == "Harvest Crop" || first == "Plant Seeds" || first == "Remove Crop") && second == "Quit") return 2;
         return declared is > 0 and <= 16 && available >= declared ? declared : 0;
     }
     public (int Patch, int Bed)? ReadyLocation()
@@ -27,7 +27,7 @@ public sealed record GardenMenu(nint AddonAddress, DateTimeOffset OpenedAt,
     }
     public (int Patch,int Bed)? NumberedLocation()
     {
-        if(Target.Address is null||Target.Address.Apartment||Target.Address.Workshop||Target.Address.Room!=0||Target.TargetId is null||Target.TargetDetails?.DataId!=2003757||!Options.Any(x=>x is "Plant Seeds" or "Tend Crop" or "Harvest Crop"))return null;
+        if(Target.Address is null||Target.Address.Apartment||Target.Address.Workshop||Target.Address.Room!=0||Target.TargetId is null||Target.TargetDetails?.DataId!=2003757||!Options.Any(x=>x is "Plant Seeds" or "Tend Crop" or "Harvest Crop" or "Remove Crop"))return null;
         var match=System.Text.RegularExpressions.Regex.Match(Title,@"^([1-8])(?:st|nd|rd|th) Bed, ([1-3])(?:st|nd|rd|th) Patch$");
         return match.Success?(int.Parse(match.Groups[2].Value),int.Parse(match.Groups[1].Value)):null;
     }

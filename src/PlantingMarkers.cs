@@ -13,9 +13,10 @@ public sealed partial class Plugin
     private GardenMenu? guidanceBed;
     private string gardenMarkerStatus="";
     private bool gardenMarkerError;
+    private (string House,int Batch,int WrongBed,int NextBed)? gardenWrongBed;
     private bool FastGardenSync => plantingWindow?.IsOpen==true || activeGardenSession is not null;
     private static string GardenSessionKey(SharedGardenPlan p)=>$"{p.HouseId}:{p.Batch}:{p.At:O}";
-    private void StopGardenSession() { activeGardenSession=null; guidanceBed=null; gardenMarkerStatus=""; }
+    private void StopGardenSession() { activeGardenSession=null; guidanceBed=null; gardenMarkerStatus="";gardenWrongBed=null; }
     private void RememberGuidanceBed(GardenMenu menu)
     {
         // Only a numbered empty-bed menu establishes identity; selected guide tabs never do.
@@ -41,7 +42,7 @@ public sealed partial class Plugin
     {
         if(!plantingWindow.IsOpen&&!minimizedLaunchers.Contains("Planting")){StopGardenSession();return;}
         if(!config.SyncEnabled||config.PairingKey.Length!=64||!Player.IsLoaded){StopGardenSession();return;}
-        activeGardenSession=null;gardenMarkerError=false;
+        activeGardenSession=null;gardenMarkerError=false;gardenWrongBed=null;
         gardenMarkerStatus="Automatic guide · Open a numbered bed in game. A fresh batch starts at Bed 1.";
         var menu=guidanceBed;var now=DateTimeOffset.UtcNow;
         var current=Volatile.Read(ref capturedContext)?.CandidateAt(now);
@@ -58,7 +59,7 @@ public sealed partial class Plugin
         var plan=EffectiveGardenPlan(source);
         if(plan.CompletedAt is not null || plan.Beds.Any(b=>b.Crop.Length>0)&&plan.Beds.Where(b=>b.Crop.Length>0).All(b=>b.Status=="confirmed")){StopGardenSession();gardenMarkerStatus="Planting complete · confirmed by game actions.";return;}
         var next=GardenGuidance.Next(plan);
-        if(next is null||next.Bed!=location.Bed){gardenMarkerError=next is not null;gardenMarkerStatus=next is null?"Waiting for the remaining planting steps.":$"Wrong bed: you opened Bed {location.Bed}; the plan expects Bed {next.Bed}. No items marked.";return;}
+        if(next is null||next.Bed!=location.Bed){if(next is not null)gardenWrongBed=(source.HouseId,source.Batch,location.Bed,next.Bed);gardenMarkerError=next is not null;gardenMarkerStatus=next is null?"Waiting for the remaining planting steps.":$"Wrong bed: you opened Bed {location.Bed}; the plan expects Bed {next.Bed}. No items marked.";return;}
         if(menu.EmptyLocation() is null){gardenMarkerStatus=$"Bed {location.Bed} is occupied. Review its planned/actual crop before replacing anything.";return;}
         var soil=next.ReplantOrder>0&&next.Status!="replant"?next.StarterSoil:next.Soil;
         gardenMarkerStatus=$"Bed {next.Bed}: {next.Crop} · {soil}";

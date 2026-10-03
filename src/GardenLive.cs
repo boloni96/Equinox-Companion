@@ -18,7 +18,7 @@ public static class GardenLive
             else if(e.Kind=="garden.fertilized" && !b.Ready && b.HarvestAt is {} harvest && e.At<harvest && (b.LastFertilized is null || e.At-b.LastFertilized>=TimeSpan.FromHours(1)))
                 b=b with {HarvestAt=harvest-TimeSpan.FromTicks((harvest-e.At).Ticks/100),LastFertilized=e.At,ObservedAt=e.At};
             else if(e.Kind=="garden.empty")
-                b=b with {ActualCrop="Empty",ActualSoil="",Planted=null,Watered=null,NextTend=null,HarvestAt=null,Ready=false,PlantEvent="",LastClearedAt=e.At,TendedBy="",ObservedAt=e.At};
+                b=b with {ActualCrop="Empty",ActualSoil="",Planted=null,Watered=null,NextTend=null,HarvestAt=null,Ready=false,PlantEvent="",LastClearedAt=e.At,TendedBy="",LastFertilized=null,WiltHours=null,Days=0,ObservedAt=e.At};
             else if(e.Kind is "garden.ready" or "garden.observed")
                 b=b with {ActualCrop=e.Crop?.CropName??b.ActualCrop,Ready=true,NextTend=null,ObservedAt=e.At};
             else continue;

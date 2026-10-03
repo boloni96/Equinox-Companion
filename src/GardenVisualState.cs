@@ -4,7 +4,7 @@ public static class GardenVisualState
     public static string For(SharedGardenBed b,bool planVisible,DateTimeOffset now)
     {
         if(planVisible&&b.Crop.Length>0&&b.Status is not ("confirmed" or "starter"))return "planned";
-        if(b.Ready)return "ready";
+        if(b.Ready)return planVisible&&b.Crop.Length==0?"keep-mature":"ready";
         if(b.ActualCrop=="Empty")return "empty";
         var death=b.Watered is {} w&&b.WiltHours is {} hours?w.AddHours(hours+24):(DateTimeOffset?)null;
         if(GardenTiming.DeathRisk(b.Ready,death,b.HarvestAt,now))return "dead-estimated";

@@ -41,14 +41,18 @@ public sealed partial class Plugin
         var crop=planVisible&&b.Crop.Length>0?b.Crop:b.ActualCrop;
         GardenImage("assets/beds/soil-"+(state=="dead-estimated"?"dead":state=="wet"?"wet":"normal")+".png",at,new(size));
         if(gardenPictures!.TryGetValue(crop,out var picture))
-            GardenImage(picture.GetProperty(state=="ready"?"plantMature":state=="dead-estimated"?"plantDead":state is "wilt-estimated" or "at-risk"?"plantWilted":"plantGrowing").GetString()!,at,new(size));
-        var effect=state switch {"wet"=>"wet-droplets","ready"=>"ready-sparkles","wilt-estimated" or "at-risk"=>"wilt-mist","dead-estimated"=>"dead-shade","unknown"=>"unknown-shade","planned"=>"planned-veil",_=>null};
+            GardenImage(picture.GetProperty(state is "ready" or "keep-mature"?"plantMature":state=="dead-estimated"?"plantDead":state is "wilt-estimated" or "at-risk"?"plantWilted":"plantGrowing").GetString()!,at,new(size));
+        var effect=state switch {"wet"=>"wet-droplets","ready" or "keep-mature"=>"ready-sparkles","wilt-estimated" or "at-risk"=>"wilt-mist","dead-estimated"=>"dead-shade","unknown"=>"unknown-shade","planned"=>"planned-veil",_=>null};
         if(effect is not null)GardenImage("assets/effects/"+effect+".png",at,new(size));
         GardenImage("assets/beds/frame-wood.png",at,new(size));
         var border=state switch {"wilt-estimated"=>"wilt","check-maturity"=>"unknown","empty" or "growing"=>null,_=>state};
         if(border is not null)GardenImage("assets/borders/"+border+".png",at,new(size));
-        if(state is "empty" or "growing")GardenImage("assets/icons/"+state+".png",at+new Vector2(91,7)*size/128,new Vector2(size/4));
-        else GardenImage("assets/overlays/"+state+".png",at,new(size));
+        var icon=state switch {"planned"=>"plan","wet"=>"water","due"=>"tend","wilt-estimated"=>"wilting",_=>state};
+        GardenImage("assets/icons/"+icon+".png",at+new Vector2(91,7)*size/128,new Vector2(size/4));
+        if(state is not ("empty" or "growing"))GardenImage("assets/overlays/"+state+".png",at+new Vector2(-3,81)*size/128,new(size));
+        if(planVisible&&b.Status is "different" or "confirmed")GardenImage("assets/overlays/"+(b.Status=="different"?"different":"matched")+".png",at+new Vector2(-3,41)*size/128,new(size));
+        else if(!planVisible&&b.Planted is {} planted&&b.LastFertilized is {} fed&&fed>=planted&&fed<=DateTimeOffset.UtcNow&&state!="empty")GardenImage("assets/overlays/fertilized.png",at+new Vector2(-3,41)*size/128,new(size));
+        if(planVisible&&b.Status is "starter" or "replant")GardenImage("assets/badges/"+b.Status+".png",at+new Vector2(8,48)*size/128,new Vector2(24)*size/128);
         if(planVisible){var marker=b.Status switch {"confirmed"=>"ready","starter"=>"starter","replant"=>"replant","different"=>"different",_=>null};
             if(marker is not null)GardenImage("assets/borders/"+marker+".png",at,new(size));}
         if(planVisible&&b.Status=="different") ImGui.GetWindowDrawList().AddRect(at+new Vector2(2),at+new Vector2(size-2),0xff5555ff,2,ImDrawFlags.None,3);

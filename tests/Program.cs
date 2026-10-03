@@ -130,6 +130,23 @@ if (args.Length > 0 && args[0] != "--queue")
 }
 
 var plantTarget = Sample(0, "bed-a") with { TargetDetails = new(2003757, 1, "EventObj", 0, 0, 0) };
+Check("remove only menu has two visible choices",GardenMenu.VisibleOptionCount(4,4,"Remove Crop","Quit").ToString(),"2");
+var removalMenu=menu with {Target=plantTarget};
+var removal=RemoveIntent.From(removalMenu,"Remove Crop",time)!;
+Check("confirmed crop removal clears exact bed",removal.Confirm(4025,time.AddSeconds(1),plantTarget)?.Bed.ToString(),"1");
+Check("confirmed withered removal clears exact bed",removal.Confirm(4018,time.AddSeconds(1),plantTarget)?.Kind,"garden.empty");
+Check("removal cancellation creates no intent",RemoveIntent.From(removalMenu,"Quit",time)?.EventId,null);
+Check("removal denial never clears",removal.Confirm(4026,time.AddSeconds(1),plantTarget)?.EventId,null);
+Check("healthy status never confirms removal",removal.Confirm(4017,time.AddSeconds(1),plantTarget)?.EventId,null);
+Check("removal other target rejected",removal.Confirm(4025,time.AddSeconds(1),plantTarget with {TargetId="bed-b"})?.EventId,null);
+Check("removal other house rejected",removal.Confirm(4025,time.AddSeconds(1),plantTarget with {Address=address with {HouseId="other"}})?.EventId,null);
+Check("removal other actor rejected",removal.Confirm(4025,time.AddSeconds(1),plantTarget with {Actor=actor with {ContentId="other"}})?.EventId,null);
+Check("removal expired intent rejected",removal.Confirm(4025,time.AddSeconds(31),plantTarget)?.EventId,null);
+Check("removal earlier response rejected",removal.Confirm(4025,time.AddSeconds(-1),plantTarget)?.EventId,null);
+Check("removal absent context rejected",removal.Confirm(4025,time.AddSeconds(1),null)?.EventId,null);
+Check("removal unknown title rejected",RemoveIntent.From(removalMenu with {Title="Unknown"},"Remove Crop",time)?.EventId,null);
+Check("removal non garden rejected",RemoveIntent.From(removalMenu with {Target=plantTarget with {TargetDetails=null}},"Remove Crop",time)?.EventId,null);
+
 var planting = new PlantIntent("plant-test", time, plantTarget, new(7731, "Mirror Apple Seeds", 7766, "Grade 3 Thanalan Topsoil"));
 Check("planting requires success response", planting.Confirm(4017, [1, 1], time.AddSeconds(1), plantTarget)?.EventId, null);
 Check("planting failed response never records", planting.Confirm(4005, [1, 1], time.AddSeconds(1), plantTarget)?.EventId, null);

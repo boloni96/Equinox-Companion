@@ -46,6 +46,7 @@ public sealed partial class Plugin : IDalamudPlugin
     private int menuObservations;
     private GardenMenu? activeGardenMenu;
     private TendIntent? pendingTend;
+    private RemoveIntent? pendingRemove;
     private PlantIntent? pendingPlant;
     private unsafe delegate void ConfirmPlantDelegate(AgentHousingPlant* agent);
     private Hook<ConfirmPlantDelegate>? plantHook;
@@ -66,7 +67,7 @@ public sealed partial class Plugin : IDalamudPlugin
     private readonly ObservationGate gate = new();
     private readonly List<Diagnostic> diagnostics = [];
     private readonly ConcurrentQueue<Diagnostic> menuMessages = new();
-    private readonly ConcurrentQueue<(DateTimeOffset At, uint Id, int?[] Parameters, GardenContext? Context, TendIntent? Intent, PlantIntent? Plant)> messages = new();
+    private readonly ConcurrentQueue<(DateTimeOffset At, uint Id, int?[] Parameters, GardenContext? Context, TendIntent? Intent, PlantIntent? Plant, RemoveIntent? Remove)> messages = new();
     private readonly JsonSerializerOptions json = new() { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
     private bool visible;
     private volatile bool recording;
@@ -246,7 +247,7 @@ public sealed partial class Plugin : IDalamudPlugin
         if (recording && now >= recordingUntil) StopRecording();
         if (Conditions[ConditionFlag.BetweenAreas] || Conditions[ConditionFlag.BetweenAreas51])
         {
-            companyCandidate = null; snapshot = null; currentAddress = null; Volatile.Write(ref pendingTend, null); Volatile.Write(ref pendingPlant, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); messages.Clear(); menuMessages.Clear(); readyMenus.Clear(); cropChats.Clear(); cropMatcher.Clear(); status = "Waiting for the area to finish loading."; return;
+            companyCandidate = null; snapshot = null; currentAddress = null; Volatile.Write(ref pendingTend, null); Volatile.Write(ref pendingRemove, null); Volatile.Write(ref pendingPlant, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); messages.Clear(); menuMessages.Clear(); readyMenus.Clear(); cropChats.Clear(); cropMatcher.Clear(); status = "Waiting for the area to finish loading."; return;
         }
         ObserveSafely("company-profile", () => ObserveCompanyProfile(now));
         if (now >= nextDiscovery)
@@ -266,13 +267,13 @@ public sealed partial class Plugin : IDalamudPlugin
             if (manager == null || manager->CurrentTerritory == null)
             {
                 // Ordinary non-housing zone. A transient load must not create a visit.
-                snapshot = null; currentAddress = null; Volatile.Write(ref pendingTend, null); Volatile.Write(ref pendingPlant, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null);
+                snapshot = null; currentAddress = null; Volatile.Write(ref pendingTend, null); Volatile.Write(ref pendingRemove, null); Volatile.Write(ref pendingPlant, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null);
                 if (Client.TerritoryType != 0) gate.Observe("outside", now);
                 status = "No housing territory loaded.";
                 DrainMessages();
                 return;
             }
-            if (!manager->CurrentTerritory->IsLoaded()) { currentAddress = null; Volatile.Write(ref pendingTend, null); Volatile.Write(ref pendingPlant, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); messages.Clear(); menuMessages.Clear(); readyMenus.Clear(); cropChats.Clear(); cropMatcher.Clear(); return; }
+            if (!manager->CurrentTerritory->IsLoaded()) { currentAddress = null; Volatile.Write(ref pendingTend, null); Volatile.Write(ref pendingRemove, null); Volatile.Write(ref pendingPlant, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); messages.Clear(); menuMessages.Clear(); readyMenus.Clear(); cropChats.Clear(); cropMatcher.Clear(); return; }
             var type = manager->GetCurrentHousingTerritoryType();
             var inside = type == HousingTerritoryType.Indoor;
             var address = AddressOf(inside ? manager->GetCurrentIndoorHouseId() : manager->GetCurrentHouseId());
@@ -448,6 +449,7 @@ public sealed partial class Plugin : IDalamudPlugin
                 }
                 var option = menu.OptionAt(copied[0]);
                 Volatile.Write(ref pendingTend, TendIntent.From(menu, option, now));
+                Volatile.Write(ref pendingRemove, RemoveIntent.From(menu, option, now));
                 menuMessages.Enqueue(new(now, "garden.callbackObservation", new {
                     menuTitle = menu.Title, options = menu.Options, arguments = copied,
                     selectedOptionCandidate = option, close = close != 0,
@@ -601,7 +603,9 @@ public sealed partial class Plugin : IDalamudPlugin
         var sender = message.OriginalSender.ExtractText();
         if (text.Length > 512 || sender.Length > 100) return;
         cropChats.Enqueue(new(now, target, text, sender));
-        if (recording && text.Contains(CropChatMatcher.ReadyText, StringComparison.Ordinal) && menuMessages.Count < 128)
+        // Local opt-in diagnostics capture other garden system messages for stage research.
+        // No inferred growth stage and no diagnostic text is uploaded.
+        if (recording && menuMessages.Count < 128)
             menuMessages.Enqueue(new(now, "garden.chatObservation", new { chatType = message.LogKind.ToString(), text, sender, candidateTarget = target }));
     }
 
@@ -636,7 +640,7 @@ public sealed partial class Plugin : IDalamudPlugin
                 }
             menuMessages.Enqueue(new(now, "garden.logTextObservation", new { logMessageId = message.LogMessageId, textParameters, parameters }));
         }
-        messages.Enqueue((DateTimeOffset.UtcNow, message.LogMessageId, parameters, Volatile.Read(ref capturedContext), Volatile.Read(ref pendingTend), Volatile.Read(ref pendingPlant)));
+        messages.Enqueue((DateTimeOffset.UtcNow, message.LogMessageId, parameters, Volatile.Read(ref capturedContext), Volatile.Read(ref pendingTend), Volatile.Read(ref pendingPlant), Volatile.Read(ref pendingRemove)));
     }
 
     private static GardenTargetDetails? GardenTargetOf(GardenSnapshot s) => s.TargetDetails is { EventArgument: {} argument } t ? new(argument,t.X,t.Y,t.Z) : null;
@@ -665,6 +669,10 @@ public sealed partial class Plugin : IDalamudPlugin
         {
             if (!ObservingGardens) continue;
             var candidate = message.Context?.CandidateAt(message.At);
+            var removed=message.Remove?.Confirm(message.Id,message.At,candidate);
+            if(removed is not null&&!config.Discoveries.Any(e=>e.Id==removed.EventId))
+                KeepDiscovery(new(removed.EventId,"garden.empty",removed.ConfirmedAt,WithWorldNames(removed.Actor),WithAddressNames(removed.Address),removed.Patch,removed.Bed,GardenTarget:GardenTargetOf(message.Remove!.Target)),force:true);
+            if(message.Id is 4018 or 4025 or 4026)Volatile.Write(ref pendingRemove,null);
             var confirmed = message.Intent?.Confirm(message.Id, message.At, candidate);
             if (confirmed?.Kind == "garden.fertilized")
             {
@@ -711,13 +719,13 @@ public sealed partial class Plugin : IDalamudPlugin
     private void StartRecording()
     {
         diagnostics.Clear(); recentSignals.Clear(); menuObservations = 0; messages.Clear(); menuMessages.Clear(); readyMenus.Clear(); cropChats.Clear(); cropMatcher.Clear(); lastSnapshotKey = "";
-        Volatile.Write(ref pendingTend, null); Volatile.Write(ref pendingPlant, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); snapshot = null; nextSample = default;
+        Volatile.Write(ref pendingTend, null); Volatile.Write(ref pendingRemove, null); Volatile.Write(ref pendingPlant, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); snapshot = null; nextSample = default;
         lastSubmittedOption = "None recorded";
         callbackHook?.Enable(); plantHook?.Enable();
         recordingUntil = DateTimeOffset.UtcNow.AddMinutes(5); recording = true; exportPath = null;
     }
 
-    private void StopRecording() { recording = false; if (!ObservingGardens) { callbackHook?.Disable(); plantHook?.Disable(); } Volatile.Write(ref pendingTend, null); Volatile.Write(ref pendingPlant, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); messages.Clear(); menuMessages.Clear(); readyMenus.Clear(); cropChats.Clear(); cropMatcher.Clear(); lastSnapshotKey = ""; }
+    private void StopRecording() { recording = false; if (!ObservingGardens) { callbackHook?.Disable(); plantHook?.Disable(); } Volatile.Write(ref pendingTend, null); Volatile.Write(ref pendingRemove, null); Volatile.Write(ref pendingPlant, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); messages.Clear(); menuMessages.Clear(); readyMenus.Clear(); cropChats.Clear(); cropMatcher.Clear(); lastSnapshotKey = ""; }
 
     private void Export()
     {
@@ -829,7 +837,7 @@ public sealed partial class Plugin : IDalamudPlugin
             if (ImGui.CollapsingHeader("Garden tracking details"))
             {
             ImGui.TextDisabled("Garden tracking controls: Settings > Tracking.");
-            ImGui.TextWrapped("English garden menus supported. Confirmed tending is saved per house, patch and bed. Website matching preserves existing batches. Planting records include the selected seed and soil plus a successful game response. Open the numbered bed menu after harvesting to sync the observed empty bed. Selecting Harvest alone never clears a bed.");
+            ImGui.TextWrapped("English garden menus supported. Confirmed tending is saved per house, patch and bed. Website matching preserves existing batches. Planting records include the selected seed and soil plus a successful game response. Confirmed Remove Crop responses clear the exact observed bed. After harvesting, open the numbered bed menu to sync it as empty. Selecting Harvest alone never clears a bed.");
             ImGui.TextWrapped($"Saved tending records: {config.Tending.Count} (latest 10,000 retained)");
             foreach (var tend in config.Tending.TakeLast(6).Reverse())
                 ImGui.TextWrapped($"{tend.ConfirmedAt.ToLocalTime():g} · {tend.Actor.Name} · W{tend.Address.Ward} P{tend.Address.Plot} · Patch {tend.Patch}, bed {tend.Bed}: tended");
