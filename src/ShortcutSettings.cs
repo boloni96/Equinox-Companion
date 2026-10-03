@@ -89,7 +89,7 @@ public sealed partial class Plugin
         MessageToggle("Estimated maturity: check in game",config.NotifyGardenMaturity,v=>config.NotifyGardenMaturity=v);
         MessageToggle("Unknown garden care time: check tending",config.NotifyGardenUnknownCare,v=>config.NotifyGardenUnknownCare=v);
         ImGui.EndDisabled();
-        ImGui.TextWrapped("One compact summary for this character's owned/shared houses. Green: harvest; blue: tending; orange: estimated risk; red: confirmed dead. Unchanged warnings are not repeated when switching characters in this plugin session.");
+        ImGui.TextWrapped("One compact summary for this character's owned/shared houses. Green: harvest; blue: tending; orange: estimated risk; red: confirmed dead. Each login shows one compact reminder again. While logged in, unchanged warnings stay quiet; changing areas does not repeat them.");
         ImGui.Separator();ImGui.TextUnformatted("Commands and Fashion Report");
         MessageToggle("Fashion Report browser link",config.NotifyFashionLink,v=>config.NotifyFashionLink=v);
         MessageToggle("Planting command: house not identified",config.NotifyPlantingUnavailable,v=>config.NotifyPlantingUnavailable=v);

@@ -2,15 +2,15 @@ using Dalamud.Game.Text.SeStringHandling;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
-    private ulong gardenNoticeCharacter;
     private DateTimeOffset nextGardenNotice;
-    private readonly HashSet<string> gardenNotices = [];
+    private readonly GardenNoticeSession gardenNotices = new();
+    private void OnGardenNoticeLogin() => gardenNotices.Login();
     private void UpdateGardenCareNotices(DateTimeOffset now)
     {
-        if (!Player.IsLoaded || Player.ContentId == 0) { gardenNoticeCharacter = 0; return; }
-        if (gardenNoticeCharacter != Player.ContentId)
+        if (!Player.IsLoaded || Player.ContentId == 0) return;
+        if (gardenNotices.ObserveCharacter(Player.ContentId))
         {
-            gardenNoticeCharacter = Player.ContentId; nextGardenNotice = now.AddSeconds(20); nextRosterRead = default; return;
+            nextGardenNotice = now.AddSeconds(20); nextRosterRead = default; return;
         }
         if (!config.NotifyGardenCare || !config.SyncEnabled || now < nextGardenNotice || config.SharedRoster is not { } roster) return;
         nextGardenNotice = now.AddSeconds(30);

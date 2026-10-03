@@ -174,6 +174,7 @@ public sealed partial class Plugin : IDalamudPlugin
         Pi.UiBuilder.OpenMainUi += Open;
         Pi.UiBuilder.OpenConfigUi += Open;
         Framework.Update += Update;
+        Client.Login += OnGardenNoticeLogin;
         Chat.LogMessage += OnLog;
         Chat.ChatMessage += OnGardenChat;
         foreach (var menuEvent in MenuEvents) Addons.RegisterListener(menuEvent, GardenMenus, OnGardenMenu);
@@ -883,6 +884,7 @@ public sealed partial class Plugin : IDalamudPlugin
         Chat.ChatMessage -= OnGardenChat;
         foreach (var menuEvent in MenuEvents) Addons.UnregisterListener(menuEvent, GardenMenus, OnGardenMenu);
         Framework.Update -= Update;
+        Client.Login -= OnGardenNoticeLogin;
         Pi.UiBuilder.Draw -= Draw;
         windows.RemoveAllWindows();
         fashionWindow.Dispose();

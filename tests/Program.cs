@@ -507,3 +507,18 @@ var compactGardenChat=GardenCareStatus.ChatSummary(manyGardenNotices,careNow);
 Check("thirty houses compact into one status segment",compactGardenChat.Length.ToString(),"1");
 Check("many-house summary has counts",compactGardenChat[0].Text,"Ready to harvest: 30 batches at 30 houses");
 Check("single house keeps its name",GardenCareStatus.ChatSummary([new("h","HAVEN15-11",1,"harvest",null)],careNow)[0].Text,"Ready to harvest at 'HAVEN15-11': Batch 1.");
+
+var noticeSession=new GardenNoticeSession();
+Check("first loaded character starts reminder session",noticeSession.ObserveCharacter(123).ToString(),"True");
+Check("initial unchanged warning is shown",noticeSession.Add("same-bed-harvest").ToString(),"True");
+Check("unchanged warning suppressed while logged in",noticeSession.Add("same-bed-harvest").ToString(),"False");
+Check("missing player during loading is not login",noticeSession.ObserveCharacter(0).ToString(),"False");
+Check("same player after loading is not login",noticeSession.ObserveCharacter(123).ToString(),"False");
+Check("zoning preserves warning suppression",noticeSession.Add("same-bed-harvest").ToString(),"False");
+Check("changed urgency can show new warning",noticeSession.Add("same-bed-risk-1h").ToString(),"True");
+noticeSession.Login();
+Check("same character relog starts new reminder session",noticeSession.ObserveCharacter(123).ToString(),"True");
+Check("unchanged warning returns after relog",noticeSession.Add("same-bed-harvest").ToString(),"True");
+Check("no repeated warning after login summary",noticeSession.Add("same-bed-harvest").ToString(),"False");
+Check("different character gets own login reminder",noticeSession.ObserveCharacter(456).ToString(),"True");
+Check("shared warning can show for newly logged character",noticeSession.Add("same-bed-harvest").ToString(),"True");
