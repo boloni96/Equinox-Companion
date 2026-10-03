@@ -6,6 +6,16 @@ public static class GardenVisualState
     // Illustrative first 33% of the recorded growth estimate, not an observed game stage.
     public static bool SeedlingEstimate(SharedGardenBed b,DateTimeOffset now) => HasActualCrop(b) && For(b,false,now) is "wet" or "due" or "growing" && !b.Ready && b.DeadConfirmedAt is null && b.Planted is {} start && b.HarvestAt is {} end && end>start && now>=start && now<start+(end-start)*.33;
     public static double? GrowthPercent(SharedGardenBed b,DateTimeOffset now) => b.Planted is {} start&&b.HarvestAt is {} end&&end>start?Math.Clamp((now-start).TotalSeconds/(end-start).TotalSeconds*100,0,100):null;
+    public static bool EffectVisible(DateTimeOffset now) => now.ToUnixTimeSeconds()%2==0;
+    public static string CropArtwork(SharedGardenBed b,bool planVisible,DateTimeOffset now,bool animate=false) => For(b,planVisible,now) switch
+    {
+        "planned" => "plantLive",
+        "ready" or "keep-mature" or "check-maturity" => "plantMature",
+        "dead" or "dead-estimated" => "plantDead",
+        "wilt-estimated" or "wilted" or "at-risk" => "plantWilted",
+        "wet" => SeedlingEstimate(b,now)?(animate&&!EffectVisible(now)?"plantSeedling":"plantSeedlingWet"):(animate&&!EffectVisible(now)?"plantGrowing":"plantGrowingWet"),
+        _ => SeedlingEstimate(b,now)?"plantSeedling":"plantGrowing"
+    };
     public static string For(SharedGardenBed b,bool planVisible,DateTimeOffset now)
     {
 

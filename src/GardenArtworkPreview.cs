@@ -6,6 +6,9 @@ public sealed partial class Plugin
 {
     private string[]? gardenPreviewPaths;
     private string gardenPreviewSearch = "", gardenPreviewCategory = "icons", gardenPreviewSelected = "";
+    private bool gardenFlowerPreviewRunning=true;
+    private double gardenFlowerPreviewStarted=-1;
+    private string gardenFlowerPreviewColour="white";
     private void DrawGardenInfoLabel(string icon, string label)
     {
         var texture=Textures.GetFromFile(Path.Combine(Pi.AssemblyLocation.DirectoryName!,"garden-art/assets/icons/"+icon+".png")).GetWrapOrDefault();
@@ -16,6 +19,7 @@ public sealed partial class Plugin
     {
         if(!ImGui.CollapsingHeader("Garden artwork preview"))return;
         ImGui.TextWrapped("Preview only — these controls do not change plants, care times, observations or your shared journal. Some artwork still needs supported game observations before it can appear automatically.");
+        DrawGardenFlowerPreview();
         if(gardenPreviewPaths is null)
         {
             var root=Path.Combine(Pi.AssemblyLocation.DirectoryName!,"garden-art");
@@ -52,5 +56,22 @@ public sealed partial class Plugin
         }
         else ImGui.TextUnformatted("Loading artwork…");
         ImGui.SetCursorScreenPos(at);ImGui.Dummy(new Vector2(size));
+    }
+    private void DrawGardenFlowerPreview()
+    {
+        if(!ImGui.TreeNode("Possible flower colours (demo)")){gardenFlowerPreviewStarted=-1;return;}
+        var now=ImGui.GetTime();
+        if(gardenFlowerPreviewStarted<0)gardenFlowerPreviewStarted=now;
+        if(ImGui.Checkbox("Cycle colours every second",ref gardenFlowerPreviewRunning))gardenFlowerPreviewStarted=now;
+        if(gardenFlowerPreviewRunning)gardenFlowerPreviewColour=FlowerColourPreview.At(now-gardenFlowerPreviewStarted);
+        ImGui.TextWrapped("Oldrose example · possible rare colours, not a confirmed flower. The normal colour can still be the result. Equal display time does not mean equal odds.");
+        var at=ImGui.GetCursorScreenPos();var size=Math.Min(128,ImGui.GetContentRegionAvail().X);
+        GardenImage("assets/beds/soil-normal.png",at,new(size));
+        GardenImage("assets/flower-colors/oldrose/"+gardenFlowerPreviewColour+".png",at,new(size));
+        GardenImage("assets/beds/frame-wood.png",at,new(size));
+        ImGui.Dummy(new Vector2(size));
+        ImGui.TextUnformatted("Possible: "+gardenFlowerPreviewColour);
+        ImGui.TextWrapped("Automatic colour display still needs indoor flowerpot identification and syncing. This demo changes no garden records.");
+        ImGui.TreePop();
     }
 }

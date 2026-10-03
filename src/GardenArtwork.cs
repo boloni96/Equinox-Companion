@@ -62,12 +62,17 @@ public sealed partial class Plugin
     private static Vector2 GardenCarePosition(Vector2 at,float size) => at+new Vector2(88*size/128,size-Math.Max(7,size*8/128)-ImGui.GetTextLineHeight()-3-size/4);
     private void DrawGardenTile(SharedGardenBed b,bool planVisible,Vector2 at,float size,bool wrongBed=false,bool selected=false)
     {
-        LoadGardenPictures();var state=GardenVisualState(b,planVisible,DateTimeOffset.UtcNow);
+        LoadGardenPictures();var now=DateTimeOffset.UtcNow;var state=GardenVisualState(b,planVisible,now);
         var crop=EquinoxCompanion.GardenVisualState.DisplayCrop(b,planVisible);
+        var animate=config.SharedRoster?.GardenAnimateEffects??true;
+        var cropArtwork=EquinoxCompanion.GardenVisualState.CropArtwork(b,planVisible,now,animate);
         GardenImage("assets/beds/soil-"+(state is "dead" or "dead-estimated"?"dead":state=="wet"?"wet":"normal")+".png",at,new(size));
-        if(gardenPictures!.TryGetValue(crop,out var picture))
-            GardenImage(picture.GetProperty(state is "ready" or "keep-mature" or "check-maturity"?"plantMature":state is "dead" or "dead-estimated"?"plantDead":state is "wilt-estimated" or "wilted" or "at-risk"?"plantWilted":state=="planned"||EquinoxCompanion.GardenVisualState.SeedlingEstimate(b,DateTimeOffset.UtcNow)?"plantSeedling":"plantGrowing").GetString()!,at,new(size));
+        var hasPicture=gardenPictures!.TryGetValue(crop,out var picture);
+        if(hasPicture)GardenImage(picture.GetProperty(cropArtwork).GetString()!,at,new(size));
         var effect=state switch {"wet"=>"wet-droplets","ready" or "keep-mature" or "check-maturity"=>"ready-sparkles","wilt-estimated" or "wilted" or "at-risk"=>"wilt-mist","dead" or "dead-estimated"=>"dead-shade","unknown"=>"unknown-shade","planned"=>"planned-veil",_=>null};
+        // Wet stage sprites already contain droplets; keep the standalone effect for crops without artwork.
+        if(state=="wet"&&hasPicture)effect=null;
+        if(animate&&effect is "wet-droplets" or "ready-sparkles" or "wilt-mist"&&!EquinoxCompanion.GardenVisualState.EffectVisible(now))effect=null;
         if(effect is not null){var shade=effect is "unknown-shade" or "planned-veil" or "dead-shade";GardenImage("assets/effects/"+effect+".png",shade?at-new Vector2(size*.06f):at,new(size*(shade?1.12f:1)));}
         GardenImage("assets/beds/frame-"+(config.SharedRoster?.GardenFrame=="simple"?"simple":"wood")+".png",at,new(size));
         var border=state switch {"wilt-estimated" or "wilted"=>"wilt","check-maturity"=>"unknown","empty" or "growing"=>null,_=>state};

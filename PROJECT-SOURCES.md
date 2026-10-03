@@ -45,3 +45,5 @@ Keep crop-specific maturity and neglect estimates separate. Tending and fertiliz
 5. Credits page grouping original projects, data references and artwork provenance without putting third-party branding into everyday feature labels.
 
 These are proposals, not scheduled work or promises that the underlying game data is always available. Future source studies should record an exact commit where possible and distinguish documentation review from implementation and live testing.
+
+Flowerpot colour research: see [FLOWERPOT-COLOUR-RESEARCH.md](FLOWERPOT-COLOUR-RESEARCH.md). Pinned English prediction text and community colour guidance reviewed; one-second illustrative preview implemented, indoor pot synchronization still pending.

@@ -1,5 +1,5 @@
 namespace EquinoxCompanion;
-public sealed record SharedRoster(long Revision, DateTimeOffset Updated, SharedPerson[] People, SharedVoyage[]? Voyages = null, int ProtocolVersion = 1, SharedGardenPlan[]? GardenPlans = null, SharedGardenCare[]? GardenCare = null, SharedGardenYield[]? GardenYields = null, SharedCachedVoyage[]? CachedVoyages = null, string GardenFrame = "wood", bool GardenCornerTrim = false, SharedGardenTarget[]? GardenTargets = null);
+public sealed record SharedRoster(long Revision, DateTimeOffset Updated, SharedPerson[] People, SharedVoyage[]? Voyages = null, int ProtocolVersion = 1, SharedGardenPlan[]? GardenPlans = null, SharedGardenCare[]? GardenCare = null, SharedGardenYield[]? GardenYields = null, SharedCachedVoyage[]? CachedVoyages = null, string GardenFrame = "wood", bool GardenCornerTrim = false, SharedGardenTarget[]? GardenTargets = null, bool GardenAnimateEffects = true);
 public sealed record SharedVoyage(string FcId, string FcName, DateTimeOffset At, SubmarineDetails[] Submarines);
 public sealed record SharedPerson(string Id, string Name, SharedCharacter[] Characters);
 public sealed record SharedCharacter(string Id, string Name, string World, string Dc, string Region, string Account, SharedHouse[] Houses, string AccountId = "", bool? NeedsBoost = null, bool? FcMember = null, string FcId = "");

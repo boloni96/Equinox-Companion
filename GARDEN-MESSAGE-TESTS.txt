@@ -43,3 +43,10 @@ ADDED CHECKS FOR THIS RELEASE
 Verified source: https://github.com/xivapi/ffxiv-datamining/blob/d9582a624eaec69d45649366dee801c2f3a6e9b3/csv/en/custom/001/CmnDefHousingGardeningPlant_00151.csv
 
 - Double-click Sync during a partial walk. Its number should clear and the icon remain idle; releasing the second click must not restart. A later single click starts at Bed 1.
+
+V7.11.44 / 0.5.1.32 visual checks
+- Unplanted plan: full-size live identity illustration. Immediately after planting: tiny seedling, wet for recorded care. The actual crop must override a different planned crop.
+- Water drops, ready sparkles and wilt mist: one second visible / one second hidden. Plant, soil, warning border and hover targets stay visible.
+- Disable Animate water, sparkles and wilt mist on the website; after Companion refreshes, both views should use steady effects.
+- Artwork preview > Possible flower colours (demo): Oldrose white/black/rainbow change each second. Pause freezes it; real beds and shared records remain unchanged. This is not yet automatic indoor flowerpot support.
+- For indoor flowerpot research, capture exact menu/chat text before and after each pomace and the harvest result, with screenshots and a diagnostic export. See FLOWERPOT-COLOUR-RESEARCH.md.

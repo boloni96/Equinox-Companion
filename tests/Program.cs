@@ -687,3 +687,23 @@ Check("single sync click starts",GardenBedSyncSession.ButtonAction(true,false,fa
 Check("second press cancels sync",GardenBedSyncSession.ButtonAction(false,true,true,ref suppressSync),"cancel");
 Check("double click release cannot restart",GardenBedSyncSession.ButtonAction(true,false,false,ref suppressSync),null);
 Check("later single click starts again",GardenBedSyncSession.ButtonAction(true,false,false,ref suppressSync),"start");
+
+// Crop identity artwork belongs to plans; planted crops use their own growth stage.
+var cropPreview=artBed with {Crop="Krakka Root",ActualCrop="Empty",Status="planned",Watered=null,Planted=null,HarvestAt=null,Ready=false};
+Check("unplanted plan uses live identity illustration",GardenVisualState.CropArtwork(cropPreview,true,artNow),"plantLive");
+foreach(var (percent,wet) in new[]{(0,false),(32,true),(33,false),(66,true),(99,false),(100,true)}){
+ var cropStage=artBed with {Planted=artNow.AddHours(-percent),HarvestAt=artNow.AddHours(100-percent),Watered=wet?artNow:null,NextTend=null,WiltHours=null,Ready=false,DeadConfirmedAt=null,WiltedAt=null};
+ Check($"crop artwork {percent} percent wet={wet}",GardenVisualState.CropArtwork(cropStage,true,artNow),percent==100?"plantMature":percent<33?(wet?"plantSeedlingWet":"plantSeedling"):(wet?"plantGrowingWet":"plantGrowing"));
+}
+Check("unknown start stays growing wet",GardenVisualState.CropArtwork(artBed with {Planted=null,HarvestAt=null,Watered=artNow},true,artNow),"plantGrowingWet");
+Check("wilt supersedes recent wet art",GardenVisualState.CropArtwork(artBed with {Watered=artNow.AddHours(-2),WiltedAt=artNow.AddHours(-1)},true,artNow),"plantWilted");
+Check("confirmed dead supersedes plan identity",GardenVisualState.CropArtwork(artBed with {Watered=artNow.AddHours(-2),DeadConfirmedAt=artNow.AddHours(-1),Ready=false},true,artNow),"plantDead");
+
+foreach(var (seconds,colour) in new[]{(0.0,"white"),(.999,"white"),(1.0,"black"),(1.999,"black"),(2.0,"rainbow"),(2.999,"rainbow"),(3.0,"white")})Check($"flower preview at {seconds}s",FlowerColourPreview.At(seconds),colour);
+var effectNow=DateTimeOffset.FromUnixTimeSeconds(1800000000);
+var effectBed=artBed with {Watered=effectNow,Planted=effectNow,HarvestAt=effectNow.AddDays(3),WiltedAt=null,DeadConfirmedAt=null,Ready=false};
+Check("water appears in first second",GardenVisualState.CropArtwork(effectBed,false,effectNow,true),"plantSeedlingWet");
+Check("water disappears but plant stays next second",GardenVisualState.CropArtwork(effectBed,false,effectNow.AddSeconds(1),true),"plantSeedling");
+Check("steady water remains visible",GardenVisualState.CropArtwork(effectBed,false,effectNow.AddSeconds(1),false),"plantSeedlingWet");
+Check("sparkles alternate at one second",(GardenVisualState.EffectVisible(effectNow)&&!GardenVisualState.EffectVisible(effectNow.AddSeconds(1))&&GardenVisualState.EffectVisible(effectNow.AddSeconds(2))).ToString(),"True");
+Check("old shared rosters retain animation default",new SharedRoster(1,effectNow,[]).GardenAnimateEffects.ToString(),"True");
