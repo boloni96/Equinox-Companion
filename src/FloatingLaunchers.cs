@@ -1,6 +1,7 @@
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility;
+using Dalamud.Interface.Windowing;
 namespace EquinoxCompanion;
 
 [Serializable]
@@ -19,6 +20,16 @@ public sealed partial class Plugin
     private readonly HashSet<string> minimizedLaunchers = [];
     private string? pendingLauncher;
     private double launcherClickAt;
+    // PostDraw runs after ImGui.End, including collapsed windows. Query this
+    // window explicitly: IsWindowCollapsed() here would read the parent window.
+    private static void HandleNativeCollapse(Window window, Action? minimize)
+    {
+        if (!window.IsOpen || minimize is null) return;
+        var native = ImGuiP.FindWindowByName(window.WindowName);
+        if (native.IsNull || !native.Collapsed) return;
+        ImGui.SetWindowCollapsed(window.WindowName, false, ImGuiCond.Always);
+        minimize();
+    }
     private void MinimizeLauncher(string name)
     {
         minimizedLaunchers.Add(name);
@@ -129,7 +140,7 @@ public sealed partial class Plugin
     }
     private void DrawFloatingLauncherSettings()
     {
-        ImGui.TextWrapped("Minimize shows an icon. Single-click reopens its window; double-click closes both. X or Esc closes without an icon. Commands and keybinds reopen windows. Drag icons to move them.");
+        ImGui.TextWrapped("Use the native title-bar collapse triangle or double-click the title bar to minimize to an icon. Single-click reopens its window; double-click closes both. X or Esc closes without an icon. Commands and keybinds reopen windows. Drag icons to move them.");
         var names = new[] { "Companion", "Fashion Report", "Planting" };
         for (var i = 0; i < names.Length; i++) { ImGui.PushID(i); DrawLauncherOptions(names[i], LauncherOptions(names[i], i)); ImGui.Separator(); ImGui.PopID(); }
     }

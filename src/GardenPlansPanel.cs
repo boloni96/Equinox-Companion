@@ -8,13 +8,14 @@ public sealed partial class Plugin
     private sealed class PlantingGuideWindow : Window
     {
         private readonly Plugin plugin;
-        public PlantingGuideWindow(Plugin plugin) : base("Planting guide###EquinoxPlanting",ImGuiWindowFlags.NoCollapse)
+        public PlantingGuideWindow(Plugin plugin) : base("Planting guide###EquinoxPlanting",ImGuiWindowFlags.None)
         {
             this.plugin=plugin;Size=new Vector2(560,680);SizeCondition=ImGuiCond.FirstUseEver;
             SizeConstraints=new WindowSizeConstraints{MinimumSize=new Vector2(360,360),MaximumSize=new Vector2(float.MaxValue)};
             AllowPinning=true;RespectCloseHotkey=true;AllowBackgroundBlur=true;
         }
-        public override void Draw() { if (ImGui.SmallButton("Minimize to icon")) plugin.MinimizeLauncher("Planting"); plugin.DrawGardenPlans(); }
+        public override void PostDraw() => HandleNativeCollapse(this, () => plugin.MinimizeLauncher("Planting"));
+        public override void Draw() { plugin.DrawGardenPlans(); }
     }
     private string? plantingHouseId;
     private int plantingBatch=1;

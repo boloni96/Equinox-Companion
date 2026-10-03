@@ -28,7 +28,7 @@ public sealed partial class Plugin
         private bool picturePressed;
         public Action? Minimize { get; set; }
         private readonly Action openBrowser;
-        public FashionReportWindow(Action openBrowser) : base("Fashion Report###EquinoxFashion", ImGuiWindowFlags.NoCollapse)
+        public FashionReportWindow(Action openBrowser) : base("Fashion Report###EquinoxFashion", ImGuiWindowFlags.None)
         {
             this.openBrowser = openBrowser;
             Size = new Vector2(720, 490);
@@ -84,9 +84,9 @@ public sealed partial class Plugin
             }
             if (loading is null && (login || DateTimeOffset.UtcNow - lastAttempt > TimeSpan.FromHours(1))) Refresh();
         }
+        public override void PostDraw() => HandleNativeCollapse(this, Minimize);
         public override void Draw()
         {
-            if (ImGui.SmallButton("Minimize to icon")) Minimize?.Invoke();
             if (resize)
             {
                 var display = ImGui.GetIO().DisplaySize;
