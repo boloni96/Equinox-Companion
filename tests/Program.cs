@@ -307,7 +307,7 @@ Check("combined profile categories readable", CompanyProfileIdentity.Flags(5,["T
 
 var groupedCharacter = new SharedCharacter("group-test", "Test", "Rafflesia", "Dynamis", "NA", "MAIN", [], "main-id", false, false);
 Check("boosted without FC remains Regulars", SharedCharacterGrouping.Group(groupedCharacter), "Regulars");
-Check("boosted FC member remains Regulars", SharedCharacterGrouping.Group(groupedCharacter with { FcMember = true }), "Regulars");
+Check("FC member without private house is Floater", SharedCharacterGrouping.Group(groupedCharacter with { FcMember = true }), "Floaters");
 Check("unboosted FC member is Floater", SharedCharacterGrouping.Group(groupedCharacter with { NeedsBoost = true, FcMember = true }), "Floaters");
 Check("unboosted without FC is Empty", SharedCharacterGrouping.Group(groupedCharacter with { NeedsBoost = true }), "Empty");
 Check("stable account identity", SharedCharacterGrouping.AccountKey(groupedCharacter), "main-id");
@@ -693,7 +693,7 @@ var cropPreview=artBed with {Crop="Krakka Root",ActualCrop="Empty",Status="plann
 Check("unplanted plan uses live identity illustration",GardenVisualState.CropArtwork(cropPreview,true,artNow),"plantLive");
 foreach(var (percent,wet) in new[]{(0,false),(32,true),(33,false),(66,true),(99,false),(100,true)}){
  var cropStage=artBed with {Planted=artNow.AddHours(-percent),HarvestAt=artNow.AddHours(100-percent),Watered=wet?artNow:null,NextTend=null,WiltHours=null,Ready=false,DeadConfirmedAt=null,WiltedAt=null};
- Check($"crop artwork {percent} percent wet={wet}",GardenVisualState.CropArtwork(cropStage,true,artNow),percent==100?"plantMature":percent<33?"plantSeedling":"plantGrowing");
+ Check($"crop artwork {percent} percent wet={wet}",GardenVisualState.CropArtwork(cropStage,true,artNow),percent<33?"plantSeedling":"plantGrowing");
 }
 Check("unknown start keeps growing sprite after tending",GardenVisualState.CropArtwork(artBed with {Planted=null,HarvestAt=null,Watered=artNow},true,artNow),"plantGrowing");
 Check("wilt supersedes recent wet art",GardenVisualState.CropArtwork(artBed with {Watered=artNow.AddHours(-2),WiltedAt=artNow.AddHours(-1)},true,artNow),"plantWilted");
@@ -886,3 +886,72 @@ Check("name bar estimated harvest never says ready",GardenOverview.HeaderSummary
 var plantingTabOrder=TabOrderPolicy.Reconcile(["housing","person:a","submarines","settings"],["housing","person:a","planting","submarines","settings"],false);
 Check("new planting tab precedes submarines",string.Join("|",plantingTabOrder),"housing|person:a|planting|submarines|settings");
 Check("planting tab custom order persists",string.Join("|",TabOrderPolicy.Reconcile(["planting","housing","person:a","submarines","settings"],["housing","person:a","planting","submarines","settings"],false)),"planting|housing|person:a|submarines|settings");
+
+// Restricted-access garden menus declare four choices but expose Tend Crop / Quit.
+Check("short tend resolves stale count",GardenMenu.VisibleOptionCount(4,2,"Tend Crop","Quit").ToString(),"2");
+Check("short tend ignores stale extra slots",GardenMenu.VisibleOptionCount(4,4,"Tend Crop","Quit").ToString(),"2");
+Check("incomplete short tend rejected",GardenMenu.VisibleOptionCount(4,1,"Tend Crop",null).ToString(),"0");
+var shortTend=matureMenu with {Title="3rd Bed, 2nd Patch",Options=["Tend Crop","Quit"]};
+Check("short tend preserves physical patch",shortTend.NumberedLocation()?.Patch.ToString(),"2");
+Check("short tend cannot imply mature",shortTend.ReadyLocation()?.Bed.ToString(),null);
+var finalizedTend=shortTend with {ClosedAt=time.AddMilliseconds(100)};
+Check("callback after finalize retains bed",finalizedTend.Matches(time.AddMilliseconds(150),plantTarget).ToString(),"True");
+Check("closed menu expires quickly",finalizedTend.Matches(time.AddMilliseconds(1101),plantTarget).ToString(),"False");
+Check("late callback cannot change beds",finalizedTend.Matches(time.AddMilliseconds(150),plantTarget with {TargetId="other"}).ToString(),"False");
+var shortTendIntent=TendIntent.From(shortTend,shortTend.OptionAt(0),time.AddMilliseconds(150))!;
+Check("short tend confirms exact bed",shortTendIntent.Confirm(4017,time.AddMilliseconds(450),plantTarget)?.Bed.ToString(),"3");
+Check("short quit never records water",TendIntent.From(shortTend,shortTend.OptionAt(1),time)?.EventId,null);
+var shortMatcher=new CropChatMatcher();shortMatcher.Add(shortTend);shortMatcher.Add(new CropChat(time.AddMilliseconds(-100),plantTarget,"Curiel Root\nThis crop is doing well."));
+var shortCrop=shortMatcher.Drain(time.AddMilliseconds(500),n=>n=="Curiel Root").Single();
+Check("short menu identifies actual growing crop",shortCrop.Crop.CropName,"Curiel Root");
+Check("short growing observation not mature",shortCrop.Crop.Ready.ToString(),"False");
+Check("short growing preserves bed",shortCrop.Bed.ToString(),"3");
+var staleMature=artBed with {Ready=true,HarvestAt=artNow.AddHours(-2),Planted=artNow.AddDays(-6),Watered=artNow.AddHours(-13),ObservedAt=artNow.AddHours(-3)};
+var carePlan=livePlan with {Beds=[staleMature with {Bed=2},staleMature with {Bed=3}]};
+var healthyEvent=new SyncEvent("healthy39","garden.status",artNow.AddMinutes(-2),liveActor,liveAddress,1,2,Crop:new("Mirror Apple",false,Status:"growing"));
+var inspectedCare=GardenLive.Apply(carePlan,[healthyEvent],x=>x).Beds[0];
+Check("fresh growing defeats old mature estimate",GardenVisualState.For(inspectedCare,false,artNow),"due");
+Check("inspection does not pretend to water",inspectedCare.Watered.ToString(),staleMature.Watered.ToString());
+Check("contradicted percentage unknown",GardenVisualState.GrowthPercent(inspectedCare,artNow)?.ToString(),null);
+var wateredPlan=GardenLive.Apply(carePlan,[healthyEvent,new SyncEvent("care39","garden.tended",artNow,liveActor,liveAddress,1,2)],x=>x);
+var cared39=wateredPlan.Beds[0];
+Check("tend clears stale readiness",cared39.Ready.ToString(),"False");
+Check("tend keeps fresh growing evidence",cared39.GrowingObservedAt.ToString(),artNow.ToString());
+Check("tend resolves expired maturity to wet",GardenVisualState.For(cared39,false,artNow),"wet");
+Check("tend removes water prompt",GardenVisualState.NeedsWater(cared39,false,artNow).ToString(),"False");
+Check("tend wets this bed",GardenVisualState.SoilArtwork(cared39,false,artNow),"wet");
+Check("neighbor soil stays independent",GardenVisualState.SoilArtwork(wateredPlan.Beds[1],false,artNow),"normal");
+Check("soil stays wet before twelve hours",GardenVisualState.SoilArtwork(cared39,false,artNow.AddHours(11.99)),"wet");
+Check("soil dries at twelve hours",GardenVisualState.SoilArtwork(cared39,false,artNow.AddHours(12)),"normal");
+Check("tend prompt returns at twelve hours",GardenVisualState.NeedsWater(cared39,false,artNow.AddHours(12)).ToString(),"True");
+Check("ready observation keeps wet soil",GardenVisualState.SoilArtwork(cared39 with {Ready=true},false,artNow.AddMinutes(1)),"wet");
+Check("estimated maturity keeps growing artwork",GardenVisualState.CropArtwork(staleMature with {Ready=false},false,artNow),"plantGrowing");
+Check("confirmed maturity uses mature artwork",GardenVisualState.CropArtwork(staleMature,false,artNow),"plantMature");
+Check("planting alone is not wet soil",GardenVisualState.SoilArtwork(cared39 with {Planted=artNow,Watered=artNow},false,artNow),"normal");
+
+var fcFloater=groupedCharacter with {FcMember=true};
+var ownedByGrouped=sharedPrivate with {OwnerName=fcFloater.Name,World=fcFloater.World};
+Check("private owner with FC stays Regular",SharedCharacterGrouping.Group(fcFloater with {Houses=[ownedByGrouped]}),"Regulars");
+Check("private tenant stays Floater",SharedCharacterGrouping.Group(fcFloater with {Houses=[ownedByGrouped with {OwnerName="Another Owner"}]}),"Floaters");
+Check("FC master with no private house stays Regular",SharedCharacterGrouping.Group(fcFloater with {Houses=[ownedByGrouped with {Type="Free Company house"}]}),"Regulars");
+Check("FC master without recorded estate stays Regular",SharedCharacterGrouping.Group(fcFloater with {FcMaster=true}),"Regulars");
+Check("other world owner cannot exempt Floater",SharedCharacterGrouping.Group(fcFloater with {Houses=[ownedByGrouped with {World="Siren"}]}),"Floaters");
+Check("FC membership groups before pending progress",SharedCharacterGrouping.Group(fcFloater with {NeedsBoost=null}),"Floaters");
+Check("tend bar blue attention",GardenOverview.Attention([carePlan with {Beds=[staleMature with {Ready=false,HarvestAt=null}]}],artNow),"tend");
+Check("harvest bar green attention",GardenOverview.Attention([carePlan with {Beds=[staleMature]}],artNow),"harvest");
+Check("mixed bar does not hide tending",GardenOverview.Attention([carePlan with {Beds=[staleMature,staleMature with {Ready=false,HarvestAt=null}]}],artNow),"tend");
+Check("estimated mature gets check color",GardenOverview.Attention([carePlan with {Beds=[staleMature with {Ready=false,Watered=artNow.AddHours(-1)}]}],artNow),"check");
+var fashionNow=DateTimeOffset.Parse("2026-10-03T20:00:00Z");
+var fashionActor=new Actor("123","Fashion Character",410,57,"Rafflesia","Siren");
+var fashionEvent=new SyncEvent("fashion39","fashion.observed",fashionNow.AddMinutes(-1),fashionActor,null,Fashion:new(80,3,0,FashionCompletion.Cycle(fashionNow).ToString("O")));
+Check("fashion check current character",FashionCompletion.IsComplete(fashionActor,[fashionEvent],[],fashionNow).ToString(),"True");
+Check("fashion check other character excluded",FashionCompletion.IsComplete(fashionActor with {ContentId="456"},[fashionEvent],[],fashionNow).ToString(),"False");
+Check("fashion check below80 excluded",FashionCompletion.IsComplete(fashionActor,[fashionEvent with {Fashion=fashionEvent.Fashion! with {Score=79}}],[],fashionNow).ToString(),"False");
+Check("fashion check clears weekly",FashionCompletion.IsComplete(fashionActor,[fashionEvent],[],fashionNow.AddDays(7)).ToString(),"False");
+Check("fashion check logged out hidden",FashionCompletion.IsComplete(null,[fashionEvent],[],fashionNow).ToString(),"False");
+var sharedFashion=new SharedPerson("p","Person",[groupedCharacter with {Name=fashionActor.Name,World="Rafflesia",FashionCompletedAt=fashionNow.AddMinutes(-5)}]);
+Check("fashion check shared completion after restart",FashionCompletion.IsComplete(fashionActor,[],[sharedFashion],fashionNow).ToString(),"True");
+Check("fashion check home world matches while visiting",FashionCompletion.IsComplete(fashionActor with {CurrentWorldName="Other"},[],[sharedFashion],fashionNow).ToString(),"True");
+Check("fashion check does not match same name other world",FashionCompletion.IsComplete(fashionActor with {HomeWorldName="Siren"},[],[sharedFashion],fashionNow).ToString(),"False");
+Check("fashion check newer game evidence wins",FashionCompletion.IsComplete(fashionActor,[fashionEvent with {Fashion=fashionEvent.Fashion! with {Score=0}}],[sharedFashion],fashionNow).ToString(),"False");
+Check("fashion cycle reset boundary",FashionCompletion.Cycle(DateTimeOffset.Parse("2026-10-06T08:00:00Z")).ToString("O"),"2026-10-06T08:00:00.0000000+00:00");

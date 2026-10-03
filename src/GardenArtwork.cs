@@ -71,10 +71,10 @@ public sealed partial class Plugin
         var crop=EquinoxCompanion.GardenVisualState.DisplayCrop(b,planVisible);
         var animate=config.SharedRoster?.GardenAnimateEffects??true;
         var cropArtwork=EquinoxCompanion.GardenVisualState.CropArtwork(b,planVisible,now,animate);
-        GardenImage("assets/beds/soil-"+(state is "dead" or "dead-estimated"?"dead":state=="wet"?"wet":"normal")+".png",at,new(size));
+        GardenImage("assets/beds/soil-"+EquinoxCompanion.GardenVisualState.SoilArtwork(b,planVisible,now)+".png",at,new(size));
         var hasPicture=gardenPictures!.TryGetValue(crop,out var picture);
         if(hasPicture)GardenImage(picture.GetProperty(cropArtwork).GetString()!,at,new(size));
-        var effect=state switch {"ready" or "keep-mature" or "check-maturity"=>"ready-sparkles","wilt-estimated" or "wilted" or "at-risk"=>"wilt-mist","dead" or "dead-estimated"=>"dead-shade","unknown"=>"unknown-shade","planned"=>"planned-veil",_=>null};
+        var effect=state switch {"ready" or "keep-mature"=>"ready-sparkles","wilt-estimated" or "wilted" or "at-risk"=>"wilt-mist","dead" or "dead-estimated"=>"dead-shade","unknown"=>"unknown-shade","planned"=>"planned-veil",_=>null};
         // Droplets request tending. Recorded care keeps wet soil and the same growth sprite.
         if(EquinoxCompanion.GardenVisualState.NeedsWater(b,planVisible,now)&&(!animate||EquinoxCompanion.GardenVisualState.EffectVisible(now)))GardenImage("assets/effects/wet-droplets.png",at,new(size));
         if(animate&&effect is "wet-droplets" or "ready-sparkles" or "wilt-mist"&&!EquinoxCompanion.GardenVisualState.EffectVisible(now))effect=null;

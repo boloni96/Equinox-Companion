@@ -88,7 +88,7 @@ public sealed partial class Plugin
         ImGui.TextWrapped(autoRetainerStatus);
         MessageToggle("Garden planting and tending",config.TrackGardens,v=>{
             config.TrackGardens=v;
-            if(ObservingGardens){callbackHook?.Enable();plantHook?.Enable();}else StopRecording();
+            if(ObservingGardens){callbackHook?.Enable();callbackIntHook?.Enable();plantHook?.Enable();}else StopRecording();
         });
         ImGui.TextWrapped("Tracking continues while the window is closed. Garden records include confirmed seed, soil and care actions. Chat reminders are separate, under Chat messages.");
         ImGui.Separator();ImGui.TextUnformatted("Collection status");

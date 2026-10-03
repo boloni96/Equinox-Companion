@@ -5,6 +5,8 @@ namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
     private string plantingOverviewSearch="";
+    private readonly Dictionary<string,bool> plantingOverviewAccounts=[];
+    private static Vector4 OverviewColour(IEnumerable<SharedGardenPlan> plans,DateTimeOffset now) => GardenOverview.Attention(plans,now) switch {"dead"=>Red,"risk" or "check"=>Orange,"tend"=>new(.4f,.75f,1,1),"harvest"=>Green,_=>Grey};
     private void DrawPlantingOverview()
     {
         ImGui.TextUnformatted("Planting · all shared gardens");
@@ -22,7 +24,7 @@ public sealed partial class Plugin
         var searching=!string.IsNullOrWhiteSpace(plantingOverviewSearch);
         bool Match(string text)=>!searching||text.Contains(plantingOverviewSearch,StringComparison.OrdinalIgnoreCase);
         int PersonRank(SharedPerson p){var i=config.TabOrder.IndexOf("person:"+p.Id);return i<0?int.MaxValue:i;}
-        config.PlantingAccountExpanded ??= [];
+        ImGui.TextColored(new Vector4(.4f,.75f,1,1),"Blue: tend");ImGui.SameLine();ImGui.TextColored(Green,"Green: harvest");ImGui.SameLine();ImGui.TextColored(Orange,"Orange: check / risk");
         if(!ImGui.BeginTabBar("planting-persons"))return;
         foreach(var person in people.OrderBy(PersonRank))
         {
@@ -37,11 +39,11 @@ public sealed partial class Plugin
                 {
                     ImGui.PushID("account-"+account.Key);
                     var key=person.Id+":"+account.Key;
-                    var expanded=searching||config.PlantingAccountExpanded.GetValueOrDefault(key);
+                    var expanded=searching||plantingOverviewAccounts.GetValueOrDefault(key);
                     ImGui.SetNextItemOpen(expanded,ImGuiCond.Always);
                     var name=string.IsNullOrWhiteSpace(account.First().Account)?"Account":account.First().Account.Replace("##","");
                     var open=ImGui.CollapsingHeader($"{name} · {account.Count()} characters###account");
-                    if(!searching&&open!=expanded){config.PlantingAccountExpanded[key]=open;Pi.SavePluginConfig(config);}
+                    if(!searching&&open!=expanded)plantingOverviewAccounts[key]=open;
                     if(open)
                     {
                         ImGui.Indent();
@@ -50,8 +52,8 @@ public sealed partial class Plugin
                             var grouped=account.Where(c=>SharedCharacterGrouping.Group(c)==group).ToArray();
                             if(grouped.Length==0)continue;
                             ImGui.PushID(group);
-                            if(searching)ImGui.SetNextItemOpen(true,ImGuiCond.Always);
-                            if(ImGui.TreeNodeEx($"{group} · {grouped.Length}###group",ImGuiTreeNodeFlags.DefaultOpen))
+                            ImGui.SetNextItemOpen(searching,searching?ImGuiCond.Always:ImGuiCond.Once);
+                            if(ImGui.TreeNodeEx($"{group} · {grouped.Length}###group",ImGuiTreeNodeFlags.None))
                             {
                                 foreach(var character in grouped)DrawOverviewCharacter(character,houses,now,searching);
                                 ImGui.TreePop();
@@ -93,13 +95,16 @@ public sealed partial class Plugin
         if(plans.Length==0)timers="No gardens recorded";
         else if(ImGui.CalcTextSize(timers).X>timersWidth)
             timers=$"{plans.Length} batch{(plans.Length==1?"":"es")} · "+GardenOverview.HeaderSummary(plans,now);
-        if(searching)ImGui.SetNextItemOpen(true,ImGuiCond.Always);
+        ImGui.SetNextItemOpen(searching,searching?ImGuiCond.Always:ImGuiCond.Once);
         var label=FitOverviewText($"{character.Name.Replace("##","")} · {character.World}",nameWidth-ImGui.GetFrameHeight());
+        var colour=OverviewColour(plans,now);
+        ImGui.PushStyleColor(ImGuiCol.Header,new Vector4(colour.X,colour.Y,colour.Z,.22f));
         var expanded=ImGui.CollapsingHeader(label+"###character");
+        ImGui.PopStyleColor();
         var hovered=ImGui.IsItemHovered();
         var draw=ImGui.GetWindowDrawList();
         draw.PushClipRect(new Vector2(position.X+nameWidth,position.Y),new Vector2(position.X+width,position.Y+ImGui.GetFrameHeight()),true);
-        draw.AddText(new Vector2(position.X+nameWidth,position.Y+ImGui.GetStyle().FramePadding.Y),ImGui.GetColorU32(ImGuiCol.Text),FitOverviewText(timers,timersWidth));
+        draw.AddText(new Vector2(position.X+nameWidth,position.Y+ImGui.GetStyle().FramePadding.Y),ImGui.ColorConvertFloat4ToU32(colour),FitOverviewText(timers,timersWidth));
         draw.PopClipRect();
         if(hovered)
         {
@@ -154,7 +159,11 @@ public sealed partial class Plugin
         var first=house.Batches[0];var estate=house.House;
         var owner=OverviewOwner(house);
         ImGui.PushID(first.HouseId);
-        if(ImGui.TreeNode($"{owner.Replace("##","")}###house"))
+        ImGui.SetNextItemOpen(false,ImGuiCond.Once);
+        ImGui.PushStyleColor(ImGuiCol.Text,OverviewColour(house.Batches,now));
+        var houseOpen=ImGui.TreeNode($"{owner.Replace("##","")}###house");
+        ImGui.PopStyleColor();
+        if(houseOpen)
         {
             ImGui.TextWrapped($"{first.World} · {first.District} · W{first.Ward} P{first.Plot}");
             if(!string.IsNullOrWhiteSpace(first.HouseName))ImGui.TextUnformatted(first.HouseName);
@@ -162,14 +171,19 @@ public sealed partial class Plugin
             foreach(var batch in house.Batches)
             {
                 ImGui.PushID(batch.Batch);
+                ImGui.SetNextItemOpen(false,ImGuiCond.Once);
+                ImGui.PushStyleColor(ImGuiCol.Text,OverviewColour([batch],now));
                 var expanded=ImGui.TreeNode($"Batch {batch.Batch}###batch");
+                ImGui.PopStyleColor();
                 ImGui.SameLine();
                 if(ImGui.SmallButton("Website plan"))Dalamud.Utility.Util.OpenLink(GardenCareStatus.WebsiteUrl(batch.HouseId,batch.Batch));
                 if(SharedGardenLocation.Match(currentAddress,[batch])==batch.HouseId)
                 {
                     ImGui.SameLine();if(ImGui.SmallButton("Open planting guide")){plantingBatch=batch.Batch;previousPlantingHouse=batch.HouseId;plantingHouseId=batch.HouseId;plantingWindow.IsOpen=true;}
                 }
+                ImGui.PushStyleColor(ImGuiCol.Text,OverviewColour([batch],now));
                 ImGui.TextWrapped(GardenOverview.Summary([batch],now));
+                ImGui.PopStyleColor();
                 if(expanded)
                 {
                     if(ImGui.BeginTable("beds",4,ImGuiTableFlags.BordersInnerH|ImGuiTableFlags.RowBg|ImGuiTableFlags.Resizable))

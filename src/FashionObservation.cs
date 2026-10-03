@@ -11,8 +11,7 @@ public sealed partial class Plugin
     private (ulong Character, DateTimeOffset Cycle, int Score, int Remaining)? currentFashion;
     private static DateTimeOffset FashionCycle(DateTimeOffset at)
     {
-        var anchor=new DateTimeOffset(2024,1,2,8,0,0,TimeSpan.Zero);
-        return anchor.AddDays(7*Math.Floor((at-anchor).TotalDays/7));
+        return FashionCompletion.Cycle(at);
     }
     private unsafe void ObserveNpcEvent(EventFramework* framework, NativeGameObject* target, EventId eventId, short scene, ulong flags, uint* values, byte count)
     {

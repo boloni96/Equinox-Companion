@@ -67,6 +67,8 @@ public sealed partial class Plugin : IDalamudPlugin
     private bool ObservingGardens => !faulted && (recording || config.TrackGardens);
     private unsafe delegate byte FireCallbackDelegate(AtkUnitBase* addon, uint count, AtkValue* values, byte close);
     private Hook<FireCallbackDelegate>? callbackHook;
+    private unsafe delegate byte FireCallbackIntDelegate(AtkUnitBase* addon, int value);
+    private Hook<FireCallbackIntDelegate>? callbackIntHook;
     private string callbackStatus = "Not initialized";
     private string lastSubmittedOption = "None recorded";
     private readonly Configuration config;
@@ -166,6 +168,12 @@ public sealed partial class Plugin : IDalamudPlugin
             callbackStatus = "Ready";
         }
         catch (Exception ex) { callbackStatus = "Unavailable; see /xllog"; errorJournal.Record("plugin", "Garden callback observer unavailable", exceptionType: ex.GetType().Name); Log.Error(ex, "Garden callback observer unavailable"); }
+        try
+        {
+            callbackIntHook = Interop.HookFromAddress<FireCallbackIntDelegate>(
+                AtkUnitBase.MemberFunctionPointers.FireCallbackInt, ObserveCallbackInt);
+        }
+        catch (Exception ex) { errorJournal.Record("plugin", "Garden integer callback observer unavailable", exceptionType:ex.GetType().Name); Log.Error(ex, "Garden integer callback observer unavailable"); }
         config = Pi.GetPluginConfig() as Configuration ?? new();
         config.PairingKey = config.PairingKey.Trim().ToLowerInvariant();
         syncStatus = config.PairingKey.Length == 64 ? "Saved pairing key loaded. Waiting to sync." : "Not paired. Local records only.";
@@ -176,7 +184,7 @@ public sealed partial class Plugin : IDalamudPlugin
         catch (Exception ex) { errorJournal.Record("plugin", "Estate placard observer unavailable", exceptionType: ex.GetType().Name); Log.Error(ex, "Estate placard observer unavailable"); }
         try { fashionHook = Interop.HookFromAddress<FFXIVClientStructs.FFXIV.Client.Game.Event.EventFramework.Delegates.ProcessEventPlay>(FFXIVClientStructs.FFXIV.Client.Game.Event.EventFramework.MemberFunctionPointers.ProcessEventPlay, ObserveNpcEvent); fashionHook.Enable(); }
         catch (Exception ex) { errorJournal.Record("plugin", "Fashion observer unavailable", exceptionType: ex.GetType().Name); }
-        if (config.TrackGardens) { callbackHook?.Enable(); plantHook?.Enable(); }
+        if (config.TrackGardens) { callbackHook?.Enable(); callbackIntHook?.Enable(); plantHook?.Enable(); }
         Commands.AddHandler("/equinox", new CommandInfo(OnCommand) { HelpMessage = "Open Equinox Companion, shared profiles, housing and settings." });
         plantingCommandRegistered = Commands.AddHandler("/planting", new CommandInfo(OnPlantingCommand) { HelpMessage = "Open this house's saved planting layouts and bed-by-bed guide." });
         if (!plantingCommandRegistered) Log.Warning("/planting is already registered. Use /equinox planting instead.");
@@ -379,7 +387,13 @@ public sealed partial class Plugin : IDalamudPlugin
             if (addon == null) return;
             if (args.AddonName == "SelectString")
             {
-                if (type == AddonEvent.PreFinalize) Volatile.Write(ref activeGardenMenu, null);
+                // Some UI paths finalize before forwarding their selection callback.
+                // Retain identity briefly; only an actual callback can create an intent.
+                if (type == AddonEvent.PreFinalize)
+                {
+                    var closing = Volatile.Read(ref activeGardenMenu);
+                    if (closing?.AddonAddress == (nint)addon) Volatile.Write(ref activeGardenMenu, closing with {ClosedAt=now});
+                }
                 else if (type is AddonEvent.PostSetup or AddonEvent.PostRefresh)
                 {
                     Volatile.Write(ref activeGardenMenu, null);
@@ -451,42 +465,62 @@ public sealed partial class Plugin : IDalamudPlugin
         return System.Text.Encoding.UTF8.GetString(new ReadOnlySpan<byte>(value, length));
     }
 
+    private unsafe void ObserveGardenSelection(AtkUnitBase* addon, int?[] copied, bool close, string source)
+    {
+        var menu = Volatile.Read(ref activeGardenMenu);
+        var now = DateTimeOffset.UtcNow;
+        if (!ObservingGardens || menu is null || menu.AddonAddress != (nint)addon ||
+            copied.Length == 0 || menuMessages.Count >= 128 || !Player.IsLoaded ||
+            menu.Target.Actor.ContentId != Player.ContentId.ToString(CultureInfo.InvariantCulture) ||
+            Conditions[ConditionFlag.BetweenAreas] || Conditions[ConditionFlag.BetweenAreas51] ||
+            !menu.Matches(now, Volatile.Read(ref capturedContext)?.CandidateAt(now))) return;
+        // The integer entry point may forward through the general entry point.
+        // Consume the menu once, so both paths retain one action/receipt identity.
+        if (!ReferenceEquals(Interlocked.CompareExchange(ref activeGardenMenu, null, menu), menu)) return;
+        var option = menu.OptionAt(copied[0]);
+        Volatile.Write(ref pendingTend, TendIntent.From(menu, option, now));
+        Volatile.Write(ref pendingRemove, RemoveIntent.From(menu, option, now));
+        Volatile.Write(ref pendingHarvest, HarvestIntent.From(menu, option, now, harvestInspections.ToArray(), CropItemId));
+        menuMessages.Enqueue(new(now, "garden.callbackObservation", new {
+            menuTitle=menu.Title, options=menu.Options, arguments=copied,
+            selectedOptionCandidate=option, close, source,
+            candidateTarget=menu.Target, confirmedAction=false,
+            note="Submitted option is not proof of successful execution."
+        }));
+        lastSubmittedOption=$"{menu.Title}: {option ?? "unresolved (see export)"}";
+    }
+
     private unsafe byte ObserveCallback(AtkUnitBase* addon, uint count, AtkValue* values, byte close)
     {
-        // Forward the original callback exactly once with untouched arguments and return value.
-        // No game action is initiated here. Only an already-open garden menu is observed.
+        // Forward each original exactly once with untouched arguments and return value.
+        // No game action is initiated; only submitted garden selections are observed.
         try
         {
-            var menu = Volatile.Read(ref activeGardenMenu);
-            var now = DateTimeOffset.UtcNow;
-            if (ObservingGardens && menu is not null && menu.AddonAddress == (nint)addon &&
-                count is > 0 and <= 16 && values != null && menuMessages.Count < 128 &&
-                Player.IsLoaded && menu.Target.Actor.ContentId == Player.ContentId.ToString(CultureInfo.InvariantCulture) &&
-                !Conditions[ConditionFlag.BetweenAreas] && !Conditions[ConditionFlag.BetweenAreas51] &&
-                menu.Matches(now, Volatile.Read(ref capturedContext)?.CandidateAt(now)))
+            if (ObservingGardens && Volatile.Read(ref activeGardenMenu)?.AddonAddress == (nint)addon && count is > 0 and <= 16 && values != null)
             {
-                var copied = new int?[(int)count];
-                for (var i = 0; i < count; i++)
+                var copied=new int?[(int)count];
+                for (var i=0; i<count; i++)
                 {
-                    var valueType = (int)values[i].Type & 15;
-                    if (valueType == 3) copied[i] = values[i].Int;
-                    else if (valueType == 5 && values[i].UInt <= int.MaxValue) copied[i] = (int)values[i].UInt;
+                    var valueType=(int)values[i].Type & 15;
+                    if (valueType==3) copied[i]=values[i].Int;
+                    else if (valueType==5 && values[i].UInt<=int.MaxValue) copied[i]=(int)values[i].UInt;
                 }
-                var option = menu.OptionAt(copied[0]);
-                Volatile.Write(ref pendingTend, TendIntent.From(menu, option, now));
-                Volatile.Write(ref pendingRemove, RemoveIntent.From(menu, option, now));
-                Volatile.Write(ref pendingHarvest, HarvestIntent.From(menu, option, now, harvestInspections.ToArray(), CropItemId));
-                menuMessages.Enqueue(new(now, "garden.callbackObservation", new {
-                    menuTitle = menu.Title, options = menu.Options, arguments = copied,
-                    selectedOptionCandidate = option, close = close != 0,
-                    candidateTarget = menu.Target, confirmedAction = false,
-                    note = "Submitted option is not proof of successful execution."
-                }));
-                lastSubmittedOption = $"{menu.Title}: {option ?? "unresolved (see export)"}";
+                ObserveGardenSelection(addon,copied,close!=0,"FireCallback");
             }
         }
-        catch (Exception ex) { errorJournal.Record("plugin", "Could not copy garden callback diagnostic", exceptionType: ex.GetType().Name); Log.Error(ex, "Could not copy garden callback diagnostic"); }
-        return callbackHook!.Original(addon, count, values, close);
+        catch (Exception ex) { errorJournal.Record("plugin", "Could not copy garden callback diagnostic", exceptionType:ex.GetType().Name); Log.Error(ex,"Could not copy garden callback diagnostic"); }
+        return callbackHook!.Original(addon,count,values,close);
+    }
+
+    private unsafe byte ObserveCallbackInt(AtkUnitBase* addon, int value)
+    {
+        try
+        {
+            if (ObservingGardens && Volatile.Read(ref activeGardenMenu)?.AddonAddress == (nint)addon)
+                ObserveGardenSelection(addon,[value],false,"FireCallbackInt");
+        }
+        catch (Exception ex) { errorJournal.Record("plugin", "Could not copy garden integer callback diagnostic", exceptionType:ex.GetType().Name); Log.Error(ex,"Could not copy garden integer callback diagnostic"); }
+        return callbackIntHook!.Original(addon,value);
     }
 
     private unsafe void ObservePlantSelection(AgentHousingPlant* agent)
@@ -816,11 +850,11 @@ public sealed partial class Plugin : IDalamudPlugin
         diagnostics.Clear(); recentSignals.Clear(); menuObservations = 0; messages.Clear(); menuMessages.Clear(); readyMenus.Clear(); cropChats.Clear(); cropMatcher.Clear(); harvestInspections.Clear(); harvestedChats.Clear(); lastSnapshotKey = "";
         Volatile.Write(ref pendingTend, null); Volatile.Write(ref pendingRemove, null); Volatile.Write(ref pendingHarvest, null); Volatile.Write(ref pendingPlant, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); snapshot = null; nextSample = default;
         lastSubmittedOption = "None recorded";
-        callbackHook?.Enable(); plantHook?.Enable();
+        callbackHook?.Enable(); callbackIntHook?.Enable(); plantHook?.Enable();
         recordingUntil = DateTimeOffset.UtcNow.AddMinutes(5); recording = true; exportPath = null;
     }
 
-    private void StopRecording() { recording = false; if (!ObservingGardens) { callbackHook?.Disable(); plantHook?.Disable(); } Volatile.Write(ref pendingTend, null); Volatile.Write(ref pendingRemove, null); Volatile.Write(ref pendingHarvest, null); Volatile.Write(ref pendingPlant, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); messages.Clear(); menuMessages.Clear(); readyMenus.Clear(); cropChats.Clear(); cropMatcher.Clear(); harvestInspections.Clear(); harvestedChats.Clear(); lastSnapshotKey = ""; }
+    private void StopRecording() { recording = false; if (!ObservingGardens) { callbackHook?.Disable(); callbackIntHook?.Disable(); plantHook?.Disable(); } Volatile.Write(ref pendingTend, null); Volatile.Write(ref pendingRemove, null); Volatile.Write(ref pendingHarvest, null); Volatile.Write(ref pendingPlant, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); messages.Clear(); menuMessages.Clear(); readyMenus.Clear(); cropChats.Clear(); cropMatcher.Clear(); harvestInspections.Clear(); harvestedChats.Clear(); lastSnapshotKey = ""; }
 
     private void Export()
     {
@@ -970,6 +1004,8 @@ public sealed partial class Plugin : IDalamudPlugin
         StopRecording();
         callbackHook?.Disable();
         callbackHook?.Dispose();
+        callbackIntHook?.Disable();
+        callbackIntHook?.Dispose();
         plantHook?.Disable(); plantHook?.Dispose();
         signboardHook?.Disable(); signboardHook?.Dispose();
         fashionHook?.Disable(); fashionHook?.Dispose();

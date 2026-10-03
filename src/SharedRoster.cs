@@ -2,7 +2,7 @@ namespace EquinoxCompanion;
 public sealed record SharedRoster(long Revision, DateTimeOffset Updated, SharedPerson[] People, SharedVoyage[]? Voyages = null, int ProtocolVersion = 1, SharedGardenPlan[]? GardenPlans = null, SharedGardenCare[]? GardenCare = null, SharedGardenYield[]? GardenYields = null, SharedCachedVoyage[]? CachedVoyages = null, string GardenFrame = "wood", bool GardenCornerTrim = false, SharedGardenTarget[]? GardenTargets = null, bool GardenAnimateEffects = true);
 public sealed record SharedVoyage(string FcId, string FcName, DateTimeOffset At, SubmarineDetails[] Submarines);
 public sealed record SharedPerson(string Id, string Name, SharedCharacter[] Characters);
-public sealed record SharedCharacter(string Id, string Name, string World, string Dc, string Region, string Account, SharedHouse[] Houses, string AccountId = "", bool? NeedsBoost = null, bool? FcMember = null, string FcId = "");
+public sealed record SharedCharacter(string Id, string Name, string World, string Dc, string Region, string Account, SharedHouse[] Houses, string AccountId = "", bool? NeedsBoost = null, bool? FcMember = null, string FcId = "", bool FcMaster = false, DateTimeOffset? FashionCompletedAt = null);
 public sealed record SharedHouse(string Id, string GameHouseId, string Type, string Name, string World, string District, int Ward, int Plot, string Size, string OwnerName, string FcName, string FcTag, DateTimeOffset? LastEntry, bool Paused, string FcId = "");
 public sealed record RosterResult(SharedRoster? Roster, string Status, bool NotModified = false, bool Unauthorized = false);
 
@@ -25,6 +25,12 @@ public static class SharedCharacterGrouping
 {
     public static string Group(SharedCharacter character)
     {
+        // Ownership takes priority; FC membership alone is never private ownership.
+        var ownsHouse=character.Houses.Any(h=>h.Type is "Private house" or "Free Company house" &&
+            !string.IsNullOrWhiteSpace(h.OwnerName) && string.Equals(h.OwnerName.Trim(),character.Name.Trim(),StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(h.World.Trim(),character.World.Trim(),StringComparison.OrdinalIgnoreCase));
+        if(ownsHouse || character.FcMaster)return "Regulars";
+        if(character.FcMember is true)return "Floaters";
         var needsBoost = character.NeedsBoost;
         if (needsBoost is null && character.Name.TrimStart().StartsWith("~", StringComparison.Ordinal)) needsBoost = true;
         if (needsBoost is null) return "Pending sync";
@@ -119,7 +125,7 @@ public static class GardenCareStatus
         var next = GardenTiming.FirstTendDue(bed.Planted,bed.Watered,now) ? bed.Planted : bed.Watered?.AddHours(12) ?? bed.NextTend;
         if (next is null) return "check care";
         if (next <= now) return "tend";
-        return bed.HarvestAt <= now ? "check maturity" : null;
+        return GardenTiming.MaturityEstimateDue(bed.HarvestAt,bed.GrowingObservedAt,now) ? "check maturity" : null;
     }
 }
 

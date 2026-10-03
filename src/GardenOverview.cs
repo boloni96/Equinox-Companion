@@ -5,6 +5,16 @@ public sealed record GardenOverviewBed(int Bed, string Crop, string Status, stri
 
 public static class GardenOverview
 {
+    public static string Attention(IEnumerable<SharedGardenPlan> plans,DateTimeOffset now)
+    {
+        var beds=plans.SelectMany(p=>p.Beds.Select(b=>Bed(p,b,now))).ToArray();
+        if(beds.Any(b=>b.State=="dead"))return "dead";
+        if(beds.Any(b=>b.State is "wilted" or "wilt-estimated" or "at-risk" or "dead-estimated"))return "risk";
+        if(beds.Any(b=>b.TendDue))return "tend";
+        if(beds.Any(b=>b.State=="ready"))return "harvest";
+        if(beds.Any(b=>b.State=="check-maturity"))return "check";
+        return "none";
+    }
     public static GardenOverviewHouse[] Houses(SharedPerson[] people, IEnumerable<SharedGardenPlan> plans)
     {
         var links = people.SelectMany(p => p.Characters.SelectMany(c => c.Houses.Select(h => (Person:p,Character:c,House:h)))).ToArray();
@@ -42,7 +52,7 @@ public static class GardenOverview
         var next=first?bed.Planted:bed.Watered?.AddHours(12)??bed.NextTend;
         var due=next<=now || state is "wilted" or "wilt-estimated" or "at-risk" or "dead-estimated";
         var care=first?"First tend due":next is null?"No tend recorded":next<=now?"Due now":"In "+Remaining(next.Value,now);
-        var harvest=bed.HarvestAt is null?"Unknown":bed.HarvestAt<=now?"Check maturity":"~"+Remaining(bed.HarvestAt.Value,now);
+        var harvest=bed.HarvestAt is null?"Unknown":bed.HarvestAt<=now?(GardenTiming.MaturityEstimateDue(bed.HarvestAt,bed.GrowingObservedAt,now)?"Check maturity":"Timing needs checking"):"~"+Remaining(bed.HarvestAt.Value,now);
         var status=state switch {"wet"=>"Cared for","due"=>"Tending due","wilted"=>"Wilting · confirmed","wilt-estimated"=>"Wilting · estimated","dead-estimated"=>"Death risk · check in game","at-risk"=>"At risk","check-maturity"=>"Check maturity",_=>"Growing"};
         if(plan.CompletedAt is null&&bed.Status=="different")status+=" · differs from plan";
         return Row(status,care,harvest,due,next,bed.HarvestAt);

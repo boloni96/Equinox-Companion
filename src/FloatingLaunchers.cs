@@ -102,6 +102,8 @@ public sealed partial class Plugin
                 draw.AddLine(p + new Vector2(12, 45), p + new Vector2(52, 45), gold, 3);
                 draw.AddLine(p + new Vector2(52, 45), p + new Vector2(32, 29), gold, 3);
             }
+            var fashionComplete=name=="Fashion Report"&&CurrentFashionComplete();
+            if(fashionComplete)DrawFashionCheck(p,64,o.Opacity);
             ImGui.SetCursorPos(new(0, 20));
             ImGui.InvisibleButton("Open", new(64, 44));
             var hovered = ImGui.IsItemHovered();
@@ -123,7 +125,7 @@ public sealed partial class Plugin
             ImGui.PushStyleVar(ImGuiStyleVar.Alpha,ImGui.GetStyle().Alpha*.75f);
             if (ImGui.SmallButton("...")) ImGui.OpenPopup("Icon settings");
             ImGui.PopStyleVar();
-            if (hovered) ImGui.SetTooltip(name + " · Click to open · Double-click to close · Drag to move");
+            if (hovered) ImGui.SetTooltip(name + " · Click to open · Double-click to close · Drag to move"+(fashionComplete?"\nComplete this week for "+Player.CharacterName:""));
             if (ImGui.BeginPopup("Icon settings")) { DrawLauncherOptions(name, o); ImGui.EndPopup(); }
         }
         ImGui.End(); ImGui.PopStyleVar();

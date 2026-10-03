@@ -1,12 +1,12 @@
 namespace EquinoxCompanion;
 
 public sealed record GardenMenu(nint AddonAddress, DateTimeOffset OpenedAt,
-    GardenSnapshot Target, string Title, string[] Options)
+    GardenSnapshot Target, string Title, string[] Options, DateTimeOffset? ClosedAt = null)
 {
-    // Mature menus retain the growing menu's count metadata, but expose two choices.
+    // Restricted-access gardens can expose only Tend Crop / Quit with the stale count of four.
     public static int VisibleOptionCount(int declared, int available, string? first, string? second)
     {
-        if (available >= 2 && (first == "Harvest Crop" || first == "Plant Seeds" || first == "Remove Crop") && second == "Quit") return 2;
+        if (available >= 2 && first is "Harvest Crop" or "Plant Seeds" or "Remove Crop" or "Tend Crop" && second == "Quit") return 2;
         return declared is > 0 and <= 16 && available >= declared ? declared : 0;
     }
     public (int Patch, int Bed)? ReadyLocation()
@@ -38,6 +38,7 @@ public sealed record GardenMenu(nint AddonAddress, DateTimeOffset OpenedAt,
     public string? OptionAt(int? index) => index is >= 0 && index < Options.Length ? Options[index.Value] : null;
     public bool Matches(DateTimeOffset now, GardenSnapshot? current) =>
         now >= OpenedAt && now - OpenedAt <= TimeSpan.FromMinutes(1) &&
+        (ClosedAt is null || now >= ClosedAt && now - ClosedAt <= TimeSpan.FromSeconds(1)) &&
         current is not null && current.Actor == Target.Actor && current.Address is not null &&
         current.Address == Target.Address && current.TargetId == Target.TargetId;
 }

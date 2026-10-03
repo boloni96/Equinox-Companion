@@ -16,7 +16,7 @@ public static class GardenLive
             if(e.Kind=="garden.planted" && e.Plant is {} p)
                 b=b with {ActualCrop=cropName(p.SeedName),ActualSoil=p.SoilName,Planted=e.At,Watered=e.At,NextTend=e.At,Ready=false,KeepMature=false,PlantEvent=e.Id,TendedBy="",HarvestAt=(cropDays?.Invoke(p.SeedName)??0)>0?e.At.AddDays(cropDays!(p.SeedName)):null,Days=cropDays?.Invoke(p.SeedName)??0,WiltHours=cropWilt?.Invoke(p.SeedName),LastFertilized=null,ObservedAt=e.At};
             else if(e.Kind=="garden.tended")
-                b=b with {Watered=e.At,NextTend=b.Ready?null:e.At.AddHours(12),TendedBy=e.Actor.Name+(string.IsNullOrWhiteSpace(e.Actor.HomeWorldName)?"":" @ "+e.Actor.HomeWorldName),ObservedAt=e.At};
+                b=b with {Watered=e.At,Ready=false,KeepMature=false,GrowingObservedAt=e.At,NextTend=e.At.AddHours(12),TendedBy=e.Actor.Name+(string.IsNullOrWhiteSpace(e.Actor.HomeWorldName)?"":" @ "+e.Actor.HomeWorldName),ObservedAt=e.At};
             else if(e.Kind=="garden.fertilized" && !b.Ready && b.HarvestAt is {} harvest && e.At<harvest && (b.LastFertilized is null || e.At-b.LastFertilized>=TimeSpan.FromHours(1)))
                 b=b with {HarvestAt=harvest-TimeSpan.FromTicks((harvest-e.At).Ticks/100),LastFertilized=e.At,ObservedAt=e.At};
             else if(e.Kind=="garden.status"&&e.Crop is {Ready:false,Status:"growing" or "wilting" or "dead"} status)
@@ -32,7 +32,7 @@ public static class GardenLive
             else if(e.Kind is "garden.ready" or "garden.observed")
                 b=b with {ActualCrop=e.Crop?.CropName??b.ActualCrop,Ready=true,NextTend=null,ObservedAt=e.At};
             else continue;
-            if(e.Kind is "garden.planted" or "garden.tended" or "garden.empty" or "garden.ready" or "garden.observed")b=b with {DeadConfirmedAt=null,WiltedAt=null,GrowingObservedAt=null};
+            if(e.Kind is "garden.planted" or "garden.tended" or "garden.empty" or "garden.ready" or "garden.observed")b=b with {DeadConfirmedAt=null,WiltedAt=null,GrowingObservedAt=e.Kind=="garden.tended"?e.At:null};
             else if(e.Kind=="garden.dead")b=b with {WiltedAt=null,GrowingObservedAt=null};
             beds[b.Bed]=b;
             var interim=Progress(beds.Values.ToArray(),plan.At);
