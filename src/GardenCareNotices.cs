@@ -1,3 +1,4 @@
+using Dalamud.Game.Text.SeStringHandling;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
@@ -6,16 +7,17 @@ public sealed partial class Plugin
     private readonly HashSet<string> gardenNotices = [];
     private void UpdateGardenCareNotices(DateTimeOffset now)
     {
-        if (!Player.IsLoaded || Player.ContentId == 0) { gardenNoticeCharacter = 0; gardenNotices.Clear(); return; }
+        if (!Player.IsLoaded || Player.ContentId == 0) { gardenNoticeCharacter = 0; return; }
         if (gardenNoticeCharacter != Player.ContentId)
         {
-            gardenNoticeCharacter = Player.ContentId; gardenNotices.Clear(); nextGardenNotice = now.AddSeconds(20); nextRosterRead = default; return;
+            gardenNoticeCharacter = Player.ContentId; nextGardenNotice = now.AddSeconds(20); nextRosterRead = default; return;
         }
         if (!config.NotifyGardenCare || !config.SyncEnabled || now < nextGardenNotice || config.SharedRoster is not { } roster) return;
         nextGardenNotice = now.AddSeconds(30);
         var matches = roster.People.SelectMany(p => p.Characters).Where(c => string.Equals(c.Name, Player.CharacterName, StringComparison.OrdinalIgnoreCase) && string.Equals(c.World, WorldName(Player.HomeWorld.RowId), StringComparison.OrdinalIgnoreCase)).Take(2).ToArray();
         if (matches.Length != 1) return;
         var allPlans=GardenPlanSources();
+        var notices = new List<GardenChatNotice>();
         foreach (var house in (roster.GardenCare ?? []).Where(g => g.CharacterIds.Contains(matches[0].Id)).GroupBy(g => g.HouseId))
         {
             var alerts = new List<(int Batch, string Kind, DateTimeOffset? DeathAt)>();
@@ -38,7 +40,8 @@ public sealed partial class Plugin
                     {
                         if(projected.ActualCrop=="Empty")continue;
                         effective=effective with {Ready=projected.Ready,Watered=projected.Watered,NextTend=projected.NextTend,HarvestAt=projected.HarvestAt,WiltHours=projected.WiltHours,
-                            DeathAt=projected.Ready?null:projected.Watered is {} care&&projected.WiltHours is {} wilt?care.AddHours(wilt+24):null};
+                            DeadConfirmedAt=projected.DeadConfirmedAt,Planted=projected.Planted,
+                            DeathAt=projected.Ready||GardenVisualState(projected,false,now)=="dead"?null:projected.Watered is {} care&&projected.WiltHours is {} wilt?care.AddHours(wilt+24):null};
                     }
                     else if (lastPlant > (bed.Watered ?? DateTimeOffset.MinValue)) effective = effective with { Ready = false, KeepMature = false, HarvestAt = null, DeathAt = null };
                     var kind = GardenCareStatus.Due(effective, now); if (kind is null || !GardenMessageEnabled(kind)) continue;
@@ -50,9 +53,16 @@ public sealed partial class Plugin
                 foreach (var group in due.GroupBy(x => x.Kind)) alerts.Add((batch.Batch, group.Key, group.Any(x => x.DeathAt is null) ? null : group.Min(x => x.DeathAt)));
             }
             var h = house.First();
-            foreach (var group in alerts.GroupBy(x => x.Kind))
-                Chat.Print(GardenCareStatus.BatchMessage(h.HouseName, group.Key, group.Select(x => (x.Batch,x.DeathAt)), now));
-
+            notices.AddRange(alerts.Select(x=>new GardenChatNotice(h.HouseId,h.HouseName,x.Batch,x.Kind,x.DeathAt)));
         }
+        if(notices.Count==0)return;
+        var summary=new SeStringBuilder().AddText("[Equinox] ");
+        var segments=GardenCareStatus.ChatSummary(notices,now);
+        for(var i=0;i<segments.Length;i++){
+            if(i>0)summary.AddText(" · ");
+            summary.AddUiForeground(segments[i].Color).AddText(segments[i].Text).AddUiForegroundOff();
+        }
+        if(notices.Select(x=>x.HouseId).Distinct().Count()>1)summary.AddText(" · /equinox for details");
+        Chat.Print(summary.Build());
     }
 }

@@ -20,6 +20,7 @@ public sealed partial class Plugin
     private string? plantingHouseId;
     private int plantingBatch=1;
     private string? previousPlantingHouse;
+    private (string House,int Batch,int Bed)? selectedGardenBed;
     private void OnPlantingCommand(string command,string args)
     {
         nextRosterRead=default;
@@ -39,7 +40,7 @@ public sealed partial class Plugin
             var beds=Enumerable.Range(1,8).Select(number=>{
                 var bed=plan.Beds.FirstOrDefault(b=>b.Bed==number);if(bed is not null)return bed;
                 var b=care?.Beds.FirstOrDefault(b=>b.Bed==number);
-                return new SharedGardenBed(number,"","","actual",b?.Crop is {Length:>0}?b.Crop:"Not synced yet",b?.Soil??"",b?.Planted,b?.Watered,0,b?.Ready??false,b?.NextTend,b?.HarvestAt,ObservedAt:b?.ObservedAt,TendedBy:b?.TendedBy??"",WiltHours:b?.WiltHours);
+                return new SharedGardenBed(number,"","","actual",b?.Crop is {Length:>0}?b.Crop:"Not synced yet",b?.Soil??"",b?.Planted,b?.Watered,0,b?.Ready??false,b?.NextTend,b?.HarvestAt,ObservedAt:b?.ObservedAt,TendedBy:b?.TendedBy??"",WiltHours:b?.WiltHours,DeadConfirmedAt:b?.DeadConfirmedAt);
             }).ToArray();
             plan=plan with {Beds=beds};if(existing>=0)result[existing]=plan;else result.Add(plan);
         }
@@ -71,6 +72,7 @@ public sealed partial class Plugin
         if(planned.Length>0)ImGui.TextWrapped($"{(complete?totalSteps:doneSteps)}/{totalSteps} planting steps complete · Goal: {plan.Target}");
         var board=Math.Min(432,ImGui.GetContentRegionAvail().X);var origin=ImGui.GetCursorScreenPos();var tile=board*128/432;var margin=board*16/432;var stride=board*136/432;
         GardenImage("assets/backgrounds/batch-base.png",origin,new(board));
+        if(config.SharedRoster?.GardenCornerTrim==true)GardenImage("assets/backgrounds/batch-corner-trim.png",origin,new(board));
         int[] layout=[1,2,3,8,0,4,7,6,5];
         for(var i=0;i<9;i++)
         {
@@ -91,7 +93,11 @@ public sealed partial class Plugin
                 continue;
             }
             var wrong= gardenWrongBed is {} mismatch&&mismatch.House==plan.HouseId&&mismatch.Batch==plan.Batch&&mismatch.WrongBed==n;
-            var b=plan.Beds.First(x=>x.Bed==n);DrawGardenTile(b,showPlan,at,tile,wrong);
+            ImGui.SetCursorScreenPos(at);
+            if(ImGui.InvisibleButton("Select garden bed##"+n,new Vector2(tile)))selectedGardenBed=(plan.HouseId,plan.Batch,n);
+            ImGui.SetItemAllowOverlap();
+            var selected=selectedGardenBed is {} pick&&pick.House==plan.HouseId&&pick.Batch==plan.Batch&&pick.Bed==n;
+            var b=plan.Beds.First(x=>x.Bed==n);DrawGardenTile(b,showPlan,at,tile,wrong,selected);
             DrawGardenIdentity(b,showPlan,at,tile);
             var draw=ImGui.GetWindowDrawList();
             if(showPlan&&next?.Bed==n)GardenImage("assets/borders/next.png",at,new Vector2(tile));
@@ -105,7 +111,7 @@ public sealed partial class Plugin
             draw.AddText(bedLabelAt,0xffffffff,label);draw.PopClipRect();
             DrawGardenHoverTarget($"Planting plan##garden-plan-{n}", at+new Vector2(91,7)*tile/128, tile/4,
                 () => DrawGardenPlanTooltip(b, wrong));
-            DrawGardenHoverTarget($"Crop and care##garden-care-{n}", at+new Vector2(88,52)*tile/128, tile/4,
+            DrawGardenHoverTarget($"Crop and care##garden-care-{n}", GardenCarePosition(at,tile), tile/4,
                 () => DrawGardenCareTooltip(b,showPlan,wrong));
         }
         ImGui.SetCursorScreenPos(origin+new Vector2(0,board));ImGui.Dummy(new Vector2(board,4));
@@ -133,12 +139,14 @@ public sealed partial class Plugin
     }
     private void DrawGardenPlanTooltip(SharedGardenBed b, bool wrong)
     {
-        ImGui.TextUnformatted($"Bed {b.Bed} · Planting plan");
+        ImGui.TextUnformatted($"Bed {b.Bed} · {(b.Crop.Length==0?"Bed overview":b.Status=="confirmed"?"Planting record":"Planting plan")}");
         if (wrong && gardenWrongBed is {} correction)
             DrawGardenInfoLabel("warning", $"Wrong bed opened. Close this menu and open Bed {correction.NextBed}, outlined as the next planting bed. No planting action was recorded.");
         if (b.Crop.Length == 0)
         {
-            ImGui.TextWrapped("No planting plan for this bed. Choose Start garden on the website to create one.");
+            DrawGardenItem(b.ActualCrop,false,"Crop: ");
+            DrawGardenItem(b.ActualSoil.Length>0?b.ActualSoil:"Not recorded",true,"Soil: ");
+            ImGui.TextWrapped("No planting plan for this bed. Use the lower icon for care details.");
             return;
         }
         DrawGardenItem(b.Crop, true, "Planned crop: ");
@@ -172,7 +180,7 @@ public sealed partial class Plugin
         if (b.Watered is {} watered) DrawGardenInfoLabel("clock", $"Latest care: {watered.ToLocalTime():g}");
         DrawGardenInfoLabel("actor", "Tended by: " + (b.TendedBy.Length > 0 ? b.TendedBy : "Gardener not recorded"));
         if (b.LastFertilized is {} fed) DrawGardenInfoLabel("fertilized", $"Last fertilized: {fed.ToLocalTime():g}");
-        if (!b.Ready)
+        if (!b.Ready && b.DeadConfirmedAt is null)
         {
             if (b.NextTend is {} tend) DrawGardenInfoLabel("tend", $"Tending suggested: {tend.ToLocalTime():g}");
             if (b.HarvestAt is {} harvest) DrawGardenInfoLabel("check-maturity", $"Maturity estimate: {harvest.ToLocalTime():g}");

@@ -17,6 +17,10 @@ public sealed record GardenMenu(nint AddonAddress, DateTimeOffset OpenedAt,
         var m = System.Text.RegularExpressions.Regex.Match(Title, @"^([1-8])(?:st|nd|rd|th) Bed, ([1-3])(?:st|nd|rd|th) Patch$");
         return m.Success ? (int.Parse(m.Groups[2].Value), int.Parse(m.Groups[1].Value)) : null;
     }
+    // Only the complete removal-only numbered menu identifies a dead crop.
+    // Growing crops also offer Remove Crop, so that option alone is insufficient.
+    public (int Patch, int Bed)? DeadLocation() =>
+        Options.SequenceEqual(new[] { "Remove Crop", "Quit" }) ? NumberedLocation() : null;
     public (int Patch, int Bed)? EmptyLocation()
     {
         if (Target.Address is null || Target.Address.Apartment || Target.Address.Workshop || Target.Address.Room != 0 ||

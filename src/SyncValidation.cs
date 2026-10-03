@@ -11,7 +11,7 @@ public static class SyncValidation
         !string.IsNullOrWhiteSpace(e.Actor?.ContentId) && records.Any(newer =>
             newer.Kind == "character.updated" && newer.Actor?.ContentId == e.Actor.ContentId &&
             newer.At > e.At && CanSend(newer, now));
-    public static bool SupportedByWebsite(string kind, int version) => kind == "submarines.cached" ? version >= 7 : kind == "garden.fertilized" ? version >= 6 : kind == "company.observed" ? version >= 4 : kind == "storage.observed" ? version >= 3 : version >= 2 ||
+    public static bool SupportedByWebsite(string kind, int version) => kind == "garden.dead" ? version >= 9 : kind == "submarines.cached" ? version >= 7 : kind == "garden.fertilized" ? version >= 6 : kind == "company.observed" ? version >= 4 : kind == "storage.observed" ? version >= 3 : version >= 2 ||
         kind is "house.entered" or "garden.tended" or "garden.ready" or "garden.observed" or "garden.planted" or "house.discovered" or "character.updated";
     private static bool Text(string? s) => !string.IsNullOrWhiteSpace(s) && s.Length <= 100;
     public static bool ActorReady(Actor? a) => a is not null &&
@@ -69,7 +69,7 @@ public static class SyncValidation
         if (e.Kind == "garden.unmapped") return e.GardenTarget is {} target && float.IsFinite(target.X) && float.IsFinite(target.Y) && float.IsFinite(target.Z) && e.Crop is { Ready: true, Evidence: "garden-system-message-awaiting-calibration" } crop && Text(crop.CropName) && !crop.CropName.Any(char.IsControl);
         if (e.Patch is not (>= 1 and <= 3) || e.Bed is not (>= 1 and <= 8)) return false;
         return e.Kind switch {
-            "garden.tended" or "garden.ready" or "garden.empty" or "garden.fertilized" => !h.Apartment && !h.Workshop && h.Room == 0 && h.Plot > 0,
+            "garden.tended" or "garden.dead" or "garden.ready" or "garden.empty" or "garden.fertilized" => !h.Apartment && !h.Workshop && h.Room == 0 && h.Plot > 0,
             "garden.observed" => e.Crop is { Ready: true, Evidence: "garden-menu-and-system-message" } c && Text(c.CropName) && !c.CropName.Contains('\n') && !c.CropName.Contains('\r'),
             "garden.planted" => e.Plant is { SeedId: >= 1 and <= 1000000, SoilId: >= 1 and <= 1000000 } p && Text(p.SeedName) && Text(p.SoilName),
             _ => false

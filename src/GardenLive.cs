@@ -17,11 +17,14 @@ public static class GardenLive
                 b=b with {Watered=e.At,NextTend=b.Ready?null:e.At.AddHours(12),TendedBy=e.Actor.Name,ObservedAt=e.At};
             else if(e.Kind=="garden.fertilized" && !b.Ready && b.HarvestAt is {} harvest && e.At<harvest && (b.LastFertilized is null || e.At-b.LastFertilized>=TimeSpan.FromHours(1)))
                 b=b with {HarvestAt=harvest-TimeSpan.FromTicks((harvest-e.At).Ticks/100),LastFertilized=e.At,ObservedAt=e.At};
+            else if(e.Kind=="garden.dead")
+                b=b with {Ready=false,DeadConfirmedAt=e.At,NextTend=null,HarvestAt=null,ObservedAt=e.At};
             else if(e.Kind=="garden.empty")
                 b=b with {ActualCrop="Empty",ActualSoil="",Planted=null,Watered=null,NextTend=null,HarvestAt=null,Ready=false,PlantEvent="",LastClearedAt=e.At,TendedBy="",LastFertilized=null,WiltHours=null,Days=0,ObservedAt=e.At};
             else if(e.Kind is "garden.ready" or "garden.observed")
                 b=b with {ActualCrop=e.Crop?.CropName??b.ActualCrop,Ready=true,NextTend=null,ObservedAt=e.At};
             else continue;
+            if(e.Kind!="garden.dead")b=b with {DeadConfirmedAt=null};
             beds[b.Bed]=b;
             var interim=Progress(beds.Values.ToArray(),plan.At);
             if(complete is null && interim.Any(x=>x.Crop.Length>0)&&interim.Where(x=>x.Crop.Length>0).All(x=>x.Status=="confirmed"))complete=e.At;

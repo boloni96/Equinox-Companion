@@ -3,6 +3,8 @@ public static class GardenVisualState
 {
     public static string For(SharedGardenBed b,bool planVisible,DateTimeOffset now)
     {
+
+        if(b.DeadConfirmedAt is {} deadAt && deadAt<=now && (b.Watered is null||b.Watered<=deadAt) && (b.Planted is null||b.Planted<=deadAt) && b.ActualCrop!="Empty" && !b.Ready)return "dead";
         if(planVisible&&b.Crop.Length>0&&b.Status is not ("confirmed" or "starter"))return "planned";
         if(b.Ready)return planVisible&&b.Crop.Length==0?"keep-mature":"ready";
         if(b.ActualCrop=="Empty")return "empty";
@@ -13,6 +15,6 @@ public static class GardenVisualState
         if(b.Watered is {} care&&b.WiltHours is {} wilt&&care.AddHours(wilt)<=now)return "wilt-estimated";
         if(b.Watered is {} water&&water<=now)return now-water<TimeSpan.FromHours(12)?"wet":"due";
         if(b.NextTend<=now)return "due";
-        return b.ActualCrop.Length==0||b.ActualCrop=="Not synced yet"?"unknown":"growing";
+        return b.ActualCrop.Length==0||b.ActualCrop is "Not synced yet" or "Crop not identified"?"unknown":"growing";
     }
 }

@@ -478,3 +478,32 @@ Check("garden art maturity before death uncertain",GardenVisualState.For(artBed 
 Check("garden art saved plan is distinct",GardenVisualState.For(artBed with {Status="planned",Watered=null},true,artNow),"planned");
 Check("garden art confirmed empty has no wet",GardenVisualState.For(artBed with {ActualCrop="Empty"},false,artNow),"empty");
 Check("garden art unknown is not empty",GardenVisualState.For(artBed with {ActualCrop="Not synced yet",Watered=null},false,artNow),"unknown");
+
+var deadMenu = matureMenu with {Options=["Remove Crop","Quit"]};
+Check("dead removal-only menu identifies bed",deadMenu.DeadLocation()?.Bed.ToString(),"8");
+Check("dead menu is not empty",deadMenu.EmptyLocation()?.Bed.ToString(),null);
+Check("healthy remove option never proves death",(deadMenu with {Options=["Fertilize Crop","Tend Crop","Remove Crop","Quit"]}).DeadLocation()?.Bed.ToString(),null);
+Check("truncated menu cannot prove death",(deadMenu with {Options=["Remove Crop"]}).DeadLocation()?.Bed.ToString(),null);
+Check("unknown title cannot prove death",(deadMenu with {Title="Garden"}).DeadLocation()?.Bed.ToString(),null);
+Check("non garden cannot prove death",(deadMenu with {Target=plantTarget with {TargetDetails=null}}).DeadLocation()?.Bed.ToString(),null);
+Check("old website defers death event",SyncValidation.SupportedByWebsite("garden.dead",8).ToString(),"False");
+Check("new website accepts death event",SyncValidation.SupportedByWebsite("garden.dead",9).ToString(),"True");
+Check("confirmed death uses distinct visual",GardenVisualState.For(artBed with {DeadConfirmedAt=artNow.AddMinutes(-1)},false,artNow),"dead");
+Check("later tending replaces death evidence",GardenVisualState.For(artBed with {DeadConfirmedAt=artNow.AddHours(-2),Watered=artNow.AddHours(-1)},false,artNow),"wet");
+var styledRoster=JsonSerializer.Deserialize<SharedRoster>("{\"revision\":1,\"updated\":\"2026-10-03T00:00:00Z\",\"people\":[],\"gardenFrame\":\"simple\",\"gardenCornerTrim\":true}",new JsonSerializerOptions{PropertyNameCaseInsensitive=true})!;
+Check("paired frame style deserializes",styledRoster.GardenFrame,"simple");
+Check("paired corner trim deserializes",styledRoster.GardenCornerTrim.ToString(),"True");
+
+Check("confirmed dead care notice",GardenCareStatus.Due(careBed with {DeadConfirmedAt=careNow.AddMinutes(-1)},careNow),"dead");
+Check("new care replaces old dead notice",GardenCareStatus.Due(careBed with {Watered=careNow,DeadConfirmedAt=careNow.AddMinutes(-1)},careNow)??"none","none");
+Check("estimated death remains tending warning",GardenCareStatus.Due(careBed with {DeathAt=careNow.AddMinutes(-1)},careNow),"tend");
+Check("harvest chat green",GardenCareStatus.ChatColor("harvest",careNow.AddMinutes(-1),careNow).ToString(),"43");
+Check("ordinary tending chat blue",GardenCareStatus.ChatColor("tend",careNow.AddDays(1),careNow).ToString(),"37");
+Check("unknown care chat blue",GardenCareStatus.ChatColor("check care",null,careNow).ToString(),"37");
+Check("estimated risk chat orange",GardenCareStatus.ChatColor("tend",careNow.AddMinutes(-1),careNow).ToString(),"32");
+Check("confirmed death chat red",GardenCareStatus.ChatColor("dead",null,careNow).ToString(),"17");
+var manyGardenNotices=Enumerable.Range(1,30).Select(i=>new GardenChatNotice("h"+i,"House "+i,1,"harvest",null)).ToArray();
+var compactGardenChat=GardenCareStatus.ChatSummary(manyGardenNotices,careNow);
+Check("thirty houses compact into one status segment",compactGardenChat.Length.ToString(),"1");
+Check("many-house summary has counts",compactGardenChat[0].Text,"Ready to harvest: 30 batches at 30 houses");
+Check("single house keeps its name",GardenCareStatus.ChatSummary([new("h","HAVEN15-11",1,"harvest",null)],careNow)[0].Text,"Ready to harvest at 'HAVEN15-11': Batch 1.");

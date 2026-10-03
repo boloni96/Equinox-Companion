@@ -85,9 +85,12 @@ public sealed partial class Plugin
         ImGui.BeginDisabled(!config.NotifyGardenCare);
         MessageToggle("Tending due",config.NotifyGardenTending,v=>config.NotifyGardenTending=v);
         MessageToggle("Confirmed harvest-ready crops",config.NotifyGardenHarvest,v=>config.NotifyGardenHarvest=v);
+        MessageToggle("Confirmed dead crops",config.NotifyGardenDead,v=>config.NotifyGardenDead=v);
         MessageToggle("Estimated maturity: check in game",config.NotifyGardenMaturity,v=>config.NotifyGardenMaturity=v);
         MessageToggle("Unknown garden care time: check tending",config.NotifyGardenUnknownCare,v=>config.NotifyGardenUnknownCare=v);
-        ImGui.EndDisabled();ImGui.Separator();ImGui.TextUnformatted("Commands and Fashion Report");
+        ImGui.EndDisabled();
+        ImGui.TextWrapped("One compact summary for this character's owned/shared houses. Green: harvest; blue: tending; orange: estimated risk; red: confirmed dead. Unchanged warnings are not repeated when switching characters in this plugin session.");
+        ImGui.Separator();ImGui.TextUnformatted("Commands and Fashion Report");
         MessageToggle("Fashion Report browser link",config.NotifyFashionLink,v=>config.NotifyFashionLink=v);
         MessageToggle("Planting command: house not identified",config.NotifyPlantingUnavailable,v=>config.NotifyPlantingUnavailable=v);
         MessageToggle("Fashion Report: could not open browser",config.NotifyBrowserErrors,v=>config.NotifyBrowserErrors=v);
@@ -96,6 +99,7 @@ public sealed partial class Plugin
     {
         "tend"=>config.NotifyGardenTending,
         "harvest"=>config.NotifyGardenHarvest,
+        "dead"=>config.NotifyGardenDead,
         "check maturity"=>config.NotifyGardenMaturity,
         _=>config.NotifyGardenUnknownCare
     };
