@@ -36,7 +36,7 @@ public sealed partial class Plugin
                     if (empty > (bed.Watered ?? DateTimeOffset.MinValue) && empty >= localCare) continue;
                     var effective = localCare > (bed.Watered ?? DateTimeOffset.MinValue) ? bed with { Watered = localCare, NextTend = localCare.AddHours(12), DeathAt = bed.WiltHours is > 0 ? localCare.AddHours(bed.WiltHours.Value+24) : null } : bed;
                     var projected=projection?.Beds.FirstOrDefault(b=>b.Bed==bed.Bed);
-                    if(projection?.CompletedAt is null&&projected is not null&&GardenPlantRequirement.IsReplant(projected))continue;
+                    if(projection?.CompletedAt is null&&projected is not null&&GardenPlantRequirement.SuppressTending(projected))continue;
                     if(projected is not null)
                     {
                         if(projected.ActualCrop=="Empty")continue;

@@ -14,7 +14,7 @@ public static class GardenLive
             if(b.ObservedAt is {} observed && e.At<=observed || b.Planted is {} planted && e.At<planted)continue;
             if(b.ActualCrop=="Empty" && e.Kind is "garden.tended" or "garden.dead" or "garden.ready" or "garden.observed")b=b with {ActualCrop="Crop not identified"};
             if(e.Kind=="garden.planted" && e.Plant is {} p)
-                b=b with {ActualCrop=cropName(p.SeedName),ActualSoil=p.SoilName,Planted=e.At,Watered=e.At,NextTend=e.At.AddHours(12),Ready=false,KeepMature=false,PlantEvent=e.Id,TendedBy="",HarvestAt=(cropDays?.Invoke(p.SeedName)??0)>0?e.At.AddDays(cropDays!(p.SeedName)):null,Days=cropDays?.Invoke(p.SeedName)??0,WiltHours=cropWilt?.Invoke(p.SeedName),LastFertilized=null,ObservedAt=e.At};
+                b=b with {ActualCrop=cropName(p.SeedName),ActualSoil=p.SoilName,Planted=e.At,Watered=e.At,NextTend=e.At,Ready=false,KeepMature=false,PlantEvent=e.Id,TendedBy="",HarvestAt=(cropDays?.Invoke(p.SeedName)??0)>0?e.At.AddDays(cropDays!(p.SeedName)):null,Days=cropDays?.Invoke(p.SeedName)??0,WiltHours=cropWilt?.Invoke(p.SeedName),LastFertilized=null,ObservedAt=e.At};
             else if(e.Kind=="garden.tended")
                 b=b with {Watered=e.At,NextTend=b.Ready?null:e.At.AddHours(12),TendedBy=e.Actor.Name+(string.IsNullOrWhiteSpace(e.Actor.HomeWorldName)?"":" @ "+e.Actor.HomeWorldName),ObservedAt=e.At};
             else if(e.Kind=="garden.fertilized" && !b.Ready && b.HarvestAt is {} harvest && e.At<harvest && (b.LastFertilized is null || e.At-b.LastFertilized>=TimeSpan.FromHours(1)))

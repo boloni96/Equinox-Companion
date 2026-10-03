@@ -7,7 +7,7 @@ public static class GardenVisualState
     public static bool SeedlingEstimate(SharedGardenBed b,DateTimeOffset now) => HasActualCrop(b) && For(b,false,now) is "wet" or "due" or "growing" && !b.Ready && b.DeadConfirmedAt is null && b.Planted is {} start && b.HarvestAt is {} end && end>start && now>=start && now<start+(end-start)*.33;
     public static double? GrowthPercent(SharedGardenBed b,DateTimeOffset now) => b.Planted is {} start&&b.HarvestAt is {} end&&end>start?Math.Clamp((now-start).TotalSeconds/(end-start).TotalSeconds*100,0,100):null;
     public static bool EffectVisible(DateTimeOffset now) => now.ToUnixTimeSeconds()%2==0;
-    public static bool NeedsWater(SharedGardenBed b,bool planVisible,DateTimeOffset now) => !(planVisible&&GardenPlantRequirement.IsReplant(b)) && For(b,false,now) is "due" or "wilted" or "wilt-estimated" or "at-risk";
+    public static bool NeedsWater(SharedGardenBed b,bool planVisible,DateTimeOffset now) => !(planVisible&&GardenPlantRequirement.SuppressTending(b)) && For(b,false,now) is "due" or "wilted" or "wilt-estimated" or "at-risk";
     public static string CropArtwork(SharedGardenBed b,bool planVisible,DateTimeOffset now,bool animate=false) => For(b,planVisible,now) switch
     {
         "planned" => "plantLive",
@@ -29,6 +29,7 @@ public static class GardenVisualState
         if(b.HarvestAt<=now)return "check-maturity";
         if(death is {} risk&&risk>now&&risk-now<=TimeSpan.FromHours(4))return "at-risk";
         if(b.Watered is {} care&&b.WiltHours is {} wilt&&care.AddHours(wilt)<=now&&!(care.AddHours(wilt)<=b.GrowingObservedAt))return "wilt-estimated";
+        if(HasActualCrop(b)&&GardenTiming.FirstTendDue(b.Planted,b.Watered,now))return "due";
         if(b.Watered is {} water&&water<=now)return now-water<TimeSpan.FromHours(12)?"wet":"due";
         if(b.NextTend<=now)return "due";
         return b.ActualCrop.Length==0||b.ActualCrop is "Not synced yet" or "Crop not identified"?"unknown":"growing";

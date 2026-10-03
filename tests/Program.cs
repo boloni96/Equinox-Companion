@@ -701,7 +701,7 @@ Check("confirmed dead supersedes plan identity",GardenVisualState.CropArtwork(ar
 
 foreach(var (seconds,colour) in new[]{(0.0,"white"),(.999,"white"),(1.0,"black"),(1.999,"black"),(2.0,"rainbow"),(2.999,"rainbow"),(3.0,"white")})Check($"flower preview at {seconds}s",FlowerColourPreview.At(seconds),colour);
 var effectNow=DateTimeOffset.FromUnixTimeSeconds(1800000000);
-var effectBed=artBed with {Watered=effectNow,Planted=effectNow,HarvestAt=effectNow.AddDays(3),WiltedAt=null,DeadConfirmedAt=null,Ready=false};
+var effectBed=artBed with {Watered=effectNow,Planted=effectNow.AddMinutes(-1),HarvestAt=effectNow.AddDays(3),WiltedAt=null,DeadConfirmedAt=null,Ready=false};
 Check("recent tending keeps dry seedling sprite",GardenVisualState.CropArtwork(effectBed,false,effectNow,true),"plantSeedling");
 Check("seedling stays unchanged through animation phase",GardenVisualState.CropArtwork(effectBed,false,effectNow.AddSeconds(1),true),"plantSeedling");
 Check("disabling animation does not add droplets after care",GardenVisualState.CropArtwork(effectBed,false,effectNow.AddSeconds(1),false),"plantSeedling");
@@ -732,3 +732,29 @@ Check("recently tended bed has no droplets",GardenVisualState.NeedsWater(effectB
 Check("twelve hour boundary asks for water",GardenVisualState.NeedsWater(effectBed,false,effectNow.AddHours(12)).ToString(),"True");
 Check("step nine starter never asks for water",GardenVisualState.NeedsWater(pendingRemoval with {Watered=artNow.AddHours(-13),HarvestAt=artNow.AddDays(3),WiltHours=null},true,artNow).ToString(),"False");
 Check("other beds still ask for water",GardenVisualState.NeedsWater(effectBed with {Watered=effectNow.AddHours(-13)},false,effectNow).ToString(),"True");
+
+var newlyPlanted=GardenLive.Apply(livePlan,liveEvents,x=>x,_=>5,_=>48);
+Check("step one temporary starter suppresses tending before neighbours",GardenVisualState.NeedsWater(pendingStarter,true,liveAt.AddMinutes(2)).ToString(),"False");
+Check("step one temporary starter suppresses tending after neighbours",GardenVisualState.NeedsWater(newlyPlanted.Beds[0],true,liveAt.AddMinutes(9)).ToString(),"False");
+foreach(var bed in newlyPlanted.Beds.Skip(1))Check($"bed {bed.Bed} needs first tending after planting",GardenVisualState.NeedsWater(bed,true,liveAt.AddMinutes(9)).ToString(),"True");
+Check("planting clock is not proof of tending",GardenVisualState.For(newlyPlanted.Beds[1],false,liveAt.AddMinutes(9)),"due");
+Check("new planting tending time is immediate",newlyPlanted.Beds[1].NextTend.ToString(),liveEvents[1].At.ToString());
+Check("step nine final crop needs its own first tending",GardenVisualState.NeedsWater(localDone.Beds[0],false,liveAt.AddMinutes(11)).ToString(),"True");
+var finallyTended=GardenLive.Apply(localDone,[new SyncEvent("first-tend","garden.tended",liveAt.AddMinutes(11),liveActor,liveAddress,1,1)],x=>x);
+Check("actual tending turns soil wet",GardenVisualState.For(finallyTended.Beds[0],false,liveAt.AddMinutes(11)),"wet");
+Check("actual tending removes droplets",GardenVisualState.NeedsWater(finallyTended.Beds[0],false,liveAt.AddMinutes(11)).ToString(),"False");
+Check("actual tending retains original growth start",finallyTended.Beds[0].Planted.ToString(),localDone.Beds[0].Planted.ToString());
+Check("droplets return exactly twelve hours after actual tend",GardenVisualState.NeedsWater(finallyTended.Beds[0],false,liveAt.AddMinutes(11).AddHours(12)).ToString(),"True");
+Check("initial care reminder is due despite planting clock",GardenCareStatus.Due(careBed with {Planted=careNow,Watered=careNow,NextTend=careNow.AddHours(12)},careNow),"tend");
+Check("ready crop has no first-tend reminder",GardenVisualState.NeedsWater(localDone.Beds[0] with {Ready=true},false,liveAt.AddMinutes(11)).ToString(),"False");
+Check("unknown planting time does not invent first tend",GardenTiming.FirstTendDue(null,null,careNow).ToString(),"False");
+Check("seed picker can identify shared artwork by inventory entry",GardenPlantRequirement.PickerEntryMatches(11,11,11,6,6,123,123,9,9).ToString(),"True");
+Check("seed picker rejects a changed inventory slot",GardenPlantRequirement.PickerEntryMatches(11,11,11,6,6,123,456,9,9).ToString(),"False");
+Check("seed picker rejects recycled renderers",GardenPlantRequirement.PickerEntryMatches(11,11,11,6,1,123,123,9,9).ToString(),"False");
+Check("seed picker rejects mismatching menu lengths",GardenPlantRequirement.PickerEntryMatches(11,12,11,6,6,123,123,9,9).ToString(),"False");
+Check("seed picker rejects unexpected icons",GardenPlantRequirement.PickerEntryMatches(11,11,11,6,6,123,123,9,8).ToString(),"False");
+
+var eightStep=livePlan with {Beds=liveBeds.Select(b=>b with {ReplantOrder=0,StarterSoil=""}).ToArray()};
+var eightPlanted=GardenLive.Apply(eightStep,[LivePlant(1,1,"Grade 3 Thanalan Topsoil")],x=>x,_=>5,_=>48);
+Check("eight-step bed one is permanent and needs tending",GardenVisualState.NeedsWater(eightPlanted.Beds[0],true,liveAt.AddMinutes(2)).ToString(),"True");
+Check("eight-step bed one has no starter exception",GardenPlantRequirement.SuppressTending(eightPlanted.Beds[0]).ToString(),"False");

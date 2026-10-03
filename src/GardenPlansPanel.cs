@@ -237,6 +237,13 @@ public sealed partial class Plugin
         if(b.Queued)DrawGardenInfoLabel("queued","Recorded locally · waiting for server acknowledgement. Another client may still need to refresh afterwards.");
         if(EquinoxCompanion.GardenVisualState.SeedlingEstimate(b,DateTimeOffset.UtcNow))DrawGardenInfoLabel("seedling","Seedling illustration · first 33% of the recorded growth estimate; the game stage has not been observed.");
         var icon = GardenCareIcon(b,showPlan,wrong);
+        if(showPlan&&GardenPlantRequirement.SuppressTending(b)&&!GardenPlantRequirement.IsReplant(b))
+        {
+            DrawGardenInfoLabel("starter",GardenCareHint("starter"));
+            DrawGardenItem(b.ActualCrop,false,"Actual temporary crop: ");
+            ImGui.TextWrapped($"After the other required beds, step {b.ReplantOrder}: remove this starter and replant. The final crop will need tending.");
+            return;
+        }
         if(showPlan&&GardenPlantRequirement.IsReplant(b))
         {
             DrawGardenInfoLabel(icon,GardenPlantRequirement.RemoveStarter(b)?$"Step {b.ReplantOrder}: remove only this temporary starter, then replant {b.Crop} with {b.Soil}. No tending is needed for this planned removal.":$"Step {b.ReplantOrder}: plant {b.Crop} with {b.Soil} in this now-empty bed.");
@@ -266,7 +273,7 @@ public sealed partial class Plugin
         if (b.LastFertilized is {} fed) {DrawGardenItem("Fishmeal",true,"Fertilizer: ");DrawGardenInfoLabel("fertilized", $"Last fertilized: {fed.ToLocalTime():g} · does not reset tending.");}
         if (!b.Ready && b.DeadConfirmedAt is null)
         {
-            if (b.NextTend is {} tend) DrawGardenInfoLabel("tend", $"Tending suggested: {tend.ToLocalTime():g}");
+            if ((GardenTiming.FirstTendDue(b.Planted,b.Watered,DateTimeOffset.UtcNow)?b.Planted:b.NextTend) is {} tend) DrawGardenInfoLabel("tend", $"Tending suggested: {tend.ToLocalTime():g}");
             if (b.HarvestAt is {} harvest) DrawGardenInfoLabel("check-maturity", $"Maturity estimate: {harvest.ToLocalTime():g}");
             if (b.Watered is {} lastCare && b.WiltHours is >0) ImGui.TextWrapped($"Death estimate: {lastCare.AddHours(b.WiltHours.Value+24).ToLocalTime():g} · check in game");
         }

@@ -116,7 +116,7 @@ public static class GardenCareStatus
         if (bed.Ready) return bed.KeepMature ? null : "harvest";
         if(bed.DeadConfirmedAt is {} dead&&dead<=now&&(bed.Watered is null||bed.Watered<=dead)&&(bed.Planted is null||bed.Planted<=dead))return "dead";
         if(bed.WiltedAt is {} wilt&&wilt<=now&&(bed.Watered is null||bed.Watered<=wilt)&&(bed.Planted is null||bed.Planted<=wilt))return "wilt";
-        var next = bed.Watered?.AddHours(12) ?? bed.NextTend;
+        var next = GardenTiming.FirstTendDue(bed.Planted,bed.Watered,now) ? bed.Planted : bed.Watered?.AddHours(12) ?? bed.NextTend;
         if (next is null) return "check care";
         if (next <= now) return "tend";
         return bed.HarvestAt <= now ? "check maturity" : null;
