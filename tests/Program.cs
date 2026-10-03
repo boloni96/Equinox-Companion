@@ -432,7 +432,7 @@ Check("other batch cannot confirm selected tab",GardenLive.Apply(livePlan,[liveE
 Check("other world cannot confirm selected tab",GardenLive.Apply(livePlan,[liveEvents[0] with {Address=liveAddress with {WorldName="Halicarnassus"}}],x=>x).Beds[0].Status,"planned");
 var localTend=GardenLive.Apply(localDone,[new SyncEvent("tend","garden.tended",liveAt.AddMinutes(12),liveActor,liveAddress,1,2)],x=>x);
 Check("local tending preserves planting time",localTend.Beds[1].Planted.ToString(),liveEvents[1].At.ToString());
-Check("local tending records actual gardener",localTend.Beds[1].TendedBy,"Gardener");
+Check("local tending records actual gardener",localTend.Beds[1].TendedBy,"Gardener @ Rafflesia");
 
 var withClear=GardenLive.Apply(livePlan,liveEvents.Append(new SyncEvent("clear","garden.empty",liveAt.AddMinutes(9),liveActor,liveAddress,1,1)).Append(LivePlant(1,10,"Grade 3 Thanalan Topsoil")),x=>x);
 Check("local empty then replant completes",withClear.Beds[0].Status,"confirmed");
@@ -475,7 +475,7 @@ Check("garden art wilt is not death",GardenVisualState.For(artBed with {Watered=
 Check("garden art dead after deadline",GardenVisualState.For(artBed with {Watered=artNow.AddHours(-49)},false,artNow),"dead-estimated");
 Check("garden art ready immune to old death",GardenVisualState.For(artBed with {Watered=artNow.AddHours(-49),Ready=true},false,artNow),"ready");
 Check("garden art maturity before death uncertain",GardenVisualState.For(artBed with {Watered=artNow.AddHours(-49),HarvestAt=artNow.AddHours(-2)},false,artNow),"check-maturity");
-Check("garden art saved plan is distinct",GardenVisualState.For(artBed with {Status="planned",Watered=null},true,artNow),"planned");
+Check("garden art saved plan is distinct",GardenVisualState.For(artBed with {Status="planned",Watered=null,ActualCrop="Not synced yet"},true,artNow),"planned");
 Check("garden art confirmed empty has no wet",GardenVisualState.For(artBed with {ActualCrop="Empty"},false,artNow),"empty");
 Check("garden art unknown is not empty",GardenVisualState.For(artBed with {ActualCrop="Not synced yet",Watered=null},false,artNow),"unknown");
 
@@ -504,8 +504,8 @@ Check("estimated risk chat orange",GardenCareStatus.ChatColor("tend",careNow.Add
 Check("confirmed death chat red",GardenCareStatus.ChatColor("dead",null,careNow).ToString(),"17");
 var manyGardenNotices=Enumerable.Range(1,30).Select(i=>new GardenChatNotice("h"+i,"House "+i,1,"harvest",null)).ToArray();
 var compactGardenChat=GardenCareStatus.ChatSummary(manyGardenNotices,careNow);
-Check("thirty houses compact into one status segment",compactGardenChat.Length.ToString(),"1");
-Check("many-house summary has counts",compactGardenChat[0].Text,"Ready to harvest: 30 batches at 30 houses");
+Check("all thirty houses keep their locations",compactGardenChat.Length.ToString(),"30");
+Check("many-house summary names each house",compactGardenChat[0].Text,"Ready to harvest at 'House 1': Batch 1.");
 Check("single house keeps its name",GardenCareStatus.ChatSummary([new("h","HAVEN15-11",1,"harvest",null)],careNow)[0].Text,"Ready to harvest at 'HAVEN15-11': Batch 1.");
 
 var noticeSession=new GardenNoticeSession();
@@ -595,3 +595,95 @@ if(args.Length>1 && args[0]=="--garden-chat")foreach(var path in args.Skip(1))
     Check("native evidence identifies all eight beds",(nativeEmpty+nativeNamed).ToString(),"8");
     Console.WriteLine($"PASS local native export replay: {nativeEmpty} empty, {nativeNamed} named ready crops; identities match the inspected sequence.");
 }
+
+// Review regressions: inspection completeness, independent plan/crop art, attribution and care.
+var allObserved=Enumerable.Range(1,8).Select(n=>artBed with {Bed=n,ActualCrop="Crop not identified",ObservedAt=artNow}).ToArray();
+Check("eight game observations hide setup even without a crop name",GardenBedSyncSession.NeedsSync(allObserved).ToString(),"False");
+Check("seven observed beds still need setup",GardenBedSyncSession.NeedsSync(allObserved[..7]).ToString(),"True");
+Check("a saved plan alone is not inspection",GardenBedSyncSession.NeedsSync(allObserved.Select(b=>b with {ObservedAt=null})).ToString(),"True");
+Check("eight observed empty beds hide setup",GardenBedSyncSession.NeedsSync(allObserved.Select(b=>b with {ActualCrop="Empty"})).ToString(),"False");
+Check("duplicate bed IDs cannot complete setup",GardenBedSyncSession.NeedsSync(allObserved.Select(b=>b with {Bed=1})).ToString(),"True");
+Check("plan cannot hide actual crop name",GardenVisualState.DisplayCrop(artBed with {Crop="Krakka Root"},true),"Mirror Apple");
+Check("plan cannot hide actual wet state",GardenVisualState.For(artBed with {Status="planned"},true,artNow),"wet");
+Check("keep mature actual care icon",GardenVisualState.For(artBed with {Ready=true,KeepMature=true},false,artNow),"keep-mature");
+Check("seedling estimate early growth",GardenVisualState.SeedlingEstimate(artBed with {Planted=artNow.AddHours(-1),HarvestAt=artNow.AddDays(2)},artNow).ToString(),"True");
+Check("seedling estimate requires planting time",GardenVisualState.SeedlingEstimate(artBed with {Planted=null,HarvestAt=artNow.AddDays(2)},artNow).ToString(),"False");
+Check("ready is never estimated seedling",GardenVisualState.SeedlingEstimate(artBed with {Ready=true,HarvestAt=artNow.AddDays(2)},artNow).ToString(),"False");
+var reminderEstate=new SharedHouse("h","g","Private house","Home","Rafflesia","Goblet",18,49,"Medium","Owner Character","Garden FC","GARD",null,false);
+var reminderCare=new SharedGardenCare("h","g","Home","Rafflesia","Goblet",18,49,1,[],[]);
+Check("reminder identifies private owner and address",GardenCareStatus.HouseLabel(reminderEstate,reminderCare),"Owner: Owner Character · Rafflesia · Goblet W18 P49");
+Check("reminder identifies FC and address",GardenCareStatus.HouseLabel(reminderEstate with {Type="Free Company house"},reminderCare),"FC: Garden FC · Rafflesia · Goblet W18 P49");
+Check("missing owner never becomes viewer",GardenCareStatus.HouseLabel(null,reminderCare),"Owner not recorded · Rafflesia · Goblet W18 P49");
+var chronological=GardenLive.Apply(livePlan,[..liveEvents,LivePlant(1,10,"Grade 3 Thanalan Topsoil"),new SyncEvent("new-care","garden.tended",liveAt.AddMinutes(20),liveActor with {Name="Paired Visitor"},liveAddress,1,1),new SyncEvent("old-care","garden.tended",liveAt.AddMinutes(15),liveActor,liveAddress,1,1)],x=>x);
+Check("out of order care retains actual latest actor",chronological.Beds[0].TendedBy,"Paired Visitor @ Rafflesia");
+Check("out of order care retains action timestamp",chronological.Beds[0].Watered?.ToString("O"),liveAt.AddMinutes(20).ToString("O"));
+Check("one bed care leaves neighbour unchanged",chronological.Beds[1].Watered?.ToString("O"),liveEvents[1].At.ToString("O"));
+
+var messageDir=Path.Combine(Path.GetTempPath(),"equinox-garden-messages-"+Guid.NewGuid().ToString("N"));
+try{
+ var savedMessages=new GardenMessageJournal(messageDir);
+ savedMessages.Record(new(time,"garden.chatObservation",new {text="This crop is ready to be harvested."}));
+ savedMessages.Record(new(time,"player.chat",new {text="excluded"}));
+ Check("normal garden evidence survives reopening without timed recording",new GardenMessageJournal(messageDir).Snapshot().Length.ToString(),"1");
+ File.WriteAllText(savedMessages.FilePath,new string(' ',256001));savedMessages.Record(new(time,"garden.logTextObservation",new {logMessageId=4017}));
+ Check("garden research history rotates",File.Exists(savedMessages.FilePath+".previous").ToString(),"True");
+ var noDirectory=Path.Combine(messageDir,"blocked");File.WriteAllText(noDirectory,"file");var failedHistory=new GardenMessageJournal(noDirectory);failedHistory.Record(new(time,"garden.chatObservation",new {text="status"}));
+ Check("garden history IO failure never crashes tracking",(failedHistory.WriteFailure is not null).ToString(),"True");
+}finally{Directory.Delete(messageDir,true);}
+
+// Verified English inspection table, not paraphrased guide sentences.
+foreach(var item in new[]{(Text:"This crop is doing well.",State:"growing"),(Text:"This crop has seen better days...",State:"wilting"),(Text:"This crop is beyond hope.",State:"dead")}){
+ var parsed=CropChatMatcher.ParseStatus("Curiel Root\n"+item.Text);
+ Check("inspection phrase "+item.State,parsed?.Status,item.State);
+ Check("inspection retains crop "+item.State,parsed?.CropName,"Curiel Root");
+ cm.Clear();cm.Add(matureMenu with {Options=item.State=="dead"?["Remove Crop","Quit"]:["Fertilize Crop","Tend Crop","Remove Crop","Quit"]});cm.Add(new CropChat(time,plantTarget,"Curiel Root\n"+item.Text));
+ var found=cm.Drain(time.AddSeconds(1),Known);
+ Check("inspection correlated to physical bed "+item.State,found.Single().Bed.ToString(),"8");
+ Check("inspection not harvest "+item.State,found.Single().Crop.Ready.ToString(),"False");
+}
+Check("guide paraphrase is not native status",CropChatMatcher.ParseStatus("The Curiel Root is growing well.")?.Status,null);
+cm.Clear();cm.Add(matureMenu with {Options=["Tend Crop","Quit"]});cm.Add(new CropChat(time,plantTarget,"Curiel Root"));cm.Add(new CropChat(time.AddMilliseconds(100),plantTarget,"This crop is doing well."));
+Check("separate healthy name and status",cm.Drain(time.AddSeconds(1),Known).Single().Crop.CropName,"Curiel Root");
+cm.Clear();cm.Add(matureMenu with {Options=["Tend Crop","Quit"]});cm.Add(new CropChat(time,plantTarget,"Fake Crop\nThis crop has seen better days..."));
+Check("unknown item cannot become crop",cm.Drain(time.AddSeconds(1),Known).Count.ToString(),"0");
+cm.Clear();cm.Add(matureMenu);cm.Add(new CropChat(time,plantTarget,"Curiel Root\nThis crop is doing well."));
+Check("healthy text cannot override harvest menu",cm.Drain(time.AddSeconds(2),Known,true).Count.ToString(),"0");
+cm.Clear();cm.Add(matureMenu with {Options=["Tend Crop","Quit"]});cm.Add(new CropChat(time,plantTarget with {TargetId="other"},"Curiel Root\nThis crop is doing well."));
+Check("healthy text cannot borrow other bed",cm.Drain(time.AddSeconds(1),Known).Count.ToString(),"0");
+cm.Clear();cm.Add(new CropChat(time,unmappedTarget,"Curiel Root\nThis crop has seen better days..."));
+var statusUnmapped=cm.Drain(time.AddSeconds(2),Known,true).Single();
+Check("visitor wilt retained for calibration",statusUnmapped.Crop.Evidence,"garden-system-message-awaiting-calibration");
+var statusEvent=new SyncEvent(new string('a',32),"garden.status",liveAt.AddHours(2),liveActor,liveAddress,1,2,Crop:new("Mirror Apple",false,Status:"wilting"));
+Check("status accepted with protocol11",SyncValidation.SupportedByWebsite(statusEvent.Kind,11).ToString(),"True");
+Check("status waits for website update",SyncValidation.SupportedByWebsite(statusEvent.Kind,10).ToString(),"False");
+Check("well formed status valid",SyncValidation.CanSend(statusEvent,liveAt.AddHours(3)).ToString(),"True");
+Check("malformed status rejected",SyncValidation.CanSend(statusEvent with {Crop=statusEvent.Crop! with {Status="ready"}},liveAt.AddHours(3)).ToString(),"False");
+var statusPlan=GardenLive.Apply(fertBase,[statusEvent],x=>x);var statusBed=statusPlan.Beds[1];
+Check("observed wilt affects art",GardenVisualState.For(statusBed,false,liveAt.AddHours(3)),"wilted");
+Check("inspection preserves watered time",statusBed.Watered?.ToString("O"),fertBase.Beds[1].Watered?.ToString("O"));
+Check("inspection does not assign gardener",statusBed.TendedBy,"");
+Check("fertilizing cannot cure wilt",GardenLive.Apply(statusPlan,[fertEvent with {At=liveAt.AddHours(3)}],x=>x).Beds[1].WiltedAt?.ToString("O"),statusEvent.At.ToString("O"));
+var caredAfterWilt=GardenLive.Apply(statusPlan,[new SyncEvent("care-wilt","garden.tended",liveAt.AddHours(4),liveActor,liveAddress,1,2)],x=>x);
+Check("confirmed tending clears wilt",caredAfterWilt.Beds[1].WiltedAt?.ToString(),null);
+Check("older wilt cannot override new care",GardenLive.Apply(caredAfterWilt,[statusEvent],x=>x).Beds[1].WiltedAt?.ToString(),null);
+var deadStatus=GardenLive.Apply(statusPlan,[statusEvent with {At=liveAt.AddHours(3),Crop=statusEvent.Crop! with {Status="dead"}}],x=>x);
+Check("named death keeps identity",deadStatus.Beds[1].ActualCrop,"Mirror Apple");
+Check("named death selects dead art",GardenVisualState.For(deadStatus.Beds[1],false,liveAt.AddHours(4)),"dead");
+var changedStatus=GardenLive.Apply(statusPlan,[statusEvent with {At=liveAt.AddHours(4),Crop=new("Curiel Root",false,Status:"growing")}],x=>x).Beds[1];
+Check("different observed crop discards old water clock",changedStatus.Watered?.ToString(),null);
+Check("different observed crop discards old planting",changedStatus.Planted?.ToString(),null);
+var growthBed=fertBase.Beds[1] with {Planted=liveAt,Watered=null,WiltHours=null,HarvestAt=liveAt.AddHours(100)};
+Check("seedling before33 percent",GardenVisualState.SeedlingEstimate(growthBed,liveAt.AddHours(32)).ToString(),"True");
+Check("growing at33 percent",GardenVisualState.SeedlingEstimate(growthBed,liveAt.AddHours(33)).ToString(),"False");
+Check("growth66 percentage",GardenVisualState.GrowthPercent(growthBed,liveAt.AddHours(66))?.ToString(),"66");
+Check("100percent keeps estimated status",GardenVisualState.For(growthBed,false,liveAt.AddHours(100)),"check-maturity");
+Check("observed wilt overrides100percent",GardenVisualState.For(growthBed with {WiltedAt=liveAt.AddHours(99)},false,liveAt.AddHours(100)),"wilted");
+Check("house link names the specific house and garden",GardenCareStatus.WebsiteUrl("house-a",2),"https://equinoxjournal.pages.dev/#house=house-a&section=gardening&batch=2");
+Check("different house gets different encoded link",GardenCareStatus.WebsiteUrl("house b&x",1),"https://equinoxjournal.pages.dev/#house=house%20b%26x&section=gardening&batch=1");
+var healthyOldTimer=growthBed with {Watered=liveAt,WiltHours=24,GrowingObservedAt=liveAt.AddHours(60)};
+Check("healthy inspection supersedes already elapsed death estimate",GardenVisualState.For(healthyOldTimer,false,liveAt.AddHours(61)),"due");
+bool suppressSync=false;
+Check("single sync click starts",GardenBedSyncSession.ButtonAction(true,false,false,ref suppressSync),"start");
+Check("second press cancels sync",GardenBedSyncSession.ButtonAction(false,true,true,ref suppressSync),"cancel");
+Check("double click release cannot restart",GardenBedSyncSession.ButtonAction(true,false,false,ref suppressSync),null);
+Check("later single click starts again",GardenBedSyncSession.ButtonAction(true,false,false,ref suppressSync),"start");

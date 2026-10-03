@@ -36,9 +36,21 @@ with zipfile.ZipFile(io.BytesIO(payload)) as archive:
     icon = archive.read('icon.png')
     assert icon == (root / 'src/icon.png').read_bytes()
     assert 'garden-art/assets/centers/stone-emblem.png' in archive.namelist()
+    # Keep new source artwork identical to the reviewed, checksum-verified package.
+    source_assets = {}
+    for name, expected in manifest.get('sourceAssets', {}).items():
+        assert name == 'garden-art/assets/icons/house-moogle.png', 'Unexpected source asset'
+        content = archive.read(name)
+        assert content.startswith(b'\x89PNG\r\n\x1a\n') and len(content) <= 4 * 1024 * 1024
+        assert hashlib.sha256(content).hexdigest() == expected, 'Source asset checksum mismatch'
+        source_assets[name] = content
 destination = root / 'dist' / f'v{version}'
 assert not destination.exists(), 'Do not overwrite an existing version'
 destination.mkdir(parents=True)
+for name, content in source_assets.items():
+    asset_path = root / 'src' / name
+    asset_path.parent.mkdir(parents=True, exist_ok=True)
+    asset_path.write_bytes(content)
 (destination / 'EquinoxCompanion.zip').write_bytes(payload)
 (destination / 'icon.png').write_bytes(icon)
 (destination / 'repo.json').write_bytes(feed_bytes)

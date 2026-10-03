@@ -97,7 +97,7 @@ public sealed partial class Plugin
     }
     private bool GardenMessageEnabled(string kind)=>kind switch
     {
-        "tend"=>config.NotifyGardenTending,
+        "tend" or "wilt"=>config.NotifyGardenTending,
         "harvest"=>config.NotifyGardenHarvest,
         "dead"=>config.NotifyGardenDead,
         "check maturity"=>config.NotifyGardenMaturity,

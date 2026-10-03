@@ -94,6 +94,7 @@ public sealed partial class Plugin : IDalamudPlugin
     private int syncFailures;
     private int heldSyncRecords;
     private ErrorJournal errorJournal = null!;
+    private GardenMessageJournal gardenMessageJournal = null!;
 
     private readonly HashSet<string> reportedHeldRecords = [];
     private void UpdateSync(DateTimeOffset now)
@@ -122,7 +123,7 @@ public sealed partial class Plugin : IDalamudPlugin
             .Select(h => new SyncEvent(h.EventId, h.Kind, h.ObservedAt, WithWorldNames(h.Actor), WithAddressNames(h.Address)))
             .Concat(config.Tending.Where(t => !sent.Contains(t.EventId)).Select(t => new SyncEvent(t.EventId, "garden.tended", t.ConfirmedAt, WithWorldNames(t.Actor), WithAddressNames(t.Address), t.Patch, t.Bed)))
             .Concat(config.Planting.Where(t => !sent.Contains(t.EventId)).Select(t => new SyncEvent(t.EventId, "garden.planted", t.ConfirmedAt, WithWorldNames(t.Actor), WithAddressNames(t.Address), t.Patch, t.Bed, t.Plant)))
-            .Concat(config.Discoveries.Where(e => !sent.Contains(e.Id) && (e.Kind is "garden.ready" or "garden.observed" or "garden.unmapped" or "garden.empty.unmapped" or "garden.mapped" or "garden.empty" or "garden.dead" ? config.TrackGardens : e.Kind == "character.updated" ? config.SyncCharacterDetails : e.Kind is "collection.observed" or "storage.observed" ? config.SyncCollections : e.Kind == "submarines.cached" ? config.SyncAutoRetainer : e.Kind is "fashion.observed" or "submarines.observed" ? config.SyncActivities : config.SyncHouseDetails)))
+            .Concat(config.Discoveries.Where(e => !sent.Contains(e.Id) && (e.Kind is "garden.ready" or "garden.observed" or "garden.unmapped" or "garden.empty.unmapped" or "garden.status" or "garden.status.unmapped" or "garden.mapped" or "garden.empty" or "garden.dead" or "garden.fertilized" ? config.TrackGardens : e.Kind == "character.updated" ? config.SyncCharacterDetails : e.Kind is "collection.observed" or "storage.observed" ? config.SyncCollections : e.Kind == "submarines.cached" ? config.SyncAutoRetainer : e.Kind is "fashion.observed" or "submarines.observed" ? config.SyncActivities : config.SyncHouseDetails)))
             .Where(e => !SyncValidation.SupersededIncompleteCharacter(e, config.Discoveries, now))
             .OrderBy(e => e.At).ToArray();
         var held = pending.Where(e => !SyncValidation.CanSend(e, now)).ToArray();
@@ -142,6 +143,7 @@ public sealed partial class Plugin : IDalamudPlugin
     public unsafe Plugin()
     {
         errorJournal = new ErrorJournal(Pi.GetPluginConfigDirectory());
+        gardenMessageJournal = new GardenMessageJournal(Pi.GetPluginConfigDirectory());
         try
         {
             callbackHook = Interop.HookFromAddress<FireCallbackDelegate>(
@@ -523,7 +525,7 @@ public sealed partial class Plugin : IDalamudPlugin
     {
         if (!SyncValidation.CanSend(e, DateTimeOffset.UtcNow)) return;
         var last = config.Discoveries.LastOrDefault(x => x.Kind == e.Kind && x.Actor.ContentId == e.Actor.ContentId && x.Address?.HouseId == e.Address?.HouseId && x.Patch == e.Patch && x.Bed == e.Bed && x.Collection?.Category == e.Collection?.Category && x.Storage?.Key == e.Storage?.Key && x.GardenTarget?.Argument == e.GardenTarget?.Argument && x.Company?.Id == e.Company?.Id && x.Company?.Profile?.Source == e.Company?.Profile?.Source);
-        if (!force && last is not null && (!(e.Kind is "garden.empty" or "garden.empty.unmapped" or "garden.dead" or "garden.ready" or "garden.observed") || e.At - last.At < TimeSpan.FromSeconds(2)) && !(e.GardenTarget is not null && e.At-last.At > TimeSpan.FromDays(30)) && !(e.Kind is "garden.ready" or "garden.observed" or "garden.empty" or "garden.dead" && config.Planting.Any(p => p.Actor.ContentId == e.Actor.ContentId && p.Address.HouseId == e.Address?.HouseId && p.Patch == e.Patch && p.Bed == e.Bed && p.ConfirmedAt > last.At)) && JsonSerializer.Serialize(new { last.Actor, last.Address, last.House, last.Character, last.Crop, last.Collection, last.Fashion, last.Voyage, last.GardenTarget, last.Storage, last.Company, last.CachedVoyage }) == JsonSerializer.Serialize(new { e.Actor, e.Address, e.House, e.Character, e.Crop, e.Collection, e.Fashion, e.Voyage, e.GardenTarget, e.Storage, e.Company, e.CachedVoyage })) return;
+        if (!force && last is not null && (!(e.Kind is "garden.empty" or "garden.empty.unmapped" or "garden.dead" or "garden.ready" or "garden.observed" or "garden.status" or "garden.status.unmapped") || e.At - last.At < TimeSpan.FromSeconds(2)) && !(e.GardenTarget is not null && e.At-last.At > TimeSpan.FromDays(30)) && !(e.Kind is "garden.ready" or "garden.observed" or "garden.status" or "garden.empty" or "garden.dead" && config.Planting.Any(p => p.Actor.ContentId == e.Actor.ContentId && p.Address.HouseId == e.Address?.HouseId && p.Patch == e.Patch && p.Bed == e.Bed && p.ConfirmedAt > last.At)) && JsonSerializer.Serialize(new { last.Actor, last.Address, last.House, last.Character, last.Crop, last.Collection, last.Fashion, last.Voyage, last.GardenTarget, last.Storage, last.Company, last.CachedVoyage }) == JsonSerializer.Serialize(new { e.Actor, e.Address, e.House, e.Character, e.Crop, e.Collection, e.Fashion, e.Voyage, e.GardenTarget, e.Storage, e.Company, e.CachedVoyage })) return;
         config.Discoveries.Add(e);
         if(e.Kind.StartsWith("garden.") || e.Kind.StartsWith("house.")) GardenActionRecorded();
         if(collectingStorage)storageChanged=true;else Pi.SavePluginConfig(config);
@@ -611,16 +613,16 @@ public sealed partial class Plugin : IDalamudPlugin
         var sender = message.OriginalSender.ExtractText();
         if (text.Length > 512 || sender.Length > 100) return;
         cropChats.Enqueue(new(now, target, text, sender));
-        // Local opt-in diagnostics capture other garden system messages for stage research.
+        // Bounded local history captures garden-only system text even outside a timed recording.
         // No inferred growth stage and no diagnostic text is uploaded.
-        if (recording && menuMessages.Count < 128)
+        if (menuMessages.Count < 128)
             menuMessages.Enqueue(new(now, "garden.chatObservation", new { chatType = message.LogKind.ToString(), text, sender, candidateTarget = target }));
     }
 
     private bool IsKnownCropItem(string name)
     {
         if (knownCropItems.TryGetValue(name, out var known)) return known;
-        known = DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>(Dalamud.Game.ClientLanguage.English).Any(x => x.Name.ToString() == name);
+        known = DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>(Dalamud.Game.ClientLanguage.English).Any(x => string.Equals(x.Name.ToString(),name,StringComparison.OrdinalIgnoreCase));
         if (knownCropItems.Count < 512) knownCropItems[name] = known;
         return known;
     }
@@ -636,7 +638,7 @@ public sealed partial class Plugin : IDalamudPlugin
         // Local diagnostic only: garden-system string arguments may identify an existing crop.
         // Never collect player chat, format native messages, or upload diagnostic text.
         var now = DateTimeOffset.UtcNow;
-        if (recording && message.LogMessageId is >= 4005 and <= 4025 && menuMessages.Count < 128 &&
+        if (message.LogMessageId is >= 4005 and <= 4026 && menuMessages.Count < 128 &&
             Volatile.Read(ref capturedContext)?.CandidateAt(now)?.TargetDetails?.DataId == 2003757)
         {
             var textParameters = new string?[count];
@@ -646,7 +648,7 @@ public sealed partial class Plugin : IDalamudPlugin
                     var text = value.ToString();
                     textParameters[i] = text.Length > 512 ? text[..512] : text;
                 }
-            menuMessages.Enqueue(new(now, "garden.logTextObservation", new { logMessageId = message.LogMessageId, textParameters, parameters }));
+            menuMessages.Enqueue(new(now, "garden.logTextObservation", new { logMessageId = message.LogMessageId, textParameters, parameters, candidateTarget=Volatile.Read(ref capturedContext)?.CandidateAt(now) }));
         }
         messages.Enqueue((DateTimeOffset.UtcNow, message.LogMessageId, parameters, Volatile.Read(ref capturedContext), Volatile.Read(ref pendingTend), Volatile.Read(ref pendingPlant), Volatile.Read(ref pendingRemove)));
     }
@@ -684,11 +686,11 @@ public sealed partial class Plugin : IDalamudPlugin
         foreach (var observed in cropMatcher.Drain(DateTimeOffset.UtcNow, IsKnownCropItem, true))
         {
             ObserveBedSync(observed.Target,observed.At,observed.Patch>0?(observed.Patch,observed.Bed):null);
-            KeepDiscovery(new(Guid.NewGuid().ToString("N"), observed.Patch == 0 ? "garden.unmapped" : "garden.observed", observed.At,
+            KeepDiscovery(new(Guid.NewGuid().ToString("N"), observed.Crop.Status is not null?(observed.Patch==0?"garden.status.unmapped":"garden.status"):observed.Patch == 0 ? "garden.unmapped" : "garden.observed", observed.At,
                 WithWorldNames(observed.Target.Actor), WithAddressNames(observed.Target.Address!), observed.Patch, observed.Bed, Crop: observed.Crop, GardenTarget: GardenTargetOf(observed.Target)));
-            cropChatStatus = $"{observed.Crop.CropName} · patch {observed.Patch}, bed {observed.Bed} · ready to harvest";
+            cropChatStatus = $"{observed.Crop.CropName} · patch {observed.Patch}, bed {observed.Bed} · {observed.Crop.Status??"ready to harvest"}";
         }
-        while (menuMessages.TryDequeue(out var menu)) if (recording) { menuObservations++; AddDiagnostic(menu); }
+        while (menuMessages.TryDequeue(out var menu)) { gardenMessageJournal.Record(menu); if (recording) { menuObservations++; AddDiagnostic(menu); } }
         while (messages.TryDequeue(out var message))
         {
             if (!ObservingGardens) continue;
@@ -759,7 +761,7 @@ public sealed partial class Plugin : IDalamudPlugin
             Directory.CreateDirectory(dir);
             exportPath = Path.Combine(dir, $"equinox-test-{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.json");
             File.WriteAllText(exportPath, JsonSerializer.Serialize(new {
-                schemaVersion = 4, pluginVersion = typeof(Plugin).Assembly.GetName().Version?.ToString(), errorLog = errorJournal.Snapshot(), exportedAt = DateTimeOffset.UtcNow,
+                schemaVersion = 5, pluginVersion = typeof(Plugin).Assembly.GetName().Version?.ToString(), errorLog = errorJournal.Snapshot(), recentGardenMessages=gardenMessageJournal.Snapshot(), exportedAt = DateTimeOffset.UtcNow,
                 mode = "local-diagnostics", gardeningConfirmed = false,
                 houseObservations = config.Houses, confirmedTending = config.Tending, confirmedPlanting = config.Planting, observedDetails = config.Discoveries, diagnostics
             }, json));
@@ -870,6 +872,8 @@ public sealed partial class Plugin : IDalamudPlugin
             ImGui.Separator();
             ImGui.TextUnformatted("Diagnostic recording");
             ImGui.TextWrapped("Record the action that is failing, then use Export diagnostics below. Normal tracking does not need a recording. Saved gardens and house visits are preserved.");
+            ImGui.TextWrapped("Recent garden system messages and menus are kept locally while garden tracking is enabled, including outside the five-minute test. Export diagnostics includes this bounded history for crop/growth checks. It is not sent through pairing.");
+            if(gardenMessageJournal.WriteFailure is {} historyError)ImGui.TextWrapped(historyError);
             if (!recording)
             {
                 if (ImGui.Button("Start 5-minute diagnostic recording") && Player.IsLoaded && !faulted) StartRecording();

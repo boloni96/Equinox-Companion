@@ -39,8 +39,8 @@ public sealed partial class Plugin
                     if(projected is not null)
                     {
                         if(projected.ActualCrop=="Empty")continue;
-                        effective=effective with {Empty=false,Ready=projected.Ready,Watered=projected.Watered,NextTend=projected.NextTend,HarvestAt=projected.HarvestAt,WiltHours=projected.WiltHours,
-                            DeadConfirmedAt=projected.DeadConfirmedAt,Planted=projected.Planted,
+                        effective=effective with {Empty=false,Ready=projected.Ready,KeepMature=projected.KeepMature,Watered=projected.Watered,NextTend=projected.NextTend,HarvestAt=projected.HarvestAt,WiltHours=projected.WiltHours,
+                            DeadConfirmedAt=projected.DeadConfirmedAt,WiltedAt=projected.WiltedAt,Planted=projected.Planted,
                             DeathAt=projected.Ready||GardenVisualState(projected,false,now)=="dead"?null:projected.Watered is {} care&&projected.WiltHours is {} wilt?care.AddHours(wilt+24):null};
                     }
                     else if (lastPlant > (bed.Watered ?? DateTimeOffset.MinValue)) effective = effective with { Ready = false, KeepMature = false, HarvestAt = null, DeathAt = null };
@@ -53,16 +53,19 @@ public sealed partial class Plugin
                 foreach (var group in due.GroupBy(x => x.Kind)) alerts.Add((batch.Batch, group.Key, group.Any(x => x.DeathAt is null) ? null : group.Min(x => x.DeathAt)));
             }
             var h = house.First();
-            notices.AddRange(alerts.Select(x=>new GardenChatNotice(h.HouseId,h.HouseName,x.Batch,x.Kind,x.DeathAt)));
+            var estate=roster.People.SelectMany(p=>p.Characters).SelectMany(c=>c.Houses).FirstOrDefault(x=>x.Id==h.HouseId);
+            notices.AddRange(alerts.Select(x=>new GardenChatNotice(h.HouseId,GardenCareStatus.HouseLabel(estate,h),x.Batch,x.Kind,x.DeathAt)));
         }
         if(notices.Count==0)return;
         var summary=new SeStringBuilder().AddText("[Equinox] ");
         var segments=GardenCareStatus.ChatSummary(notices,now);
-        for(var i=0;i<segments.Length;i++){
-            if(i>0)summary.AddText(" · ");
-            summary.AddUiForeground(segments[i].Color).AddText(segments[i].Text).AddUiForegroundOff();
+        var length=0;
+        foreach(var segment in segments){
+            // Bound each chat line without discarding any owner/address or emitting one line per bed.
+            if(length>0&&length+segment.Text.Length>650){Chat.Print(summary.Build());summary=new SeStringBuilder().AddText("[Equinox] ");length=0;}
+            if(length>0)summary.AddText(" · ");
+            summary.AddUiForeground(segment.Color).AddText(segment.Text).AddUiForegroundOff();length+=segment.Text.Length+3;
         }
-        if(notices.Select(x=>x.HouseId).Distinct().Count()>1)summary.AddText(" · /equinox for details");
         Chat.Print(summary.Build());
     }
 }

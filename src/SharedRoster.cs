@@ -50,7 +50,7 @@ public static class SharedHousePresentation
 }
 
 public sealed record SharedGardenPlan(string HouseId, string HouseName, string World, string District, int Ward, int Plot, int Batch, string Target, DateTimeOffset At, SharedGardenBed[] Beds, string GameHouseId = "", int Capacity = 1, DateTimeOffset? CompletedAt = null, int PhysicalPatch = 0);
-public sealed record SharedGardenBed(int Bed, string Crop, string Soil, string Status, string ActualCrop, string ActualSoil, DateTimeOffset? Planted, DateTimeOffset? Watered, double Days, bool Ready, DateTimeOffset? NextTend = null, DateTimeOffset? HarvestAt = null, int Order = 0, int ReplantOrder = 0, string StarterSoil = "", bool CheckExisting = false, string PlantEvent = "", DateTimeOffset? ObservedAt = null, DateTimeOffset? LastClearedAt = null, string TendedBy = "", double? WiltHours = null, DateTimeOffset? LastFertilized = null, DateTimeOffset? DeadConfirmedAt = null);
+public sealed record SharedGardenBed(int Bed, string Crop, string Soil, string Status, string ActualCrop, string ActualSoil, DateTimeOffset? Planted, DateTimeOffset? Watered, double Days, bool Ready, DateTimeOffset? NextTend = null, DateTimeOffset? HarvestAt = null, int Order = 0, int ReplantOrder = 0, string StarterSoil = "", bool CheckExisting = false, string PlantEvent = "", DateTimeOffset? ObservedAt = null, DateTimeOffset? LastClearedAt = null, string TendedBy = "", double? WiltHours = null, DateTimeOffset? LastFertilized = null, DateTimeOffset? DeadConfirmedAt = null, bool KeepMature = false, bool Queued = false, DateTimeOffset? WiltedAt = null, DateTimeOffset? GrowingObservedAt = null);
 
 public static class SharedGardenLocation
 {
@@ -65,24 +65,26 @@ public static class SharedGardenLocation
 }
 
 public sealed record SharedGardenCare(string HouseId, string GameHouseId, string HouseName, string World, string District, int Ward, int Plot, int Batch, string[] CharacterIds, SharedGardenCareBed[] Beds, int PhysicalPatch = 0);
-public sealed record SharedGardenCareBed(int Bed, bool Ready, bool KeepMature, DateTimeOffset? Watered, DateTimeOffset? NextTend, DateTimeOffset? HarvestAt, DateTimeOffset? DeathAt = null, double? WiltHours = null, string Crop = "", string Soil = "", DateTimeOffset? Planted = null, DateTimeOffset? ObservedAt = null, string TendedBy = "", DateTimeOffset? DeadConfirmedAt = null, bool Empty = false, DateTimeOffset? LastClearedAt = null);
+public sealed record SharedGardenCareBed(int Bed, bool Ready, bool KeepMature, DateTimeOffset? Watered, DateTimeOffset? NextTend, DateTimeOffset? HarvestAt, DateTimeOffset? DeathAt = null, double? WiltHours = null, string Crop = "", string Soil = "", DateTimeOffset? Planted = null, DateTimeOffset? ObservedAt = null, string TendedBy = "", DateTimeOffset? DeadConfirmedAt = null, bool Empty = false, DateTimeOffset? LastClearedAt = null, DateTimeOffset? LastFertilized = null, DateTimeOffset? WiltedAt = null, DateTimeOffset? GrowingObservedAt = null);
 public sealed record GardenChatNotice(string HouseId,string HouseName,int Batch,string Kind,DateTimeOffset? DeathAt);
 public static class GardenCareStatus
 {
-    private static string Label(string kind) => kind switch {"dead"=>"Dead crop confirmed","harvest"=>"Ready to harvest","tend"=>"Tending due","check maturity"=>"Check maturity",_=>"Check tending"};
+    public static string WebsiteUrl(string houseId,int batch) => "https://equinoxjournal.pages.dev/#house="+Uri.EscapeDataString(houseId)+"&section=gardening&batch="+Math.Clamp(batch,1,3);
+    private static string Label(string kind) => kind switch {"dead"=>"Dead crop confirmed","harvest"=>"Ready to harvest","wilt"=>"Wilting · tend urgently","tend"=>"Tending due","check maturity"=>"Check maturity",_=>"Check tending"};
     // Current UIColor rows: 43 green, 37 blue, 32 orange, 17 red.
     public static ushort ChatColor(string kind,DateTimeOffset? deathAt,DateTimeOffset now) => kind=="dead"?(ushort)17:kind=="harvest"?(ushort)43:kind is "tend" or "check care"?(deathAt is {} deadline&&deadline<=now.AddHours(4)?(ushort)32:(ushort)37):(ushort)32;
     public static (string Text,ushort Color)[] ChatSummary(IEnumerable<GardenChatNotice> values,DateTimeOffset now)
     {
-        var notices=values.ToArray();var oneHouse=notices.Select(x=>x.HouseId).Distinct().Count()==1;
-        return notices.GroupBy(x=>(x.Kind,Color:ChatColor(x.Kind,x.DeathAt,now)))
+        return values.GroupBy(x=>(x.Kind,Color:ChatColor(x.Kind,x.DeathAt,now)))
             .OrderBy(g=>g.Key.Kind=="dead"?0:g.Key.Color==32?1:g.Key.Kind=="harvest"?2:3)
-            .Select(g=>{
-                var batches=g.Select(x=>(x.HouseId,x.Batch)).Distinct().Count();var houses=g.Select(x=>x.HouseId).Distinct().Count();
-                var text=oneHouse?BatchMessage(g.First().HouseName,g.Key.Kind,g.Select(x=>(x.Batch,x.DeathAt)),now).Replace("[Equinox] ",""):
-                    $"{Label(g.Key.Kind)}{(g.Key.Color==32&&g.Key.Kind is "tend" or "check care"?" (estimated risk)":"")}: {batches} batch{(batches==1?"":"es")} at {houses} house{(houses==1?"":"s")}";
-                return (text,g.Key.Color);
-            }).ToArray();
+            .SelectMany(g=>g.GroupBy(x=>x.HouseId).Select(h=>(BatchMessage(h.First().HouseName,g.Key.Kind,h.Select(x=>(x.Batch,x.DeathAt)),now).Replace("[Equinox] ",""),g.Key.Color))).ToArray();
+    }
+    public static string HouseLabel(SharedHouse? house, SharedGardenCare care)
+    {
+        var owner=house?.Type=="Free Company house"
+            ? "FC"+(string.IsNullOrWhiteSpace(house.FcName)?"":": "+house.FcName)
+            : !string.IsNullOrWhiteSpace(house?.OwnerName)?"Owner: "+house.OwnerName:"Owner not recorded";
+        return $"{owner} · {care.World} · {care.District} W{care.Ward} P{care.Plot}";
     }
     public static string Message(string houseName, string kind, IEnumerable<int> batches, DateTimeOffset? deathAt = null, DateTimeOffset? now = null)
     {
@@ -113,6 +115,7 @@ public static class GardenCareStatus
         if (bed.Empty) return null;
         if (bed.Ready) return bed.KeepMature ? null : "harvest";
         if(bed.DeadConfirmedAt is {} dead&&dead<=now&&(bed.Watered is null||bed.Watered<=dead)&&(bed.Planted is null||bed.Planted<=dead))return "dead";
+        if(bed.WiltedAt is {} wilt&&wilt<=now&&(bed.Watered is null||bed.Watered<=wilt)&&(bed.Planted is null||bed.Planted<=wilt))return "wilt";
         var next = bed.Watered?.AddHours(12) ?? bed.NextTend;
         if (next is null) return "check care";
         if (next <= now) return "tend";

@@ -1,0 +1,45 @@
+Garden message test checklist — Companion 0.5.1.31
+
+No five-minute recording is required for these checks. Keep normal garden tracking enabled, inspect beds while playing, then use Settings > Diagnostics > Export diagnostics. The recentGardenMessages section retains the latest local garden system text, menu data and numeric/string log parameters across restarts. Export after the interesting messages so later activity does not rotate them away.
+
+Already established by the supplied reports
+- Empty: 'There is nothing in this bed.'
+- Mature: crop name followed by 'This crop is ready to be harvested.'
+- Ordinary saved records include confirmed tending but no preserved growth-stage wording.
+- Native log 4017 is classified by the current code as crop.status.doingWell. It can confirm tending only when paired with a valid submitted Tend Crop action. Opening a bed or reading status alone must not reset care.
+
+Next checks, as they occur naturally
+1. Inspect a newly planted crop. Close the menu without tending, then export. Note the exact crop name and visible state.
+2. Inspect the same crop at a later growing appearance. Close without acting. Check whether the text changes and whether it includes its name.
+3. Inspect and then tend a growing crop. Distinguish the inspection message from the successful action response; preserve the actual character, home world, time, patch, bed, target argument and coordinates.
+4. Inspect a mature crop, including a crop intentionally kept shining as a neighbour. Do not harvest it for this test.
+5. If a wilted or dead crop already exists, inspect it. Do not neglect or kill a plant just to collect evidence. Compare exact text and menu choices against growing/ready states.
+6. Inspect an empty bed. Keep empty distinct from a crop whose name has not yet been identified.
+7. If available, repeat growing inspection with a house-unlinked paired visitor who can only tend. Compare owner/member menus with visitor messages.
+8. If a game update adds a crop, verify the received name even before custom artwork or growth timing has been added.
+
+Acceptance before a new parser is enabled
+- Exact game-only message and fresh garden target evidence; no player-chat interpretation.
+- Match the correct house/world, physical patch and bed, including calibrated visitors.
+- Separate crop identity from growth stage, care action and harvest readiness.
+- No guessed timestamps, planting, watering, harvest, removal or death from a visual approximation.
+- Add real captured-message replay tests before promoting a phrase to an accepted state.
+- Confirm stale messages, changed targets and ambiguous mappings cannot update another bed.
+
+Deferred
+- Healthy/wilting/dead wording is source-verified in the English garden event table, but needs an in-game capture to check target/name correlation. Healthy inspection text does not prove a precise size stage. Seedling plan preview and 33/66/100% visual thresholds are presentation estimates; mature appearance at 100% does not set Ready.
+- Storage pause/resume needs an accepted garden storage event and lifecycle model.
+- The Lotlab tracker obtains seed identity from object external data and a seed-index table. Its older packet decoder is research context, not verification of current Dalamud memory layout; this update does not adopt its offsets.
+
+ADDED CHECKS FOR THIS RELEASE
+- Inspect a healthy crop: exact native text is This crop is doing well. with its crop name. Confirm its name updates without changing Watered or Tended by.
+- Inspect an already wilting crop: This crop has seen better days... should select wilt art and an urgent care hover. A confirmed tend clears the wilt; fertilizer alone does not.
+- Inspect an already dead crop: This crop is beyond hope. should keep the crop identity, select dead art and stop healthy growth timers. Remove it in game to confirm Empty.
+- At estimated 100% the mature image/sparkles are allowed, but the care icon must still say Estimated ready until the game confirms harvest readiness.
+- Click the moogle-and-house shortcut at two different houses. Each should open its own website Gardening section and selected batch. Sync can hide; the house shortcut remains.
+- Move the pointer away from Sync after clicking: mouse tooltip should close. Keyboard focus can retain the shorter instructions.
+- Protocol 11 is in V7.11.43. Upload the website ZIP before expecting the new status messages and house links to work online.
+
+Verified source: https://github.com/xivapi/ffxiv-datamining/blob/d9582a624eaec69d45649366dee801c2f3a6e9b3/csv/en/custom/001/CmnDefHousingGardeningPlant_00151.csv
+
+- Double-click Sync during a partial walk. Its number should clear and the icon remain idle; releasing the second click must not restart. A later single click starts at Bed 1.

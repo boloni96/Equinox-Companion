@@ -4,6 +4,15 @@ namespace EquinoxCompanion;
 // Stage all eight identities so cancelling a partial walk cannot publish a partial manual mapping.
 public sealed class GardenBedSyncSession(Actor actor, Address address, int patch, DateTimeOffset startedAt)
 {
+    // Double-click is reported on press; consume its later release so it cannot restart.
+    public static string? ButtonAction(bool pressed,bool doubleClick,bool mouseDown,ref bool suppressRelease)
+    {
+        if(doubleClick){suppressRelease=true;return "cancel";}
+        if(suppressRelease){if(!mouseDown)suppressRelease=false;return null;}
+        return pressed?"start":null;
+    }
+    public static bool NeedsSync(IEnumerable<SharedGardenBed> beds) => Enumerable.Range(1,8).Any(n=>
+        !beds.Any(b=>b.Bed==n && b.ObservedAt is not null));
     public static bool IsVisitor(SharedRoster? roster, string name, string homeWorld, string houseId)
     {
         var matches=(roster?.People??[]).SelectMany(p=>p.Characters).Where(c=>

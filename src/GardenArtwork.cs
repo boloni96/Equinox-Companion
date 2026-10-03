@@ -38,7 +38,7 @@ public sealed partial class Plugin
     private static string GardenCareIcon(SharedGardenBed b, bool planVisible, bool wrongBed)
     {
         var actual=GardenVisualState(b,false,DateTimeOffset.UtcNow);
-        return actual=="dead"?"dead":wrongBed||planVisible&&b.Status=="different" ? "warning" : actual switch {"wet"=>"water","due"=>"tend","wilt-estimated"=>"wilting",_=>actual};
+        return actual switch {"wet"=>"water","due"=>"tend","wilt-estimated" or "wilted"=>"wilting",_=>actual};
     }
     private static string GardenCareAsset(string icon) => icon switch {"warning"=>"assets/badges/different.png","unknown"=>"assets/badges/unknown.png","dead"=>"assets/badges/dead.png",_=>"assets/icons/"+icon+".png"};
     private static string GardenCareHint(string icon) => icon switch
@@ -50,7 +50,7 @@ public sealed partial class Plugin
         "growing" => "Growing · maturity has not been confirmed. Follow the care times below.",
         "empty" => "Empty · follow the planting plan when you are ready to plant.",
         "unknown" => "Crop or bed state unknown · open this numbered bed in game to inspect it.",
-        "check-maturity" => "Check maturity · the growth estimate has elapsed; open this bed to confirm readiness.",
+        "check-maturity" => "Estimated ready · mature appearance is based on timing. Open this bed in game to confirm readiness.",
         "at-risk" => "At risk (estimated) · check the crop and tend it if still growing.",
         "wilting" => "Wilting (estimated) · inspect the crop in game and tend it if alive.",
         "dead" => "Dead · confirmed. Remove the dead crop before replanting.",
@@ -63,27 +63,35 @@ public sealed partial class Plugin
     private void DrawGardenTile(SharedGardenBed b,bool planVisible,Vector2 at,float size,bool wrongBed=false,bool selected=false)
     {
         LoadGardenPictures();var state=GardenVisualState(b,planVisible,DateTimeOffset.UtcNow);
-        var crop=state!="dead"&&planVisible&&b.Crop.Length>0?b.Crop:b.ActualCrop;
+        var crop=EquinoxCompanion.GardenVisualState.DisplayCrop(b,planVisible);
         GardenImage("assets/beds/soil-"+(state is "dead" or "dead-estimated"?"dead":state=="wet"?"wet":"normal")+".png",at,new(size));
         if(gardenPictures!.TryGetValue(crop,out var picture))
-            GardenImage(picture.GetProperty(state is "ready" or "keep-mature"?"plantMature":state is "dead" or "dead-estimated"?"plantDead":state is "wilt-estimated" or "at-risk"?"plantWilted":"plantGrowing").GetString()!,at,new(size));
-        var effect=state switch {"wet"=>"wet-droplets","ready" or "keep-mature"=>"ready-sparkles","wilt-estimated" or "at-risk"=>"wilt-mist","dead" or "dead-estimated"=>"dead-shade","unknown"=>"unknown-shade","planned"=>"planned-veil",_=>null};
+            GardenImage(picture.GetProperty(state is "ready" or "keep-mature" or "check-maturity"?"plantMature":state is "dead" or "dead-estimated"?"plantDead":state is "wilt-estimated" or "wilted" or "at-risk"?"plantWilted":state=="planned"||EquinoxCompanion.GardenVisualState.SeedlingEstimate(b,DateTimeOffset.UtcNow)?"plantSeedling":"plantGrowing").GetString()!,at,new(size));
+        var effect=state switch {"wet"=>"wet-droplets","ready" or "keep-mature" or "check-maturity"=>"ready-sparkles","wilt-estimated" or "wilted" or "at-risk"=>"wilt-mist","dead" or "dead-estimated"=>"dead-shade","unknown"=>"unknown-shade","planned"=>"planned-veil",_=>null};
         if(effect is not null){var shade=effect is "unknown-shade" or "planned-veil" or "dead-shade";GardenImage("assets/effects/"+effect+".png",shade?at-new Vector2(size*.06f):at,new(size*(shade?1.12f:1)));}
         GardenImage("assets/beds/frame-"+(config.SharedRoster?.GardenFrame=="simple"?"simple":"wood")+".png",at,new(size));
-        var border=state switch {"wilt-estimated"=>"wilt","check-maturity"=>"unknown","empty" or "growing"=>null,_=>state};
+        var border=state switch {"wilt-estimated" or "wilted"=>"wilt","check-maturity"=>"unknown","empty" or "growing"=>null,_=>state};
         if(border is not null)GardenImage("assets/borders/"+border+".png",at,new(size));
-        // Preserve the original framed top-right hover artwork at its native canvas origin.
-        var overlay=state=="dead"?"dead":planVisible&&b.Status=="different"?"different":planVisible&&b.Status=="confirmed"?"matched":state;
-        if(overlay=="growing")GardenImage("assets/icons/growing.png",at+new Vector2(91,7)*size/128,new Vector2(size/4));
-        else GardenImage("assets/overlays/"+(overlay=="empty"?"harvested":overlay)+".png",at,new(size));
+        // Plan meaning stays at the top right; actual care belongs to the lower target.
+        var overlay=wrongBed||b.Status=="different"?"different":b.Crop.Length>0?(b.Status=="confirmed"?"matched":"planned"):null;
+        if(overlay is not null)GardenImage("assets/overlays/"+overlay+".png",at,new(size));
+        else {
+            var infoAt=at+new Vector2(91,7)*size/128;var infoSize=new Vector2(size/4);
+            ImGui.GetWindowDrawList().AddRectFilled(infoAt,infoAt+infoSize,0xee30261c,3);
+            ImGui.GetWindowDrawList().AddRect(infoAt,infoAt+infoSize,0xffacbdc8,3);
+            GardenImage("assets/icons/no-plan.png",infoAt+new Vector2(size/32),infoSize-new Vector2(size/16));
+        }
         // Separate actual-care symbol; a planned crop never supplies the actual state.
         var icon=GardenCareIcon(b,planVisible,wrongBed);
         GardenImage(GardenCareAsset(icon),GardenCarePosition(at,size),new Vector2(size/4));
+        if(b.Queued)GardenImage("assets/icons/queued.png",GardenCarePosition(at,size)+new Vector2(-25,12)*size/128,new Vector2(20)*size/128);
         if(planVisible&&b.Status is "starter" or "replant")GardenImage("assets/badges/"+b.Status+".png",at+new Vector2(8,48)*size/128,new Vector2(24)*size/128);
-        if(planVisible&&state!="dead"){var marker=b.Status switch {"confirmed"=>"ready","starter"=>"starter","replant"=>"replant","different"=>"different",_=>null};
-            if(marker is not null)GardenImage("assets/borders/"+marker+".png",at,new(size));}
-        if(selected)GardenImage("assets/borders/selected.png",at,new(size));
+        if(planVisible&&state!="dead"){var marker=b.Status switch {"starter"=>"starter","replant"=>"replant","different"=>"different",_=>null};
+            if(marker is not null)GardenPlanOutline(marker,at,size);}
+        if(selected)GardenImage("assets/borders/selected.png",at+new Vector2(size/32),new(size*15/16));
     }
+    // Plan outline is outside the care perimeter; selection is inset. Preserve both meanings.
+    private void GardenPlanOutline(string name,Vector2 at,float size) => GardenImage("assets/borders/"+name+".png",at-new Vector2(size/32),new Vector2(size*17/16));
     private void DrawGardenIdentity(SharedGardenBed bed,bool planVisible,Vector2 at,float size)
     {
         GardenImage($"assets/badges/bed-{bed.Bed}.png",at,new(size));
@@ -113,7 +121,7 @@ public sealed partial class Plugin
         var mappings=GardenMappings().ToArray();
         return config.Planting.Select(p=>new SyncEvent(p.EventId,"garden.planted",p.ConfirmedAt,WithWorldNames(p.Actor),WithAddressNames(p.Address),p.Patch,p.Bed,p.Plant))
         .Concat(config.Tending.Select(t=>new SyncEvent(t.EventId,"garden.tended",t.ConfirmedAt,WithWorldNames(t.Actor),WithAddressNames(t.Address),t.Patch,t.Bed)))
-        .Concat(config.Discoveries.Where(e=>e.Kind is "garden.empty" or "garden.empty.unmapped" or "garden.unmapped" or "garden.dead" or "garden.ready" or "garden.observed" or "garden.fertilized")).Select(e=>GardenTargetMap.Resolve(e,mappings));
+        .Concat(config.Discoveries.Where(e=>e.Kind is "garden.empty" or "garden.empty.unmapped" or "garden.unmapped" or "garden.dead" or "garden.ready" or "garden.observed" or "garden.fertilized" or "garden.status" or "garden.status.unmapped")).Select(e=>GardenTargetMap.Resolve(e,mappings));
     }
     private IEnumerable<SharedGardenTarget> GardenMappings() => (config.SharedRoster?.GardenTargets??[])
         .Concat(config.Discoveries.Select(GardenTargetMap.FromNumbered).OfType<SharedGardenTarget>())
