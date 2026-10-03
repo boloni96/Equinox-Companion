@@ -1,0 +1,5 @@
+Equinox Companion 0.5.1.23
+
+Every garden bed crop-name strip is inset from the bottom and side edges, so it cannot cover the border. This applies to all care and plan borders. Original top-right info targets and artwork preview are retained.
+
+Release build passed. Native in-game appearance needs user verification. Native seed/soil icon-menu highlighting and flower-colour observation remain under investigation; no new automatic colour inference is claimed in this release.

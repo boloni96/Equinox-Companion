@@ -94,10 +94,11 @@ public sealed partial class Plugin
             var draw=ImGui.GetWindowDrawList();
             if(showPlan&&next?.Bed==n)GardenImage("assets/borders/next.png",at,new Vector2(tile));
             var label=showPlan&&b.Crop.Length>0?b.Crop:b.ActualCrop;
-            while(label.Length>1&&ImGui.CalcTextSize(label).X>tile-10)label=label[..^2]+"…";
-            var bedLabelSize=ImGui.CalcTextSize(label);var bedLabelAt=at+new Vector2(Math.Max(4,(tile-bedLabelSize.X)/2),tile-bedLabelSize.Y-4);
+            var captionInset=Math.Max(7,tile*8/128);
+            while(label.Length>1&&ImGui.CalcTextSize(label).X>tile-2*captionInset)label=label[..^2]+"…";
+            var bedLabelSize=ImGui.CalcTextSize(label);var bedLabelAt=at+new Vector2(Math.Max(4,(tile-bedLabelSize.X)/2),tile-bedLabelSize.Y-captionInset);
             draw.PushClipRect(at,at+new Vector2(tile),true);
-            draw.AddRectFilled(new Vector2(at.X+3,bedLabelAt.Y-1),at+new Vector2(tile-3,tile-2),0xdd201710);
+            draw.AddRectFilled(new Vector2(at.X+captionInset,bedLabelAt.Y-1),at+new Vector2(tile-captionInset,tile-captionInset+1),0xdd201710);
             draw.AddText(bedLabelAt,0xffffffff,label);draw.PopClipRect();
             // Bed details are attached only to the small plan icon, never the whole bed.
             var infoSize=tile/4;
