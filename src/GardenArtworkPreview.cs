@@ -11,7 +11,7 @@ public sealed partial class Plugin
     private string gardenFlowerPreviewColour="white";
     private void DrawGardenInfoLabel(string icon, string label)
     {
-        var texture=Textures.GetFromFile(Path.Combine(Pi.AssemblyLocation.DirectoryName!,"garden-art/assets/icons/"+icon+".png")).GetWrapOrDefault();
+        var texture=Textures.GetFromFile(Path.Combine(Pi.AssemblyLocation.DirectoryName!,"garden-art",GardenCareAsset(icon))).GetWrapOrDefault();
         if(texture is not null){ImGui.Image(texture.Handle,new Vector2(ImGui.GetTextLineHeight()));ImGui.SameLine();}
         ImGui.TextWrapped(label);
     }

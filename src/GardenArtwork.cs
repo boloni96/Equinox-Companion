@@ -37,12 +37,15 @@ public sealed partial class Plugin
     private static string GardenVisualState(SharedGardenBed b,bool planVisible,DateTimeOffset now) => EquinoxCompanion.GardenVisualState.For(b,planVisible,now);
     private static string GardenCareIcon(SharedGardenBed b, bool planVisible, bool wrongBed)
     {
+        if(planVisible&&GardenPlantRequirement.ActionIcon(b) is {} action)return action;
         var actual=GardenVisualState(b,false,DateTimeOffset.UtcNow);
-        return actual switch {"wet"=>"water","due"=>"tend","wilt-estimated" or "wilted"=>"wilting",_=>actual};
+        return actual switch {"wet"=>"growing","due"=>"tend","wilt-estimated" or "wilted"=>"wilting",_=>actual};
     }
-    private static string GardenCareAsset(string icon) => icon switch {"warning"=>"assets/badges/different.png","unknown"=>"assets/badges/unknown.png","dead"=>"assets/badges/dead.png",_=>"assets/icons/"+icon+".png"};
+    private static string GardenCareAsset(string icon) => icon switch {"remove-starter" or "replant"=>"assets/badges/replant.png","warning"=>"assets/badges/different.png","unknown"=>"assets/badges/unknown.png","dead"=>"assets/badges/dead.png",_=>"assets/icons/"+icon+".png"};
     private static string GardenCareHint(string icon) => icon switch
     {
+        "remove-starter" => "Remove the temporary starter, then follow the replant step.",
+        "replant" => "Starter removed · plant the final crop and soil for the replant step.",
         "water" => "Recently tended · wet for 12h after recorded care.",
         "tend" => "Tending suggested · tend this bed in game. 12h is a suggested interval, not a cooldown.",
         "ready" => "Ready to harvest · harvest when the crop is no longer needed as a neighbour for the planting plan.",
@@ -69,13 +72,14 @@ public sealed partial class Plugin
         GardenImage("assets/beds/soil-"+(state is "dead" or "dead-estimated"?"dead":state=="wet"?"wet":"normal")+".png",at,new(size));
         var hasPicture=gardenPictures!.TryGetValue(crop,out var picture);
         if(hasPicture)GardenImage(picture.GetProperty(cropArtwork).GetString()!,at,new(size));
-        var effect=state switch {"wet"=>"wet-droplets","ready" or "keep-mature" or "check-maturity"=>"ready-sparkles","wilt-estimated" or "wilted" or "at-risk"=>"wilt-mist","dead" or "dead-estimated"=>"dead-shade","unknown"=>"unknown-shade","planned"=>"planned-veil",_=>null};
-        // Wet stage sprites already contain droplets; keep the standalone effect for crops without artwork.
-        if(state=="wet"&&hasPicture)effect=null;
+        var effect=state switch {"ready" or "keep-mature" or "check-maturity"=>"ready-sparkles","wilt-estimated" or "wilted" or "at-risk"=>"wilt-mist","dead" or "dead-estimated"=>"dead-shade","unknown"=>"unknown-shade","planned"=>"planned-veil",_=>null};
+        // Droplets request tending. Recorded care keeps wet soil and the same growth sprite.
+        if(EquinoxCompanion.GardenVisualState.NeedsWater(b,planVisible,now)&&(!animate||EquinoxCompanion.GardenVisualState.EffectVisible(now)))GardenImage("assets/effects/wet-droplets.png",at,new(size));
         if(animate&&effect is "wet-droplets" or "ready-sparkles" or "wilt-mist"&&!EquinoxCompanion.GardenVisualState.EffectVisible(now))effect=null;
         if(effect is not null){var shade=effect is "unknown-shade" or "planned-veil" or "dead-shade";GardenImage("assets/effects/"+effect+".png",shade?at-new Vector2(size*.06f):at,new(size*(shade?1.12f:1)));}
         GardenImage("assets/beds/frame-"+(config.SharedRoster?.GardenFrame=="simple"?"simple":"wood")+".png",at,new(size));
         var border=state switch {"wilt-estimated" or "wilted"=>"wilt","check-maturity"=>"unknown","empty" or "growing"=>null,_=>state};
+        if(planVisible&&GardenPlantRequirement.IsReplant(b)&&border is "due" or "wet" or "at-risk" or "wilt" or "unknown")border=null;
         if(border is not null)GardenImage("assets/borders/"+border+".png",at,new(size));
         // Plan meaning stays at the top right; actual care belongs to the lower target.
         var overlay=wrongBed||b.Status=="different"?"different":b.Crop.Length>0?(b.Status=="confirmed"?"matched":"planned"):null;
@@ -90,7 +94,7 @@ public sealed partial class Plugin
         var icon=GardenCareIcon(b,planVisible,wrongBed);
         GardenImage(GardenCareAsset(icon),GardenCarePosition(at,size),new Vector2(size/4));
         if(b.Queued)GardenImage("assets/icons/queued.png",GardenCarePosition(at,size)+new Vector2(-25,12)*size/128,new Vector2(20)*size/128);
-        if(planVisible&&b.Status is "starter" or "replant")GardenImage("assets/badges/"+b.Status+".png",at+new Vector2(8,48)*size/128,new Vector2(24)*size/128);
+        if(planVisible&&b.Status=="starter")GardenImage("assets/badges/"+b.Status+".png",at+new Vector2(8,48)*size/128,new Vector2(24)*size/128);
         if(planVisible&&state!="dead"){var marker=b.Status switch {"starter"=>"starter","replant"=>"replant","different"=>"different",_=>null};
             if(marker is not null)GardenPlanOutline(marker,at,size);}
         if(selected)GardenImage("assets/borders/selected.png",at+new Vector2(size/32),new(size*15/16));

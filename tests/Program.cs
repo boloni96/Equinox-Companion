@@ -693,17 +693,42 @@ var cropPreview=artBed with {Crop="Krakka Root",ActualCrop="Empty",Status="plann
 Check("unplanted plan uses live identity illustration",GardenVisualState.CropArtwork(cropPreview,true,artNow),"plantLive");
 foreach(var (percent,wet) in new[]{(0,false),(32,true),(33,false),(66,true),(99,false),(100,true)}){
  var cropStage=artBed with {Planted=artNow.AddHours(-percent),HarvestAt=artNow.AddHours(100-percent),Watered=wet?artNow:null,NextTend=null,WiltHours=null,Ready=false,DeadConfirmedAt=null,WiltedAt=null};
- Check($"crop artwork {percent} percent wet={wet}",GardenVisualState.CropArtwork(cropStage,true,artNow),percent==100?"plantMature":percent<33?(wet?"plantSeedlingWet":"plantSeedling"):(wet?"plantGrowingWet":"plantGrowing"));
+ Check($"crop artwork {percent} percent wet={wet}",GardenVisualState.CropArtwork(cropStage,true,artNow),percent==100?"plantMature":percent<33?"plantSeedling":"plantGrowing");
 }
-Check("unknown start stays growing wet",GardenVisualState.CropArtwork(artBed with {Planted=null,HarvestAt=null,Watered=artNow},true,artNow),"plantGrowingWet");
+Check("unknown start keeps growing sprite after tending",GardenVisualState.CropArtwork(artBed with {Planted=null,HarvestAt=null,Watered=artNow},true,artNow),"plantGrowing");
 Check("wilt supersedes recent wet art",GardenVisualState.CropArtwork(artBed with {Watered=artNow.AddHours(-2),WiltedAt=artNow.AddHours(-1)},true,artNow),"plantWilted");
 Check("confirmed dead supersedes plan identity",GardenVisualState.CropArtwork(artBed with {Watered=artNow.AddHours(-2),DeadConfirmedAt=artNow.AddHours(-1),Ready=false},true,artNow),"plantDead");
 
 foreach(var (seconds,colour) in new[]{(0.0,"white"),(.999,"white"),(1.0,"black"),(1.999,"black"),(2.0,"rainbow"),(2.999,"rainbow"),(3.0,"white")})Check($"flower preview at {seconds}s",FlowerColourPreview.At(seconds),colour);
 var effectNow=DateTimeOffset.FromUnixTimeSeconds(1800000000);
 var effectBed=artBed with {Watered=effectNow,Planted=effectNow,HarvestAt=effectNow.AddDays(3),WiltedAt=null,DeadConfirmedAt=null,Ready=false};
-Check("water appears in first second",GardenVisualState.CropArtwork(effectBed,false,effectNow,true),"plantSeedlingWet");
-Check("water disappears but plant stays next second",GardenVisualState.CropArtwork(effectBed,false,effectNow.AddSeconds(1),true),"plantSeedling");
-Check("steady water remains visible",GardenVisualState.CropArtwork(effectBed,false,effectNow.AddSeconds(1),false),"plantSeedlingWet");
+Check("recent tending keeps dry seedling sprite",GardenVisualState.CropArtwork(effectBed,false,effectNow,true),"plantSeedling");
+Check("seedling stays unchanged through animation phase",GardenVisualState.CropArtwork(effectBed,false,effectNow.AddSeconds(1),true),"plantSeedling");
+Check("disabling animation does not add droplets after care",GardenVisualState.CropArtwork(effectBed,false,effectNow.AddSeconds(1),false),"plantSeedling");
 Check("sparkles alternate at one second",(GardenVisualState.EffectVisible(effectNow)&&!GardenVisualState.EffectVisible(effectNow.AddSeconds(1))&&GardenVisualState.EffectVisible(effectNow.AddSeconds(2))).ToString(),"True");
 Check("old shared rosters retain animation default",new SharedRoster(1,effectNow,[]).GardenAnimateEffects.ToString(),"True");
+
+// Required supplies and the starter action follow actual game-confirmed progress.
+var pendingStarter=GardenLive.Apply(livePlan,liveEvents.Take(1),x=>x).Beds[0];
+var pendingRemoval=GardenLive.Apply(livePlan,liveEvents,x=>x).Beds[0];
+var removedStarter=GardenLive.Apply(livePlan,liveEvents.Append(new SyncEvent("remove-starter-test","garden.empty",liveAt.AddMinutes(9),liveActor,liveAddress,1,1)),x=>x).Beds[0];
+Check("step one requires potting soil",GardenPlantRequirement.Soil(liveBeds[0]),"Potting Soil");
+Check("starter before neighbours has no removal action",GardenPlantRequirement.ActionIcon(pendingStarter),null);
+Check("eight confirmed steps select removal action",GardenPlantRequirement.ActionIcon(pendingRemoval),"remove-starter");
+Check("removal action retains actual starter",pendingRemoval.ActualCrop,liveBeds[0].Crop);
+Check("step nine requires final soil",GardenPlantRequirement.Soil(pendingRemoval),"Grade 3 Thanalan Topsoil");
+Check("step nine shown after neighbours",GardenPlantRequirement.Step(pendingRemoval).ToString(),"9");
+Check("confirmed removal switches to planting action",GardenPlantRequirement.ActionIcon(removedStarter),"replant");
+Check("confirmed removal empties actual crop",removedStarter.ActualCrop,"Empty");
+Check("completed planting clears removal action",GardenPlantRequirement.ActionIcon(localDone.Beds[0]),null);
+Check("completed starter records final step soil",GardenPlantRequirement.Soil(localDone.Beds[0]),"Grade 3 Thanalan Topsoil");
+Check("required item ID is green",GardenPlantRequirement.Required(12,new Dictionary<uint,bool>{{12,true},{13,false}}).ToString(),"True");
+Check("other item ID is red",GardenPlantRequirement.Required(13,new Dictionary<uint,bool>{{12,true},{13,false}}).ToString(),"False");
+Check("unknown item ID is never guessed",GardenPlantRequirement.Required(14,new Dictionary<uint,bool>{{12,true},{13,false}})?.ToString(),null);
+Check("shared seed icon cannot falsely mark another seed green",GardenPlantRequirement.IconMatch(9,[(9u,true),(9u,false)])?.ToString(),null);
+Check("duplicate correct seed stacks remain green",GardenPlantRequirement.IconMatch(9,[(9u,true),(9u,true)]).ToString(),"True");
+Check("distinct incorrect icon stays red",GardenPlantRequirement.IconMatch(8,[(9u,true),(8u,false)]).ToString(),"False");
+Check("recently tended bed has no droplets",GardenVisualState.NeedsWater(effectBed,false,effectNow).ToString(),"False");
+Check("twelve hour boundary asks for water",GardenVisualState.NeedsWater(effectBed,false,effectNow.AddHours(12)).ToString(),"True");
+Check("step nine starter never asks for water",GardenVisualState.NeedsWater(pendingRemoval with {Watered=artNow.AddHours(-13),HarvestAt=artNow.AddDays(3),WiltHours=null},true,artNow).ToString(),"False");
+Check("other beds still ask for water",GardenVisualState.NeedsWater(effectBed with {Watered=effectNow.AddHours(-13)},false,effectNow).ToString(),"True");

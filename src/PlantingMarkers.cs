@@ -3,6 +3,8 @@ using Dalamud.Bindings.ImGui;
 using Dalamud.IoC;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
+using FFXIVClientStructs.FFXIV.Client.Game;
+using FFXIVClientStructs.FFXIV.Client.Enums;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using Bounds = FFXIVClientStructs.FFXIV.Common.Math.Bounds;
 namespace EquinoxCompanion;
@@ -22,21 +24,25 @@ public sealed partial class Plugin
         // Only a numbered empty-bed menu establishes identity; selected guide tabs never do.
         guidanceBed=menu.NumberedLocation() is not null?menu:null;
     }
-    private unsafe HashSet<string> MarkerNames(AgentHousingPlant* agent,string crop,string soil)
+    private readonly record struct PlantMenuItem(uint Id,uint Icon,bool Required);
+    private unsafe List<PlantMenuItem> MarkerItems(AgentHousingPlant* agent,string crop,string soil)
     {
         LoadGardenPictures();
-        var names=new HashSet<string>(StringComparer.Ordinal);
+        var items=new List<PlantMenuItem>();
         var english=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>(Dalamud.Game.ClientLanguage.English);
-        var local=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>();
-        // Resolve only items actually offered by the planting agent, never a crop's harvest item.
-        for(var i=0;i<Math.Min((int)agent->SelectableItemCount,140);i++)
+        void Add(uint id)
         {
-            var item=agent->SelectableItems[i].ItemCache;if(item==null)continue;
-            var id=item->Id;var name=english.GetRowOrDefault(id)?.Name.ToString()??"";
-            if(name==soil || gardenTiming.TryGetValue(name,out var t)&&t.Crop==crop)
-            { var translated=local.GetRowOrDefault(id)?.Name.ToString();if(!string.IsNullOrEmpty(translated))names.Add(translated); }
+            id%=1000000;if(id==0||items.Any(x=>x.Id==id))return;
+            var row=english.GetRowOrDefault(id);if(row is null)return;
+            var name=row.Value.Name.ToString();
+            var required=string.Equals(name,soil,StringComparison.OrdinalIgnoreCase)||gardenTiming.TryGetValue(name,out var t)&&string.Equals(t.Crop,crop,StringComparison.OrdinalIgnoreCase);
+            items.Add(new(id,row.Value.Icon,required));
         }
-        return names;
+        for(var i=0;i<Math.Min((int)agent->SelectableItemCount,140);i++)
+        {var item=agent->SelectableItems[i].ItemCache;if(item!=null)Add(item->Id);}
+        // Main Gardening slots remain marked when the context picker is closed.
+        for(var i=0;i<2;i++)Add(agent->SelectedItems[i].ItemId);
+        return items;
     }
     private unsafe void DrawPlantingMarkers()
     {
@@ -61,45 +67,101 @@ public sealed partial class Plugin
         var next=GardenGuidance.Next(plan);
         if(next is null||next.Bed!=location.Bed){if(next is not null)gardenWrongBed=(source.HouseId,source.Batch,location.Bed,next.Bed);gardenMarkerError=next is not null;gardenMarkerStatus=next is null?"Waiting for the remaining planting steps.":$"Wrong bed: you opened Bed {location.Bed}; the plan expects Bed {next.Bed}. No items marked.";return;}
         if(menu.EmptyLocation() is null){gardenMarkerStatus=$"Bed {location.Bed} is occupied. Review its planned/actual crop before replacing anything.";return;}
-        var soil=next.ReplantOrder>0&&next.Status!="replant"?next.StarterSoil:next.Soil;
+        var soil=GardenPlantRequirement.Soil(next);
         gardenMarkerStatus=$"Bed {next.Bed}: {next.Crop} · {soil}";
         try
         {
             var agent=AgentHousingPlant.Instance();
             if(agent==null||!agent->IsAgentActive())return;
-            var names=MarkerNames(agent,next.Crop,soil);
-            if(names.Count==0){gardenMarkerStatus+=" · Required item is not offered by this planting menu.";return;}
-            var addon=(AtkUnitBase*)GardenGui.GetAddonByName("ContextIconMenu").Address;
-            if(addon==null||!addon->IsVisible||agent->ContextAddonId!=addon->Id){gardenMarkerStatus+=" · Waiting for the planting item selector.";return;}
-            var budget=600;var count=MarkGardenNodes(&addon->UldManager,names,ref budget,0);
-            gardenMarkerStatus+=count>0?" · Required item outlined in green.":" · Required item not visible in this menu; check inventory/scroll.";
+            var items=MarkerItems(agent,next.Crop,soil);
+            var gardening=(AtkUnitBase*)GardenGui.GetAddonByName("HousingGardening").Address;
+            if(gardening==null||!gardening->IsVisible)return;
+            var picker=(AtkUnitBase*)GardenGui.GetAddonByName("ContextIconMenu").Address;
+            var pickerOpen=picker!=null&&picker->IsVisible&&agent->ContextAddonId==picker->Id;
+            var marked=MarkGardenItems(gardening,items);
+            if(pickerOpen)marked+=MarkGardenItems(picker,items);
+            gardenMarkerStatus+=marked>0?" · Green: required. Red: different item.":" · Choose soil and seed; follow the required names above.";
+            if(pickerOpen&&!items.Any(x=>x.Required))gardenMarkerStatus+=" Required item is not offered; check inventory.";
+
         }
         catch(Exception e){gardenMarkerStatus="Item marker unavailable; follow the bed guide.";errorJournal.Record("garden-marker","Could not read planting item menu",exceptionType:e.GetType().Name);}
     }
-    private static unsafe int MarkGardenNodes(AtkUldManager* uld,HashSet<string> names,ref int budget,int depth)
+    private static unsafe bool MarkerVisible(AtkResNode* node)
+    {
+        if(node==null)return false;
+        for(var n=0;node!=null&&n<40;n++,node=node->ParentNode)if(!node->IsVisible())return false;
+        return true;
+    }
+    private static unsafe bool OutlineGardenItem(AtkResNode* node,bool correct,HashSet<nint> drawn)
+    {
+        if(!MarkerVisible(node)||!drawn.Add((nint)node))return false;
+        Bounds bounds;node->GetBounds(&bounds);
+        // Ignore tooltips bound to a whole window/text row, and invalid geometry.
+        if(bounds.Width<12||bounds.Height<12||bounds.Width>256||bounds.Height>256||(float)bounds.Width/bounds.Height is <.55f or >1.8f)return false;
+        var offset=ImGui.GetMainViewport().Pos;
+        var thickness=Math.Clamp(bounds.Width/18f,2,4);
+        ImGui.GetForegroundDrawList().AddRect(offset+new Vector2(bounds.Pos1.X-2,bounds.Pos1.Y-2),offset+new Vector2(bounds.Pos2.X+2,bounds.Pos2.Y+2),correct?0xff65ee83:0xff5757f2,3,ImDrawFlags.None,thickness);
+        return true;
+    }
+    private static unsafe uint GardenTooltipItem(AtkTooltipManager.AtkTooltipInfo* info)
+    {
+        if(info==null||(info->Type&AtkTooltipType.Item)==0)return 0;
+        var item=info->AtkTooltipArgs.ItemArgs;
+        if(item.Kind==DetailKind.InventoryItem)
+        {
+            // Only player inventory slots can be offered to this outdoor planting agent.
+            if(item.InventoryType is not (InventoryType.Inventory1 or InventoryType.Inventory2 or InventoryType.Inventory3 or InventoryType.Inventory4)||item.Slot is <0 or >=35)return 0;
+            var inventory=InventoryManager.Instance();if(inventory==null)return 0;
+            var slot=inventory->GetInventorySlot(item.InventoryType,item.Slot);return slot==null?0:slot->ItemId%1000000;
+        }
+        return item.Kind==DetailKind.Item&&item.ItemId>0?(uint)item.ItemId%1000000:0;
+    }
+    private static unsafe int MarkGardenItems(AtkUnitBase* addon,List<PlantMenuItem> items)
+    {
+        if(addon==null||!addon->IsVisible||items.Count==0)return 0;
+        var drawn=new HashSet<nint>();var exact=new Dictionary<nint,bool>();
+        var allowed=items.ToDictionary(x=>x.Id,x=>x.Required);var stage=AtkStage.Instance();
+        if(stage!=null)
+        {
+            var budget=4096;
+            foreach(var entry in stage->TooltipManager.TooltipMap)
+            {
+                if(--budget<0)break;
+                var info=entry.Item2.Value;var node=entry.Item1.Value;
+                if(info==null||info->ParentId!=addon->Id||!MarkerVisible(node))continue;
+                var id=GardenTooltipItem(info);
+                if(GardenPlantRequirement.Required(id,allowed) is {} correct)exact[(nint)node]=correct;
+            }
+        }
+        // Native item tooltips carry the exact item ID or inventory slot, even when
+        // the selector renders icons without labels. No screen-coordinate guesses.
+        var marked=0;
+        foreach(var match in exact)if(OutlineGardenItem((AtkResNode*)match.Key,match.Value,drawn))marked++;
+        var nodes=600;
+        marked+=MarkGardenIcons(&addon->UldManager,items,exact,drawn,ref nodes,0);
+        return marked;
+    }
+    private static unsafe int MarkGardenIcons(AtkUldManager* uld,List<PlantMenuItem> items,Dictionary<nint,bool> exact,HashSet<nint> drawn,ref int budget,int depth)
     {
         if(uld==null||uld->NodeList==null||depth>8)return 0;
         var marked=0;
         for(var i=0;i<uld->NodeListCount&&budget-->0;i++)
         {
-            var node=uld->NodeList[i];if(node==null||!node->IsVisible())continue;
-            var visible=true;var parent=node->ParentNode;
-            for(var n=0;parent!=null&&n<30;n++,parent=parent->ParentNode)if(!parent->IsVisible()){visible=false;break;}
-            if(!visible)continue;
-            if(node->Type==NodeType.Text)
+            var node=uld->NodeList[i];if(!MarkerVisible(node)||(int)node->Type<1000)continue;
+            var component=node->GetComponent();if(component==null)continue;
+            var type=component->GetComponentType();
+            var icon=type==ComponentType.Icon?(AtkComponentIcon*)component:type==ComponentType.DragDrop?((AtkComponentDragDrop*)component)->AtkComponentIcon:null;
+            if(icon!=null)
             {
-                var text=Dalamud.Game.Text.SeStringHandling.SeString.Parse(((AtkTextNode*)node)->NodeText.AsSpan()).TextValue;
-                if(!names.Contains(text))continue;
-                Bounds bounds;node->GetBounds(&bounds);
-                if(bounds.Width<=0||bounds.Height<=0)continue;
-                var offset=ImGui.GetMainViewport().Pos;
-                ImGui.GetForegroundDrawList().AddRect(offset+new Vector2(bounds.Pos1.X-3,bounds.Pos1.Y-2),offset+new Vector2(bounds.Pos2.X+3,bounds.Pos2.Y+2),0xff65ee83,3,ImDrawFlags.None,2);
-                marked++;
+                var target=icon->OuterResNode!=null?icon->OuterResNode:node;
+                var hasExact=false;bool? correct=null;
+                foreach(var candidate in new[]{(nint)target,(nint)node,(nint)icon->IconImage,(nint)icon->OwnerNode})
+                    if(exact.TryGetValue(candidate,out var value)){hasExact=true;correct=value;break;}
+                // An exact node was already outlined above. Never overwrite it with icon inference.
+                if(!hasExact){correct=GardenPlantRequirement.IconMatch(icon->IconId,items.Select(x=>(x.Icon,x.Required)));if(correct is {} match&&OutlineGardenItem(target,match,drawn))marked++;}
+                continue;
             }
-            else if((int)node->Type>=1000)
-            {
-                var component=node->GetComponent();if(component!=null)marked+=MarkGardenNodes(&component->UldManager,names,ref budget,depth+1);
-            }
+            marked+=MarkGardenIcons(&component->UldManager,items,exact,drawn,ref budget,depth+1);
         }
         return marked;
     }

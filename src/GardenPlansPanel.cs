@@ -125,7 +125,7 @@ public sealed partial class Plugin
         DrawGardenInfoLabel("paired",rosterStatus+" "+syncStatus);
         if(gardenMarkerStatus.Length>0){if(gardenMarkerError)ImGui.PushStyleColor(ImGuiCol.Text,new Vector4(1,.3f,.3f,1));ImGui.TextWrapped(gardenMarkerStatus);if(gardenMarkerError)ImGui.PopStyleColor();}
         var next=GardenGuidance.Next(plan);
-        if(showPlan&&next is not null)ImGui.TextWrapped(next.Status=="replant"?$"Next: Step {next.ReplantOrder} · Bed {next.Bed}. Remove only the temporary starter; replant {next.Crop} with {next.Soil}.":next.Status=="starter"?"Starter planted. Finish the other required beds before replanting it.":$"Next: Step {next.Order} · Bed {next.Bed}: {next.Crop} · {(next.ReplantOrder>0?next.StarterSoil:next.Soil)}");
+        if(showPlan&&next is not null)ImGui.TextWrapped(next.Status=="replant"?$"Next: Step {next.ReplantOrder} · Bed {next.Bed}. {(GardenPlantRequirement.RemoveStarter(next)?"Remove only the temporary starter; replant":"Plant")} {next.Crop} with {next.Soil}.":next.Status=="starter"?"Starter planted. Finish the other required beds before replanting it.":$"Next: Step {next.Order} · Bed {next.Bed}: {next.Crop} · {GardenPlantRequirement.Soil(next)}");
         else ImGui.TextWrapped(complete?"Planting complete · showing the actual synced garden":"Choose Start garden on the website to save a planting plan.");
         var totalSteps=planned.Sum(b=>b.ReplantOrder>0?2:1);var doneSteps=planned.Sum(b=>b.Status=="confirmed"?(b.ReplantOrder>0?2:1):b.Status is "starter" or "replant"?1:0);
         if(planned.Length>0)ImGui.TextWrapped($"{(complete?totalSteps:doneSteps)}/{totalSteps} planting steps complete · Goal: {plan.Target}");
@@ -221,7 +221,8 @@ public sealed partial class Plugin
             return;
         }
         DrawGardenItem(b.Crop, true, "Planned crop: ");
-        DrawGardenItem(b.Soil, true, "Final planned soil: ");
+        DrawGardenItem(GardenPlantRequirement.Soil(b), true, $"Step {GardenPlantRequirement.Step(b)} soil: ");
+        if(b.ReplantOrder>0&&b.Status is not ("replant" or "confirmed"))DrawGardenItem(b.Soil,true,$"Later · step {b.ReplantOrder} soil: ");
         DrawGardenInfoLabel("plan", "Plan status: " + b.Status.Replace('-', ' '));
         if (b.ReplantOrder > 0)
             ImGui.TextWrapped($"Step {b.Order}: plant the temporary starter with {b.StarterSoil}. Step {b.ReplantOrder}: after the other required beds, remove only that starter and replant with {b.Soil}.");
@@ -236,7 +237,16 @@ public sealed partial class Plugin
         if(b.Queued)DrawGardenInfoLabel("queued","Recorded locally · waiting for server acknowledgement. Another client may still need to refresh afterwards.");
         if(EquinoxCompanion.GardenVisualState.SeedlingEstimate(b,DateTimeOffset.UtcNow))DrawGardenInfoLabel("seedling","Seedling illustration · first 33% of the recorded growth estimate; the game stage has not been observed.");
         var icon = GardenCareIcon(b,showPlan,wrong);
-        DrawGardenInfoLabel(icon,EquinoxCompanion.GardenVisualState.For(b,false,DateTimeOffset.UtcNow)=="wilted"?"Wilting · reported by the game. Tend urgently if alive.":GardenCareHint(icon));
+        if(showPlan&&GardenPlantRequirement.IsReplant(b))
+        {
+            DrawGardenInfoLabel(icon,GardenPlantRequirement.RemoveStarter(b)?$"Step {b.ReplantOrder}: remove only this temporary starter, then replant {b.Crop} with {b.Soil}. No tending is needed for this planned removal.":$"Step {b.ReplantOrder}: plant {b.Crop} with {b.Soil} in this now-empty bed.");
+            DrawGardenItem(b.ActualCrop,false,"Actual crop: ");
+            DrawGardenItem(b.Soil,true,"Replant soil: ");
+            ImGui.TextWrapped("The record changes only after the game confirms removal or planting.");
+            return;
+        }
+        var visual=EquinoxCompanion.GardenVisualState.For(b,false,DateTimeOffset.UtcNow);
+        DrawGardenInfoLabel(icon,visual=="wet"?"Recently tended · wet soil for 12h after recorded care. No tending needed now.":visual=="wilted"?"Wilting · reported by the game. Tend urgently if alive.":GardenCareHint(icon));
         DrawGardenItem(b.ActualCrop, false, "Actual crop: ");
         if (b.ActualCrop == "Empty" && !b.Ready)
         {
