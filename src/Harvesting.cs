@@ -4,6 +4,15 @@ namespace EquinoxCompanion;
 // Read the item parameter from the installed game's template, not a guessed numeric slot.
 public sealed record HarvestReceipt(uint LogId, int ItemParameter)
 {
+    public static uint? FromChat(string text, string sender, IEnumerable<uint> itemIds)
+    {
+        // Original system/loot text and an actual item link, not text typed by another player.
+        text=text.Trim();
+        if(!string.IsNullOrWhiteSpace(sender)||text.Length>512||!text.StartsWith("You obtain ",StringComparison.Ordinal)||!text.EndsWith('.')||text.Contains('\n')||text.Contains('\r'))return null;
+        var ids=itemIds.Select(id=>id%1_000_000).Where(id=>id>0).Distinct().ToArray();
+        return ids.Length==1?ids[0]:null;
+    }
+
     public static HarvestReceipt? FromTemplate(uint logId, string template)
     {
         if (logId is not (750 or 751) || !template.StartsWith("You obtain ", StringComparison.Ordinal)) return null;
@@ -47,5 +56,15 @@ public sealed record HarvestIntent(string EventId, DateTimeOffset At, GardenSnap
     {
         if (logId is not (750 or 751) || receivedItem != CropItemId || CropItemId == 0 || at < At || at - At > TimeSpan.FromSeconds(10) || target is null || !Same(Target, target)) return null;
         return new(EventId, At, at, Target.Actor, Target.Address!, Patch, Bed, "garden.empty");
+    }
+
+    public TendingRecord? ConfirmChat(uint? receivedItem, DateTimeOffset at, GardenSnapshot? current)
+    {
+        if(receivedItem!=CropItemId||CropItemId==0||at<At||at-At>TimeSpan.FromSeconds(10)||current is null||
+            at<current.ObservedAt||at-current.ObservedAt>TimeSpan.FromMilliseconds(500)||
+            current.Actor!=Target.Actor||current.Address is null||current.Address!=Target.Address||
+            current.TargetId is not null&&current.TargetId!=Target.TargetId)return null;
+        // Harvest animation can drop the target. The submitted numbered bed stays authoritative.
+        return new(EventId,At,at,Target.Actor,Target.Address!,Patch,Bed,"garden.empty");
     }
 }
