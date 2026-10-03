@@ -448,3 +448,16 @@ Check("death risk survives later maturity estimate",GardenTiming.DeathRisk(false
 Check("maturity before death avoids dead estimate",GardenTiming.DeathRisk(false,liveAt.AddHours(48),liveAt.AddDays(1),liveAt.AddDays(4)).ToString(),"False");
 Check("confirmed mature never dies",GardenTiming.DeathRisk(true,liveAt.AddHours(48),null,liveAt.AddDays(4)).ToString(),"False");
 Check("unknown care cannot invent death",GardenTiming.DeathRisk(false,null,liveAt.AddDays(3),liveAt.AddDays(4)).ToString(),"False");
+
+// Asset-state timing boundaries; no game observation is fabricated by a graphic.
+var artNow=DateTimeOffset.Parse("2026-10-03T12:00:00Z");
+var artBed=new SharedGardenBed(4,"Mirror Apple","Potting Soil","actual","Mirror Apple","Potting Soil",artNow.AddDays(-1),artNow.AddHours(-11),5,false, WiltHours:24);
+Check("garden art wet before 12h",GardenVisualState.For(artBed,false,artNow),"wet");
+Check("garden art due at exact 12h",GardenVisualState.For(artBed with {Watered=artNow.AddHours(-12)},false,artNow),"due");
+Check("garden art wilt is not death",GardenVisualState.For(artBed with {Watered=artNow.AddHours(-25)},false,artNow),"wilt-estimated");
+Check("garden art dead after deadline",GardenVisualState.For(artBed with {Watered=artNow.AddHours(-49)},false,artNow),"dead-estimated");
+Check("garden art ready immune to old death",GardenVisualState.For(artBed with {Watered=artNow.AddHours(-49),Ready=true},false,artNow),"ready");
+Check("garden art maturity before death uncertain",GardenVisualState.For(artBed with {Watered=artNow.AddHours(-49),HarvestAt=artNow.AddHours(-2)},false,artNow),"check-maturity");
+Check("garden art saved plan is distinct",GardenVisualState.For(artBed with {Status="planned",Watered=null},true,artNow),"planned");
+Check("garden art confirmed empty has no wet",GardenVisualState.For(artBed with {ActualCrop="Empty"},false,artNow),"empty");
+Check("garden art unknown is not empty",GardenVisualState.For(artBed with {ActualCrop="Not synced yet",Watered=null},false,artNow),"unknown");

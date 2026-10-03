@@ -748,12 +748,23 @@ public sealed partial class Plugin : IDalamudPlugin
 
     private void DrawContents()
     {
+        if (ImGui.BeginTable("companion-header", 2, ImGuiTableFlags.SizingStretchProp))
+        {
+        var shortcutSize = ImGui.GetFontSize() * 2.1f;
+        ImGui.TableSetupColumn("Status", ImGuiTableColumnFlags.WidthStretch);
+        ImGui.TableSetupColumn("Shortcuts", ImGuiTableColumnFlags.WidthFixed, shortcutSize);
+        ImGui.TableNextColumn();
         var icon = Textures.GetFromFile(System.IO.Path.Combine(Pi.AssemblyLocation.DirectoryName!, "icon.png")).GetWrapOrDefault();
         if (icon is not null) { ImGui.Image(icon.Handle, new Vector2(40, 40)); ImGui.SameLine(); }
             ImGui.BeginGroup();
             ImGui.TextDisabled($"Equinox Companion v{typeof(Plugin).Assembly.GetName().Version}");
             DrawSharedStatus();
             ImGui.EndGroup();
+        ImGui.TableNextColumn();
+        DrawHeaderShortcut(true, shortcutSize);
+        DrawHeaderShortcut(false, shortcutSize);
+        ImGui.EndTable();
+        }
             DrawOrderedTabs();
     }
 

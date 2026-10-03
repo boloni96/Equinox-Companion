@@ -5,6 +5,7 @@ namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
     private Dictionary<string,JsonElement>? gardenPictures;
+    private readonly Dictionary<string,string> gardenSupplies=new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string,(string Crop,double Days,double? Wilt)> gardenTiming=new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string,DateTimeOffset> completedGardenPlans=[];
     private readonly Dictionary<string,SharedGardenPlan> localGardenCache=[];
@@ -18,6 +19,8 @@ public sealed partial class Plugin
             using var document=JsonDocument.Parse(File.ReadAllText(Path.Combine(Pi.AssemblyLocation.DirectoryName!,"garden-art/catalog/crops.json")));
             using var times=JsonDocument.Parse(File.ReadAllText(Path.Combine(Pi.AssemblyLocation.DirectoryName!,"garden-art/catalog/timings.json")));
             foreach(var t in times.RootElement.EnumerateArray())gardenTiming[t.GetProperty("seed").GetString()!]=(t.GetProperty("crop").GetString()!,t.GetProperty("days").GetDouble(),t.GetProperty("wilt").ValueKind==JsonValueKind.Number?t.GetProperty("wilt").GetDouble():null);
+            using var supplies=JsonDocument.Parse(File.ReadAllText(Path.Combine(Pi.AssemblyLocation.DirectoryName!,"garden-art/catalog/supplies.json")));
+            foreach(var row in supplies.RootElement.EnumerateArray())gardenSupplies[row.GetProperty("label").GetString()!]=row.GetProperty("path").GetString()!;
             foreach(var row in document.RootElement.EnumerateArray()){
                 var value=row.Clone();gardenPictures[value.GetProperty("cropLabel").GetString()!]=value;
                 foreach(var alias in value.GetProperty("aliases").EnumerateArray())gardenPictures[alias.GetString()!]=value;
@@ -31,23 +34,48 @@ public sealed partial class Plugin
         var image=Textures.GetFromFile(Path.Combine(Pi.AssemblyLocation.DirectoryName!,"garden-art",path)).GetWrapOrDefault();
         if(image is not null)ImGui.GetWindowDrawList().AddImage(image.Handle,at,at+size);
     }
+    private static string GardenVisualState(SharedGardenBed b,bool planVisible,DateTimeOffset now) => EquinoxCompanion.GardenVisualState.For(b,planVisible,now);
     private void DrawGardenTile(SharedGardenBed b,bool planVisible,Vector2 at,float size)
     {
-        LoadGardenPictures();var now=DateTimeOffset.UtcNow;
-        var planned=planVisible&&b.Crop.Length>0;var crop=planned?b.Crop:b.ActualCrop;
-        var ready=!planned&&b.Ready;var wet=(!planned||b.Status is "confirmed" or "starter")&&!b.Ready&&b.Watered is {} w&&w<=now&&now-w<TimeSpan.FromHours(12);
-        var death=b.Watered is {} care&&b.WiltHours is {} wilt?care.AddHours(wilt+24):(DateTimeOffset?)null;
-        var dead=!ready&&!planned&&GardenTiming.DeathRisk(b.Ready,death,b.HarvestAt,now);
-        GardenImage("assets/beds/soil-"+(dead?"dead":wet?"wet":"normal")+".png",at,new(size));
-        if(gardenPictures!.TryGetValue(crop,out var picture)){
-            GardenImage(picture.GetProperty(ready?"plantMature":dead?"plantDead":"plantGrowing").GetString()!,at,new(size));
-            if(wet&&(!planned||b.Status is "confirmed" or "starter"))GardenImage("assets/effects/wet-droplets.png",at,new(size));
-        }else if(crop!="Empty")GardenImage("assets/overlays/unknown.png",at,new(size));
-        if(planned&&b.Status is not ("confirmed" or "starter"))GardenImage("assets/effects/planned-veil.png",at,new(size));
+        LoadGardenPictures();var state=GardenVisualState(b,planVisible,DateTimeOffset.UtcNow);
+        var crop=planVisible&&b.Crop.Length>0?b.Crop:b.ActualCrop;
+        GardenImage("assets/beds/soil-"+(state=="dead-estimated"?"dead":state=="wet"?"wet":"normal")+".png",at,new(size));
+        if(gardenPictures!.TryGetValue(crop,out var picture))
+            GardenImage(picture.GetProperty(state=="ready"?"plantMature":state=="dead-estimated"?"plantDead":state is "wilt-estimated" or "at-risk"?"plantWilted":"plantGrowing").GetString()!,at,new(size));
+        var effect=state switch {"wet"=>"wet-droplets","ready"=>"ready-sparkles","wilt-estimated" or "at-risk"=>"wilt-mist","dead-estimated"=>"dead-shade","unknown"=>"unknown-shade","planned"=>"planned-veil",_=>null};
+        if(effect is not null)GardenImage("assets/effects/"+effect+".png",at,new(size));
         GardenImage("assets/beds/frame-wood.png",at,new(size));
-        var border=planned?b.Status switch {"confirmed"=>"ready","starter"=>"starter","replant"=>"replant","different"=>"different",_=>"planned"}:ready?"ready":dead?"dead-estimated":wet?"wet":b.NextTend<=now?"due":"unknown";
-        GardenImage("assets/borders/"+border+".png",at,new(size));
-        if(planned&&b.Status=="different") ImGui.GetWindowDrawList().AddRect(at+new Vector2(2),at+new Vector2(size-2),0xff5555ff,2,ImDrawFlags.None,3);
+        var border=state switch {"wilt-estimated"=>"wilt","check-maturity"=>"unknown","empty" or "growing"=>null,_=>state};
+        if(border is not null)GardenImage("assets/borders/"+border+".png",at,new(size));
+        if(state=="empty")GardenImage("assets/icons/empty.png",at,new(size));
+        else if(state!="growing")GardenImage("assets/overlays/"+state+".png",at,new(size));
+        if(planVisible){var marker=b.Status switch {"confirmed"=>"ready","starter"=>"starter","replant"=>"replant","different"=>"different",_=>null};
+            if(marker is not null)GardenImage("assets/borders/"+marker+".png",at,new(size));}
+        if(planVisible&&b.Status=="different") ImGui.GetWindowDrawList().AddRect(at+new Vector2(2),at+new Vector2(size-2),0xff5555ff,2,ImDrawFlags.None,3);
+    }
+    private void DrawGardenIdentity(SharedGardenBed bed,bool planVisible,Vector2 at,float size)
+    {
+        GardenImage($"assets/badges/bed-{bed.Bed}.png",at,new(size));
+        if(!planVisible||bed.Order<=0)return;
+        var paired=bed.Order==1&&bed.ReplantOrder==9;
+        if(paired||bed.ReplantOrder==0&&bed.Order<=9)
+        {
+            var width=(paired?34:24)*size/128;
+            GardenImage("assets/badges/step-"+(paired?"1-plus-9":bed.Order.ToString())+".png",at+new Vector2((size-width)/2,size/32),new(width,24*size/128));
+        }
+        else
+        {
+            var label=bed.Order+(bed.ReplantOrder>0?"+"+bed.ReplantOrder:"");var dims=ImGui.CalcTextSize(label);var p=at+new Vector2((size-dims.X)/2,size/32);
+            var draw=ImGui.GetWindowDrawList();draw.AddRectFilled(p-new Vector2(2),p+dims+new Vector2(2),0xdd201710,3);draw.AddText(p,0xffffffff,label);
+        }
+    }
+    private void DrawGardenItem(string label,bool seed=true,string prefix="")
+    {
+        LoadGardenPictures();var name=label.Trim();string? path=null;
+        if(gardenSupplies.TryGetValue(name,out var supply))path=supply;
+        else if(gardenPictures!.TryGetValue(GardenCropName(name.EndsWith(" seed",StringComparison.OrdinalIgnoreCase)?name[..^5]:name),out var picture))path=picture.GetProperty(seed?"seedIcon":"produceIcon").GetString();
+        if(path is not null){var texture=Textures.GetFromFile(Path.Combine(Pi.AssemblyLocation.DirectoryName!,"garden-art",path)).GetWrapOrDefault();if(texture is not null){ImGui.Image(texture.Handle,new Vector2(ImGui.GetTextLineHeight()));ImGui.SameLine();}}
+        ImGui.TextWrapped(prefix+label);
     }
     private IEnumerable<SyncEvent> LocalGardenActions()=>config.Planting.Select(p=>new SyncEvent(p.EventId,"garden.planted",p.ConfirmedAt,WithWorldNames(p.Actor),WithAddressNames(p.Address),p.Patch,p.Bed,p.Plant))
         .Concat(config.Tending.Select(t=>new SyncEvent(t.EventId,"garden.tended",t.ConfirmedAt,WithWorldNames(t.Actor),WithAddressNames(t.Address),t.Patch,t.Bed)))

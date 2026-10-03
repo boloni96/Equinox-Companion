@@ -1,0 +1,9 @@
+Equinox Companion 0.5.1.20 — garden artwork and header shortcuts
+
+- Top-right Fashion Report and Planting icons call the same handlers as /fashionr and /planting. Existing estate/paired-journal checks are preserved.
+- Bed number and planting-step PNG badges replace the long top text. Step 1+9 uses the supplied badge; other combinations use their real plan order. Crop names sit at the bottom.
+- Layered wet, due, ready, wilt-estimated, death-estimated, unknown, empty and four-hour risk art; plan borders remain separate. Confirmed mature crops are protected from stale death estimates.
+- Next planting bed outline; seed, produce and soil images in supplies/details. Real actor attribution remains intact.
+- No invented confirmed-death, storage, growth-stage or flower-colour observations. Optional alternate artwork remains packaged.
+
+Validation: Release build succeeds; transition/garden gates, care-state boundaries and shared actor/timer checks pass. In-game appearance and native clicks still require live validation.
