@@ -48,6 +48,28 @@ public static class GardenOverview
         return Row(status,care,harvest,due,next,bed.HarvestAt);
     }
 
+    public static string HeaderSummary(IEnumerable<SharedGardenPlan> plans,DateTimeOffset now)
+    {
+        var beds=plans.SelectMany(p=>p.Beds.Select(b=>Bed(p,b,now))).ToArray();
+        if(beds.Length==0)return "No gardens";
+        if(beds.All(b=>b.State=="empty"))return "Empty";
+        var parts=new List<string>();
+        void Count(string text,Func<GardenOverviewBed,bool> match){var n=beds.Count(match);if(n>0)parts.Add($"{n} {text}");}
+        Count("dead",b=>b.State=="dead");
+        Count("at risk",b=>b.State is "wilted" or "wilt-estimated" or "at-risk" or "dead-estimated");
+        Count("replace",b=>b.Status=="Replace starter");
+        Count("ready",b=>b.State=="ready");
+        Count("tend due",b=>b.TendDue);
+        Count("check maturity",b=>b.State=="check-maturity");
+        Count("unsynced",b=>b.State=="unknown");
+        var tend=beds.Where(b=>b.NextTend>now).Select(b=>b.NextTend).Min();
+        var harvest=beds.Where(b=>b.HarvestAt>now).Select(b=>b.HarvestAt).Min();
+        if(!beds.Any(b=>b.TendDue)&&tend is {} next)parts.Add("T "+Remaining(next,now));
+        if(harvest is {} ready)parts.Add("H ~"+Remaining(ready,now));
+        if(parts.Count==0)return beds.Any(b=>b.State=="keep-mature")?"Kept mature":"No care due";
+        return string.Join(" · ",parts);
+    }
+
     public static string Summary(IEnumerable<SharedGardenPlan> plans,DateTimeOffset now)
     {
         var beds=plans.SelectMany(p=>p.Beds.Select(b=>Bed(p,b,now))).ToArray();

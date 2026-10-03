@@ -10,6 +10,7 @@ public sealed partial class Plugin
         ImGui.TextUnformatted("Planting · all shared gardens");
         if(config.SharedRoster is not {} roster){ImGui.TextWrapped("Connect your shared Journal in Settings to see everyone's houses and garden timers.");return;}
         ImGui.TextWrapped("Tend suggested every 12h. Harvest countdowns are estimates; Ready and Dead require game confirmation.");
+        ImGui.TextDisabled("Name bars: T = next suggested tend · H = estimated harvest. Hover for every batch; click to expand.");
         if(ImGui.SmallButton("Refresh gardens"))nextRosterRead=default;
         ImGui.SameLine();ImGui.TextDisabled($"Journal updated {roster.Updated.ToLocalTime():g}");
         ImGui.InputText("Find person / character / house",ref plantingOverviewSearch,120);
@@ -18,48 +19,140 @@ public sealed partial class Plugin
         var houses=GardenOverview.Houses(people,GardenPlanSources().Select(EffectiveGardenPlan));
         ImGui.TextWrapped($"{houses.Length} houses · "+GardenOverview.Summary(houses.SelectMany(h=>h.Batches),now));
         ImGui.Separator();
-        if(!ImGui.BeginChild("planting-overview-scroll",Vector2.Zero)){ImGui.EndChild();return;}
         var searching=!string.IsNullOrWhiteSpace(plantingOverviewSearch);
         bool Match(string text)=>!searching||text.Contains(plantingOverviewSearch,StringComparison.OrdinalIgnoreCase);
         int PersonRank(SharedPerson p){var i=config.TabOrder.IndexOf("person:"+p.Id);return i<0?int.MaxValue:i;}
+        config.PlantingAccountExpanded ??= [];
+        if(!ImGui.BeginTabBar("planting-persons"))return;
         foreach(var person in people.OrderBy(PersonRank))
         {
-            var chars=person.Characters.Where(c=>Match(person.Name+" "+c.Name+" "+c.World+" "+c.Dc+" "+c.Account+" "+string.Join(" ",c.Houses.Select(h=>$"{h.Name} {h.OwnerName} {h.FcName} {h.District} W{h.Ward} P{h.Plot}")))).ToArray();
-            if(chars.Length==0)continue;
+            if(!ImGui.BeginTabItem(person.Name.Replace("##","")+"###planting-person-"+person.Id))continue;
             ImGui.PushID(person.Id);
-            if(searching)ImGui.SetNextItemOpen(true,ImGuiCond.Always);
-            var owned=houses.Where(h=>h.Person?.Id==person.Id).ToArray();
-            if(ImGui.CollapsingHeader($"{person.Name.Replace("##","")} · {chars.Length} characters · {owned.Length} houses###person",ImGuiTreeNodeFlags.DefaultOpen))
-            foreach(var character in chars)
+            if(ImGui.BeginChild("planting-person-scroll",Vector2.Zero))
             {
-                ImGui.PushID(character.Id);
-                var assigned=houses.Where(h=>h.Character?.Id==character.Id).ToArray();
-                var shared=houses.Where(h=>h.Character?.Id!=character.Id&&character.Houses.Any(x=>x.Id==h.Batches[0].HouseId)).ToArray();
-                var summary=assigned.Length>0?GardenOverview.Summary(assigned.SelectMany(h=>h.Batches),now):shared.Length>0?"Shared · "+GardenOverview.Summary(shared.SelectMany(h=>h.Batches),now):"No gardens recorded";
-                if(searching)ImGui.SetNextItemOpen(true,ImGuiCond.Always);
-                var expanded=ImGui.TreeNode($"{character.Name.Replace("##","")} · {character.World}###character");
-                ImGui.TextWrapped(summary);
-                if(expanded)
+                var chars=person.Characters.Where(c=>Match(person.Name+" "+c.Name+" "+c.World+" "+c.Dc+" "+c.Account+" "+string.Join(" ",c.Houses.Select(h=>$"{h.Name} {h.OwnerName} {h.FcName} {h.District} W{h.Ward} P{h.Plot}")))).ToArray();
+                var owned=houses.Where(h=>h.Person?.Id==person.Id).ToArray();
+                ImGui.TextWrapped($"{chars.Length} characters · {owned.Length} houses · "+GardenOverview.Summary(owned.SelectMany(h=>h.Batches),now));
+                foreach(var account in chars.GroupBy(SharedCharacterGrouping.AccountKey))
                 {
-                    ImGui.TextDisabled(character.Account+" · "+SharedLocation(character));
-                    foreach(var house in assigned)DrawOverviewHouse(house,now);
-                    foreach(var house in shared){ImGui.TextWrapped($"Shared: {house.House?.Name} · timers under {house.Person?.Name} / {house.Character?.Name}");}
-                    if(assigned.Length==0&&shared.Length==0)ImGui.TextDisabled("No house garden linked to this character yet.");
-                    ImGui.TreePop();
+                    ImGui.PushID("account-"+account.Key);
+                    var key=person.Id+":"+account.Key;
+                    var expanded=searching||config.PlantingAccountExpanded.GetValueOrDefault(key);
+                    ImGui.SetNextItemOpen(expanded,ImGuiCond.Always);
+                    var name=string.IsNullOrWhiteSpace(account.First().Account)?"Account":account.First().Account.Replace("##","");
+                    var open=ImGui.CollapsingHeader($"{name} · {account.Count()} characters###account");
+                    if(!searching&&open!=expanded){config.PlantingAccountExpanded[key]=open;Pi.SavePluginConfig(config);}
+                    if(open)
+                    {
+                        ImGui.Indent();
+                        foreach(var group in new[]{"Regulars","Floaters","Empty","Pending sync"})
+                        {
+                            var grouped=account.Where(c=>SharedCharacterGrouping.Group(c)==group).ToArray();
+                            if(grouped.Length==0)continue;
+                            ImGui.PushID(group);
+                            if(searching)ImGui.SetNextItemOpen(true,ImGuiCond.Always);
+                            if(ImGui.TreeNodeEx($"{group} · {grouped.Length}###group",ImGuiTreeNodeFlags.DefaultOpen))
+                            {
+                                foreach(var character in grouped)DrawOverviewCharacter(character,houses,now,searching);
+                                ImGui.TreePop();
+                            }
+                            ImGui.PopID();
+                        }
+                        ImGui.Unindent();
+                    }
+                    ImGui.PopID();
                 }
-                ImGui.PopID();
+                if(chars.Length==0)ImGui.TextDisabled(searching?"No characters match this search.":"No visible characters in this profile.");
             }
-            ImGui.PopID();
+            ImGui.EndChild();ImGui.PopID();ImGui.EndTabItem();
         }
-        foreach(var house in houses.Where(h=>h.Character is null))
-            if(Match(string.Join(" ",house.Batches.Select(p=>$"{p.HouseName} {p.World} {p.District} W{p.Ward} P{p.Plot}"))))DrawOverviewHouse(house,now);
-        ImGui.EndChild();
+        var unassigned=houses.Where(h=>h.Character is null).ToArray();
+        if(unassigned.Length>0&&ImGui.BeginTabItem("Other gardens###planting-unassigned"))
+        {
+            if(ImGui.BeginChild("planting-unassigned-scroll",Vector2.Zero))
+                foreach(var house in unassigned)
+                    if(Match(string.Join(" ",house.Batches.Select(p=>$"{p.HouseName} {p.World} {p.District} W{p.Ward} P{p.Plot}"))))DrawOverviewHouse(house,now);
+            ImGui.EndChild();ImGui.EndTabItem();
+        }
+        ImGui.EndTabBar();
     }
+
+    private void DrawOverviewCharacter(SharedCharacter character,GardenOverviewHouse[] houses,DateTimeOffset now,bool searching)
+    {
+        ImGui.PushID(character.Id);
+        var assigned=houses.Where(h=>h.Character?.Id==character.Id).ToArray();
+        var shared=houses.Where(h=>h.Character?.Id!=character.Id&&character.Houses.Any(x=>x.Id==h.Batches[0].HouseId)).ToArray();
+        var linked=assigned.Concat(shared).ToArray();
+        var plans=linked.SelectMany(h=>h.Batches).ToArray();
+        var position=ImGui.GetCursorScreenPos();
+        var width=Math.Max(1,ImGui.GetContentRegionAvail().X);
+        var nameWidth=width*.42f;
+        var timersWidth=Math.Max(1,width-nameWidth-ImGui.GetStyle().FramePadding.X*2);
+        var timers=string.Join(" | ",linked.SelectMany(h=>h.Batches.Select(b=>
+            $"{(linked.Length>1?(h.House?.Type=="Free Company house"?"FC ":"Private "):"")}B{b.Batch}: {GardenOverview.HeaderSummary([b],now)}")));
+        if(plans.Length==0)timers="No gardens recorded";
+        else if(ImGui.CalcTextSize(timers).X>timersWidth)
+            timers=$"{plans.Length} batch{(plans.Length==1?"":"es")} · "+GardenOverview.HeaderSummary(plans,now);
+        if(searching)ImGui.SetNextItemOpen(true,ImGuiCond.Always);
+        var label=FitOverviewText($"{character.Name.Replace("##","")} · {character.World}",nameWidth-ImGui.GetFrameHeight());
+        var expanded=ImGui.CollapsingHeader(label+"###character");
+        var hovered=ImGui.IsItemHovered();
+        var draw=ImGui.GetWindowDrawList();
+        draw.PushClipRect(new Vector2(position.X+nameWidth,position.Y),new Vector2(position.X+width,position.Y+ImGui.GetFrameHeight()),true);
+        draw.AddText(new Vector2(position.X+nameWidth,position.Y+ImGui.GetStyle().FramePadding.Y),ImGui.GetColorU32(ImGuiCol.Text),FitOverviewText(timers,timersWidth));
+        draw.PopClipRect();
+        if(hovered)
+        {
+            ImGui.BeginTooltip();ImGui.PushTextWrapPos(ImGui.GetFontSize()*40);
+            ImGui.TextUnformatted($"{character.Name} · {character.World} · {character.Account}");
+            if(plans.Length==0)ImGui.TextDisabled("No gardens recorded.");
+            foreach(var house in linked)
+            {
+                ImGui.Separator();
+                var first=house.Batches[0];
+                ImGui.TextWrapped(OverviewOwner(house)+$" · {first.World} · {first.District} W{first.Ward} P{first.Plot}");
+                foreach(var batch in house.Batches)
+                {
+                    ImGui.TextWrapped($"Batch {batch.Batch}: "+GardenOverview.Summary([batch],now));
+                    var last=batch.Beds.Where(b=>b.Watered is not null&&!GardenTiming.FirstTendDue(b.Planted,b.Watered,now)).MaxBy(b=>b.Watered);
+                    if(last?.Watered is {} at)ImGui.TextWrapped($"Last tended: {at.ToLocalTime():g} · {(last.TendedBy.Length>0?last.TendedBy:"Unknown gardener")}");
+                }
+            }
+            ImGui.TextDisabled("T: suggested every 12h · H: estimate; confirm maturity in game.");
+            ImGui.PopTextWrapPos();ImGui.EndTooltip();
+        }
+        if(expanded)
+        {
+            ImGui.Indent();
+            ImGui.TextDisabled(character.Account+" · "+SharedLocation(character));
+            foreach(var house in assigned)DrawOverviewHouse(house,now);
+            foreach(var house in shared)
+            {
+                ImGui.TextDisabled($"Shared with {house.Person?.Name} / {house.Character?.Name}");
+                DrawOverviewHouse(house,now);
+            }
+            if(assigned.Length==0&&shared.Length==0)ImGui.TextDisabled("No house garden linked to this character yet.");
+            ImGui.Unindent();
+        }
+        ImGui.PopID();
+    }
+
+    private static string FitOverviewText(string text,float width)
+    {
+        if(ImGui.CalcTextSize(text).X<=width)return text;
+        const string tail="…";
+        while(text.Length>0&&ImGui.CalcTextSize(text+tail).X>width)text=text[..^1];
+        return text+tail;
+    }
+
+    private static string OverviewOwner(GardenOverviewHouse house) => house.House?.Type=="Free Company house"
+        ? "FC: "+(string.IsNullOrWhiteSpace(house.House.FcName)?"Name not recorded":house.House.FcName)
+        : "Owner: "+(string.IsNullOrWhiteSpace(house.House?.OwnerName)?"Not recorded":house.House.OwnerName);
 
     private void DrawOverviewHouse(GardenOverviewHouse house,DateTimeOffset now)
     {
         var first=house.Batches[0];var estate=house.House;
-        var owner=estate?.Type=="Free Company house"?"FC: "+(string.IsNullOrWhiteSpace(estate.FcName)?"Name not recorded":estate.FcName):"Owner: "+(string.IsNullOrWhiteSpace(estate?.OwnerName)?"Not recorded":estate.OwnerName);
+        var owner=OverviewOwner(house);
         ImGui.PushID(first.HouseId);
         if(ImGui.TreeNode($"{owner.Replace("##","")}###house"))
         {

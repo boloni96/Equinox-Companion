@@ -851,6 +851,15 @@ Check("overview countdown days",GardenOverview.Remaining(ovNow.AddDays(2).AddHou
 Check("overview no negative countdown",GardenOverview.Remaining(ovNow.AddSeconds(-1),ovNow),"now");
 Check("overview empty summary remains honest",GardenOverview.Summary([fullyHarvested],ovNow.AddMinutes(15)),"8 empty");
 Check("overview no gardens does not throw",GardenOverview.Summary([],ovNow),"No care action due");
+Check("name bar empty beds have no care timer",GardenOverview.HeaderSummary([fullyHarvested],ovNow.AddMinutes(15)),"Empty");
+Check("name bar no garden remains distinct from empty",GardenOverview.HeaderSummary([],ovNow),"No gardens");
+var headerCared=localDone with {Beds=[localDone.Beds[0] with {Watered=ovNow,Ready=false,HarvestAt=ovNow.AddDays(2)}]};
+Check("name bar shows tending and harvest clocks",GardenOverview.HeaderSummary([headerCared],ovNow),"T 12h 0m · H ~2d 0h 0m");
+var headerReady=headerCared with {Batch=2,Beds=[headerCared.Beds[0] with {Ready=true}]};
+Check("name bar ready batch does not hide another batch clocks",GardenOverview.HeaderSummary([headerCared,headerReady],ovNow),"1 ready · T 12h 0m · H ~2d 0h 0m");
+var headerDue=headerCared with {Batch=3,Beds=[headerCared.Beds[0] with {Watered=ovNow.AddHours(-13)}]};
+Check("name bar overdue batch takes priority over future tending",GardenOverview.HeaderSummary([headerCared,headerDue],ovNow),"1 tend due · H ~2d 0h 0m");
+Check("name bar estimated harvest never says ready",GardenOverview.HeaderSummary([headerCared],ovNow.AddDays(2)).Contains("ready").ToString(),"False");
 var plantingTabOrder=TabOrderPolicy.Reconcile(["housing","person:a","submarines","settings"],["housing","person:a","planting","submarines","settings"],false);
 Check("new planting tab precedes submarines",string.Join("|",plantingTabOrder),"housing|person:a|planting|submarines|settings");
 Check("planting tab custom order persists",string.Join("|",TabOrderPolicy.Reconcile(["planting","housing","person:a","submarines","settings"],["housing","person:a","planting","submarines","settings"],false)),"planting|housing|person:a|submarines|settings");
