@@ -47,8 +47,8 @@ public sealed partial class Plugin
         GardenImage("assets/beds/frame-wood.png",at,new(size));
         var border=state switch {"wilt-estimated"=>"wilt","check-maturity"=>"unknown","empty" or "growing"=>null,_=>state};
         if(border is not null)GardenImage("assets/borders/"+border+".png",at,new(size));
-        if(state=="empty")GardenImage("assets/icons/empty.png",at,new(size));
-        else if(state!="growing")GardenImage("assets/overlays/"+state+".png",at,new(size));
+        if(state is "empty" or "growing")GardenImage("assets/icons/"+state+".png",at+new Vector2(91,7)*size/128,new Vector2(size/4));
+        else GardenImage("assets/overlays/"+state+".png",at,new(size));
         if(planVisible){var marker=b.Status switch {"confirmed"=>"ready","starter"=>"starter","replant"=>"replant","different"=>"different",_=>null};
             if(marker is not null)GardenImage("assets/borders/"+marker+".png",at,new(size));}
         if(planVisible&&b.Status=="different") ImGui.GetWindowDrawList().AddRect(at+new Vector2(2),at+new Vector2(size-2),0xff5555ff,2,ImDrawFlags.None,3);

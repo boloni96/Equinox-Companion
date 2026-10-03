@@ -1,0 +1,9 @@
+Equinox Companion 0.5.1.22
+
+Bed information attaches to the original top-right status icon. The extra lower plan/info icon is removed. Growing and empty beds keep a status icon in the same position. Actual actor/time and planned-crop details use their small metadata icons.
+
+Garden artwork preview is a collapsible panel in Planting, with category selection, filename search and previous/next image controls. All 1565 installed runtime PNGs can be inspected. Previewing an image does not change real records or manufacture plant states. Atlas and authoring examples remain in the full inventory.
+
+The watering-can-and-hoe header/floating shortcut is retained. Existing /planting pairing/location checks are retained.
+
+Release build and garden/transition tests passed. Native in-game hover geometry and preview rendering still require user testing.
