@@ -3,7 +3,7 @@
     "Author": "Boloni",
     "Name": "Equinox Companion",
     "InternalName": "EquinoxCompanion",
-    "AssemblyVersion": "0.5.1.28",
+    "AssemblyVersion": "0.5.1.29",
     "Description": "Use /planting at an identified paired estate for its garden guide; /fashionr opens the current Fashion Report. Observes characters, paired estates, gardening, collections, event quests, Fashion Report and submarine timers. Reads Company Profile and FC member panels. Optional background submarine data and carried supplies require Journal V7.11.27. Pixel garden guide with local planting progress and fast paired updates requires Journal V7.11.28. Click-to-record command shortcuts in Settings. Requires Journal V7.11.18 for garden plans, care reminders and fertilizer sync. English garden menus supported. In-game validation build.",
     "ApplicableVersion": "any",
     "RepoUrl": "https://github.com/boloni96/Equinox-Companion",
@@ -17,14 +17,14 @@
     "LoadSync": false,
     "CanUnloadAsync": false,
     "LoadPriority": 0,
-    "IconUrl": "https://raw.githubusercontent.com/boloni96/Equinox-Companion/main/dist/v0.5.1.28/icon.png",
+    "IconUrl": "https://raw.githubusercontent.com/boloni96/Equinox-Companion/main/dist/v0.5.1.29/icon.png",
     "Punchline": "Your shared characters, estates, collections and timers.",
     "AcceptsFeedback": true,
     "IsHide": false,
     "IsTestingExclusive": false,
-    "DownloadLinkInstall": "https://raw.githubusercontent.com/boloni96/Equinox-Companion/main/dist/v0.5.1.28/EquinoxCompanion.zip",
-    "DownloadLinkUpdate": "https://raw.githubusercontent.com/boloni96/Equinox-Companion/main/dist/v0.5.1.28/EquinoxCompanion.zip",
-    "DownloadLinkTesting": "https://raw.githubusercontent.com/boloni96/Equinox-Companion/main/dist/v0.5.1.28/EquinoxCompanion.zip",
-    "LastUpdate": 1791003501
+    "DownloadLinkInstall": "https://raw.githubusercontent.com/boloni96/Equinox-Companion/main/dist/v0.5.1.29/EquinoxCompanion.zip",
+    "DownloadLinkUpdate": "https://raw.githubusercontent.com/boloni96/Equinox-Companion/main/dist/v0.5.1.29/EquinoxCompanion.zip",
+    "DownloadLinkTesting": "https://raw.githubusercontent.com/boloni96/Equinox-Companion/main/dist/v0.5.1.29/EquinoxCompanion.zip",
+    "LastUpdate": 1791004021
   }
 ]
