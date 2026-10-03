@@ -110,7 +110,7 @@ public sealed partial class Plugin : IDalamudPlugin
                 syncStatus = result.Status;
                 if (result.Retry) errorJournal.Record("upload", result.Status);
                 syncFailures = result.Retry ? Math.Min(syncFailures + 1, 5) : 0;
-                nextSync = now.AddSeconds(result.Retry ? Math.Min(600, 30 * (1 << syncFailures)) : plantingWindow?.IsOpen == true ? 1 : 30);
+                nextSync = now.AddSeconds(result.Retry ? Math.Min(600, 30 * (1 << syncFailures)) : FastGardenSync ? 1 : 30);
             }
             else { errorJournal.Record("upload", "Upload task failed; records kept.", exceptionType: syncTask.Exception?.GetBaseException().GetType().Name); syncStatus = "Sync paused after a connection error; local records are kept."; nextSync = now.AddMinutes(2); }
             syncTask = null;
@@ -132,7 +132,7 @@ public sealed partial class Plugin : IDalamudPlugin
         if (events.Length == 0) {
             if (pending.Any(e => !SyncValidation.SupportedByWebsite(e.Kind, config.SharedRoster?.ProtocolVersion ?? 1)))
                 syncStatus = "New observations kept locally. Deploy Journal V7.11.11, save once, then refresh shared profiles.";
-            nextSync = now.AddSeconds(plantingWindow?.IsOpen == true ? 1 : 30); return;
+            nextSync = now.AddSeconds(FastGardenSync ? 1 : 30); return;
         }
         syncStatus = $"Sending {events.Length} events…";
         syncTask = sync.Send(config.PairingKey, events);
@@ -167,7 +167,7 @@ public sealed partial class Plugin : IDalamudPlugin
         if (!fashionCommandRegistered) Log.Warning("/fashionr is already registered by another plugin. Use /equinox fashion instead.");
         mainWindow = new CompanionWindow(this); windows.AddWindow(mainWindow);
         welcomeWindow = new WelcomeWindow(this); windows.AddWindow(welcomeWindow);
-        fashionWindow = new FashionReportWindow(OpenFashionBrowser); windows.AddWindow(fashionWindow);
+        fashionWindow = new FashionReportWindow(OpenFashionBrowser); windows.AddWindow(fashionWindow); fashionWindow.Minimize = () => MinimizeLauncher("Fashion Report");
         plantingWindow = new PlantingGuideWindow(this); windows.AddWindow(plantingWindow);
         Pi.UiBuilder.Draw += Draw;
         Pi.UiBuilder.OpenMainUi += Open;
@@ -384,6 +384,7 @@ public sealed partial class Plugin : IDalamudPlugin
                             {
                                 var menu = new GardenMenu((nint)addon, now, candidate, title, options);
                                 Volatile.Write(ref activeGardenMenu, menu);
+                                RememberGuidanceBed(menu);
                                 if ((menu.ReadyLocation() is not null || menu.EmptyLocation() is not null) && readyMenus.Count < 128) readyMenus.Enqueue(menu);
                             }
                         }
@@ -741,6 +742,7 @@ public sealed partial class Plugin : IDalamudPlugin
         windows.Draw();
         visible = mainWindow.IsOpen;
         DrawFloatingLaunchers();
+        DrawPlantingMarkers();
         if (!visible) showSavedPairingKey = false;
     }
 

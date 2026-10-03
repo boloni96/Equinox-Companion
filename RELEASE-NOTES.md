@@ -1,3 +1,33 @@
+Equinox Companion 0.5.1.19 — compact garden centre
+
+Includes the pending 0.5.1.18 planting assistance, floating-icon and submarine updates.
+
+- The centre shows one short, horizontally centred label on the bottom plaque: Plan, Complete, or Garden. Batch and guide details remain available on hover; the existing batch tabs identify the batch.
+- The care suggestion line wraps inside narrow planting windows.
+
+Validation: Release build and existing transition/garden gates pass. The ImGui layout still requires live in-game confirmation.
+
+Equinox Companion 0.5.1.18 — planting assistance test build
+
+Compatible with Journal V7.11.28; deploy V7.11.29 for the matching website death-estimate correction.
+
+- Automatic assistance while /planting is open or minimized: opening a numbered bed selects its matching saved physical-batch plan. No Start/Pause buttons or manual links. Fresh full-batch guides begin at Bed 1; unfinished confirmed plans resume at their next step. Starter replacement, when required, is a step before completion; completed plans never restart after harvesting.
+- Identified active planting keeps fast sync enabled while minimized. Confirmed game actions update the local guide immediately and upload separately; no manual completion or bed linking is introduced.
+- Incorrect confirmed seed/soil adds a red bed outline and keeps that step unfinished. A corrected game planting turns it green and resumes the next step without resetting other beds.
+- Read-only green outlines identify required seed/soil text in the game's ContextIconMenu. Identity must match the numbered empty-bed menu, current actor, estate, physical batch, and next bed. Item names resolve from the planting agent's offered inventory items. Unsupported/uncertain menus get no highlight; status explains why. English numbered bed menus remain required. In-game selector positioning and lifecycle require live validation.
+- Icons now appear only after Minimize. Single-click reopens and hides the icon; double-click dismisses it. X/Esc closes without leaving an icon. Commands/keybinds reopen windows. Single-click waits for the double-click interval to avoid opening during dismissal.
+
+Validation: Release build, all transition/garden gates, first-bed order, starter progression, final replant and permanent completion tests pass. No live game session is available in the build environment.
+
+- Explicit red wrong-batch and wrong-bed warnings in /planting, including occupied numbered beds. No item markers until the physical and displayed batch match.
+- Submarines follow person-tab, account and character order; accounts, characters and vessels expand separately. Workshop observations and cached supply/part/EXP details remain labelled.
+- Local care uses physical patch identity and locally projected planting/tending/fertilizer/ready records. Later estimated maturity no longer hides an earlier death-risk deadline.
+- No Show floating icon checkbox or separate floating-settings tab; the appearance popup remains, with its tiny button at 75% opacity.
+
+- Companion-owned submarine UI wording; integration endpoints and attribution retained in implementation/docs for future credits.
+
+---
+
 Floating shortcuts: existing Companion icon, gold Fashion Report hanger, and garden-art seedling for Planting. Drag to move, click to reopen; per-icon opacity, background blur, lock and visibility in Settings. Minimize to icon replaces collapsed title bars.
 
 # 0.5.1.17 — Pixel garden and responsive planting sync

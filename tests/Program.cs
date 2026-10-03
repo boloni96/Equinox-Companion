@@ -426,3 +426,25 @@ var fertResult=GardenLive.Apply(fertBase,[fertEvent],x=>x);
 Check("local fertilizer shortens growth",(fertResult.Beds[1].HarvestAt<fertBase.Beds[1].HarvestAt).ToString(),"True");
 Check("local fertilizer leaves tending unchanged",fertResult.Beds[1].Watered.ToString(),fertBase.Beds[1].Watered.ToString());
 Check("local fertilizer does not double apply",GardenLive.Apply(fertResult,[fertEvent],x=>x).Beds[1].HarvestAt.ToString(),fertResult.Beds[1].HarvestAt.ToString());
+
+Check("guidance starts at bed one",GardenGuidance.Next(livePlan)?.Bed.ToString(),"1");
+Check("guidance after starter advances to bed two",GardenGuidance.Next(GardenLive.Apply(livePlan,liveEvents.Take(1),x=>x))?.Bed.ToString(),"2");
+Check("guidance unfinished replant is final step",GardenGuidance.Next(GardenLive.Apply(livePlan,liveEvents,x=>x))?.ReplantOrder.ToString(),"9");
+Check("completed guide never returns to bed one",(GardenGuidance.Next(localDone) is null).ToString(),"True");
+Check("harvest never restarts completed guide",(GardenGuidance.Next(localHarvest) is null).ToString(),"True");
+Check("reject batch order that starts elsewhere",GardenGuidance.ValidOrder(livePlan with {Beds=liveBeds.Select(b=>b with {Order=b.Bed==1?2:b.Bed==2?1:b.Order}).ToArray()}).ToString(),"False");
+Check("individual bed retains its identity",GardenGuidance.Next(livePlan with {Beds=[liveBeds[4] with {Order=0}]})?.Bed.ToString(),"5");
+
+var wrongPlant=liveEvents[1] with {Plant=liveEvents[1].Plant! with {SoilName="Grade 1 Shroud Topsoil"}};
+var wrongGuide=GardenLive.Apply(livePlan,[liveEvents[0],wrongPlant],x=>x);
+Check("wrong soil marks only its bed different",wrongGuide.Beds[1].Status,"different");
+Check("mistake returns guide to affected bed",GardenGuidance.Next(wrongGuide)?.Bed.ToString(),"2");
+Check("mistake preserves starter progress",wrongGuide.Beds[0].Status,"starter");
+var repairedGuide=GardenLive.Apply(wrongGuide,[new SyncEvent("repair-clear","garden.empty",liveAt.AddMinutes(3),liveActor,liveAddress,1,2),LivePlant(2,4,"Grade 3 Thanalan Topsoil")],x=>x);
+Check("corrected planting clears different mark",repairedGuide.Beds[1].Status,"confirmed");
+Check("corrected planting advances guide automatically",GardenGuidance.Next(repairedGuide)?.Bed.ToString(),"3");
+
+Check("death risk survives later maturity estimate",GardenTiming.DeathRisk(false,liveAt.AddHours(48),liveAt.AddDays(3),liveAt.AddDays(4)).ToString(),"True");
+Check("maturity before death avoids dead estimate",GardenTiming.DeathRisk(false,liveAt.AddHours(48),liveAt.AddDays(1),liveAt.AddDays(4)).ToString(),"False");
+Check("confirmed mature never dies",GardenTiming.DeathRisk(true,liveAt.AddHours(48),null,liveAt.AddDays(4)).ToString(),"False");
+Check("unknown care cannot invent death",GardenTiming.DeathRisk(false,null,liveAt.AddDays(3),liveAt.AddDays(4)).ToString(),"False");

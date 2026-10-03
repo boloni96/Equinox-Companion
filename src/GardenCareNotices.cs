@@ -15,22 +15,32 @@ public sealed partial class Plugin
         nextGardenNotice = now.AddSeconds(30);
         var matches = roster.People.SelectMany(p => p.Characters).Where(c => string.Equals(c.Name, Player.CharacterName, StringComparison.OrdinalIgnoreCase) && string.Equals(c.World, WorldName(Player.HomeWorld.RowId), StringComparison.OrdinalIgnoreCase)).Take(2).ToArray();
         if (matches.Length != 1) return;
+        var allPlans=GardenPlanSources();
         foreach (var house in (roster.GardenCare ?? []).Where(g => g.CharacterIds.Contains(matches[0].Id)).GroupBy(g => g.HouseId))
         {
             var alerts = new List<(int Batch, string Kind, DateTimeOffset? DeathAt)>();
             foreach (var batch in house)
             {
+                var source=allPlans.FirstOrDefault(p=>p.HouseId==batch.HouseId&&p.Batch==batch.Batch);
+                var projection=source is null?null:EffectiveGardenPlan(source);
                 var due = new List<(int Bed, string Kind, DateTimeOffset? DeathAt)>();
                 foreach (var bed in batch.Beds)
                 {
                     // Local confirmed care already happened, even if the browser has not saved it yet.
-                    var lastPlant = config.Planting.Where(t => t.Address.HouseId == batch.GameHouseId && t.Patch == batch.Batch && t.Bed == bed.Bed).Select(t => t.ConfirmedAt).DefaultIfEmpty(DateTimeOffset.MinValue).Max();
-                    var lastTend = config.Tending.Where(t => t.Address.HouseId == batch.GameHouseId && t.Patch == batch.Batch && t.Bed == bed.Bed).Select(t => t.ConfirmedAt).DefaultIfEmpty(DateTimeOffset.MinValue).Max();
+                    var lastPlant = config.Planting.Where(t => t.Address.HouseId == batch.GameHouseId && t.Patch == (batch.PhysicalPatch>0?batch.PhysicalPatch:batch.Batch) && t.Bed == bed.Bed).Select(t => t.ConfirmedAt).DefaultIfEmpty(DateTimeOffset.MinValue).Max();
+                    var lastTend = config.Tending.Where(t => t.Address.HouseId == batch.GameHouseId && t.Patch == (batch.PhysicalPatch>0?batch.PhysicalPatch:batch.Batch) && t.Bed == bed.Bed).Select(t => t.ConfirmedAt).DefaultIfEmpty(DateTimeOffset.MinValue).Max();
                     var localCare = lastPlant > lastTend ? lastPlant : lastTend;
-                    var empty = config.Discoveries.Where(e => e.Kind == "garden.empty" && e.Address?.HouseId == batch.GameHouseId && e.Patch == batch.Batch && e.Bed == bed.Bed).Select(e => e.At).DefaultIfEmpty(DateTimeOffset.MinValue).Max();
+                    var empty = config.Discoveries.Where(e => e.Kind == "garden.empty" && e.Address?.HouseId == batch.GameHouseId && e.Patch == (batch.PhysicalPatch>0?batch.PhysicalPatch:batch.Batch) && e.Bed == bed.Bed).Select(e => e.At).DefaultIfEmpty(DateTimeOffset.MinValue).Max();
                     if (empty > (bed.Watered ?? DateTimeOffset.MinValue) && empty >= localCare) continue;
                     var effective = localCare > (bed.Watered ?? DateTimeOffset.MinValue) ? bed with { Watered = localCare, NextTend = localCare.AddHours(12), DeathAt = bed.WiltHours is > 0 ? localCare.AddHours(bed.WiltHours.Value+24) : null } : bed;
-                    if (lastPlant > (bed.Watered ?? DateTimeOffset.MinValue)) effective = effective with { Ready = false, KeepMature = false, HarvestAt = null, DeathAt = null };
+                    var projected=projection?.Beds.FirstOrDefault(b=>b.Bed==bed.Bed);
+                    if(projected is not null)
+                    {
+                        if(projected.ActualCrop=="Empty")continue;
+                        effective=effective with {Ready=projected.Ready,Watered=projected.Watered,NextTend=projected.NextTend,HarvestAt=projected.HarvestAt,WiltHours=projected.WiltHours,
+                            DeathAt=projected.Ready?null:projected.Watered is {} care&&projected.WiltHours is {} wilt?care.AddHours(wilt+24):null};
+                    }
+                    else if (lastPlant > (bed.Watered ?? DateTimeOffset.MinValue)) effective = effective with { Ready = false, KeepMature = false, HarvestAt = null, DeathAt = null };
                     var kind = GardenCareStatus.Due(effective, now); if (kind is null || !GardenMessageEnabled(kind)) continue;
                     var left = effective.DeathAt - now;
                     var urgency = left is null ? "unknown" : left <= TimeSpan.Zero ? "risk" : left <= TimeSpan.FromHours(1) ? "1h" : left <= TimeSpan.FromHours(4) ? "4h" : "normal";

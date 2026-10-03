@@ -5,7 +5,7 @@ public sealed partial class Plugin
     private DateTimeOffset nextAutoRetainerRead;
     private Queue<ulong> autoRetainerCharacters = new();
     private int autoRetainerMatched;
-    private string autoRetainerStatus = "Waiting for AutoRetainer and the paired character list.";
+    private string autoRetainerStatus = "Waiting for submarine data and the paired character list.";
     private void UpdateAutoRetainer(DateTimeOffset now)
     {
         if(!config.SyncAutoRetainer || !config.SyncEnabled || config.SharedRoster is null || now<nextAutoRetainerRead) return;
@@ -17,7 +17,7 @@ public sealed partial class Plugin
                 var ids=Pi.GetIpcSubscriber<List<ulong>>("AutoRetainer.GetRegisteredCIDs").InvokeFunc();
                 autoRetainerCharacters=new(ids.Where(id=>id!=0).Distinct().Take(500));
                 autoRetainerMatched=0;
-                if(autoRetainerCharacters.Count==0){autoRetainerStatus="AutoRetainer has no registered characters.";nextAutoRetainerRead=now.AddMinutes(1);}
+                if(autoRetainerCharacters.Count==0){autoRetainerStatus="No saved submarine characters are available yet.";nextAutoRetainerRead=now.AddMinutes(1);}
                 return;
             }
             var cid=autoRetainerCharacters.Dequeue();
@@ -37,20 +37,18 @@ public sealed partial class Plugin
                     }
                 }
             }
-            autoRetainerStatus=$"AutoRetainer: {autoRetainerMatched} matched character cache(s); {autoRetainerCharacters.Count} remaining.";
-            if(autoRetainerCharacters.Count==0){nextAutoRetainerRead=now.AddMinutes(1);autoRetainerStatus=$"AutoRetainer: {autoRetainerMatched} matched character cache(s). Last scan {now.LocalDateTime:t}.";}
+            autoRetainerStatus=$"Submarine data: {autoRetainerMatched} matched character record(s); {autoRetainerCharacters.Count} remaining.";
+            if(autoRetainerCharacters.Count==0){nextAutoRetainerRead=now.AddMinutes(1);autoRetainerStatus=$"Submarine data: {autoRetainerMatched} matched character record(s). Last scan {now.LocalDateTime:t}.";}
         }
         catch(Exception ex)
         {
             autoRetainerCharacters.Clear();nextAutoRetainerRead=now.AddMinutes(1);
-            autoRetainerStatus="AutoRetainer cache unavailable; enable/update AutoRetainer. Direct workshop tracking still works.";
+            autoRetainerStatus="Background submarine data is unavailable. Open the workshop voyage panel to refresh direct observations.";
             Log.Debug(ex,"Optional AutoRetainer cache read deferred");
         }
     }
-    private void DrawAutoRetainerSubmarines()
+    private List<SharedCachedVoyage> CachedSubmarineRecords()
     {
-        ImGui.Separator();ImGui.TextUnformatted("AutoRetainer cached submarines & supplies");
-        ImGui.TextWrapped(config.SyncAutoRetainer?autoRetainerStatus:"AutoRetainer import is off. Enable it in Settings > Tracking.");
         var roster=config.SharedRoster;
         var chars=roster?.People.SelectMany(p=>p.Characters).ToArray()??[];
         var records=new List<SharedCachedVoyage>(roster?.CachedVoyages??[]);
@@ -62,24 +60,6 @@ public sealed partial class Plugin
             var fc=config.Discoveries.LastOrDefault(e=>e.Character?.FreeCompany?.Id==c.FcId)?.Character?.FreeCompany?.Name??c.FcId;
             records.Add(new(c.Id,c.Name,c.World,fc,e.At,e.CachedVoyage!));
         }
-        foreach(var group in records.Where(r=>chars.Any(c=>c.Id==r.CharacterId&&c.FcMember!=false&&c.FcId==r.Data.FcId)).GroupBy(r=>r.CharacterId))
-        {
-            var r=group.MaxBy(r=>r.ImportedAt)!;var v=r.Data;
-            ImGui.Separator();ImGui.TextUnformatted($"{r.CharacterName}@{r.World} · {r.FcName}");
-            ImGui.TextWrapped($"Carried supplies: {v.Ceruleum?.ToString()??"unknown"} ceruleum tanks · {v.RepairKits?.ToString()??"unknown"} repair kits · {v.Slots?.ToString()??"unknown"} submarine slots");
-            ImGui.TextWrapped($"Cache imported {r.ImportedAt.LocalDateTime:g}; last game observation unknown.");
-            foreach(var s in v.Submarines)
-            {
-                var left=DateTimeOffset.FromUnixTimeSeconds(s.ReturnTime)-DateTimeOffset.UtcNow;
-                var timer=s.ReturnTime==0?"No voyage recorded":left<=TimeSpan.Zero?"Return due — confirm in game":$"Returns in {(int)left.TotalHours}h {left.Minutes}m";
-                ImGui.TextUnformatted($"{s.Name} · {(s.Rank>0?$"rank {s.Rank}":"rank unknown")} · {timer}");
-                if(ImGui.IsItemHovered())
-                {
-                    ImGui.BeginTooltip();ImGui.TextUnformatted($"EXP {s.CurrentExp:N0} / {s.NextLevelExp:N0}");
-                    foreach(var p in s.PartItems.Select((id,i)=>s.PartNames[i].Length>0?s.PartNames[i]:id>0?$"Item #{id}":"Unknown component"))ImGui.TextUnformatted(p);
-                    ImGui.TextUnformatted("Route sector IDs: "+string.Join(", ",s.Route.Where(id=>id>0)));ImGui.EndTooltip();
-                }
-            }
-        }
+        return records.Where(r=>chars.Any(c=>c.Id==r.CharacterId&&c.FcMember!=false&&c.FcId==r.Data.FcId)).GroupBy(r=>r.CharacterId).Select(g=>g.MaxBy(r=>r.ImportedAt)!).ToList();
     }
 }

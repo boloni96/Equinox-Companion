@@ -1,0 +1,27 @@
+name: Publish verified prepared package
+on:
+  push:
+    branches: [main]
+    paths: ['.release-staging/manifest.json']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: equinox-companion-release
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - name: Verify package and prepare feeds
+        run: python3 scripts/publish_prepared.py
+      - name: Publish package and feeds atomically
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add dist repo.json test-repo.json testrepo.json .release-staging
+          git commit -m 'Publish verified Companion package and installer feeds'
+          git push origin HEAD:main

@@ -28,7 +28,6 @@ public sealed partial class Plugin
             ImGui.EndTabItem();
         }
         if (ImGui.BeginTabItem("Chat messages")) { DrawChatMessageSettings(); ImGui.EndTabItem(); }
-        if (ImGui.BeginTabItem("Floating icons")) { DrawFloatingLauncherSettings(); ImGui.EndTabItem(); }
         if (ImGui.BeginTabItem("Keybinds")) { DrawShortcutSettings(); ImGui.EndTabItem(); }
         if (ImGui.BeginTabItem("Characters"))
         {
@@ -84,7 +83,7 @@ public sealed partial class Plugin
         MessageToggle("Private / FC houses and paired estate placards",config.SyncHouseDetails,v=>config.SyncHouseDetails=v);
         MessageToggle("Collection unlocks and reward items",config.SyncCollections,v=>config.SyncCollections=v);
         MessageToggle("Fashion Report and submarine observations",config.SyncActivities,v=>config.SyncActivities=v);
-        MessageToggle("Import AutoRetainer submarine cache and carried supplies",config.SyncAutoRetainer,v=>config.SyncAutoRetainer=v);
+        MessageToggle("Import background submarine data and carried supplies",config.SyncAutoRetainer,v=>config.SyncAutoRetainer=v);
         ImGui.TextWrapped(autoRetainerStatus);
         MessageToggle("Garden planting and tending",config.TrackGardens,v=>{
             config.TrackGardens=v;

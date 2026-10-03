@@ -16,6 +16,23 @@ public sealed class FloatingLauncherOptions
 public sealed partial class Plugin
 {
     private string? draggedLauncher;
+    private readonly HashSet<string> minimizedLaunchers = [];
+    private string? pendingLauncher;
+    private double launcherClickAt;
+    private void MinimizeLauncher(string name)
+    {
+        minimizedLaunchers.Add(name);
+        if(name == "Companion") { mainWindow.IsOpen=false; visible=false; }
+        else if(name == "Fashion Report") fashionWindow.IsOpen=false;
+        else plantingWindow.IsOpen=false;
+    }
+    private void LauncherClick(string name)
+    {
+        var now=ImGui.GetTime();
+        if(pendingLauncher==name && now-launcherClickAt<=ImGui.GetIO().MouseDoubleClickTime)
+        { pendingLauncher=null; minimizedLaunchers.Remove(name); if(name=="Planting") StopGardenSession(); }
+        else { pendingLauncher=name; launcherClickAt=now; }
+    }
     private FloatingLauncherOptions LauncherOptions(string name, int index)
     {
         if (!config.FloatingLaunchers.TryGetValue(name, out var options))
@@ -24,14 +41,28 @@ public sealed partial class Plugin
     }
     private void DrawFloatingLaunchers()
     {
-        DrawLauncher("Companion", 0, "icon.png", Open);
-        DrawLauncher("Fashion Report", 1, null, () => fashionWindow.OpenReport());
-        DrawLauncher("Planting", 2, "garden-art/assets/icons/seedling.png", () => OnPlantingCommand("/planting", ""));
+        if(mainWindow.IsOpen) minimizedLaunchers.Remove("Companion");
+        if(fashionWindow.IsOpen) minimizedLaunchers.Remove("Fashion Report");
+        if(plantingWindow.IsOpen) minimizedLaunchers.Remove("Planting");
+        DrawLauncher("Companion", 0, "icon.png");
+        DrawLauncher("Fashion Report", 1, null);
+        DrawLauncher("Planting", 2, "garden-art/assets/icons/seedling.png");
+        if(pendingLauncher is {} pending && ImGui.GetTime()-launcherClickAt>ImGui.GetIO().MouseDoubleClickTime && !ImGui.IsMouseDown(ImGuiMouseButton.Left))
+        {
+            pendingLauncher=null;
+            if(minimizedLaunchers.Contains(pending))
+            {
+                if(pending=="Companion") Open();
+                else if(pending=="Fashion Report") fashionWindow.OpenReport();
+                else OnPlantingCommand("/planting", "");
+                if(pending!="Planting" || plantingWindow.IsOpen) minimizedLaunchers.Remove(pending);
+            }
+        }
     }
-    private void DrawLauncher(string name, int index, string? artwork, Action open)
+    private void DrawLauncher(string name, int index, string? artwork)
     {
         var o = LauncherOptions(name, index);
-        if (!o.Enabled) return;
+        if (!minimizedLaunchers.Contains(name)) return;
         var display = ImGui.GetIO().DisplaySize;
         o.X = Math.Clamp(o.X, 0, Math.Max(0, display.X - 68));
         o.Y = Math.Clamp(o.Y, 0, Math.Max(0, display.Y - 68));
@@ -63,6 +94,8 @@ public sealed partial class Plugin
             ImGui.SetCursorPos(new(0, 20));
             ImGui.InvisibleButton("Open", new(64, 44));
             var hovered = ImGui.IsItemHovered();
+            if(hovered && pendingLauncher==name && ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left))
+            { pendingLauncher=null; minimizedLaunchers.Remove(name); if(name=="Planting")StopGardenSession(); }
             if (ImGui.IsItemActive() && ImGui.IsMouseDragging(ImGuiMouseButton.Left))
             {
                 draggedLauncher = name;
@@ -71,13 +104,15 @@ public sealed partial class Plugin
             if (ImGui.IsItemDeactivated())
             {
                 if (draggedLauncher == name) { draggedLauncher = null; Pi.SavePluginConfig(config); }
-                else if (hovered) open();
+                else if (hovered && minimizedLaunchers.Contains(name)) LauncherClick(name);
             }
             ImGui.SetCursorPos(Vector2.Zero);
-            if (ImGui.InvisibleButton("Open top", new(48, 20))) open();
+            if (ImGui.InvisibleButton("Open top", new(48, 20))) LauncherClick(name);
             ImGui.SetCursorPos(new(48, 0));
+            ImGui.PushStyleVar(ImGuiStyleVar.Alpha,ImGui.GetStyle().Alpha*.75f);
             if (ImGui.SmallButton("...")) ImGui.OpenPopup("Icon settings");
-            if (hovered) ImGui.SetTooltip(name + " · Click to open · Drag to move");
+            ImGui.PopStyleVar();
+            if (hovered) ImGui.SetTooltip(name + " · Click to open · Double-click to close · Drag to move");
             if (ImGui.BeginPopup("Icon settings")) { DrawLauncherOptions(name, o); ImGui.EndPopup(); }
         }
         ImGui.End(); ImGui.PopStyleVar();
@@ -85,17 +120,16 @@ public sealed partial class Plugin
     private void DrawLauncherOptions(string name, FloatingLauncherOptions o)
     {
         ImGui.TextUnformatted(name);
-        var enabled = o.Enabled; var opacity = o.Opacity; var blur = o.Blur; var locked = o.Locked;
-        var changed = ImGui.Checkbox("Show floating icon", ref enabled);
-        changed |= ImGui.SliderFloat("Opacity", ref opacity, .2f, 1, "%.2f");
+        var opacity = o.Opacity; var blur = o.Blur; var locked = o.Locked;
+        var changed = ImGui.SliderFloat("Opacity", ref opacity, .2f, 1, "%.2f");
         changed |= ImGui.Checkbox("Blur background", ref blur);
         changed |= ImGui.Checkbox("Lock position", ref locked);
         if (ImGui.Button("Reset position")) { o.X = 24; o.Y = 180 + (name == "Companion" ? 0 : name == "Fashion Report" ? 76 : 152); changed = true; }
-        if (changed) { o.Enabled = enabled; o.Opacity = opacity; o.Blur = blur; o.Locked = locked; Pi.SavePluginConfig(config); }
+        if (changed) { o.Opacity = opacity; o.Blur = blur; o.Locked = locked; Pi.SavePluginConfig(config); }
     }
     private void DrawFloatingLauncherSettings()
     {
-        ImGui.TextWrapped("Floating icons remain available when their windows are closed or minimized. Drag an icon to move it; its small button opens appearance settings.");
+        ImGui.TextWrapped("Minimize shows an icon. Single-click reopens its window; double-click closes both. X or Esc closes without an icon. Commands and keybinds reopen windows. Drag icons to move them.");
         var names = new[] { "Companion", "Fashion Report", "Planting" };
         for (var i = 0; i < names.Length; i++) { ImGui.PushID(i); DrawLauncherOptions(names[i], LauncherOptions(names[i], i)); ImGui.Separator(); ImGui.PopID(); }
     }

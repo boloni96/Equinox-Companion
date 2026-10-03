@@ -102,28 +102,4 @@ public sealed partial class Plugin
         if (subs.Count > 0) KeepDiscovery(new(Guid.NewGuid().ToString("N"), "submarines.observed", now, actor, null, Voyage: new(fc.Id,subs.ToArray())));
     }
 
-    private void DrawSubmarines()
-    {
-        ImGui.TextWrapped("Open the FC workshop voyage panel to refresh timers. Paired observations are shared automatically.");
-        var observations = new List<SharedVoyage>(config.SharedRoster?.Voyages ?? []);
-        foreach (var e in config.Discoveries.Where(x => x.Voyage is not null))
-        {
-            var fc = config.Discoveries.LastOrDefault(x => x.Character?.FreeCompany?.Id == e.Voyage!.FcId)?.Character?.FreeCompany;
-            observations.Add(new(e.Voyage!.FcId, fc?.Name ?? "Free Company", e.At, e.Voyage.Submarines));
-        }
-        foreach (var group in observations.GroupBy(x => x.FcId))
-        {
-            var latest = group.MaxBy(x => x.At)!;
-            ImGui.Separator();
-            ImGui.TextUnformatted($"{latest.FcName} · observed {latest.At.LocalDateTime:g}");
-            foreach (var s in latest.Submarines)
-            {
-                var remaining = DateTimeOffset.FromUnixTimeSeconds(s.ReturnTime) - DateTimeOffset.UtcNow;
-                var label = s.ReturnTime == 0 ? "No voyage recorded" : remaining <= TimeSpan.Zero ? "Return due — confirm in workshop" : $"Returns in {(int)remaining.TotalHours}h {remaining.Minutes}m";
-                ImGui.TextUnformatted($"{s.Name} · rank {s.Rank} · {label}");
-            }
-        }
-        if (observations.Count == 0) ImGui.TextWrapped("No submarines observed yet.");
-        DrawAutoRetainerSubmarines();
-    }
 }

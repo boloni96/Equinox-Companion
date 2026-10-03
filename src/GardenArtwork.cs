@@ -37,7 +37,7 @@ public sealed partial class Plugin
         var planned=planVisible&&b.Crop.Length>0;var crop=planned?b.Crop:b.ActualCrop;
         var ready=!planned&&b.Ready;var wet=(!planned||b.Status is "confirmed" or "starter")&&!b.Ready&&b.Watered is {} w&&w<=now&&now-w<TimeSpan.FromHours(12);
         var death=b.Watered is {} care&&b.WiltHours is {} wilt?care.AddHours(wilt+24):(DateTimeOffset?)null;
-        var dead=!ready&&!planned&&death<=now&&!(b.HarvestAt<=now);
+        var dead=!ready&&!planned&&GardenTiming.DeathRisk(b.Ready,death,b.HarvestAt,now);
         GardenImage("assets/beds/soil-"+(dead?"dead":wet?"wet":"normal")+".png",at,new(size));
         if(gardenPictures!.TryGetValue(crop,out var picture)){
             GardenImage(picture.GetProperty(ready?"plantMature":dead?"plantDead":"plantGrowing").GetString()!,at,new(size));
@@ -47,6 +47,7 @@ public sealed partial class Plugin
         GardenImage("assets/beds/frame-wood.png",at,new(size));
         var border=planned?b.Status switch {"confirmed"=>"ready","starter"=>"starter","replant"=>"replant","different"=>"different",_=>"planned"}:ready?"ready":dead?"dead-estimated":wet?"wet":b.NextTend<=now?"due":"unknown";
         GardenImage("assets/borders/"+border+".png",at,new(size));
+        if(planned&&b.Status=="different") ImGui.GetWindowDrawList().AddRect(at+new Vector2(2),at+new Vector2(size-2),0xff5555ff,2,ImDrawFlags.None,3);
     }
     private IEnumerable<SyncEvent> LocalGardenActions()=>config.Planting.Select(p=>new SyncEvent(p.EventId,"garden.planted",p.ConfirmedAt,WithWorldNames(p.Actor),WithAddressNames(p.Address),p.Patch,p.Bed,p.Plant))
         .Concat(config.Tending.Select(t=>new SyncEvent(t.EventId,"garden.tended",t.ConfirmedAt,WithWorldNames(t.Actor),WithAddressNames(t.Address),t.Patch,t.Bed)))

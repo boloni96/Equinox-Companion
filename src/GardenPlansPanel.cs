@@ -12,9 +12,9 @@ public sealed partial class Plugin
         {
             this.plugin=plugin;Size=new Vector2(560,680);SizeCondition=ImGuiCond.FirstUseEver;
             SizeConstraints=new WindowSizeConstraints{MinimumSize=new Vector2(360,360),MaximumSize=new Vector2(float.MaxValue)};
-            AllowPinning=true;AllowBackgroundBlur=true;
+            AllowPinning=true;RespectCloseHotkey=true;AllowBackgroundBlur=true;
         }
-        public override void Draw() { if (ImGui.SmallButton("Minimize to icon")) IsOpen = false; plugin.DrawGardenPlans(); }
+        public override void Draw() { if (ImGui.SmallButton("Minimize to icon")) plugin.MinimizeLauncher("Planting"); plugin.DrawGardenPlans(); }
     }
     private string? plantingHouseId;
     private int plantingBatch=1;
@@ -57,8 +57,11 @@ public sealed partial class Plugin
         var complete=plan.CompletedAt is not null||planned.Length>0&&planned.All(b=>b.Status=="confirmed");var showPlan=planned.Length>0&&!complete;
         ImGui.TextWrapped($"{plan.HouseName} · {plan.World} · {plan.District} W{plan.Ward} P{plan.Plot}");
         if(ImGui.SmallButton("Refresh / retry garden sync")){nextRosterRead=default;if(syncFailures==0)nextSync=default;}
-        ImGui.TextDisabled("Live plan check every 2s while open · Tend Suggested Every 12h");
+        ImGui.PushStyleColor(ImGuiCol.Text, ImGui.GetStyle().Colors[(int)ImGuiCol.TextDisabled]);
+        ImGui.TextWrapped("Live plan check every 2s while open · Tend Suggested Every 12h");
+        ImGui.PopStyleColor();
         ImGui.TextWrapped(rosterStatus+" "+syncStatus);
+        if(gardenMarkerStatus.Length>0){if(gardenMarkerError)ImGui.PushStyleColor(ImGuiCol.Text,new Vector4(1,.3f,.3f,1));ImGui.TextWrapped(gardenMarkerStatus);if(gardenMarkerError)ImGui.PopStyleColor();}
         var next=planned.Where(b=>b.Status!="confirmed").OrderBy(b=>b.Status=="replant"?b.ReplantOrder:b.Status=="starter"?int.MaxValue:b.Order).FirstOrDefault();
         if(showPlan&&next is not null)ImGui.TextWrapped(next.Status=="replant"?$"Next: Step {next.ReplantOrder} · Bed {next.Bed}. Remove only the temporary starter; replant {next.Crop} with {next.Soil}.":next.Status=="starter"?"Starter planted. Finish the other required beds before replanting it.":$"Next: Step {next.Order} · Bed {next.Bed}: {next.Crop} · {(next.ReplantOrder>0?next.StarterSoil:next.Soil)}");
         else ImGui.TextWrapped(complete?"Planting complete · showing the actual synced garden":"Choose Start garden on the website to save a planting plan.");
@@ -70,13 +73,27 @@ public sealed partial class Plugin
         for(var i=0;i<9;i++)
         {
             var at=origin+new Vector2(margin+i%3*stride,margin+i/3*stride);var n=layout[i];
-            if(n==0){GardenImage("assets/centers/stone-emblem.png",at,new(tile));ImGui.SetCursorScreenPos(at+new Vector2(6,tile*.45f));ImGui.TextUnformatted($"Batch {plan.Batch}");ImGui.SetCursorScreenPos(at+new Vector2(6,tile*.65f));ImGui.TextUnformatted(complete?"Complete":showPlan?"Garden plan":"Garden");continue;}
+            if(n==0)
+            {
+                GardenImage("assets/centers/stone-emblem.png",at,new(tile));
+                var centerLabel=complete?"Complete":showPlan?"Plan":"Garden";
+                var labelSize=ImGui.CalcTextSize(centerLabel);
+                var labelAt=at+new Vector2((tile-labelSize.X)/2,tile-labelSize.Y-8);
+                var centerDraw=ImGui.GetWindowDrawList();
+                centerDraw.PushClipRect(at,at+new Vector2(tile),true);
+                centerDraw.AddRectFilled(labelAt-new Vector2(4,2),labelAt+labelSize+new Vector2(4,2),0xdd201710,3);
+                centerDraw.AddText(labelAt,0xffffffff,centerLabel);
+                centerDraw.PopClipRect();
+                ImGui.SetCursorScreenPos(at);ImGui.InvisibleButton("garden-center",new Vector2(tile));
+                if(ImGui.IsItemHovered())ImGui.SetTooltip($"Batch {plan.Batch} · {(complete?"Planting complete":showPlan?"Automatic planting guide":"Actual garden")}");
+                continue;
+            }
             var b=plan.Beds.First(x=>x.Bed==n);DrawGardenTile(b,showPlan,at,tile);
             ImGui.SetCursorScreenPos(at);ImGui.InvisibleButton("garden-bed-"+n,new Vector2(tile));var hover=ImGui.IsItemHovered();
             var draw=ImGui.GetWindowDrawList();draw.AddRectFilled(at+new Vector2(3,3),at+new Vector2(tile-3,23),0xdd201710);draw.AddText(at+new Vector2(5,4),0xffffffff,$"Bed {n}"+(showPlan&&b.Order>0?$" · {b.Order}"+(b.ReplantOrder>0?"+"+b.ReplantOrder:""):""));
             var label=showPlan&&b.Crop.Length>0?b.Crop:b.ActualCrop;var max=Math.Max(8,(int)(tile/7));if(label.Length>max)label=label[..(max-1)]+"…";
             draw.AddRectFilled(at+new Vector2(3,tile-23),at+new Vector2(tile-3,tile-3),0xdd201710);draw.AddText(at+new Vector2(5,tile-22),0xffffffff,label);
-            if(hover){ImGui.BeginTooltip();ImGui.PushTextWrapPos(ImGui.GetFontSize()*28);ImGui.TextWrapped($"Bed {n} · Actual: {b.ActualCrop} · {b.ActualSoil}");if(b.Crop.Length>0)ImGui.TextWrapped($"Plan: {b.Crop} · {b.Soil} · {b.Status}");if(b.ReplantOrder>0)ImGui.TextWrapped($"Step {b.Order}: {b.StarterSoil}. Step {b.ReplantOrder}: remove only starter, then replant with {b.Soil}.");if(b.Planted is {} planted)ImGui.TextWrapped($"Planted: {planted.ToLocalTime():g}");if(b.Watered is {} watered)ImGui.TextWrapped($"Latest care: {watered.ToLocalTime():g}");ImGui.TextWrapped("Tended by: "+(b.TendedBy.Length>0?b.TendedBy:"Gardener not recorded"));if(!b.Ready&&b.Watered is {} dw&&b.WiltHours is {} wh&&dw.AddHours(wh+24)<=DateTimeOffset.UtcNow&&!(b.HarvestAt<=DateTimeOffset.UtcNow))ImGui.TextWrapped("Dead (estimated) — check in game before removing.");if(b.Ready)ImGui.TextUnformatted("Confirmed ready to harvest");else{if(b.NextTend is {} tend)ImGui.TextWrapped($"Tending suggested: {tend.ToLocalTime():g}");if(b.HarvestAt is {} harvest)ImGui.TextWrapped($"Maturity estimate: {harvest.ToLocalTime():g}");}ImGui.TextWrapped("Green confirms planting, not guaranteed crossbred seeds. Unsynced confirmed actions appear locally first.");ImGui.PopTextWrapPos();ImGui.EndTooltip();}
+            if(hover){ImGui.BeginTooltip();ImGui.PushTextWrapPos(ImGui.GetFontSize()*28);ImGui.TextWrapped($"Bed {n} · Actual: {b.ActualCrop} · {b.ActualSoil}");if(b.Crop.Length>0)ImGui.TextWrapped($"Plan: {b.Crop} · {b.Soil} · {b.Status}");if(b.ReplantOrder>0)ImGui.TextWrapped($"Step {b.Order}: {b.StarterSoil}. Step {b.ReplantOrder}: remove only starter, then replant with {b.Soil}.");if(b.Planted is {} planted)ImGui.TextWrapped($"Planted: {planted.ToLocalTime():g}");if(b.Watered is {} watered)ImGui.TextWrapped($"Latest care: {watered.ToLocalTime():g}");ImGui.TextWrapped("Tended by: "+(b.TendedBy.Length>0?b.TendedBy:"Gardener not recorded"));if(b.Watered is {} dw&&b.WiltHours is {} wh&&GardenTiming.DeathRisk(b.Ready,dw.AddHours(wh+24),b.HarvestAt,DateTimeOffset.UtcNow))ImGui.TextWrapped("Dead (estimated) — check in game before removing.");if(b.Ready)ImGui.TextUnformatted("Confirmed ready to harvest");else{if(b.NextTend is {} tend)ImGui.TextWrapped($"Tending suggested: {tend.ToLocalTime():g}");if(b.HarvestAt is {} harvest)ImGui.TextWrapped($"Maturity estimate: {harvest.ToLocalTime():g}");}ImGui.TextWrapped("Green confirms planting, not guaranteed crossbred seeds. Unsynced confirmed actions appear locally first.");ImGui.PopTextWrapPos();ImGui.EndTooltip();}
         }
         ImGui.SetCursorScreenPos(origin+new Vector2(0,board));ImGui.Dummy(new Vector2(board,4));
         if(ImGui.CollapsingHeader("Tips, supplies and harvest potential")){

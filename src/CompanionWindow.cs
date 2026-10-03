@@ -17,10 +17,10 @@ public sealed partial class Plugin
             Size = new Vector2(660, 480);
             SizeCondition = ImGuiCond.FirstUseEver;
             SizeConstraints = new WindowSizeConstraints { MinimumSize = new Vector2(500, 360), MaximumSize = new Vector2(float.MaxValue) };
-            AllowPinning = true;
+            AllowPinning = true; RespectCloseHotkey = true;
             AllowClickthrough = true;
             AllowBackgroundBlur = true;
         }
-        public override void Draw() { if (ImGui.SmallButton("Minimize to icon")) IsOpen = false; plugin.DrawContents(); }
+        public override void Draw() { if (ImGui.SmallButton("Minimize to icon")) plugin.MinimizeLauncher("Companion"); plugin.DrawContents(); }
     }
 }

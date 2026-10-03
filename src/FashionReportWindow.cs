@@ -26,6 +26,7 @@ public sealed partial class Plugin
         private Vector2 pan;
         private bool dragged;
         private bool picturePressed;
+        public Action? Minimize { get; set; }
         private readonly Action openBrowser;
         public FashionReportWindow(Action openBrowser) : base("Fashion Report###EquinoxFashion", ImGuiWindowFlags.NoCollapse)
         {
@@ -33,7 +34,7 @@ public sealed partial class Plugin
             Size = new Vector2(720, 490);
             SizeCondition = ImGuiCond.FirstUseEver;
             SizeConstraints = new WindowSizeConstraints { MinimumSize = new Vector2(360, 260), MaximumSize = new Vector2(float.MaxValue) };
-            AllowPinning = true;
+            AllowPinning = true; RespectCloseHotkey = true;
             AllowBackgroundBlur = true;
         }
         public void OpenReport()
@@ -85,7 +86,7 @@ public sealed partial class Plugin
         }
         public override void Draw()
         {
-            if (ImGui.SmallButton("Minimize to icon")) IsOpen = false;
+            if (ImGui.SmallButton("Minimize to icon")) Minimize?.Invoke();
             if (resize)
             {
                 var display = ImGui.GetIO().DisplaySize;
