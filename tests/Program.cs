@@ -1073,3 +1073,15 @@ singleLogin.Login();singleLogin.ObserveCharacter(123);
 Check("relogin gets one new summary",singleLogin.TrySummary().ToString(),"True");
 singleLogin.ObserveCharacter(456);
 Check("switch character gets one new summary",singleLogin.TrySummary().ToString(),"True");
+
+var registrationRoster=new SharedRoster(1,time,[new("her","Goddess",[new("c1","Known","Rafflesia","Dynamis","North America","Main",[],AccountId:"main",GameAccountKey:new string('a',64),ContentId:"100")],[new("main","Main"),new("alt","Alt")]),new("him","Sir Haven",[new("c2","His","Sophia","Materia","Oceania","Main",[],AccountId:"his",GameAccountKey:new string('b',64))])]);
+Check("registration identifies account across character switch",CharacterRegistrationPolicy.Destination(registrationRoster,new string('a',64))?.ToString(),("her","main").ToString());
+Check("registration identifies other Person",CharacterRegistrationPolicy.Destination(registrationRoster,new string('b',64))?.ToString(),("him","his").ToString());
+Check("registration missing identity asks in game",CharacterRegistrationPolicy.Destination(registrationRoster,"")?.ToString(),null);
+Check("registration ambiguous account never guessed",CharacterRegistrationPolicy.Destination(registrationRoster with {People=[..registrationRoster.People,new("third","Third",[new("c3","Third","Rafflesia","Dynamis","North America","Other",[],AccountId:"other",GameAccountKey:new string('a',64))])]},new string('a',64))?.ToString(),null);
+Check("registration stable content identity survives rename",CharacterRegistrationPolicy.Find(registrationRoster,new("100","Renamed",410,410,"Rafflesia"))?.Id,"c1");
+Check("registration same name different home world is new",CharacterRegistrationPolicy.Find(registrationRoster,new("101","Known",410,410,"Sophia"))?.Id,null);
+Check("registration valid empty-account destination",CharacterRegistrationPolicy.Valid(new("her","alt")).ToString(),"True");
+Check("registration rejects control names",CharacterRegistrationPolicy.Valid(new("her","alt",PersonName:"bad\nname")).ToString(),"False");
+Check("registration held for older website",SyncValidation.SupportedByWebsite("character.registered",13).ToString(),"False");
+Check("registration sends with new website",SyncValidation.SupportedByWebsite("character.registered",14).ToString(),"True");

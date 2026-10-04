@@ -15,6 +15,7 @@ public sealed partial class Plugin
             if (rosterTaskKey == config.PairingKey && rosterTask.IsCompletedSuccessfully)
             {
                 var r = rosterTask.Result; rosterStatus = r.Status;
+                if(r.Roster is not null||r.NotModified)registrationFreshKey=rosterTaskKey;
                 if (r.Roster is null && !r.NotModified) { errorJournal.Record("shared-roster", r.Status); nextRosterRead=now.AddSeconds(30); }
                 if (r.Roster is not null) { if((config.SharedRoster?.ProtocolVersion??0)<13&&r.Roster.ProtocolVersion>=13){autoRetainerForceRead=true;autoRetainerCharacters.Clear();nextAutoRetainerRead=default;} config.SharedRoster = r.Roster; Pi.SavePluginConfig(config); }
                 if (r.Unauthorized) { config.SharedRoster = null; Pi.SavePluginConfig(config); }
@@ -22,7 +23,7 @@ public sealed partial class Plugin
             if (rosterTask.IsFaulted) errorJournal.Record("shared-roster", "Shared roster task failed.", exceptionType: rosterTask.Exception?.GetBaseException().GetType().Name);
             rosterTask = null;
         }
-        if ((!visible && !FastGardenSync && !config.RefreshSharedInBackground) || !config.SyncEnabled || config.PairingKey.Length != 64 || rosterTask is not null || now < nextRosterRead) return;
+        if ((!visible && !FastGardenSync && !config.RefreshSharedInBackground && !RegistrationNeedsRoster) || !config.SyncEnabled || config.PairingKey.Length != 64 || rosterTask is not null || now < nextRosterRead) return;
         nextRosterRead = now.AddSeconds(FastGardenSync ? 2 : 15);
         rosterTaskKey = config.PairingKey;
         rosterTask = sync.ReadRoster(rosterTaskKey, config.SharedRoster?.Revision);

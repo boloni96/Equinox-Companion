@@ -11,7 +11,7 @@ public static class SyncValidation
         !string.IsNullOrWhiteSpace(e.Actor?.ContentId) && records.Any(newer =>
             newer.Kind == "character.updated" && newer.Actor?.ContentId == e.Actor.ContentId &&
             newer.At > e.At && CanSend(newer, now));
-    public static bool SupportedByWebsite(string kind, int version) => kind == "submarines.supplies" ? version >= 13 : kind == "garden.plan" ? version >= 12 : kind is "garden.status" or "garden.status.unmapped" ? version >= 11 : kind is "garden.empty.unmapped" or "garden.mapped" ? version >= 10 : kind == "garden.dead" ? version >= 9 : kind == "submarines.cached" ? version >= 7 : kind == "garden.fertilized" ? version >= 6 : kind == "company.observed" ? version >= 4 : kind == "storage.observed" ? version >= 3 : version >= 2 ||
+    public static bool SupportedByWebsite(string kind, int version) => kind == "character.registered" ? version >= 14 : kind == "submarines.supplies" ? version >= 13 : kind == "garden.plan" ? version >= 12 : kind is "garden.status" or "garden.status.unmapped" ? version >= 11 : kind is "garden.empty.unmapped" or "garden.mapped" ? version >= 10 : kind == "garden.dead" ? version >= 9 : kind == "submarines.cached" ? version >= 7 : kind == "garden.fertilized" ? version >= 6 : kind == "company.observed" ? version >= 4 : kind == "storage.observed" ? version >= 3 : version >= 2 ||
         kind is "house.entered" or "garden.tended" or "garden.ready" or "garden.observed" or "garden.planted" or "house.discovered" or "character.updated";
     private static bool Text(string? s) => !string.IsNullOrWhiteSpace(s) && s.Length <= 100;
     public static bool ActorReady(Actor? a) => a is not null &&
@@ -49,6 +49,7 @@ public static class SyncValidation
         if (e.Kind == "submarines.cached") return e.Address is null && AutoRetainerCache.Valid(e.CachedVoyage,now);
         if (e.Kind == "company.observed") return e.Address is null && CompanyReady(e.Company);
         if (e.Kind == "character.updated") return CharacterReady(e.Character);
+        if (e.Kind == "character.registered") return e.Address is null && CharacterReady(e.Character) && CharacterRegistrationPolicy.Valid(e.Registration) && !string.IsNullOrWhiteSpace(e.Actor.HomeWorldName);
         if (e.Kind == "storage.observed") return e.Storage is {} storage && Regex.IsMatch(storage.Key ?? "", @"^(bag:\d{1,5}|armoire|dresser|(?:retainer|fc):[1-9]\d{0,19}:\d{1,5})$") && Text(storage.Name) && storage.Items is { Length: <= 8000 } && storage.Items.All(i=>i is >0 and <1000000);
         if (e.Kind == "collection.observed") return e.Collection is { } collection &&
             new[] { "mount", "minion", "orchestrion", "emote", "barding", "card", "ornament", "framerkit", "quest", "hairstyle" }.Contains(collection.Category) &&

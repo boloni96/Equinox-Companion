@@ -4,7 +4,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 namespace EquinoxCompanion;
 
-public sealed record SyncEvent(string Id, string Kind, DateTimeOffset At, Actor Actor, Address? Address, int? Patch = null, int? Bed = null, PlantDetails? Plant = null, HouseDetails? House = null, CharacterDetails? Character = null, CropDetails? Crop = null, CollectionDetails? Collection = null, FashionDetails? Fashion = null, VoyageDetails? Voyage = null, GardenTargetDetails? GardenTarget = null, StorageDetails? Storage = null, FreeCompanyDetails? Company = null, CachedVoyage? CachedVoyage = null, GardenPlanChange? PlanEdit = null, SubmarineSupplies? Supplies = null);
+public sealed record SyncEvent(string Id, string Kind, DateTimeOffset At, Actor Actor, Address? Address, int? Patch = null, int? Bed = null, PlantDetails? Plant = null, HouseDetails? House = null, CharacterDetails? Character = null, CropDetails? Crop = null, CollectionDetails? Collection = null, FashionDetails? Fashion = null, VoyageDetails? Voyage = null, GardenTargetDetails? GardenTarget = null, StorageDetails? Storage = null, FreeCompanyDetails? Company = null, CachedVoyage? CachedVoyage = null, GardenPlanChange? PlanEdit = null, SubmarineSupplies? Supplies = null, CharacterRegistration? Registration = null);
 public sealed record GardenTargetDetails(uint Argument, float X, float Y, float Z);
 public sealed record StorageDetails(string Key, string Name, uint[] Items);
 public sealed record CollectionDetails(string Category, uint[] Known, uint[] Unlocked, uint[] Obtained);
@@ -60,7 +60,7 @@ public sealed class CompanionSync : IDisposable
             if (!response.IsSuccessStatusCode) return new(null, $"Shared profiles unavailable (HTTP {(int)response.StatusCode}); showing saved copy.");
             await response.Content.LoadIntoBufferAsync(1000000);
             var roster = JsonSerializer.Deserialize<SharedRoster>(await response.Content.ReadAsStringAsync(cancel.Token), Json);
-            if (roster is null || roster.People is null || roster.People.Length > 100 || roster.People.Any(p => p is null || p.Characters is null || p.Characters.Any(c => c is null || c.Houses is null)))
+            if (roster is null || roster.People is null || roster.People.Length > 100 || roster.People.Any(p => p is null || p.Characters is null || p.Accounts is {Length:>100} || p.Accounts?.Any(a=>a is null||string.IsNullOrWhiteSpace(a.Id)||string.IsNullOrWhiteSpace(a.Name))==true || p.Characters.Any(c => c is null || c.Houses is null)))
                 return new(null, "Invalid shared profile response; showing saved copy.");
             if (roster.CachedVoyages is { Length: > 500 } || roster.CachedVoyages?.Any(v=>v is null || v.CharacterId is null || v.CharacterName is null || v.World is null || v.FcName is null || v.ImportedAt.Year<2020 || v.ImportedAt>DateTimeOffset.UtcNow.AddMinutes(5) || !AutoRetainerCache.Valid(v.Data,DateTimeOffset.UtcNow)) == true)
                 return new(null,"Invalid AutoRetainer cache response; showing saved copy.");

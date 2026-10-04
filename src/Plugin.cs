@@ -131,9 +131,9 @@ public sealed partial class Plugin : IDalamudPlugin
             .Select(h => new SyncEvent(h.EventId, h.Kind, h.ObservedAt, WithWorldNames(h.Actor), WithAddressNames(h.Address)))
             .Concat(config.Tending.Where(t => !sent.Contains(t.EventId)).Select(t => new SyncEvent(t.EventId, "garden.tended", t.ConfirmedAt, WithWorldNames(t.Actor), WithAddressNames(t.Address), t.Patch, t.Bed)))
             .Concat(config.Planting.Where(t => !sent.Contains(t.EventId)).Select(t => new SyncEvent(t.EventId, "garden.planted", t.ConfirmedAt, WithWorldNames(t.Actor), WithAddressNames(t.Address), t.Patch, t.Bed, t.Plant)))
-            .Concat(config.Discoveries.Where(e => !sent.Contains(e.Id) && (e.Kind is "garden.ready" or "garden.observed" or "garden.unmapped" or "garden.empty.unmapped" or "garden.status" or "garden.status.unmapped" or "garden.mapped" or "garden.empty" or "garden.dead" or "garden.fertilized" ? config.TrackGardens : e.Kind == "character.updated" ? config.SyncCharacterDetails : e.Kind is "collection.observed" or "storage.observed" ? config.SyncCollections : e.Kind == "submarines.cached" ? config.SyncAutoRetainer : e.Kind is "fashion.observed" or "submarines.observed" or "submarines.supplies" ? config.SyncActivities : config.SyncHouseDetails)))
+            .Concat(config.Discoveries.Where(e => !sent.Contains(e.Id) && (e.Kind is "garden.ready" or "garden.observed" or "garden.unmapped" or "garden.empty.unmapped" or "garden.status" or "garden.status.unmapped" or "garden.mapped" or "garden.empty" or "garden.dead" or "garden.fertilized" ? config.TrackGardens : e.Kind == "character.registered" ? config.SyncCharacterDetails && e.Registration?.PairingScope == RegistrationScope : e.Kind == "character.updated" ? config.SyncCharacterDetails : e.Kind is "collection.observed" or "storage.observed" ? config.SyncCollections : e.Kind == "submarines.cached" ? config.SyncAutoRetainer : e.Kind is "fashion.observed" or "submarines.observed" or "submarines.supplies" ? config.SyncActivities : config.SyncHouseDetails)))
             .Where(e => !SyncValidation.SupersededIncompleteCharacter(e, config.Discoveries, now))
-            .OrderBy(e => e.At).ToArray();
+            .OrderBy(e => e.Kind == "character.registered" ? 0 : 1).ThenBy(e => e.At).ToArray();
         var held = pending.Where(e => !SyncValidation.CanSend(e, now)).ToArray();
         heldSyncRecords = held.Length;
         foreach (var e in held) if(reportedHeldRecords.Add(e.Id)) errorJournal.Record("held-record", SyncValidation.HoldReason(e, now), e.Id, e.Kind);
@@ -141,7 +141,7 @@ public sealed partial class Plugin : IDalamudPlugin
         while (events.Length > 1 && JsonSerializer.SerializeToUtf8Bytes(new { events }, json).Length > 60000) events = events[..^1];
         if (events.Length == 0) {
             if (pending.Any(e => !SyncValidation.SupportedByWebsite(e.Kind, config.SharedRoster?.ProtocolVersion ?? 1)))
-                syncStatus = "New observations kept locally. Deploy Journal V7.11.52, save once, then refresh shared profiles.";
+                syncStatus = "New observations kept locally. Deploy Journal V7.11.57, save once, then refresh shared profiles.";
             nextSync = now.AddSeconds(FastGardenSync ? 1 : 30); return;
         }
         syncStatus = $"Sending {events.Length} events…";
@@ -195,6 +195,7 @@ public sealed partial class Plugin : IDalamudPlugin
         welcomeWindow = new WelcomeWindow(this); windows.AddWindow(welcomeWindow);
         fashionWindow = new FashionReportWindow(OpenFashionBrowser); windows.AddWindow(fashionWindow); fashionWindow.Minimize = () => MinimizeLauncher("Fashion Report");
         plantingWindow = new PlantingGuideWindow(this); windows.AddWindow(plantingWindow);
+        registrationWindow = new NewCharacterWindow(this); windows.AddWindow(registrationWindow);
         Pi.UiBuilder.Draw += Draw;
         Pi.UiBuilder.OpenMainUi += Open;
         Pi.UiBuilder.OpenConfigUi += Open;
@@ -213,6 +214,7 @@ public sealed partial class Plugin : IDalamudPlugin
     {
         if (args.Trim().Equals("fashion", StringComparison.OrdinalIgnoreCase)) OnFashionCommand(command, args);
         else if (args.Trim().Equals("planting", StringComparison.OrdinalIgnoreCase)) OnPlantingCommand(command, args);
+        else if(args.Trim().Equals("register",StringComparison.OrdinalIgnoreCase)){registrationDeferred=false;nextRosterRead=default;}
         else visible = !visible;
     }
     private void OnFashionCommand(string command, string args)
@@ -252,6 +254,7 @@ public sealed partial class Plugin : IDalamudPlugin
         var now = DateTimeOffset.UtcNow;
         UpdateSync(now);
         UpdateSharedRoster(now);
+        UpdateCharacterRegistration(now);
         UpdateHouseNotices(now);
         UpdateGardenCareNotices(now);
         MaintainRecords(now);
