@@ -25,8 +25,10 @@ public sealed partial class Plugin
         bool? membership = hasTag || details.FreeCompany is not null ? true : emptyCompanySamples >= 3 && Player.HomeWorld.RowId == Player.CurrentWorld.RowId ? false : null;
         var accountKey = "";
         var lobby = AgentLobby.Instance();
+        // The loaded local player above proves the active character. Character-
+        // selection IDs belong to the lobby UI and are not an in-world identity gate.
         if (config.PairingKey.Length == 64 && characterState->AccountId != 0 && lobby != null && lobby->IsLoggedIn &&
-            lobby->ServiceAccountIndex >= 0 && (lobby->SelectedCharacterContentId == Player.ContentId || lobby->LobbyData.ContentId == Player.ContentId))
+            lobby->ServiceAccountIndex >= 0)
         {
             // Only a journal-scoped fingerprint leaves the game; never raw account IDs or session data.
             var identity = $"equinox-account-v1:{characterState->AccountId}:{lobby->ServiceAccountIndex}";

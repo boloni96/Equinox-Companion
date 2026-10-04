@@ -36,7 +36,7 @@ public sealed partial class Plugin
             id%=1000000;if(id==0||items.Any(x=>x.Id==id))return;
             var row=english.GetRowOrDefault(id);if(row is null)return;
             var name=row.Value.Name.ToString();
-            var required=string.Equals(name,soil,StringComparison.OrdinalIgnoreCase)||gardenTiming.TryGetValue(name,out var t)&&string.Equals(t.Crop,crop,StringComparison.OrdinalIgnoreCase);
+            var required=string.Equals(name,soil,StringComparison.OrdinalIgnoreCase)||string.Equals(GardenCropName(name),crop,StringComparison.OrdinalIgnoreCase);
             items.Add(new(id,row.Value.Icon,required));
         }
         for(var i=0;i<Math.Min((int)agent->SelectableItemCount,140);i++)
@@ -79,8 +79,9 @@ public sealed partial class Plugin
             if(gardening==null||!gardening->IsVisible)return;
             var picker=(AtkUnitBase*)GardenGui.GetAddonByName("ContextIconMenu").Address;
             var pickerOpen=picker!=null&&picker->IsVisible&&agent->ContextAddonId==picker->Id;
-            var marked=MarkGardenItems(gardening,items);
-            if(pickerOpen)marked+=MarkGardenItems(picker,items,agent);
+            // ImGui overlays sit above native windows. Never outline the covered
+            // Gardening slots through the foreground soil/seed picker.
+            var marked=pickerOpen?MarkGardenItems(picker,items,agent):MarkGardenItems(gardening,items);
             gardenMarkerStatus+=marked>0?" · Green: required. Red: different item.":" · Choose soil and seed; follow the required names above.";
             if(pickerOpen&&!items.Any(x=>x.Required))gardenMarkerStatus+=" Required item is not offered; check inventory.";
 
@@ -146,7 +147,7 @@ public sealed partial class Plugin
     private static unsafe void MapGardenPickerEntries(AddonContextIconMenu* menu,AgentHousingPlant* agent,List<PlantMenuItem> items,Dictionary<nint,bool> exact)
     {
         var list=menu->AtkComponentList240;var inventory=InventoryManager.Instance();var count=menu->EntryCount;
-        if(list==null||inventory==null||count is <=0 or >140||count!=agent->SelectableItemCount||list->ListLength!=count||list->ItemRendererList==null||list->AllocatedItemRendererListLength<count)return;
+        if(list==null||inventory==null||count is <=0 or >140||count!=agent->SelectableItemCount||list->ListLength!=count)return;
         // Use the native list item's logical index, not screen position or a seed-bag image.
         // Validate the current inventory slot and displayed icon before drawing a border.
         for(var i=0;i<count;i++)
@@ -157,9 +158,11 @@ public sealed partial class Plugin
             var item=items.FirstOrDefault(x=>x.Id==cache->Id%1000000);if(item.Id==0)continue;
             var renderer=list->GetItemRenderer(i);if(renderer==null||!MarkerVisible((AtkResNode*)renderer->OwnerNode))continue;
             var icon=renderer->DragDropComponent!=null?renderer->DragDropComponent->AtkComponentIcon:null;
-            var visibleIcon=icon!=null?icon->IconId:list->ItemRendererList[i].IconId;
+            // A scrolling list need not allocate a renderer for every inventory
+            // entry. GetItemRenderer resolves the current logical item safely.
+            var visibleIcon=icon!=null?icon->IconId:list->ItemRendererList!=null&&i<list->AllocatedItemRendererListLength?list->ItemRendererList[i].IconId:0;
             if(!GardenPlantRequirement.PickerEntryMatches(count,agent->SelectableItemCount,list->ListLength,i,renderer->ListItemIndex,cache->Id%1000000,slot->ItemId%1000000,item.Icon,visibleIcon))continue;
-            var node=(nint)renderer->OwnerNode;
+            var node=icon!=null&&icon->OuterResNode!=null?(nint)icon->OuterResNode:(nint)renderer->OwnerNode;
             // An independently registered exact tooltip wins over a list binding.
             if(!exact.ContainsKey(node))exact[node]=item.Required;
         }
