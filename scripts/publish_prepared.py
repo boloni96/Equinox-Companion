@@ -1,4 +1,4 @@
-"""Verify a prepared release before updating its install feeds in one commit."""
+"""Verify a prepared release before updating the single install feed."""
 import base64
 import hashlib
 import io
@@ -54,7 +54,6 @@ for name, content in source_assets.items():
 (destination / 'EquinoxCompanion.zip').write_bytes(payload)
 (destination / 'icon.png').write_bytes(icon)
 (destination / 'repo.json').write_bytes(feed_bytes)
-for name in ('repo.json', 'test-repo.json', 'testrepo.json'):
-    (root / name).write_bytes(feed_bytes)
+(root / 'repo.json').write_bytes(feed_bytes)
 shutil.rmtree(stage)
 print(f'Verified {version}: {manifest["sha256"]}')

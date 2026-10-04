@@ -16,12 +16,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
-      - name: Verify package and prepare feeds
+      - name: Verify package and prepare feed
         run: python3 scripts/publish_prepared.py
-      - name: Publish package and feeds atomically
+      - name: Publish package and feed atomically
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add src/garden-art dist repo.json test-repo.json testrepo.json .release-staging
-          git commit -m 'Publish verified Companion package and installer feeds'
+          git add src/garden-art dist repo.json .release-staging
+          git commit -m 'Publish verified Companion package and installer feed'
           git push origin HEAD:main
