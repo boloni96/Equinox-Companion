@@ -1,3 +1,7 @@
+# Current release: Companion 0.5.1.44 / Journal V7.11.55
+
+Person-level login garden reminders and character-page navigation; see RELEASE-NOTES-0.5.1.44.md. Previous audit follows.
+
 # Current release: Companion 0.5.1.43 / Journal V7.11.54
 
 Fashion artwork and website icon corrections; see RELEASE-NOTES-0.5.1.43.md. Previous audit follows.

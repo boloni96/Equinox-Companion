@@ -22,4 +22,6 @@ public sealed class GardenNoticeSession
     }
 
     public bool Add(string key) => shown.Add(key);
+    // Consume even a quiet login, so a later timer transition cannot chat again.
+    public bool TrySummary() => shown.Add("login-summary");
 }

@@ -15,6 +15,7 @@ public sealed class Configuration : IPluginConfiguration
     public Shortcut PlantingShortcut { get; set; } = new();
     public Shortcut FashionShortcut { get; set; } = new();
     public bool NotifyGardenTending { get; set; } = true;
+    public bool NotifyGardenRisk { get; set; } = true;
     public bool NotifyGardenHarvest { get; set; } = true;
     public bool NotifyGardenDead { get; set; } = true;
     public bool NotifyGardenMaturity { get; set; } = true;

@@ -4,7 +4,7 @@ Read RELEASE-NOTES.md and WORK-STATUS.md. This update uses the existing GitHub i
 
 # Equinox Companion
 
-Prepared installer build: **0.5.1.43**, for **Journal V7.11.54**. Check `repo.json` for the published version. This release needs in-game validation; the complete feature audit and remaining gaps are in [WORK-STATUS.md](WORK-STATUS.md).
+Prepared installer build: **0.5.1.44**, for **Journal V7.11.55**. Check `repo.json` for the published version. This release needs in-game validation; the complete feature audit and remaining gaps are in [WORK-STATUS.md](WORK-STATUS.md).
 
 Add this repository in Dalamud → Settings → Experimental:
 

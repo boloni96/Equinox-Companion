@@ -1039,3 +1039,37 @@ Check("closed fashion tooltip explains closure",FashionCompletion.Tooltip(fashio
 
 var sharedZero=sharedFashion with{Characters=[sharedFashion.Characters[0] with{FashionCompletedAt=null,FashionScore=0,FashionCycle=FashionCompletion.Cycle(fashionNow),FashionObservedAt=fashionNow}]};
 Check("newer shared incomplete score clears older local check",FashionCompletion.IsComplete(fashionActor,[fashionEvent],[sharedZero],fashionNow).ToString(),"False");
+
+// One login summary for all paired Persons, with no mature-crop noise.
+var loginCare=careBed with {Watered=careNow.AddHours(-13),NextTend=careNow.AddHours(-1),WiltHours=48,DeathAt=careNow.AddHours(59),HarvestAt=careNow.AddDays(2)};
+Check("login ordinary care is tending",GardenLoginSummary.Kind(loginCare,careNow),"tend");
+Check("login mature crops never notify",GardenLoginSummary.Kind(loginCare with {Ready=true,DeathAt=careNow.AddHours(-1)},careNow),null);
+Check("login kept mature crops never notify",GardenLoginSummary.Kind(loginCare with {Ready=true,KeepMature=true},careNow),null);
+Check("login empty beds never notify",GardenLoginSummary.Kind(loginCare with {Empty=true},careNow),null);
+Check("login freshly tended beds quiet",GardenLoginSummary.Kind(loginCare with {Watered=careNow,DeathAt=careNow.AddHours(72)},careNow),null);
+Check("login near death needs check",GardenLoginSummary.Kind(loginCare with {DeathAt=careNow.AddHours(2)},careNow),"check");
+Check("login estimated death needs check",GardenLoginSummary.Kind(loginCare with {DeathAt=careNow.AddHours(-1)},careNow),"check");
+Check("login confirmed wilt needs check",GardenLoginSummary.Kind(loginCare with {WiltedAt=careNow.AddMinutes(-1)},careNow),"check");
+Check("login confirmed dead needs check",GardenLoginSummary.Kind(loginCare with {DeadConfirmedAt=careNow.AddMinutes(-1)},careNow),"check");
+Check("login stale death estimate corrected by healthy observation",GardenLoginSummary.Kind(loginCare with {DeathAt=careNow.AddHours(-1),GrowingObservedAt=careNow},careNow),"tend");
+Check("login unknown time does not invent tending",GardenLoginSummary.Kind(loginCare with {Watered=null,NextTend=null,DeathAt=null},careNow),null);
+var loginMessages=GardenLoginSummary.Messages([new("g","Equinox Empire","tend"),new("g","Equinox Empire","tend"),new("s","Sir Haven","tend"),new("g","Equinox Empire","check")]);
+Check("login at most two messages for mixed persons",loginMessages.Length.ToString(),"2");
+Check("login all accounts deduplicated by Person",loginMessages[0].Text,"Equinox Empire and Sir Haven need to tend their Gardens.");
+Check("login tending light blue",loginMessages[0].Color.ToString(),"37");
+Check("login same person can also need risk attention",loginMessages[1].Text,"Equinox Empire needs to check their Gardens.");
+Check("login risk orange",loginMessages[1].Color.ToString(),"32");
+Check("login mature-only categories omitted",GardenLoginSummary.Messages([new("g","Equinox Empire","harvest")]).Length.ToString(),"0");
+var loginGarden=new SharedGardenCare(overviewHouse.Id,overviewHouse.GameHouseId,"Garden",overviewHouse.World,overviewHouse.District,1,1,1,[overviewTenant.Id,overviewOwner.Id],[loginCare]);
+Check("login reminder names owner Person not visiting Person",GardenLoginSummary.Person(overviewPeople,loginGarden)?.Id,"owner-profile");
+Check("login FC master Person preferred to other Person member",GardenLoginSummary.Person([new("a","Member",[overviewMember]),new("z","Master",[overviewMaster])],loginGarden)?.Id,"z");
+Check("login no current character filter on paired alt",GardenLoginSummary.Person([new("g","Goddess",[overviewOwner with {Account="Alt"}])],loginGarden)?.Name,"Goddess");
+var singleLogin=new GardenNoticeSession();singleLogin.ObserveCharacter(123);
+Check("quiet login consumes summary",singleLogin.TrySummary().ToString(),"True");
+Check("later urgency cannot repeat login summary",singleLogin.TrySummary().ToString(),"False");
+singleLogin.ObserveCharacter(0);singleLogin.ObserveCharacter(123);
+Check("zoning cannot repeat login summary",singleLogin.TrySummary().ToString(),"False");
+singleLogin.Login();singleLogin.ObserveCharacter(123);
+Check("relogin gets one new summary",singleLogin.TrySummary().ToString(),"True");
+singleLogin.ObserveCharacter(456);
+Check("switch character gets one new summary",singleLogin.TrySummary().ToString(),"True");

@@ -14,18 +14,17 @@ public sealed partial class Plugin
         }
         if (!config.NotifyGardenCare || !config.SyncEnabled || now < nextGardenNotice || config.SharedRoster is not { } roster) return;
         nextGardenNotice = now.AddSeconds(30);
-        var matches = roster.People.SelectMany(p => p.Characters).Where(c => string.Equals(c.Name, Player.CharacterName, StringComparison.OrdinalIgnoreCase) && string.Equals(c.World, WorldName(Player.HomeWorld.RowId), StringComparison.OrdinalIgnoreCase)).Take(2).ToArray();
-        if (matches.Length != 1) return;
+        if (roster.GardenCare is null || !gardenNotices.TrySummary()) return;
         var allPlans=GardenPlanSources();
-        var notices = new List<GardenChatNotice>();
-        foreach (var house in (roster.GardenCare ?? []).Where(g => g.CharacterIds.Contains(matches[0].Id)).GroupBy(g => g.HouseId))
+        var notices = new List<GardenPersonNotice>();
+        foreach (var house in roster.GardenCare.GroupBy(g => g.HouseId))
         {
-            var alerts = new List<(int Batch, string Kind, DateTimeOffset? DeathAt)>();
+            var person = GardenLoginSummary.Person(roster.People, house.First());
+            if (person is null) continue;
             foreach (var batch in house)
             {
                 var source=allPlans.FirstOrDefault(p=>p.HouseId==batch.HouseId&&p.Batch==batch.Batch);
                 var projection=source is null?null:EffectiveGardenPlan(source);
-                var due = new List<(int Bed, string Kind, DateTimeOffset? DeathAt)>();
                 foreach (var bed in batch.Beds)
                 {
                     // Local confirmed care already happened, even if the browser has not saved it yet.
@@ -41,32 +40,17 @@ public sealed partial class Plugin
                     {
                         if(projected.ActualCrop=="Empty")continue;
                         effective=effective with {Empty=false,Ready=projected.Ready,KeepMature=projected.KeepMature,Watered=projected.Watered,NextTend=projected.NextTend,HarvestAt=projected.HarvestAt,WiltHours=projected.WiltHours,
-                            DeadConfirmedAt=projected.DeadConfirmedAt,WiltedAt=projected.WiltedAt,Planted=projected.Planted,
+                            DeadConfirmedAt=projected.DeadConfirmedAt,WiltedAt=projected.WiltedAt,Planted=projected.Planted,GrowingObservedAt=projected.GrowingObservedAt,
                             DeathAt=projected.Ready||GardenVisualState(projected,false,now)=="dead"?null:projected.Watered is {} care&&projected.WiltHours is {} wilt?care.AddHours(wilt+24):null};
                     }
                     else if (lastPlant > (bed.Watered ?? DateTimeOffset.MinValue)) effective = effective with { Ready = false, KeepMature = false, HarvestAt = null, DeathAt = null };
-                    var kind = GardenCareStatus.Due(effective, now); if (kind is null || !GardenMessageEnabled(kind)) continue;
-                    var left = effective.DeathAt - now;
-                    var urgency = left is null ? "unknown" : left <= TimeSpan.Zero ? "risk" : left <= TimeSpan.FromHours(1) ? "1h" : left <= TimeSpan.FromHours(4) ? "4h" : "normal";
-                    var key = $"{batch.HouseId}:{batch.Batch}:{bed.Bed}:{kind}:{effective.Watered:O}:{bed.HarvestAt:O}:{urgency}";
-                    if (gardenNotices.Add(key)) due.Add((bed.Bed, kind, effective.DeathAt));
+                    var kind = GardenLoginSummary.Kind(effective, now);
+                    if (kind == "tend" && config.NotifyGardenTending || kind == "check" && config.NotifyGardenRisk)
+                        notices.Add(new(person.Id, person.Name, kind!));
                 }
-                foreach (var group in due.GroupBy(x => x.Kind)) alerts.Add((batch.Batch, group.Key, group.Any(x => x.DeathAt is null) ? null : group.Min(x => x.DeathAt)));
             }
-            var h = house.First();
-            var estate=roster.People.SelectMany(p=>p.Characters).SelectMany(c=>c.Houses).FirstOrDefault(x=>x.Id==h.HouseId);
-            notices.AddRange(alerts.Select(x=>new GardenChatNotice(h.HouseId,GardenCareStatus.HouseLabel(estate,h),x.Batch,x.Kind,x.DeathAt)));
         }
-        if(notices.Count==0)return;
-        var summary=new SeStringBuilder().AddText("[Equinox] ");
-        var segments=GardenCareStatus.ChatSummary(notices,now);
-        var length=0;
-        foreach(var segment in segments){
-            // Bound each chat line without discarding any owner/address or emitting one line per bed.
-            if(length>0&&length+segment.Text.Length>650){Chat.Print(summary.Build());summary=new SeStringBuilder().AddText("[Equinox] ");length=0;}
-            if(length>0)summary.AddText(" · ");
-            summary.AddUiForeground(segment.Color).AddText(segment.Text).AddUiForegroundOff();length+=segment.Text.Length+3;
-        }
-        Chat.Print(summary.Build());
+        foreach(var message in GardenLoginSummary.Messages(notices))
+            Chat.Print(new SeStringBuilder().AddText("[Equinox] ").AddUiForeground(message.Color).AddText(message.Text).AddUiForegroundOff().Build());
     }
 }

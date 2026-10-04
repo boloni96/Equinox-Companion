@@ -83,24 +83,13 @@ public sealed partial class Plugin
         ImGui.Separator();ImGui.TextUnformatted("Gardening");
         MessageToggle("Garden chat messages enabled",config.NotifyGardenCare,v=>config.NotifyGardenCare=v);
         ImGui.BeginDisabled(!config.NotifyGardenCare);
-        MessageToggle("Tending due",config.NotifyGardenTending,v=>config.NotifyGardenTending=v);
-        MessageToggle("Confirmed harvest-ready crops",config.NotifyGardenHarvest,v=>config.NotifyGardenHarvest=v);
-        MessageToggle("Confirmed dead crops",config.NotifyGardenDead,v=>config.NotifyGardenDead=v);
-        MessageToggle("Estimated maturity: check in game",config.NotifyGardenMaturity,v=>config.NotifyGardenMaturity=v);
-        MessageToggle("Unknown garden care time: check tending",config.NotifyGardenUnknownCare,v=>config.NotifyGardenUnknownCare=v);
+        MessageToggle("Persons needing to tend (light blue)",config.NotifyGardenTending,v=>config.NotifyGardenTending=v);
+        MessageToggle("Persons with gardens at risk (orange)",config.NotifyGardenRisk,v=>config.NotifyGardenRisk=v);
         ImGui.EndDisabled();
-        ImGui.TextWrapped("One compact summary for this character's owned/shared houses. Green: harvest; blue: tending; orange: estimated risk; red: confirmed dead. Each login shows one compact reminder again. While logged in, unchanged warnings stay quiet; changing areas does not repeat them.");
+        ImGui.TextWrapped("Once per character login: one light-blue tending message and/or one orange risk message, grouped by Person across all paired accounts and characters. Mature crops do not trigger reminders. No house lists or repeated messages during the session.");
         ImGui.Separator();ImGui.TextUnformatted("Commands and Fashion Report");
         MessageToggle("Fashion Report browser link",config.NotifyFashionLink,v=>config.NotifyFashionLink=v);
         MessageToggle("Planting command: house not identified",config.NotifyPlantingUnavailable,v=>config.NotifyPlantingUnavailable=v);
         MessageToggle("Fashion Report: could not open browser",config.NotifyBrowserErrors,v=>config.NotifyBrowserErrors=v);
     }
-    private bool GardenMessageEnabled(string kind)=>kind switch
-    {
-        "tend" or "wilt"=>config.NotifyGardenTending,
-        "harvest"=>config.NotifyGardenHarvest,
-        "dead"=>config.NotifyGardenDead,
-        "check maturity"=>config.NotifyGardenMaturity,
-        _=>config.NotifyGardenUnknownCare
-    };
 }
