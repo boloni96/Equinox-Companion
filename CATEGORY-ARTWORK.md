@@ -17,3 +17,9 @@ Subjects:
 - **history**: the History icon at bottom row fifth: dark sapphire clock face and silver hands, wrapped in a blue crescent circular arrow and small central star.
 
 Existing plugin identity artwork and crop-state assets are unchanged. Status checks and borders are drawn separately. No in-game screenshot is represented as verified by these generated assets.
+
+## Fashion Report artwork — 4 October 2026
+
+Built-in image generation; transparent original preserved. Project asset: `assets/category-icons/fashion-report.png` (under website `site/` and Companion `src/garden-art/`).
+
+Final prompt: Use case: logo-brand. Create ONE standalone transparent Fashion Report category icon for Equinox Companion and Journal. The provided Gardening icon is a STYLE reference only: match its sapphire blue faceted enamel, polished silver and white-metal edges, subtle celestial gleam and bold readable silhouette. Replace the plant subject with a clearly recognizable elegant silver clothes hanger holding a compact royal sapphire-blue formal jacket/cape, with a small diamond star accent. Centered square composition, fill about 85% of canvas with generous unclipped margins, front view, polished fantasy game UI artwork. Must remain readable at 28 to 64 pixels. Genuine transparent background and transparent negative space. No letters, no text, no frame, no green checkmark or green border; the application adds those separately. Deliver only the single Fashion Report icon.

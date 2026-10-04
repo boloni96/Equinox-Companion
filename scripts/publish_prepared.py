@@ -39,7 +39,7 @@ with zipfile.ZipFile(io.BytesIO(payload)) as archive:
     # Keep new source artwork identical to the reviewed, checksum-verified package.
     source_assets = {}
     for name, expected in manifest.get('sourceAssets', {}).items():
-        assert name == 'garden-art/assets/icons/house-moogle.png' or re.fullmatch(r'garden-art/assets/category-icons/(private-house|fc-house|characters|gardening|submarines|free-company)\.png', name), 'Unexpected source asset'
+        assert name == 'garden-art/assets/icons/house-moogle.png' or re.fullmatch(r'garden-art/assets/category-icons/(private-house|fc-house|characters|gardening|submarines|free-company|fashion-report)\.png', name), 'Unexpected source asset'
         content = archive.read(name)
         assert content.startswith(b'\x89PNG\r\n\x1a\n') and len(content) <= 4 * 1024 * 1024
         assert hashlib.sha256(content).hexdigest() == expected, 'Source asset checksum mismatch'

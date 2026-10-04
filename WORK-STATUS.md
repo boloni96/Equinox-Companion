@@ -1,3 +1,7 @@
+# Current release: Companion 0.5.1.43 / Journal V7.11.54
+
+Fashion artwork and website icon corrections; see RELEASE-NOTES-0.5.1.43.md. Previous audit follows.
+
 # Current release: Companion 0.5.1.42 / Journal V7.11.53
 
 See RELEASE-NOTES-0.5.1.42.md for the current update and verification. The earlier audit below is historical. Pending live checks: new ImGui artwork/layout, current-character house indicators, and old visitor beds without positional identity. No waiting garden observations were discarded.

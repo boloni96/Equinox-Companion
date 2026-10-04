@@ -28,13 +28,9 @@ public sealed partial class Plugin
         draw.AddRectFilled(at, at + new Vector2(size), hover ? 0xff534735 : 0x99312720, 5);
         if (fashion)
         {
-            var scale = size / 64;
-            var gold = 0xff6ec9ffu;
-            draw.AddBezierCubic(at + new Vector2(25,22)*scale, at + new Vector2(25,10)*scale,
-                at + new Vector2(44,12)*scale, at + new Vector2(32,29)*scale, gold, 2);
-            draw.AddLine(at + new Vector2(32,29)*scale, at + new Vector2(12,45)*scale, gold, 2);
-            draw.AddLine(at + new Vector2(12,45)*scale, at + new Vector2(52,45)*scale, gold, 2);
-            draw.AddLine(at + new Vector2(52,45)*scale, at + new Vector2(32,29)*scale, gold, 2);
+            var texture = Textures.GetFromFile(Path.Combine(Pi.AssemblyLocation.DirectoryName!, "garden-art/assets/category-icons/fashion-report.png")).GetWrapOrDefault();
+            if (texture is not null) draw.AddImage(texture.Handle, at + new Vector2(3), at + new Vector2(size-3));
+            else draw.AddText(at + new Vector2(4), 0xffffffff, "F");
             if(complete){DrawFashionCheck(at,size);DrawFashionBorder(at,size);}
         }
         else
