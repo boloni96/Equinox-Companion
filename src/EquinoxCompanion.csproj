@@ -1,6 +1,6 @@
 <Project Sdk="Dalamud.NET.Sdk/15.0.0">
   <PropertyGroup>
-    <Version>0.5.1.41</Version>
+    <Version>0.5.1.42</Version>
     <Author>Boloni</Author>
     <Name>Equinox Companion</Name>
     <Punchline>Your shared characters, estates, collections and timers.</Punchline>
@@ -10,6 +10,6 @@
     <Tags>housing;gardening;journal</Tags>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
-  <ItemGroup><Content Include="collection-ids.json" CopyToOutputDirectory="PreserveNewest" /><Content Include="icon.png" CopyToOutputDirectory="PreserveNewest" /><Content Include="garden-art/assets/icons/house-moogle.png" CopyToOutputDirectory="PreserveNewest" /><Content Include="garden-art/assets/icons/gardening-tools.png" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
+  <ItemGroup><Content Include="collection-ids.json" CopyToOutputDirectory="PreserveNewest" /><Content Include="icon.png" CopyToOutputDirectory="PreserveNewest" /><Content Include="garden-art/assets/icons/house-moogle.png" CopyToOutputDirectory="PreserveNewest" /><Content Include="garden-art/assets/icons/gardening-tools.png" CopyToOutputDirectory="PreserveNewest" /><Content Include="garden-art/assets/category-icons/*.png" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
 <Target Name="UnpackGardenArtwork" AfterTargets="Build"><Unzip SourceFiles="$(MSBuildProjectDirectory)/garden-art.zip" DestinationFolder="$(OutputPath)garden-art" SkipUnchangedFiles="true" /></Target>
 </Project>

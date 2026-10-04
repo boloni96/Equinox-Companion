@@ -63,6 +63,9 @@ public sealed partial class Plugin
                     {
                         ImGui.TextWrapped(SubmarineSupplyStatus.Summary(supply));
                         if(supply is not null)ImGui.TextWrapped(SubmarineSupplyStatus.Freshness(supply,DateTimeOffset.UtcNow));
+                        var fcIconSize=ImGui.GetFontSize()*1.5f;
+                        GardenImage("assets/category-icons/free-company.png",ImGui.GetCursorScreenPos(),new System.Numerics.Vector2(fcIconSize));
+                        ImGui.Dummy(new System.Numerics.Vector2(fcIconSize));ImGui.SameLine();
                         ImGui.TextWrapped((observed?.FcName??cache?.FcName??"Free Company")+" · FC fleet");
                         if(cache is not null)
                         {

@@ -1,4 +1,5 @@
 using Dalamud.Bindings.ImGui;
+using System.Numerics;
 
 namespace EquinoxCompanion;
 
@@ -26,8 +27,12 @@ public sealed partial class Plugin
         var ids = new Dictionary<uint, string>();
         foreach (var tab in tabs.OrderBy(t => order.IndexOf(t.Id)))
         {
-            ids[ImGui.GetID(tab.Label)] = tab.Id;
-            if (!ImGui.BeginTabItem(tab.Label,tab.Id=="settings"?ImGuiTabItemFlags.Trailing|ImGuiTabItemFlags.NoReorder:ImGuiTabItemFlags.None)) continue;
+            var category=tab.Id=="housing"||tab.Id.StartsWith("person:")?"characters":tab.Id=="planting"?"gardening":tab.Id=="submarines"?"submarines":null;
+            var label=category is null?tab.Label:new string(' ',(int)Math.Ceiling((ImGui.GetFontSize()+5)/Math.Max(1,ImGui.CalcTextSize(" ").X)))+tab.Label;
+            ids[ImGui.GetID(label)] = tab.Id;
+            var active=ImGui.BeginTabItem(label,tab.Id=="settings"?ImGuiTabItemFlags.Trailing|ImGuiTabItemFlags.NoReorder:ImGuiTabItemFlags.None);
+            if(category is not null){var at=ImGui.GetItemRectMin();var max=ImGui.GetItemRectMax();var size=Math.Min(ImGui.GetFontSize()+2,max.Y-at.Y-2);var draw=ImGui.GetWindowDrawList();draw.PushClipRect(at,max,true);GardenImage("assets/category-icons/"+category+".png",at+new Vector2(ImGui.GetStyle().FramePadding.X,(max.Y-at.Y-size)/2),new Vector2(size));draw.PopClipRect();}
+            if(!active)continue;
             tab.Draw();
             ImGui.EndTabItem();
         }

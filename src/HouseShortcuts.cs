@@ -10,8 +10,7 @@ public sealed partial class Plugin
         var clicked=ImGui.InvisibleButton((fc?"FC house":"Private house")+"###house-shortcut-"+house.Id,new Vector2(size));var hovered=ImGui.IsItemHovered();
         var band=house.Paused?HousingBand.Unknown:HousingStatus.Band(house.LastEntry,now);var draw=ImGui.GetWindowDrawList();
         draw.AddRectFilled(at,at+new Vector2(size),hovered?0xff534735:0x99312720,5);
-        GardenImage("assets/icons/house-moogle.png",at+new Vector2(3,fc?8:3),new Vector2(size-6,fc?size-10:size-6));
-        if(fc){var text=ImGui.CalcTextSize("FC");draw.AddRectFilled(at+new Vector2(2),at+new Vector2(size-2,text.Y+2),0xe0201710,3);draw.AddText(at+new Vector2((size-text.X)/2,1),0xffffffff,"FC");}
+        GardenImage("assets/category-icons/"+(fc?"fc-house":"private-house")+".png",at+new Vector2(2),new Vector2(size-4));
         if(HouseShortcutSelection.Checked(house,now))DrawFashionCheck(at,size);
         draw.AddRect(at,at+new Vector2(size),ImGui.ColorConvertFloat4ToU32(BandColour(band)),5,ImDrawFlags.None,2);
         if(hovered){ImGui.BeginTooltip();ImGui.PushTextWrapPos(ImGui.GetFontSize()*28);

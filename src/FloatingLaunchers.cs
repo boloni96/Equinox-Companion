@@ -57,7 +57,7 @@ public sealed partial class Plugin
         if(plantingWindow.IsOpen) minimizedLaunchers.Remove("Planting");
         DrawLauncher("Companion", 0, "icon.png");
         DrawLauncher("Fashion Report", 1, null);
-        DrawLauncher("Planting", 2, "garden-art/assets/icons/gardening-tools.png");
+        DrawLauncher("Planting", 2, "garden-art/assets/category-icons/gardening.png");
         if(pendingLauncher is {} pending && ImGui.GetTime()-launcherClickAt>ImGui.GetIO().MouseDoubleClickTime && !ImGui.IsMouseDown(ImGuiMouseButton.Left))
         {
             pendingLauncher=null;
@@ -103,7 +103,7 @@ public sealed partial class Plugin
                 draw.AddLine(p + new Vector2(52, 45), p + new Vector2(32, 29), gold, 3);
             }
             var fashionComplete=name=="Fashion Report"&&CurrentFashionComplete();
-            if(fashionComplete){DrawFashionCheck(p,64,o.Opacity);DrawFashionBorder(p,64,o.Opacity);}
+            if(fashionComplete){DrawFashionCheck(p,64,o.Opacity);}
             ImGui.SetCursorPos(new(0, 20));
             ImGui.InvisibleButton("Open", new(64, 44));
             var hovered = ImGui.IsItemHovered();

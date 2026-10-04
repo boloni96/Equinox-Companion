@@ -1,3 +1,7 @@
+# Current release: Companion 0.5.1.42 / Journal V7.11.53
+
+See RELEASE-NOTES-0.5.1.42.md for the current update and verification. The earlier audit below is historical. Pending live checks: new ImGui artwork/layout, current-character house indicators, and old visitor beds without positional identity. No waiting garden observations were discarded.
+
 # Latest release work — 2026-10-02
 
 Companion 0.5.1.10 / Journal V7.11.18 implement house batches, inline planned planting, game guide via /planting, per-batch care warnings after 12 hours, crop-specific death estimates, and successful fertilizer observation. Read RELEASE-NOTES.md for setup and remaining native testing. Website package includes source and Cloudflare deployment archive; deploy manually. New-character account discovery remains awaiting user test.
