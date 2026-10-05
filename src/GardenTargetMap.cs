@@ -55,3 +55,22 @@ public static class GardenTargetMap
         return matches.Length==1?(matches[0].HouseId,matches[0].Batch,resolved.Bed.Value):null;
     }
 }
+
+// A missing mapping may arrive after the target was selected. Retry gently until
+// resolved; after success, leave manual tab choices alone until the target changes.
+public sealed class GardenSelectionFollow
+{
+    private (string? Target,Address? Address,uint? Argument,float X,float Y,float Z)? followed;
+    private DateTimeOffset nextAttempt;
+    public void Reset(){followed=null;nextAttempt=default;}
+    public (string House,int Batch,int Bed)? Update(GardenSnapshot target,IEnumerable<SharedGardenTarget> mappings,IEnumerable<SharedGardenPlan> plans,DateTimeOffset now)
+    {
+        var t=target.TargetDetails;
+        var identity=(target.TargetId,target.Address,t?.EventArgument,t?.X??0,t?.Y??0,t?.Z??0);
+        if(followed==identity||now<nextAttempt)return null;
+        nextAttempt=now.AddMilliseconds(250);
+        var selection=GardenTargetMap.SelectedBatch(target,mappings,plans);
+        if(selection is not null)followed=identity;
+        return selection;
+    }
+}

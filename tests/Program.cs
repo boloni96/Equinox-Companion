@@ -1117,3 +1117,12 @@ var resolve50=GardenTargetMap.CreateResolver(mappingHistory50);
 var actual50=eventHistory50.Select(e=>resolve50(e).Bed!.Value).ToArray();indexed50.Stop();
 Check("indexed 6000-event history preserves mapping results",actual50.SequenceEqual(expected50).ToString(),"True");
 Console.WriteLine($"BENCH mapping lookup 6000 events/6000 mappings: original {baseline50.Elapsed.TotalMilliseconds:F2} ms; indexed {indexed50.Elapsed.TotalMilliseconds:F2} ms (CPU synthetic, not game FPS)");
+
+var now=selectedTarget50.ObservedAt;
+var follow51=new GardenSelectionFollow();
+Check("follow waits for mapping",follow51.Update(selectedTarget50,[],[selectionPlan50],now)?.ToString(),null);
+Check("follow throttles unresolved mapping",follow51.Update(selectedTarget50,[selectedMapping50],[selectionPlan50],now.AddMilliseconds(100))?.ToString(),null);
+Check("follow retries unchanged target after mapping arrives",follow51.Update(selectedTarget50,[selectedMapping50],[selectionPlan50],now.AddMilliseconds(300))?.Batch.ToString(),"2");
+Check("follow preserves manual tab after selection",follow51.Update(selectedTarget50,[selectedMapping50],[selectionPlan50],now.AddMilliseconds(600))?.ToString(),null);
+follow51.Reset();
+Check("reopening follows selected bed",follow51.Update(selectedTarget50,[selectedMapping50],[selectionPlan50],now.AddSeconds(1))?.Batch.ToString(),"2");

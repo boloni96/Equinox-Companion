@@ -37,7 +37,7 @@ public sealed partial class Plugin
         nextRosterRead=default;
         plantingHouseId=config.SyncEnabled&&config.PairingKey.Length==64?SharedGardenLocation.Match(currentAddress,GardenPlanSources()):null;
         if(plantingHouseId is null){if(config.NotifyPlantingUnavailable)Chat.Print("[Equinox] /gardening is available only at an identified paired house. Open its placard and allow sync, then try again.");return;}
-        followedGardenTarget=null;
+        gardenSelectionFollow.Reset();
         plantingWindow.IsOpen=true;
     }
     private SharedGardenPlan[] GardenPlanSources()
@@ -61,7 +61,19 @@ public sealed partial class Plugin
             return GardenPlanEditing.Apply(p,config.Discoveries);}).ToArray();
     }
     private SharedGardenPlan? gardenActionsPlan;
-    private (string? Target,Address? Address,uint? Argument,float X,float Y,float Z)? followedGardenTarget;
+    private readonly GardenSelectionFollow gardenSelectionFollow=new();
+    // Guide navigation reads the current temporary selection as well as hard targets.
+    // It never changes the observation snapshot used for recording game actions.
+    private unsafe GardenSnapshot? GardenGuideSelection()
+    {
+        if(snapshot is not {} context)return null;
+        var target=Targets.SoftTarget??Targets.Target;
+        if(target is null)return context with {TargetId=null,TargetDetails=null};
+        uint? argument=null;
+        if(target.BaseId==2003757&&target.ObjectKind==Dalamud.Game.ClientState.Objects.Enums.ObjectKind.EventObj&&target.Address!=0)
+            argument=((FFXIVClientStructs.FFXIV.Client.Game.Object.EventObject*)target.Address)->Arg;
+        return context with {TargetId=target.GameObjectId.ToString("X16"),TargetDetails=new(target.BaseId,target.EntityId,target.ObjectKind.ToString(),target.Position.X,target.Position.Y,target.Position.Z,argument)};
+    }
     private double gardenDrawLastMs,gardenDrawPeakMs;
     private void DrawGardenPlansWindow()
     {
@@ -87,20 +99,14 @@ public sealed partial class Plugin
         if(previousPlantingHouse!=plantingHouseId){plantingBatch=1;previousPlantingHouse=plantingHouseId;}
         // Switch once when the game target changes. Manual tabs stay usable until
         // another bed is selected. Partial calibration must not move its own tab.
-        if(snapshot is {} target && target.Address==currentAddress && atOutdoorEstate &&
+        if(GardenGuideSelection() is {} target && target.Address==currentAddress && atOutdoorEstate &&
             DateTimeOffset.UtcNow-target.ObservedAt<TimeSpan.FromSeconds(2) && gardenBedSync is not {Complete:false})
         {
-            var t=target.TargetDetails;
-            var identity=(target.TargetId,target.Address,t?.EventArgument,t?.X??0,t?.Y??0,t?.Z??0);
-            if(followedGardenTarget!=identity)
-            {
-                followedGardenTarget=identity;
-                var selection=GardenTargetMap.SelectedBatch(target,GardenMappings(),plans);
-                if(selection is {} selected && selected.House==plantingHouseId)
+            var selection=gardenSelectionFollow.Update(target,GardenMappings(),plans,DateTimeOffset.UtcNow);
+            if(selection is {} selected && selected.House==plantingHouseId)
                 {plantingBatch=selected.Batch;selectedGardenBed=selected;}
-            }
         }
-        else followedGardenTarget=null;
+        else gardenSelectionFollow.Reset();
         var house=plans.Where(p=>p.HouseId==plantingHouseId).ToArray();
         var capacity=house.Max(p=>Math.Max(p.Batch,p.Capacity));
         var tabsAt=ImGui.GetCursorScreenPos();var tabsWidth=ImGui.GetContentRegionAvail().X;
