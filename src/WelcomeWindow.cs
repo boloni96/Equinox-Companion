@@ -49,7 +49,7 @@ public sealed partial class Plugin
                 ImGui.BulletText("Planting plans, submarine timers and supplies");
                 ImGui.BulletText("Fashion Report, right here in game");
                 ImGui.Spacing();ImGui.TextUnformatted("Version "+CompanionVersion);
-                ImGui.TextWrapped("A warmer welcome for Goddess. Also includes AutoRetainer submarine caches and carried supplies, click-to-set command shortcuts and corrected submarine route syncing.");
+                ImGui.TextWrapped("New: optional QuickLoot. Enable it in Settings > Tracking to show its tab. Shared loot rules, automatic Need / Greed / Pass, collection and equipment filters, rule previews and top-bar controls. Disabled by default. Gardening keeps the rollback behavior.");
                 ImGui.Spacing();
                 ImGui.TextWrapped(plugin.config.PairingKey.Length==64?"Your saved pairing and settings are kept. Journal V7.11.27 supports the new submarine cache sync; save once after updating the website.":"Start in Settings > Connection: paste the pairing key from your Journal's Game connection. Then choose what to sync in Settings > Tracking.");
                 ImGui.TextWrapped("/equinox opens Companion. /planting opens the garden guide at an identified paired house. /fashionr opens the Fashion Report.");

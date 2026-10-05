@@ -75,6 +75,13 @@ public sealed partial class Plugin
     }
     private void DrawGeneralSettings()
     {
+        ImGui.TextUnformatted("Optional features");
+        MessageToggle("Enable QuickLoot",config.EnableQuickLoot,v=>{
+            config.EnableQuickLoot=v;
+            if(!v){config.QuickLoot.Automatic=false;StopQuickLoot("QuickLoot disabled.");quickLootBarEntry?.Remove();quickLootBarEntry=null;}
+        });
+        ImGui.TextWrapped("Disabled by default. Enable to show the QuickLoot tab and its loot settings. Disabling hides the tab, stops rolling and removes its top-bar entry; your rules are kept.");
+        ImGui.Separator();
         ImGui.TextUnformatted("Website sync");
         MessageToggle("Sync confirmed actions to Equinox Journal",config.SyncEnabled,v=>{config.SyncEnabled=v;nextSync=default;});
         MessageToggle("Refresh shared profiles while this window is closed",config.RefreshSharedInBackground,v=>{config.RefreshSharedInBackground=v;nextRosterRead=default;});

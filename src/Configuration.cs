@@ -3,6 +3,8 @@ namespace EquinoxCompanion;
 [Serializable]
 public sealed class Configuration : IPluginConfiguration
 {
+    public QuickLootSettings QuickLoot { get; set; } = new();
+    public bool EnableQuickLoot { get; set; }
     public Dictionary<string, bool> SharedAccountExpanded { get; set; } = [];
     public Dictionary<string, bool> PlantingAccountExpanded { get; set; } = [];
     public Dictionary<string, FloatingLauncherOptions> FloatingLaunchers { get; set; } = [];

@@ -1,4 +1,4 @@
-# Equinox Companion 0.5.1.48
+# Equinox Companion 0.5.1.49
 
 Current update: garden calculation and pending-action caching. See RELEASE-NOTES.md.
 Use the existing repo.json installer feed. Journal remains V7.11.66.
@@ -30,3 +30,9 @@ Company Profile support requires Journal V7.11.11. Deploy and save the website f
 
 ### Fashion Report picture window
 Use `/fashionr` to open the current V1 picture inside the game. Click the picture to expand or shrink it. A clickable browser link is also printed in local chat. Refresh downloads the current image; Open in browser is optional. `/equinox fashion` works if another plugin owns `/fashionr`. The shortcut never marks the task complete. Downloads happen asynchronously on demand, with a shared in-memory picture checked at each character login and hourly while logged in, including when the picture window is closed. Closing the window does not interrupt character sync.
+
+## Optional QuickLoot
+
+Disabled by default. Enable in Settings > Tracking to show the QuickLoot tab.
+Shared settings, nested rolling/filter/rule/feedback sections, top-bar controls
+and LazyLoot credits. See RELEASE-NOTES-0.5.1.49.md for behavior and live checks.

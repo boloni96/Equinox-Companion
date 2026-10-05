@@ -212,6 +212,7 @@ public sealed partial class Plugin : IDalamudPlugin
     private readonly Dalamud.Game.Text.SeStringHandling.Payloads.DalamudLinkPayload fashionBrowserLink;
     private void OnCommand(string command, string args)
     {
+        if(args.Trim().StartsWith("loot",StringComparison.OrdinalIgnoreCase)){OnQuickLootCommand(args.Trim()[4..].Trim());return;}
         if (args.Trim().Equals("fashion", StringComparison.OrdinalIgnoreCase)) OnFashionCommand(command, args);
         else if (args.Trim().Equals("planting", StringComparison.OrdinalIgnoreCase)) OnPlantingCommand(command, args);
         else if(args.Trim().Equals("register",StringComparison.OrdinalIgnoreCase)){registrationDeferred=false;nextRosterRead=default;}
@@ -252,6 +253,7 @@ public sealed partial class Plugin : IDalamudPlugin
     private unsafe void Update(IFramework framework)
     {
         var now = DateTimeOffset.UtcNow;
+        UpdateQuickLoot(now);
         UpdateSync(now);
         UpdateSharedRoster(now);
         UpdateCharacterRegistration(now);
@@ -1007,6 +1009,7 @@ public sealed partial class Plugin : IDalamudPlugin
 
     public void Dispose()
     {
+        quickLootBarEntry?.Remove();
         sync.Dispose();
         StopRecording();
         callbackHook?.Disable();

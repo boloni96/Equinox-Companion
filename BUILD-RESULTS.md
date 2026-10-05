@@ -1,3 +1,9 @@
+# 0.5.1.49 — Optional QuickLoot
+
+804 automated checks pass; Release build zero warnings/errors.
+Default-off master hides/stops QuickLoot. Native game interaction needs live
+validation. Existing garden rollback code is unchanged.
+
 # 0.5.1.48 — Requested rollback
 
 Source/tests restored to published 0.5.1.46, version bump only.
