@@ -1126,3 +1126,17 @@ Check("follow retries unchanged target after mapping arrives",follow51.Update(se
 Check("follow preserves manual tab after selection",follow51.Update(selectedTarget50,[selectedMapping50],[selectionPlan50],now.AddMilliseconds(600))?.ToString(),null);
 follow51.Reset();
 Check("reopening follows selected bed",follow51.Update(selectedTarget50,[selectedMapping50],[selectionPlan50],now.AddSeconds(1))?.Batch.ToString(),"2");
+
+foreach(var order52 in new int[][]{[1,2,3],[1,3,2],[2,1,3],[2,3,1],[3,1,2],[3,2,1]}){
+ var source52=Enumerable.Range(1,3).Select(i=>selectionPlan50 with {Batch=i,PhysicalPatch=i,Capacity=3}).ToArray();
+ var event52=mappedEmpty with {Kind="garden.batch-order",At=time,BatchOrder=new("selected",order52,null)};
+ var mapped52=GardenBatchOrdering.Apply(source52,[],[event52]);
+ Check("batch order "+string.Join(',',order52),string.Join(',',mapped52.OrderBy(p=>p.Batch).Select(p=>p.PhysicalPatch)),string.Join(',',order52));
+ Check("batch order retains beds "+string.Join(',',order52),mapped52.All(p=>ReferenceEquals(p.Beds,source52[p.PhysicalPatch-1].Beds)).ToString(),"True");
+ Check("selected patch follows reordered tab "+string.Join(',',order52),GardenTargetMap.SelectedBatch(selectedTarget50,[selectedMapping50],mapped52)?.Batch.ToString(),(Array.IndexOf(order52,1)+1).ToString());
+ Check("stale order ignored "+string.Join(',',order52),GardenBatchOrdering.Apply(source52,[new("selected",[1,2,3],time.AddMinutes(1))],[event52])[0].Batch.ToString(),"1");
+ Check("duplicate order idempotent "+string.Join(',',order52),string.Join(',',GardenBatchOrdering.Apply(source52,[],[event52,event52]).Select(p=>p.Batch)),string.Join(',',mapped52.Select(p=>p.Batch)));
+}
+Check("batch swap two occupied labels",string.Join(',',GardenBatchOrdering.Swap([1,2,3],1,3)),"3,2,1");
+Check("batch order rejects duplicates",GardenBatchOrdering.Valid(new("h",[1,1],null)).ToString(),"False");
+Check("batch order rejects missing positions",GardenBatchOrdering.Valid(new("h",[2],null)).ToString(),"False");

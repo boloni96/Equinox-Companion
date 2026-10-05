@@ -11,7 +11,7 @@ public static class SyncValidation
         !string.IsNullOrWhiteSpace(e.Actor?.ContentId) && records.Any(newer =>
             newer.Kind == "character.updated" && newer.Actor?.ContentId == e.Actor.ContentId &&
             newer.At > e.At && CanSend(newer, now));
-    public static bool SupportedByWebsite(string kind, int version) => kind == "character.registered" ? version >= 14 : kind == "submarines.supplies" ? version >= 13 : kind == "garden.plan" ? version >= 12 : kind is "garden.status" or "garden.status.unmapped" ? version >= 11 : kind is "garden.empty.unmapped" or "garden.mapped" ? version >= 10 : kind == "garden.dead" ? version >= 9 : kind == "submarines.cached" ? version >= 7 : kind == "garden.fertilized" ? version >= 6 : kind == "company.observed" ? version >= 4 : kind == "storage.observed" ? version >= 3 : version >= 2 ||
+    public static bool SupportedByWebsite(string kind, int version) => kind == "garden.batch-order" ? version >= 15 : kind == "character.registered" ? version >= 14 : kind == "submarines.supplies" ? version >= 13 : kind == "garden.plan" ? version >= 12 : kind is "garden.status" or "garden.status.unmapped" ? version >= 11 : kind is "garden.empty.unmapped" or "garden.mapped" ? version >= 10 : kind == "garden.dead" ? version >= 9 : kind == "submarines.cached" ? version >= 7 : kind == "garden.fertilized" ? version >= 6 : kind == "company.observed" ? version >= 4 : kind == "storage.observed" ? version >= 3 : version >= 2 ||
         kind is "house.entered" or "garden.tended" or "garden.ready" or "garden.observed" or "garden.planted" or "house.discovered" or "character.updated";
     private static bool Text(string? s) => !string.IsNullOrWhiteSpace(s) && s.Length <= 100;
     public static bool ActorReady(Actor? a) => a is not null &&
@@ -60,6 +60,7 @@ public static class SyncValidation
             voyage.Submarines is { Length: > 0 and <= 4 } && voyage.Submarines.Select(s=>s?.Slot).Distinct().Count()==voyage.Submarines.Length && voyage.Submarines.All(s=>s is not null && s.Slot is >= 0 and <= 3 && Text(s.Name) && s.Rank is > 0 and <= 200 && s.Parts is { Length: 4 } && s.Route is { Length: <= 5 } && s.RegisterTime > 0 && s.RegisterTime <= now.ToUnixTimeSeconds() && s.Parts.All(p=>p<=65535) && s.ReturnTime >= 0 && s.ReturnTime < now.AddDays(30).ToUnixTimeSeconds());
         var h = e.Address;
         if (h is null || !Regex.IsMatch(h.HouseId ?? "", "^[a-fA-F0-9]{16}$") || h.WorldId == 0 || h.TerritoryTypeId == 0 || h.Ward is < 1 or > 60 || h.Plot is < 0 or > 60 || h.Room is < 0 or > 65535) return false;
+        if (e.Kind == "garden.batch-order") return h.Plot>0&&h.Room==0&&!h.Apartment&&!h.Workshop&&GardenBatchOrdering.Valid(e.BatchOrder);
         if (e.Kind == "garden.plan") return h.Plot>0&&h.Room==0&&!h.Apartment&&!h.Workshop&&GardenPlanEditing.Valid(e.PlanEdit);
         if (e.Kind == "house.entered") return true;
         if (e.Kind == "house.placard") return h.Plot > 0 && h.Room == 0 && !h.Apartment && !h.Workshop &&

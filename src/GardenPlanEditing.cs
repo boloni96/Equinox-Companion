@@ -54,3 +54,23 @@ public static class GardenPlanEditing
     public static bool Valid(GardenPlanChange? change) => change is {Batch:>=1 and <=3}&&change.HouseId.Length is >0 and <=100&&
         (change.Plan is null || change.Plan is {Draft:{} d,Steps:{Length:<=8} s}&&d.Target.Length is >0 and <=100&&d.Mode is "grow" or "cross" or "plan"&&s.Select(x=>x.Bed).Distinct().Count()==s.Length&&s.All(x=>x.Bed is >=1 and <=8&&x.Order is >=0 and <=16&&x.Crop.Length is >0 and <=100&&x.Soil.Length is >0 and <=100));
 }
+
+public sealed record SharedGardenBatchOrder(string HouseId,int[] Order,DateTimeOffset? At);
+public sealed record GardenBatchOrderChange(string HouseId,int[] Order,DateTimeOffset? BaseAt);
+public static class GardenBatchOrdering
+{
+    public static bool Valid(GardenBatchOrderChange? x)=>x is {HouseId.Length:>0 and <=100,Order.Length:>=1 and <=3}&&x.Order.Distinct().Count()==x.Order.Length&&x.Order.All(n=>n>=1&&n<=x.Order.Length);
+    public static int[] Swap(int[] order,int source,int destination){var result=order.ToArray();if(source<1||source>result.Length||destination<1||destination>result.Length)return result;(result[source-1],result[destination-1])=(result[destination-1],result[source-1]);return result;}
+    public static SharedGardenPlan[] Apply(SharedGardenPlan[] plans,SharedGardenBatchOrder[] orders,IEnumerable<SyncEvent> events)
+    {
+        var state=orders.Where(x=>x is not null&&Valid(new(x.HouseId,x.Order,x.At))).GroupBy(x=>x.HouseId).ToDictionary(g=>g.Key,g=>g.First());
+        foreach(var e in events.Where(e=>e.Kind=="garden.batch-order").OrderBy(e=>e.At)){
+            var x=e.BatchOrder;if(!Valid(x))continue;state.TryGetValue(x!.HouseId,out var old);
+            if(old?.At!=x.BaseAt)continue;
+            var prior=old?.Order??Enumerable.Range(1,x.Order.Length).ToArray();if(prior.Length!=x.Order.Length)continue;
+            plans=plans.Select(p=>p.HouseId==x.HouseId&&p.Batch>=1&&p.Batch<=prior.Length?p with {Batch=Array.IndexOf(x.Order,prior[p.Batch-1])+1}:p).ToArray();
+            state[x.HouseId]=new(x.HouseId,x.Order,e.At);
+        }
+        return plans;
+    }
+}

@@ -3,6 +3,7 @@ namespace EquinoxCompanion;
 [Serializable]
 public sealed class Configuration : IPluginConfiguration
 {
+    public HashSet<string> GardenResyncBatches { get; set; } = [];
     public QuickLootSettings QuickLoot { get; set; } = new();
     public bool EnableQuickLoot { get; set; }
     public Dictionary<string, bool> SharedAccountExpanded { get; set; } = [];

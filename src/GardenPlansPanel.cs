@@ -28,6 +28,7 @@ public sealed partial class Plugin
     private void ObserveBedSync(GardenSnapshot target, DateTimeOffset at, (int Patch,int Bed)? numbered = null)
     {
         if (!plantingWindow.IsOpen || !atOutdoorEstate || gardenBedSync?.Observe(target,at,numbered)!=true || !gardenBedSync.Complete) return;
+        config.GardenResyncBatches.Remove(GardenResyncKey(plantingHouseId??"",gardenBedSync.Patch));
         foreach (var e in gardenBedSync.Mappings)
             KeepDiscovery(e with {Actor=WithWorldNames(e.Actor),Address=WithAddressNames(e.Address!)},force:true);
         nextRosterRead=default;if(syncFailures==0)nextSync=default;
@@ -48,7 +49,7 @@ public sealed partial class Plugin
         {
             var care=config.SharedRoster?.GardenCare?.FirstOrDefault(c=>c.HouseId==house.Id&&c.Batch==batch);
             var existing=result.FindIndex(p=>p.HouseId==house.Id&&p.Batch==batch);
-            var plan=existing>=0?result[existing]:new SharedGardenPlan(house.Id,house.Name,house.World,house.District,house.Ward,house.Plot,batch,"",DateTimeOffset.MinValue,[],house.GameHouseId,house.Size=="Large"?3:house.Size=="Medium"?2:1,PhysicalPatch:care?.PhysicalPatch??batch);
+            var plan=existing>=0?result[existing]:new SharedGardenPlan(house.Id,house.Name,house.World,house.District,house.Ward,house.Plot,batch,"",DateTimeOffset.MinValue,[],house.GameHouseId,house.Size=="Large"?3:house.Size=="Medium"?2:1,PhysicalPatch:care?.PhysicalPatch??config.SharedRoster?.GardenBatchOrders?.FirstOrDefault(o=>o.HouseId==house.Id)?.Order.ElementAtOrDefault(batch-1)??batch);
             var beds=Enumerable.Range(1,8).Select(number=>{
                 var bed=plan.Beds.FirstOrDefault(b=>b.Bed==number);if(bed is not null)return bed;
                 var b=care?.Beds.FirstOrDefault(b=>b.Bed==number);
@@ -56,9 +57,11 @@ public sealed partial class Plugin
             }).ToArray();
             plan=plan with {Beds=beds};if(existing>=0)result[existing]=plan;else result.Add(plan);
         }
-        return result.Select(p=>{var revision=config.SharedRoster?.GardenPlanRevisions?.FirstOrDefault(r=>r.HouseId==p.HouseId&&r.Batch==p.Batch);
+        var projected=result.Select(p=>{var revision=config.SharedRoster?.GardenPlanRevisions?.FirstOrDefault(r=>r.HouseId==p.HouseId&&r.Batch==p.Batch);
             if(p.At==DateTimeOffset.MinValue&&revision is not null)p=p with {At=revision.At};
-            return GardenPlanEditing.Apply(p,config.Discoveries);}).ToArray();
+            var assignedAt=config.SharedRoster?.GardenBatchOrders?.FirstOrDefault(o=>o.HouseId==p.HouseId)?.At;
+            return GardenPlanEditing.Apply(p,config.Discoveries.Where(e=>assignedAt is null||e.At>assignedAt));}).ToArray();
+        return GardenBatchOrdering.Apply(projected,config.SharedRoster?.GardenBatchOrders??[],config.Discoveries);
     }
     private SharedGardenPlan? gardenActionsPlan;
     private readonly GardenSelectionFollow gardenSelectionFollow=new();
@@ -134,7 +137,7 @@ public sealed partial class Plugin
         var visitorSetup=atOutdoorEstate&&GardenBedSyncSession.IsVisitor(config.SharedRoster,Player.CharacterName,WorldName(Player.HomeWorld.RowId)??"",plan.HouseId);
         if(!visitorSetup||gardenBedSync is not null&&!gardenBedSync.Matches(Player.ContentId.ToString(System.Globalization.CultureInfo.InvariantCulture),currentAddress,physicalPatch))gardenBedSync=null;
         if(!visitorSetup||canceledBedSync is {} canceled&&(canceled.House!=plan.HouseId||canceled.Patch!=physicalPatch))canceledBedSync=null;
-        var showSync=visitorSetup&&(gardenBedSync is {Complete:false}||canceledBedSync is not null||GardenBedSyncSession.NeedsSync(plan.Beds));
+        var showSync=visitorSetup&&(gardenBedSync is {Complete:false}||canceledBedSync is not null||config.GardenResyncBatches.Contains(GardenResyncKey(plan.HouseId,physicalPatch))||GardenBedSyncSession.NeedsSync(plan.Beds));
         var houseAt=new Vector2(tabsAt.X+Math.Max(0,tabsWidth-houseSize-(showSync?syncSize+ImGui.GetStyle().ItemSpacing.X:0)),tabsAt.Y);
         ImGui.SetCursorScreenPos(houseAt);
         var openHouse=ImGui.Button("##Open house gardening",new Vector2(houseSize));
@@ -244,7 +247,7 @@ public sealed partial class Plugin
                 () => DrawGardenCareTooltip(b,showPlan,wrong));
         }
         ImGui.SetCursorScreenPos(origin+new Vector2(0,board));ImGui.Dummy(new Vector2(board,4));
-        DrawSavedGardenPlans(plan);
+        DrawGardenBatchMapping(plan);DrawSavedGardenPlans(plan);
         if(ImGui.CollapsingHeader("Tips, supplies and harvest potential")){
             DrawGardenInfoLabel("tips","Follow step numbers, not just bed numbers. Keep compatible mature neighbours. The first planting in an empty batch has no neighbour; the guide may return to that starter after the others are planted. Crossbred seeds are possible extras, not guaranteed harvests.");
             var y=config.SharedRoster?.GardenYields?.FirstOrDefault(y=>y.HouseId==plan.HouseId&&y.Batch==plan.Batch);if(y is not null){ImGui.TextWrapped("Recorded: "+y.Actual);ImGui.TextWrapped("Planned: "+y.Planned);ImGui.TextWrapped(y.Seeds);}
