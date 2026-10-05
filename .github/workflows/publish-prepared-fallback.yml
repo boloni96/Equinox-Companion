@@ -1,0 +1,30 @@
+name: Publish prepared package (Windows fallback)
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/publish-prepared-fallback.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: equinox-companion-release-fallback
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - name: Verify package and prepare feed
+        run: python3 scripts/publish_prepared.py
+      - name: Publish package and feed atomically
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/garden-art dist repo.json .release-staging
+          git commit -m 'Publish verified Companion package and installer feed'
+          git push origin HEAD:main
