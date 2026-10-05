@@ -1,3 +1,9 @@
+# 0.5.1.48 — Requested rollback
+
+Source/tests restored to published 0.5.1.46, version bump only.
+728 checks passed; Release build zero warnings/errors. Live harvest and
+performance confirmation pending. No investigation fixes included.
+
 # 0.5.1.47 — Garden update efficiency
 
 802 checks passed. .NET 10 / Dalamud API 15 Release build: zero warnings/errors.

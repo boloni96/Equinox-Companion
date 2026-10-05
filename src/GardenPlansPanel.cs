@@ -41,8 +41,6 @@ public sealed partial class Plugin
     }
     private SharedGardenPlan[] GardenPlanSources()
     {
-        RefreshGardenInputs();
-        if (gardenPlanSources is not null) return gardenPlanSources;
         var saved=config.SharedRoster?.GardenPlans??[];var result=saved.ToList();
         var houses=(config.SharedRoster?.People??[]).SelectMany(p=>p.Characters).SelectMany(c=>c.Houses).DistinctBy(h=>h.Id);
         foreach(var house in houses)for(var batch=1;batch<=(house.Size=="Large"?3:house.Size=="Medium"?2:1);batch++)
@@ -57,11 +55,9 @@ public sealed partial class Plugin
             }).ToArray();
             plan=plan with {Beds=beds};if(existing>=0)result[existing]=plan;else result.Add(plan);
         }
-        gardenPlanSources = result.Select(p=>{var revision=config.SharedRoster?.GardenPlanRevisions?.FirstOrDefault(r=>r.HouseId==p.HouseId&&r.Batch==p.Batch);
+        return result.Select(p=>{var revision=config.SharedRoster?.GardenPlanRevisions?.FirstOrDefault(r=>r.HouseId==p.HouseId&&r.Batch==p.Batch);
             if(p.At==DateTimeOffset.MinValue&&revision is not null)p=p with {At=revision.At};
             return GardenPlanEditing.Apply(p,config.Discoveries);}).ToArray();
-        gardenProjection.Retain(gardenPlanSources);
-        return gardenPlanSources;
     }
     private SharedGardenPlan? gardenActionsPlan;
     private void DrawGardenPlansWindow()
@@ -94,7 +90,8 @@ public sealed partial class Plugin
         }
         var source=house.FirstOrDefault(p=>p.Batch==plantingBatch);if(source is null)return;
         var plan=EffectiveGardenPlan(source);gardenActionsPlan=plan;
-        var queued=QueuedGardenBeds(plan);
+        var sent=config.SentEvents.ToHashSet();
+        var queued=LocalGardenActions().Where(e=>!sent.Contains(e.Id)&&e.Address is not null&&SharedGardenLocation.Match(e.Address,[plan])==plan.HouseId&&e.Patch==(plan.PhysicalPatch>0?plan.PhysicalPatch:plan.Batch)).Select(e=>e.Bed).ToHashSet();
         plan=plan with {Beds=plan.Beds.Select(b=>b with {Queued=queued.Contains(b.Bed)}).ToArray()};
         var planned=plan.Beds.Where(b=>b.Crop.Length>0).ToArray();
         var physicalPatch=plan.PhysicalPatch>0?plan.PhysicalPatch:plan.Batch;

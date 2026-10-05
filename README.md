@@ -1,4 +1,4 @@
-# Equinox Companion 0.5.1.47
+# Equinox Companion 0.5.1.48
 
 Current update: garden calculation and pending-action caching. See RELEASE-NOTES.md.
 Use the existing repo.json installer feed. Journal remains V7.11.66.
