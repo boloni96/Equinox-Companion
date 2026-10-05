@@ -39,6 +39,13 @@ static class QuickLootTests
             Expect(category+" unlocked passes",QuickLootRoll.Pass,collectible);Expect(category+" locked kept",QuickLootRoll.Need,collectible with {Unlocked=false});
             s.Collections[category].UntradeableOnly=true;Expect(category+" tradeable kept",QuickLootRoll.Need,collectible);Expect(category+" untradeable passes",QuickLootRoll.Pass,collectible with {Untradeable=true});
         }
+        s.Collections.Clear();
+        s.Collections["All unlockables"]=new(){Enabled=true,UntradeableOnly=true};
+        s.Collections["Mounts"]=new(){Enabled=true,UntradeableOnly=false};
+        Expect("global untradeable wins over hidden category",QuickLootRoll.Need,f with {Equipment=false,Category="Mounts",Unlocked=true});
+        Expect("global still passes unlocked untradeable",QuickLootRoll.Pass,f with {Equipment=false,Category="Mounts",Unlocked=true,Untradeable=true});
+        s.Collections["All unlockables"].Enabled=false;
+        Expect("category restored after disabling global",QuickLootRoll.Pass,f with {Equipment=false,Category="Mounts",Unlocked=true});
         s.Collections.Clear();s.Items.Add(new(){Id=100,Roll=QuickLootRoll.Nothing});Expect("nothing never changes to pass for duplicate",QuickLootRoll.Nothing,f with {UniqueOwned=true});
         var json=QuickLootPolicy.ExportRules(s.Items);check("QuickLoot rule roundtrip",QuickLootPolicy.ExportRules(QuickLootPolicy.ImportRules(json)),json);
         foreach(var invalid in new[]{"null","[null]","[{\"Id\":0}]","[{\"Id\":1,\"Roll\":99}]","[{\"Id\":1},{\"Id\":1}]"})

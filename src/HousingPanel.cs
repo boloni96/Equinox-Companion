@@ -22,7 +22,7 @@ public sealed partial class Plugin
 
     private void DrawHousing()
     {
-        ImGui.TextWrapped("Characters & housing");
+        ImGui.TextWrapped("My Empire");
         ImGui.TextColored(Green, "0–7 days"); ImGui.SameLine();
         ImGui.TextColored(Orange, "8–30"); ImGui.SameLine();
         ImGui.TextColored(Red, "31–45"); ImGui.SameLine();

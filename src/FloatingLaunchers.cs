@@ -65,7 +65,7 @@ public sealed partial class Plugin
             {
                 if(pending=="Companion") Open();
                 else if(pending=="Fashion Report") fashionWindow.OpenReport();
-                else OnPlantingCommand("/planting", "");
+                else OnPlantingCommand("/gardening", "");
                 if(pending!="Planting" || plantingWindow.IsOpen) minimizedLaunchers.Remove(pending);
             }
         }
@@ -125,14 +125,14 @@ public sealed partial class Plugin
             ImGui.PushStyleVar(ImGuiStyleVar.Alpha,ImGui.GetStyle().Alpha*.75f);
             if (ImGui.SmallButton("...")) ImGui.OpenPopup("Icon settings");
             ImGui.PopStyleVar();
-            if (hovered) ImGui.SetTooltip(name + " · Click to open · Double-click to close · Drag to move"+(name=="Fashion Report"?"\n"+CurrentFashionTooltip():""));
+            if (hovered) ImGui.SetTooltip((name=="Planting"?"Gardening":name) + " · Click to open · Double-click to close · Drag to move"+(name=="Fashion Report"?"\n"+CurrentFashionTooltip():""));
             if (ImGui.BeginPopup("Icon settings")) { DrawLauncherOptions(name, o); ImGui.EndPopup(); }
         }
         ImGui.End(); ImGui.PopStyleVar();
     }
     private void DrawLauncherOptions(string name, FloatingLauncherOptions o)
     {
-        ImGui.TextUnformatted(name);
+        ImGui.TextUnformatted(name=="Planting"?"Gardening":name);
         var opacity = o.Opacity; var blur = o.Blur; var locked = o.Locked;
         var changed = ImGui.SliderFloat("Opacity", ref opacity, .2f, 1, "%.2f");
         changed |= ImGui.Checkbox("Blur background", ref blur);

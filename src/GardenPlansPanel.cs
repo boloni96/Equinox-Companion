@@ -36,7 +36,8 @@ public sealed partial class Plugin
     {
         nextRosterRead=default;
         plantingHouseId=config.SyncEnabled&&config.PairingKey.Length==64?SharedGardenLocation.Match(currentAddress,GardenPlanSources()):null;
-        if(plantingHouseId is null){if(config.NotifyPlantingUnavailable)Chat.Print("[Equinox] /planting is available only at an identified paired house. Open its placard and allow sync, then try again.");return;}
+        if(plantingHouseId is null){if(config.NotifyPlantingUnavailable)Chat.Print("[Equinox] /gardening is available only at an identified paired house. Open its placard and allow sync, then try again.");return;}
+        followedGardenTarget=null;
         plantingWindow.IsOpen=true;
     }
     private SharedGardenPlan[] GardenPlanSources()
@@ -60,17 +61,46 @@ public sealed partial class Plugin
             return GardenPlanEditing.Apply(p,config.Discoveries);}).ToArray();
     }
     private SharedGardenPlan? gardenActionsPlan;
+    private (string? Target,Address? Address,uint? Argument,float X,float Y,float Z)? followedGardenTarget;
+    private double gardenDrawLastMs,gardenDrawPeakMs;
     private void DrawGardenPlansWindow()
     {
-        gardenActionsPlan=null;
-        DrawGardenPlans();
-        if(gardenActionsPlan is {} plan)DrawGardenPlanActions(plan);
+        var started=System.Diagnostics.Stopwatch.GetTimestamp();
+        try
+        {
+            drawingGardenGuide=true;gardenGuideActions=null;
+            gardenActionsPlan=null;
+            DrawGardenPlans();
+            if(gardenActionsPlan is {} plan)DrawGardenPlanActions(plan);
+        }
+        finally
+        {
+            drawingGardenGuide=false;gardenGuideActions=null;
+            gardenDrawLastMs=System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+            gardenDrawPeakMs=Math.Max(gardenDrawPeakMs,gardenDrawLastMs);
+        }
     }
     private void DrawGardenPlans()
     {
         var plans=GardenPlanSources();plantingHouseId=config.SyncEnabled&&config.PairingKey.Length==64?SharedGardenLocation.Match(currentAddress,plans):null;
-        if(plantingHouseId is null){ImGui.TextWrapped("Visit an identified paired house to view its planting guide. No guide is shown outside or while loading.");return;}
+        if(plantingHouseId is null){ImGui.TextWrapped("Visit an identified paired house to view its Gardening guide. No guide is shown outside or while loading.");return;}
         if(previousPlantingHouse!=plantingHouseId){plantingBatch=1;previousPlantingHouse=plantingHouseId;}
+        // Switch once when the game target changes. Manual tabs stay usable until
+        // another bed is selected. Partial calibration must not move its own tab.
+        if(snapshot is {} target && target.Address==currentAddress && atOutdoorEstate &&
+            DateTimeOffset.UtcNow-target.ObservedAt<TimeSpan.FromSeconds(2) && gardenBedSync is not {Complete:false})
+        {
+            var t=target.TargetDetails;
+            var identity=(target.TargetId,target.Address,t?.EventArgument,t?.X??0,t?.Y??0,t?.Z??0);
+            if(followedGardenTarget!=identity)
+            {
+                followedGardenTarget=identity;
+                var selection=GardenTargetMap.SelectedBatch(target,GardenMappings(),plans);
+                if(selection is {} selected && selected.House==plantingHouseId)
+                {plantingBatch=selected.Batch;selectedGardenBed=selected;}
+            }
+        }
+        else followedGardenTarget=null;
         var house=plans.Where(p=>p.HouseId==plantingHouseId).ToArray();
         var capacity=house.Max(p=>Math.Max(p.Batch,p.Capacity));
         var tabsAt=ImGui.GetCursorScreenPos();var tabsWidth=ImGui.GetContentRegionAvail().X;

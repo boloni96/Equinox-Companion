@@ -1,6 +1,7 @@
-# Equinox Companion 0.5.1.49
+# Equinox Companion 0.5.1.50
 
-Current update: garden calculation and pending-action caching. See RELEASE-NOTES.md.
+Current update: My Empire, /gardening batch following, coloured garden groups,
+QuickLoot filter/feedback fixes and indexed garden-history lookup. See RELEASE-NOTES.md.
 Use the existing repo.json installer feed. Journal remains V7.11.66.
 
 # Equinox Companion 0.5.1.2 — validation build

@@ -1087,3 +1087,33 @@ Check("registration held for older website",SyncValidation.SupportedByWebsite("c
 Check("registration sends with new website",SyncValidation.SupportedByWebsite("character.registered",14).ToString(),"True");
 
 QuickLootTests.Run(Check);
+
+// Batch following reads only confirmed identities and physical-patch assignments.
+var selectedAddress50=realAddress with {WorldName="Rafflesia",DistrictName="Shirogane"};
+var selectedTarget50=setupTarget with {Address=selectedAddress50};
+var selectedMapping50=calibration with {World="Rafflesia",District="Shirogane"};
+var selectionPlan50=livePlan with {HouseId="selected",World="Rafflesia",District="Shirogane",Ward=realAddress.Ward,Plot=realAddress.Plot,GameHouseId=realAddress.HouseId,Batch=2,PhysicalPatch=1};
+Check("selected mapped bed opens assigned batch",GardenTargetMap.SelectedBatch(selectedTarget50,[selectedMapping50],[selectionPlan50])?.ToString(),("selected",2,1).ToString());
+Check("unknown bed leaves current tab",GardenTargetMap.SelectedBatch(selectedTarget50,[],[selectionPlan50])?.ToString(),null);
+Check("moved bed leaves current tab",GardenTargetMap.SelectedBatch(selectedTarget50,[selectedMapping50 with {X=calibration.X+1}],[selectionPlan50])?.ToString(),null);
+Check("wrong estate leaves current tab",GardenTargetMap.SelectedBatch(selectedTarget50 with {Address=selectedAddress50 with {HouseId="other"}},[selectedMapping50],[selectionPlan50])?.ToString(),null);
+Check("ambiguous patch assignment leaves current tab",GardenTargetMap.SelectedBatch(selectedTarget50,[selectedMapping50],[selectionPlan50,selectionPlan50 with {Batch=3}])?.ToString(),null);
+Check("ordinary game target leaves current tab",GardenTargetMap.SelectedBatch(selectedTarget50 with {TargetDetails=selectedTarget50.TargetDetails! with {DataId=1}},[selectedMapping50],[selectionPlan50])?.ToString(),null);
+Check("mapping tie keeps original identity",GardenTargetMap.CreateResolver([calibration,calibration with {Bed=2}])(mappedEmpty).Bed?.ToString(),"1");
+var early50=GardenLive.Apply(wateredPlan,[new SyncEvent("early50","garden.tended",artNow.AddHours(3),liveActor,liveAddress,1,2)],x=>x);
+Check("early tending restarts water time",early50.Beds[0].Watered.ToString(),artNow.AddHours(3).ToString());
+Check("early tending restarts twelve hour suggestion",early50.Beds[0].NextTend.ToString(),artNow.AddHours(15).ToString());
+Check("early tending remains wet at old deadline",GardenVisualState.SoilArtwork(early50.Beds[0],false,artNow.AddHours(12)),"wet");
+Check("early tending dries at new deadline",GardenVisualState.SoilArtwork(early50.Beds[0],false,artNow.AddHours(15)),"normal");
+Check("early tending preserves another bed",early50.Beds[1].Watered.ToString(),wateredPlan.Beds[1].Watered.ToString());
+// Exercise a large mapping history, including newer moved calibrations, against the original lookup.
+var mappingHistory50=Enumerable.Range(0,6000).Select(i=>calibration with {Argument=(uint)(i%64),At=time.AddSeconds(i/64),Bed=i%8+1}).ToArray();
+var eventHistory50=Enumerable.Range(0,6000).Select(i=>mappedEmpty with {GardenTarget=mappedEmpty.GardenTarget! with {Argument=(uint)(i%64)},At=time.AddMinutes(2)}).ToArray();
+var baseline50=System.Diagnostics.Stopwatch.StartNew();
+var expected50=eventHistory50.Select(e=>mappingHistory50.Where(m=>m.Argument==e.GardenTarget!.Argument).OrderByDescending(m=>m.At).First().Bed).ToArray();
+baseline50.Stop();
+var indexed50=System.Diagnostics.Stopwatch.StartNew();
+var resolve50=GardenTargetMap.CreateResolver(mappingHistory50);
+var actual50=eventHistory50.Select(e=>resolve50(e).Bed!.Value).ToArray();indexed50.Stop();
+Check("indexed 6000-event history preserves mapping results",actual50.SequenceEqual(expected50).ToString(),"True");
+Console.WriteLine($"BENCH mapping lookup 6000 events/6000 mappings: original {baseline50.Elapsed.TotalMilliseconds:F2} ms; indexed {indexed50.Elapsed.TotalMilliseconds:F2} ms (CPU synthetic, not game FPS)");

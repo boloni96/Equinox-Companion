@@ -186,7 +186,9 @@ public sealed partial class Plugin : IDalamudPlugin
         catch (Exception ex) { errorJournal.Record("plugin", "Fashion observer unavailable", exceptionType: ex.GetType().Name); }
         if (config.TrackGardens) { callbackHook?.Enable(); callbackIntHook?.Enable(); plantHook?.Enable(); }
         Commands.AddHandler("/equinox", new CommandInfo(OnCommand) { HelpMessage = "Open Equinox Companion, shared profiles, housing and settings." });
-        plantingCommandRegistered = Commands.AddHandler("/planting", new CommandInfo(OnPlantingCommand) { HelpMessage = "Open this house's saved planting layouts and bed-by-bed guide." });
+        gardeningCommandRegistered = Commands.AddHandler("/gardening", new CommandInfo(OnPlantingCommand) { HelpMessage = "Open this house’s Gardening guide; follows selected synced beds." });
+        if (!gardeningCommandRegistered) Log.Warning("/gardening is already registered. Use /equinox gardening instead.");
+        plantingCommandRegistered = Commands.AddHandler("/planting", new CommandInfo(OnPlantingCommand) { HelpMessage = "Alias for /gardening." });
         if (!plantingCommandRegistered) Log.Warning("/planting is already registered. Use /equinox planting instead.");
         fashionBrowserLink = Chat.AddChatLinkHandler(10513, (_, _) => OpenFashionBrowser());
         fashionCommandRegistered = Commands.AddHandler("/fashionr", new CommandInfo(OnFashionCommand) { HelpMessage = "Open the current Fashion Report V1 picture in game." });
@@ -209,12 +211,13 @@ public sealed partial class Plugin : IDalamudPlugin
     private void Open() => visible = true;
     private readonly bool fashionCommandRegistered;
     private readonly bool plantingCommandRegistered;
+    private readonly bool gardeningCommandRegistered;
     private readonly Dalamud.Game.Text.SeStringHandling.Payloads.DalamudLinkPayload fashionBrowserLink;
     private void OnCommand(string command, string args)
     {
         if(args.Trim().StartsWith("loot",StringComparison.OrdinalIgnoreCase)){OnQuickLootCommand(args.Trim()[4..].Trim());return;}
         if (args.Trim().Equals("fashion", StringComparison.OrdinalIgnoreCase)) OnFashionCommand(command, args);
-        else if (args.Trim().Equals("planting", StringComparison.OrdinalIgnoreCase)) OnPlantingCommand(command, args);
+        else if ((args.Trim().Equals("planting", StringComparison.OrdinalIgnoreCase) || args.Trim().Equals("gardening", StringComparison.OrdinalIgnoreCase))) OnPlantingCommand(command, args);
         else if(args.Trim().Equals("register",StringComparison.OrdinalIgnoreCase)){registrationDeferred=false;nextRosterRead=default;}
         else visible = !visible;
     }
@@ -946,6 +949,8 @@ public sealed partial class Plugin : IDalamudPlugin
             ImGui.TextWrapped(status);
             ImGui.TextWrapped(discoveryStatus);
             ImGui.TextWrapped(cropChatStatus);
+            ImGui.TextWrapped($"Gardening guide CPU draw: {gardenDrawLastMs:F2} ms · session peak {gardenDrawPeakMs:F2} ms (not total game frame time).");
+            if(ImGui.SmallButton("Reset garden draw peak"))gardenDrawPeakMs=0;
             ImGui.TextWrapped($"Saved planting records: {config.Planting.Count}. Plant observer: {(plantHook is null ? "unavailable" : "ready")}");
             if (ImGui.CollapsingHeader("Recent observed house visits · latest 50"))
             {
@@ -1031,6 +1036,7 @@ public sealed partial class Plugin : IDalamudPlugin
         Pi.UiBuilder.OpenConfigUi -= Open;
         Commands.RemoveHandler("/equinox");
         if (fashionCommandRegistered) Commands.RemoveHandler("/fashionr");
+        if (gardeningCommandRegistered) Commands.RemoveHandler("/gardening");
         if (plantingCommandRegistered) Commands.RemoveHandler("/planting");
         Chat.RemoveChatLinkHandler(10513);
     }

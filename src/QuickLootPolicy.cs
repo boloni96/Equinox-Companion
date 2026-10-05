@@ -63,7 +63,7 @@ public static class QuickLootPolicy
         if(intent==QuickLootRoll.Pass)return Limit(intent,f,"Pass requested");
         if(s.KeepGlamour&&f.Glamour)return Limit(intent,f,"Glamour protected from global filters");
         bool Filter(string key)=>s.Collections.TryGetValue(key,out var c)&&c.Enabled&&(!c.UntradeableOnly||f.Untradeable);
-        if(f.Unlocked&&(Filter("All unlockables")||Filter(f.Category)))return Limit(QuickLootRoll.Pass,f,"Already unlocked on this character");
+        if(f.Unlocked&&(Filter(s.Collections.TryGetValue("All unlockables",out var all)&&all.Enabled?"All unlockables":f.Category)))return Limit(QuickLootRoll.Pass,f,"Already unlocked on this character");
         if(s.OtherJobs&&f.FitsJob==false)return Limit(QuickLootRoll.Pass,f,"Item for another job");
         if(f.Equipment)
         {

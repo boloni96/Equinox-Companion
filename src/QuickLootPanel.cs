@@ -84,7 +84,9 @@ public sealed partial class Plugin
         ImGui.TextWrapped("Pass only when the current character has unlocked the collectible. Unknown unlock states are kept. Faded copies are skipped only if every identified orchestrion result is unlocked.");
         foreach(var name in QuickLootSettings.Categories)
         {
-            var s=CurrentQuickLoot;s.Collections.TryGetValue(name,out var stored);var c=stored??new QuickLootCollectionFilter();
+            var s=CurrentQuickLoot;
+            if(name!="All unlockables"&&s.Collections.TryGetValue("All unlockables",out var all)&&all.Enabled)continue;
+            s.Collections.TryGetValue(name,out var stored);var c=stored??new QuickLootCollectionFilter();
             ImGui.PushID(name);
             QCheck(name,c.Enabled,v=>{c.Enabled=v;s.Collections[name]=c;});ImGui.SameLine();
             QCheck("Untradeable only",c.UntradeableOnly,v=>{c.UntradeableOnly=v;s.Collections[name]=c;});ImGui.PopID();
@@ -152,6 +154,10 @@ public sealed partial class Plugin
         QCheck("Chat results",s.Chat,v=>s.Chat=v);QCheck("Normal toasts",s.NormalToast,v=>s.NormalToast=v);
         QCheck("Quest toasts",s.QuestToast,v=>s.QuestToast=v);QCheck("Error toasts",s.ErrorToast,v=>s.ErrorToast=v);
         QCheck("Record decision reasons in history",s.Diagnostics,v=>s.Diagnostics=v);
+        ImGui.TextWrapped("Test a notification without rolling or changing your settings:");
+        if(ImGui.Button("Test normal toast"))QuickLootToasts.ShowNormal("QuickLoot · Normal notification test");
+        if(ImGui.Button("Test quest toast"))QuickLootToasts.ShowQuest("QuickLoot · Quest notification test");
+        if(ImGui.Button("Test error toast"))QuickLootToasts.ShowError("QuickLoot · Error notification test");
     }
     private unsafe void DrawQuickLootPreview()
     {

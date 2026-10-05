@@ -9,7 +9,7 @@ public sealed partial class Plugin
     {
         var tabs = new List<(string Id, string Label, Action Draw)>
         {
-            ("housing", "Characters & housing###equinox-housing", DrawHousing),
+            ("housing", "My Empire###equinox-housing", DrawHousing),
         };
         foreach (var profile in config.SharedRoster?.People ?? [])
             tabs.Add(("person:" + profile.Id, profile.Name.Replace("##", "") + "###person-" + profile.Id, () => DrawSharedPerson(profile)));

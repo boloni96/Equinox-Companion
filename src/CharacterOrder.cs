@@ -53,7 +53,7 @@ public sealed partial class Plugin
         { config.HouseCharactersFirst = ownersFirst; Pi.SavePluginConfig(config); }
         ImGui.TextWrapped("Use Up / Down to arrange each list. With houses first enabled, moves stay within the house / no-house groups. Disable it to place anyone anywhere. Order is saved on this installation. The logged-in character temporarily appears first in the character tabs; your order here stays unchanged.");
         var owners = LocalHousingActors();
-        DrawOrderList("local", "Characters & housing", OrderedLocalCharacters(true)
+        DrawOrderList("local", "My Empire", OrderedLocalCharacters(true)
             .Select(a => new OrderCharacter(a.ContentId, a.Name + " · " + HomeLocation(a), owners.Contains(a.ContentId))).ToArray());
         foreach (var person in config.SharedRoster?.People ?? [])
             DrawOrderList("shared-" + person.Id, person.Name, OrderedSharedCharacters(person, true)

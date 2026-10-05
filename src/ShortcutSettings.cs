@@ -4,7 +4,7 @@ namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
     private static readonly string[] ShortcutKeys = ["None", .. Enumerable.Range('A',26).Select(x=>((char)x).ToString()), .. Enumerable.Range(1,24).Select(x=>"F"+x), .. Enumerable.Range(0,10).Select(x=>"Key"+x), "Space", "Tab", "Backspace", "Insert", "Delete", "Home", "End", "PageUp", "PageDown", "LeftArrow", "RightArrow", "UpArrow", "DownArrow", .. Enumerable.Range(0,10).Select(x=>"Keypad"+x)];
-    private (string Name, Shortcut Binding)[] Shortcuts() => [("/equinox",config.EquinoxShortcut),("/planting",config.PlantingShortcut),("/fashionr",config.FashionShortcut)];
+    private (string Name, Shortcut Binding)[] Shortcuts() => [("/equinox",config.EquinoxShortcut),("/gardening",config.PlantingShortcut),("/fashionr",config.FashionShortcut)];
     private string? capturingShortcut;
     private ShortcutCapture? shortcutCapture;
     private string shortcutCaptureStatus = "";
@@ -44,7 +44,7 @@ public sealed partial class Plugin
             // Duplicate shortcuts do nothing; the settings screen highlights the conflict.
             if(bindings.Count(x=>x.Binding.Matches(binding.Key,binding.Ctrl,binding.Alt,binding.Shift))!=1)continue;
             if(name=="/equinox")OnCommand(name,"");
-            else if(name=="/planting")OnPlantingCommand(name,"");
+            else if(name=="/gardening")OnPlantingCommand(name,"");
             else OnFashionCommand(name,"");
             break;
         }
@@ -70,7 +70,7 @@ public sealed partial class Plugin
             ImGui.PopID();
         }
         if(shortcutCaptureStatus.Length>0)ImGui.TextWrapped(shortcutCaptureStatus);
-        ImGui.TextWrapped("Shortcuts pause while typing or editing a control and while the game is unfocused. They do not replace FFXIV keybinds: choose unused combinations. /planting still requires an identified paired house.");
+        ImGui.TextWrapped("Shortcuts pause while typing or editing a control and while the game is unfocused. They do not replace FFXIV keybinds: choose unused combinations. /gardening still requires an identified paired house.");
     }
     private void MessageToggle(string label,bool value,Action<bool> set)
     { if(ImGui.Checkbox(label,ref value)){set(value);Pi.SavePluginConfig(config);} }
@@ -89,7 +89,7 @@ public sealed partial class Plugin
         ImGui.TextWrapped("Once per character login: one light-blue tending message and/or one orange risk message, grouped by Person across all paired accounts and characters. Mature crops do not trigger reminders. No house lists or repeated messages during the session.");
         ImGui.Separator();ImGui.TextUnformatted("Commands and Fashion Report");
         MessageToggle("Fashion Report browser link",config.NotifyFashionLink,v=>config.NotifyFashionLink=v);
-        MessageToggle("Planting command: house not identified",config.NotifyPlantingUnavailable,v=>config.NotifyPlantingUnavailable=v);
+        MessageToggle("Gardening command: house not identified",config.NotifyPlantingUnavailable,v=>config.NotifyPlantingUnavailable=v);
         MessageToggle("Fashion Report: could not open browser",config.NotifyBrowserErrors,v=>config.NotifyBrowserErrors=v);
     }
 }

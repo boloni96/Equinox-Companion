@@ -211,8 +211,11 @@ public sealed partial class Plugin
         if(key!=offer.Key||x.RollResult!=RollResult.UnAwarded)return;
         quickLootAttempted.Add(key);
         var result=choice.Roll switch {QuickLootRoll.Need=>RollResult.Needed,QuickLootRoll.Greed=>RollResult.Greeded,_=>RollResult.Passed};
-        if(quickLootNative(loot,result,offer.Slot))quickLootReceipt=new(offer,choice,now);
-        else QuickLootReport($"Roll call rejected for {offer.Name}; no repeated attempts.",true);
+        // The native bool is not a server acknowledgement. Track the observed
+        // pending entry regardless, so a successful roll cannot lose feedback.
+        var nativeResult=quickLootNative(loot,result,offer.Slot);
+        quickLootReceipt=new(offer,choice,now);
+        if(CurrentQuickLoot.Diagnostics)quickLootHistory.Enqueue($"{now:HH:mm:ss} · Native return: {nativeResult}; awaiting loot-state change.");
         if(CurrentQuickLoot.Diagnostics){quickLootHistory.Enqueue($"{now:HH:mm:ss} · {offer.Name}: {choice.Roll} · {choice.Reason}");while(quickLootHistory.Count>80)quickLootHistory.Dequeue();}
     }
 }

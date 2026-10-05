@@ -1,3 +1,9 @@
+# 0.5.1.50 — Gardening and QuickLoot feedback
+
+820 automated checks pass; .NET 10 / Dalamud API 15 Release build: zero warnings/errors.
+Synthetic 6,000-event/mapping lookup: 219.37 ms baseline, 10.68 ms indexed.
+Early tending and selection isolation checked. No live FPS or toast verification.
+
 # 0.5.1.49 — Optional QuickLoot
 
 804 automated checks pass; Release build zero warnings/errors.

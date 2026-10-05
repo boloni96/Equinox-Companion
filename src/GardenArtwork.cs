@@ -126,12 +126,19 @@ public sealed partial class Plugin
         if(path is not null){var texture=Textures.GetFromFile(Path.Combine(Pi.AssemblyLocation.DirectoryName!,"garden-art",path)).GetWrapOrDefault();if(texture is not null){ImGui.Image(texture.Handle,new Vector2(ImGui.GetTextLineHeight()));ImGui.SameLine();}}
         ImGui.TextWrapped(prefix+label);
     }
+    private bool drawingGardenGuide;
+    private SyncEvent[]? gardenGuideActions;
     private IEnumerable<SyncEvent> LocalGardenActions()
     {
-        var mappings=GardenMappings().ToArray();
+        if(!drawingGardenGuide)return ResolveLocalGardenActions();
+        return gardenGuideActions??=ResolveLocalGardenActions().ToArray();
+    }
+    private IEnumerable<SyncEvent> ResolveLocalGardenActions()
+    {
+        var resolve=GardenTargetMap.CreateResolver(GardenMappings());
         return config.Planting.Select(p=>new SyncEvent(p.EventId,"garden.planted",p.ConfirmedAt,WithWorldNames(p.Actor),WithAddressNames(p.Address),p.Patch,p.Bed,p.Plant))
         .Concat(config.Tending.Select(t=>new SyncEvent(t.EventId,"garden.tended",t.ConfirmedAt,WithWorldNames(t.Actor),WithAddressNames(t.Address),t.Patch,t.Bed)))
-        .Concat(config.Discoveries.Where(e=>e.Kind is "garden.empty" or "garden.empty.unmapped" or "garden.unmapped" or "garden.dead" or "garden.ready" or "garden.observed" or "garden.fertilized" or "garden.status" or "garden.status.unmapped")).Select(e=>GardenTargetMap.Resolve(e,mappings));
+        .Concat(config.Discoveries.Where(e=>e.Kind is "garden.empty" or "garden.empty.unmapped" or "garden.unmapped" or "garden.dead" or "garden.ready" or "garden.observed" or "garden.fertilized" or "garden.status" or "garden.status.unmapped")).Select(resolve);
     }
     private IEnumerable<SharedGardenTarget> GardenMappings() => (config.SharedRoster?.GardenTargets??[])
         .Concat(config.Discoveries.Select(GardenTargetMap.FromNumbered).OfType<SharedGardenTarget>())
