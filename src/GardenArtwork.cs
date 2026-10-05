@@ -8,9 +8,41 @@ public sealed partial class Plugin
     private readonly Dictionary<string,string> gardenSupplies=new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string,(string Crop,double Days,double? Wilt)> gardenTiming=new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string,DateTimeOffset> completedGardenPlans=[];
-    private readonly Dictionary<string,SharedGardenPlan> localGardenCache=[];
+    private readonly GardenProjectionCache gardenProjection = new();
     private SharedRoster? projectedGardenRoster;
-    private string projectedGardenActions="";
+    private (GardenListStamp Planting, GardenListStamp Tending, GardenListStamp Discoveries, GardenListStamp Mappings) projectedGardenInputs;
+    private SyncEvent[] localGardenActions = [];
+    private SharedGardenPlan[]? gardenPlanSources;
+    private GardenListStamp acknowledgedGardenInputs;
+    private HashSet<string> acknowledgedGardenEvents = [];
+    private readonly Dictionary<(string House, int Batch), HashSet<int?>> queuedGardenBeds = [];
+
+    private void RefreshGardenInputs()
+    {
+        var inputs = (GardenListStamp.Of(config.Planting), GardenListStamp.Of(config.Tending), GardenListStamp.Of(config.Discoveries), GardenListStamp.Of(gardenBedSync?.Mappings));
+        if (ReferenceEquals(projectedGardenRoster, config.SharedRoster) && projectedGardenInputs == inputs) return;
+        projectedGardenRoster = config.SharedRoster;
+        projectedGardenInputs = inputs;
+        localGardenActions = BuildLocalGardenActions().ToArray();
+        gardenProjection.SetActions(localGardenActions);
+        gardenPlanSources = null;
+        queuedGardenBeds.Clear();
+    }
+    private HashSet<int?> QueuedGardenBeds(SharedGardenPlan plan)
+    {
+        RefreshGardenInputs();
+        var sent = GardenListStamp.Of(config.SentEvents);
+        if (acknowledgedGardenInputs != sent)
+        {
+            acknowledgedGardenInputs = sent;
+            acknowledgedGardenEvents = config.SentEvents.ToHashSet();
+            queuedGardenBeds.Clear();
+        }
+        var key = (plan.HouseId, plan.Batch);
+        if (!queuedGardenBeds.TryGetValue(key, out var beds))
+            queuedGardenBeds[key] = beds = gardenProjection.ActionsFor(plan).Where(e => !acknowledgedGardenEvents.Contains(e.Id)).Select(e => e.Bed).ToHashSet();
+        return beds;
+    }
     private void LoadGardenPictures()
     {
         if(gardenPictures is not null)return;
@@ -126,7 +158,7 @@ public sealed partial class Plugin
         if(path is not null){var texture=Textures.GetFromFile(Path.Combine(Pi.AssemblyLocation.DirectoryName!,"garden-art",path)).GetWrapOrDefault();if(texture is not null){ImGui.Image(texture.Handle,new Vector2(ImGui.GetTextLineHeight()));ImGui.SameLine();}}
         ImGui.TextWrapped(prefix+label);
     }
-    private IEnumerable<SyncEvent> LocalGardenActions()
+    private IEnumerable<SyncEvent> BuildLocalGardenActions()
     {
         var mappings=GardenMappings().ToArray();
         return config.Planting.Select(p=>new SyncEvent(p.EventId,"garden.planted",p.ConfirmedAt,WithWorldNames(p.Actor),WithAddressNames(p.Address),p.Patch,p.Bed,p.Plant))
@@ -139,15 +171,17 @@ public sealed partial class Plugin
     private void GardenActionRecorded(){if(syncFailures==0)nextSync=default;}
     private SharedGardenPlan EffectiveGardenPlan(SharedGardenPlan plan)
     {
-        var actions=$"{config.Planting.LastOrDefault()?.EventId}:{config.Tending.LastOrDefault()?.EventId}:{config.Discoveries.LastOrDefault()?.Id}:{gardenBedSync?.Mappings.LastOrDefault()?.Id}";
-        if(projectedGardenRoster!=config.SharedRoster||projectedGardenActions!=actions){localGardenCache.Clear();projectedGardenRoster=config.SharedRoster;projectedGardenActions=actions;}
+        RefreshGardenInputs();
+        return gardenProjection.Get(plan, ProjectGardenPlan);
+    }
+    private SharedGardenPlan ProjectGardenPlan(SharedGardenPlan plan, SyncEvent[] actions)
+    {
         var key=plan.HouseId+":"+plan.Batch+":"+plan.At.ToUnixTimeMilliseconds();
-        if(localGardenCache.TryGetValue(key,out var cached))return cached;
         LoadGardenPictures();
         if(completedGardenPlans.TryGetValue(key,out var at))plan=plan with {CompletedAt=at};
-        var result=GardenLive.Apply(plan,LocalGardenActions(),GardenCropName,n=>gardenTiming.TryGetValue(n,out var t)?t.Days:0,n=>gardenTiming.TryGetValue(n,out var t)?t.Wilt:null);
+        var result=GardenLive.Apply(plan,actions,GardenCropName,n=>gardenTiming.TryGetValue(n,out var t)?t.Days:0,n=>gardenTiming.TryGetValue(n,out var t)?t.Wilt:null);
         result=result with {Beds=result.Beds.Select(b=>b.DeadConfirmedAt is null&&b.Planted is {} planted&&b.HarvestAt is null&&gardenTiming.TryGetValue(b.ActualCrop,out var timing)?b with {Days=timing.Days,WiltHours=timing.Wilt,HarvestAt=timing.Days>0?planted.AddDays(timing.Days):null}:b).ToArray()};
         if(result.CompletedAt is {} completed){if(completedGardenPlans.Count>200)completedGardenPlans.Clear();completedGardenPlans[key]=completed;}
-        localGardenCache[key]=result;return result;
+        return result;
     }
 }

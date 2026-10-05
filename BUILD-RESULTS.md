@@ -1,3 +1,10 @@
+# 0.5.1.47 — Garden update efficiency
+
+802 checks passed. .NET 10 / Dalamud API 15 Release build: zero warnings/errors.
+6,000 actions / 30 batches: one new tend causes one projection; 3,000 unchanged
+batch draws cause no extra projections. Every batch matches full-history replay.
+No live FFXIV performance measurement.
+
 # 0.5.0.2 — recovered checkpoint and background housing
 
 Release build: zero warnings/errors using Dalamud API 15 references. Existing synthetic gate suite passes. Installer package matches the compiled DLL, manifest, artwork and catalogue. Journal V7.10.2 tests cover two-client background housing, tenant/FC membership eligibility, ownership changes, replay/stale events, no R2 access, ETags, bounded cache, full 50-event upload query count, and durable queue preservation. Native FFXIV and production Cloudflare checks remain outstanding. The user explicitly authorized publication of this prepared build on 2 October 2026.

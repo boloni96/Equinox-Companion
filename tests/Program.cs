@@ -1085,3 +1085,5 @@ Check("registration valid empty-account destination",CharacterRegistrationPolicy
 Check("registration rejects control names",CharacterRegistrationPolicy.Valid(new("her","alt",PersonName:"bad\nname")).ToString(),"False");
 Check("registration held for older website",SyncValidation.SupportedByWebsite("character.registered",13).ToString(),"False");
 Check("registration sends with new website",SyncValidation.SupportedByWebsite("character.registered",14).ToString(),"True");
+
+GardenProjectionTests.Run(Check);

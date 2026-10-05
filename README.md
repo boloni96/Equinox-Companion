@@ -1,3 +1,8 @@
+# Equinox Companion 0.5.1.47
+
+Current update: garden calculation and pending-action caching. See RELEASE-NOTES.md.
+Use the existing repo.json installer feed. Journal remains V7.11.66.
+
 # Equinox Companion 0.5.1.2 — validation build
 
 Read RELEASE-NOTES.md and WORK-STATUS.md. This update uses the existing GitHub installer feed and requires Journal V7.11.1 for background housing propagation. The 23-point implementation and live-validation boundaries are recorded in WORK-STATUS.md.

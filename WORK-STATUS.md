@@ -1,3 +1,8 @@
+# Current release: Companion 0.5.1.47 / Journal V7.11.66
+
+Garden update caches and per-batch replay; 802 checks and clean Release build.
+Live FPS/stutter confirmation remains pending. See RELEASE-NOTES-0.5.1.47.md.
+
 # Current release: Companion 0.5.1.44 / Journal V7.11.55
 
 Person-level login garden reminders and character-page navigation; see RELEASE-NOTES-0.5.1.44.md. Previous audit follows.
