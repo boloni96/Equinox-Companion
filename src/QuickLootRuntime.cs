@@ -158,8 +158,8 @@ public sealed partial class Plugin
         {
             quickLootBarEntry??=QuickLootBar.Get("Equinox QuickLoot");
             quickLootBarEntry.Shown=true;quickLootBarEntry.Text=new SeStringBuilder().AddText("QL: "+(s.Automatic?(QuickLootConflict()?"Paused":s.Mode.ToString()):"Off")).Build();
-            quickLootBarEntry.Tooltip=new SeStringBuilder().AddText("QuickLoot · click to toggle automatic rolling. Settings: /equinox → QuickLoot").Build();
-            quickLootBarEntry.OnClick=_=>{s.Automatic=!s.Automatic;StopQuickLoot(s.Automatic?"Automatic rolling enabled.":"Automatic rolling disabled.");SaveQuickLoot(s);};
+            quickLootBarEntry.Tooltip=new SeStringBuilder().AddText("QuickLoot · left-click to toggle automatic rolling; right-click to open Companion. Settings: /equinox → QuickLoot").Build();
+            quickLootBarEntry.OnClick=e=>{if(e.ClickType==MouseClickType.Right){quickLootSelectTab=true;Open();return;}if(e.ClickType!=MouseClickType.Left)return;s.Automatic=!s.Automatic;StopQuickLoot(s.Automatic?"Automatic rolling enabled.":"Automatic rolling disabled.");SaveQuickLoot(s);};
         }
         else if(quickLootBarEntry is not null)quickLootBarEntry.Shown=false;
         if(!s.Automatic&&quickLootManualItems is null&&quickLootReceipt is null)return;

@@ -16,19 +16,19 @@ public sealed partial class Plugin
     private string RegistrationScope => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(config.PairingKey))).ToLowerInvariant();
     private void UpdateCharacterRegistration(DateTimeOffset now)
     {
-        if(!Player.IsLoaded||Player.ContentId==0||!config.SyncEnabled||!config.SyncCharacterDetails||config.PairingKey.Length!=64){registrationWindow.IsOpen=false;registrationSession="";return;}
+        if(!Player.IsLoaded||Player.ContentId==0||!config.SyncEnabled||!config.SyncCharacterDetails||config.PairingKey.Length!=64){registrationWindow.IsOpen=false;registrationSession="";minimizedLaunchers.Remove("New Character");return;}
         var session=config.PairingKey+":"+Player.ContentId;
-        if(session!=registrationSession){registrationSession=session;registrationStartedAt=now;nextDiscovery=default;nextCharacterRefresh=default;registrationDeferred=false;registrationPerson="";registrationPersonName="";registrationNewAccount="";registrationNewPersonMode=false;registrationNewAccountMode=false;registrationSnapshot=null;registrationWindow.IsOpen=false;nextRosterRead=default;}
+        if(session!=registrationSession){minimizedLaunchers.Remove("New Character");registrationSession=session;registrationStartedAt=now;nextDiscovery=default;nextCharacterRefresh=default;registrationDeferred=false;registrationPerson="";registrationPersonName="";registrationNewAccount="";registrationNewPersonMode=false;registrationNewAccountMode=false;registrationSnapshot=null;registrationWindow.IsOpen=false;nextRosterRead=default;}
         if(now<characterReadyAt||registrationFreshKey!=config.PairingKey||config.SharedRoster is not {ProtocolVersion:>=14} roster)return;
         var actor=ReadActor();
         if(!SyncValidation.ActorReady(actor))return;
         var pending=config.Discoveries.LastOrDefault(e=>e.Kind=="character.registered"&&e.Actor.ContentId==actor.ContentId&&e.Registration?.PairingScope==RegistrationScope);
         if(CharacterRegistrationPolicy.Find(roster,actor) is {} known){
-            registrationWindow.IsOpen=false;
+            registrationWindow.IsOpen=false;minimizedLaunchers.Remove("New Character");
             if(pending is not null&&registrationNotified.Add(pending.Id))Chat.Print($"[Equinox] {known.Name} added to the Journal · {roster.People.First(p=>p.Characters.Contains(known)).Name} / {known.Account}.");
             return;
         }
-        if(pending is not null){registrationWindow.IsOpen=false;return;}
+        if(pending is not null){registrationWindow.IsOpen=false;minimizedLaunchers.Remove("New Character");return;}
         registrationSnapshot=config.Discoveries.LastOrDefault(e=>e.Kind=="character.updated"&&e.Actor.ContentId==actor.ContentId&&e.At>=registrationStartedAt&&e.At>=characterReadyAt.AddSeconds(-15)&&SyncValidation.CharacterReady(e.Character));
         if(registrationSnapshot is null)return;
         if(CharacterRegistrationPolicy.Destination(roster,registrationSnapshot.Character!.AccountKey) is {} destination){SubmitCharacterRegistration(destination.Person,destination.Account);return;}
@@ -44,14 +44,15 @@ public sealed partial class Plugin
         var registration=new CharacterRegistration(personId,accountId,personName.Trim(),accountName.Trim(),snapshot.Character?.AccountKey??"",dc?.Name.ToString()??"",region,RegistrationScope);
         if(!CharacterRegistrationPolicy.Valid(registration))return;
         KeepDiscovery(snapshot with {Id=Guid.NewGuid().ToString("N"),Kind="character.registered",At=DateTimeOffset.UtcNow,Registration=registration},true);
-        nextSync=default;nextRosterRead=default;registrationWindow.IsOpen=false;
+        nextSync=default;nextRosterRead=default;registrationWindow.IsOpen=false;minimizedLaunchers.Remove("New Character");
         Chat.Print($"[Equinox] Sending {snapshot.Actor.Name} to your Journal. It will retry automatically if the connection is unavailable.");
     }
     private sealed class NewCharacterWindow:Window
     {
         private readonly Plugin p;
-        public NewCharacterWindow(Plugin p):base("New Character Detected###EquinoxNewCharacter",ImGuiWindowFlags.NoCollapse|ImGuiWindowFlags.AlwaysAutoResize){this.p=p;SizeConstraints=new(){MinimumSize=new Vector2(430,200),MaximumSize=new Vector2(650,650)};}
+        public NewCharacterWindow(Plugin p):base("New Character Detected###EquinoxNewCharacter",ImGuiWindowFlags.AlwaysAutoResize){this.p=p;RespectCloseHotkey=false;SizeConstraints=new(){MinimumSize=new Vector2(430,200),MaximumSize=new Vector2(650,650)};}
         public override void OnClose()=>p.registrationDeferred=true;
+        public override void PostDraw()=>HandleNativeCollapse(this,()=>p.MinimizeLauncher("New Character"));
         public override void Draw()
         {
             var snapshot=p.registrationSnapshot;var roster=p.config.SharedRoster;

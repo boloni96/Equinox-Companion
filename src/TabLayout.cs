@@ -34,6 +34,7 @@ public sealed partial class Plugin
             ids[ImGui.GetID(label)] = tab.Id;
             var flags=tab.Id=="settings"?ImGuiTabItemFlags.Trailing|ImGuiTabItemFlags.NoReorder:ImGuiTabItemFlags.None;
             if(tab.Id=="quickloot"&&quickLootSelectTab){flags|=ImGuiTabItemFlags.SetSelected;quickLootSelectTab=false;}
+            if(tab.Id=="followthem"&&followThemSelectTab){flags|=ImGuiTabItemFlags.SetSelected;followThemSelectTab=false;}
             var active=ImGui.BeginTabItem(label,flags);
             if(category is not null){var at=ImGui.GetItemRectMin();var max=ImGui.GetItemRectMax();var size=Math.Min(ImGui.GetFontSize()+2,max.Y-at.Y-2);var draw=ImGui.GetWindowDrawList();draw.PushClipRect(at,max,true);GardenImage("assets/category-icons/"+category+".png",at+new Vector2(ImGui.GetStyle().FramePadding.X,(max.Y-at.Y-size)/2),new Vector2(size));draw.PopClipRect();}
             if(!active)continue;

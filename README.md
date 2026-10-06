@@ -56,3 +56,20 @@ Rounded, Royal jewel, Pixel, and Minimal outline. Choose under Settings > Featur
 > Treasure Coffer markers > Coffer appearance. Applies to both maps. Custom styles
 hide the underlying minimap symbol and restore it when switching back/disabling.
 Native drawing and cleanup still require in-game testing. Journal stays V7.11.74.
+
+## Companion 0.5.1.57
+
+Optional nearby coffer auto-open beside the six appearance choices. Off by default;
+local only. Ordinary treasure objects within 2.5 yalms, out of combat and available;
+no movement, portal clicking or roll changes. Two bounded attempts per coffer per
+visit, with cooldowns. Marker state still requires confirmation from the game.
+Parent Treasure Coffer feature must be enabled. Native behavior needs live testing.
+
+For two simultaneous game clients on one PC, use separate plugin configuration
+folders. Companion does not isolate concurrent instances sharing one configuration;
+settings and pending observations can overwrite each other. Each instance reads
+its own game client. Dual-client native behavior still requires testing.
+
+Right-click FollowThem/QuickLoot on the top bar to open Companion without toggling.
+Esc minimizes the focused plugin window to its floating icon; popup dismissal
+takes precedence. X remains close. This applies to the five Companion windows.

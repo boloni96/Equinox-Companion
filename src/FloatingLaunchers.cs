@@ -16,6 +16,8 @@ public sealed class FloatingLauncherOptions
 }
 public sealed partial class Plugin
 {
+    private static bool escapePopupWasOpen;
+    private static int escapeMinimizedFrame = -1;
     private string? draggedLauncher;
     private readonly HashSet<string> minimizedLaunchers = [];
     private string? pendingLauncher;
@@ -26,7 +28,12 @@ public sealed partial class Plugin
     {
         if (!window.IsOpen || minimize is null) return;
         var native = ImGuiP.FindWindowByName(window.WindowName);
-        if (native.IsNull || !native.Collapsed) return;
+        if(native.IsNull)return;
+        var escape=window.IsFocused && ImGui.IsKeyPressed(ImGuiKey.Escape,false) &&
+            escapeMinimizedFrame!=ImGui.GetFrameCount() && !escapePopupWasOpen &&
+            !ImGui.IsPopupOpen("",ImGuiPopupFlags.AnyPopupId|ImGuiPopupFlags.AnyPopupLevel);
+        if(!native.Collapsed && !escape)return;
+        if(escape)escapeMinimizedFrame=ImGui.GetFrameCount();
         ImGui.SetWindowCollapsed(window.WindowName, false, ImGuiCond.Always);
         minimize();
     }
@@ -35,7 +42,9 @@ public sealed partial class Plugin
         minimizedLaunchers.Add(name);
         if(name == "Companion") { mainWindow.IsOpen=false; visible=false; }
         else if(name == "Fashion Report") fashionWindow.IsOpen=false;
-        else plantingWindow.IsOpen=false;
+        else if(name=="Planting")plantingWindow.IsOpen=false;
+        else if(name=="Welcome")welcomeWindow.IsOpen=false;
+        else if(name=="New Character"){registrationDeferred=true;registrationWindow.IsOpen=false;}
     }
     private void LauncherClick(string name)
     {
@@ -58,6 +67,10 @@ public sealed partial class Plugin
         DrawLauncher("Companion", 0, "icon.png");
         DrawLauncher("Fashion Report", 1, "garden-art/assets/category-icons/fashion-report.png");
         DrawLauncher("Planting", 2, "garden-art/assets/category-icons/gardening.png");
+        if(welcomeWindow.IsOpen)minimizedLaunchers.Remove("Welcome");
+        if(registrationWindow.IsOpen || !Player.IsLoaded || registrationSnapshot==null)minimizedLaunchers.Remove("New Character");
+        DrawLauncher("Welcome",3,"icon.png");
+        DrawLauncher("New Character",4,"icon.png");
         if(pendingLauncher is {} pending && ImGui.GetTime()-launcherClickAt>ImGui.GetIO().MouseDoubleClickTime && !ImGui.IsMouseDown(ImGuiMouseButton.Left))
         {
             pendingLauncher=null;
@@ -65,7 +78,9 @@ public sealed partial class Plugin
             {
                 if(pending=="Companion") Open();
                 else if(pending=="Fashion Report") fashionWindow.OpenReport();
-                else OnPlantingCommand("/gardening", "");
+                else if(pending=="Planting")OnPlantingCommand("/gardening", "");
+                else if(pending=="Welcome")welcomeWindow.IsOpen=true;
+                else if(pending=="New Character")registrationWindow.IsOpen=true;
                 if(pending!="Planting" || plantingWindow.IsOpen) minimizedLaunchers.Remove(pending);
             }
         }
@@ -137,13 +152,13 @@ public sealed partial class Plugin
         var changed = ImGui.SliderFloat("Opacity", ref opacity, .2f, 1, "%.2f");
         changed |= ImGui.Checkbox("Blur background", ref blur);
         changed |= ImGui.Checkbox("Lock position", ref locked);
-        if (ImGui.Button("Reset position")) { o.X = 24; o.Y = 180 + (name == "Companion" ? 0 : name == "Fashion Report" ? 76 : 152); changed = true; }
+        if (ImGui.Button("Reset position")) { o.X = 24; o.Y = 180 + (name == "Companion" ? 0 : name == "Fashion Report" ? 76 : name=="Planting"?152:name=="Welcome"?228:304); changed = true; }
         if (changed) { o.Opacity = opacity; o.Blur = blur; o.Locked = locked; Pi.SavePluginConfig(config); }
     }
     private void DrawFloatingLauncherSettings()
     {
-        ImGui.TextWrapped("Use the native title-bar collapse triangle or double-click the title bar to minimize to an icon. Single-click reopens its window; double-click closes both. X or Esc closes without an icon. Commands and keybinds reopen windows. Drag icons to move them.");
-        var names = new[] { "Companion", "Fashion Report", "Planting" };
+        ImGui.TextWrapped("Use the native title-bar collapse triangle or double-click the title bar to minimize to an icon. Single-click reopens its window; double-click closes both. Esc minimizes the focused window to its icon. X closes without an icon. Commands and keybinds reopen windows. Drag icons to move them.");
+        var names = new[] { "Companion", "Fashion Report", "Planting", "Welcome", "New Character" };
         for (var i = 0; i < names.Length; i++) { ImGui.PushID(i); DrawLauncherOptions(names[i], LauncherOptions(names[i], i)); ImGui.Separator(); ImGui.PopID(); }
     }
 }

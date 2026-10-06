@@ -28,11 +28,11 @@ public sealed partial class Plugin
     private readonly Dictionary<nint, (byte R, byte G, byte B, byte A, byte AppliedR, byte AppliedG, byte AppliedB, byte AppliedA)> cofferTints = [];
     private readonly HashSet<nint> cofferLiveNodes = [];
 
-    private void OnCofferTerritoryChanged(uint territory) { cofferMemory.Clear(); cofferRendered.Clear(); cofferTerritory=territory; nextCofferCheck=default; }
+    private void OnCofferTerritoryChanged(uint territory) { ResetCofferAutoOpen(); cofferMemory.Clear(); cofferRendered.Clear(); cofferTerritory=territory; nextCofferCheck=default; }
     private unsafe void SetCofferMarkers(bool enabled)
     {
         config.EnableCofferMarkers = enabled;
-        RestoreCofferTints();
+        RestoreCofferTints();ResetCofferAutoOpen();
         cofferFault = false; cofferMemory.Clear(); cofferRendered.Clear(); nextCofferCheck = default;
         if (enabled)
         {
@@ -98,7 +98,7 @@ public sealed partial class Plugin
             var currentMap = AgentMap.Instance();
             var mapId = currentMap != null ? currentMap->CurrentMapId : 0;
             if (cid != cofferCharacter || cofferTerritory != Client.TerritoryType || cofferMap != mapId)
-            { cofferMemory.Clear(); cofferRendered.Clear(); cofferCharacter=cid; cofferTerritory=Client.TerritoryType; cofferMap=mapId; }
+            { ResetCofferAutoOpen(); cofferMemory.Clear(); cofferRendered.Clear(); cofferCharacter=cid; cofferTerritory=Client.TerritoryType; cofferMap=mapId; }
             if (cid == 0 || Objects.LocalPlayer == null) return;
             var seen = new List<CofferPoint>();
             var loot = Loot.Instance();
@@ -112,6 +112,7 @@ public sealed partial class Plugin
                 seen.Add(new(item.GameObjectId,item.BaseId,item.Position,opened,true));
             }
             if (cofferMemory.Observe(seen)) { var map = AgentMap.Instance(); if(map != null) map->CreateMiniMapMarkers(false); }
+            TryAutoOpenCoffer(now);
             cofferStatus = $"This visit: {cofferMemory.Points.Count(p=>!p.Opened)} unopened · {cofferMemory.Points.Count(p=>p.Opened)} confirmed opened.";
         }
         catch(Exception e)
@@ -223,8 +224,9 @@ public sealed partial class Plugin
         });
         MessageToggle("Show coffers on main map", config.CofferMainMap, v => config.CofferMainMap=v);
         DrawCofferAppearance();
+        DrawCofferAutoOpenSettings();
         ImGui.TextWrapped(cofferStatus);
-        ImGui.TextWrapped("Red: unopened. Green: confirmed opened, including by another player. Opened locations remain for this territory visit; logout or changing territory clears them. Ordinary treasure objects are supported; special Event Object coffers need separate support. No Journal sync and no automatic opening.");
+        ImGui.TextWrapped("Red: unopened. Green: confirmed opened, including by another player. Opened locations remain for this territory visit; logout or changing territory clears them. Ordinary treasure objects are supported; special Event Object coffers need separate support. No Journal sync. Automatic opening is a separate opt-in setting above.");
         if(ImGui.Button("Clear this visit's coffer markers"))SetCofferMarkers(true);
         if(cofferFault&&ImGui.Button("Retry coffer markers"))SetCofferMarkers(true);
     }

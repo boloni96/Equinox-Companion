@@ -17,7 +17,7 @@ public sealed partial class Plugin
             Size = new Vector2(660, 480);
             SizeCondition = ImGuiCond.FirstUseEver;
             SizeConstraints = new WindowSizeConstraints { MinimumSize = new Vector2(500, 360), MaximumSize = new Vector2(float.MaxValue) };
-            AllowPinning = true; RespectCloseHotkey = true;
+            AllowPinning = true; RespectCloseHotkey = false;
             AllowClickthrough = true;
             AllowBackgroundBlur = true;
         }

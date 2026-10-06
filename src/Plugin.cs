@@ -894,6 +894,7 @@ public sealed partial class Plugin : IDalamudPlugin
     {
         UpdateShortcuts();
         mainWindow.IsOpen = visible;
+        escapePopupWasOpen=ImGui.IsPopupOpen("",ImGuiPopupFlags.AnyPopupId|ImGuiPopupFlags.AnyPopupLevel);
         windows.Draw();
         visible = mainWindow.IsOpen;
         DrawFloatingLaunchers();

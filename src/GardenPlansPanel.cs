@@ -12,7 +12,7 @@ public sealed partial class Plugin
         {
             this.plugin=plugin;Size=new Vector2(560,680);SizeCondition=ImGuiCond.FirstUseEver;
             SizeConstraints=new WindowSizeConstraints{MinimumSize=new Vector2(500,360),MaximumSize=new Vector2(float.MaxValue)};
-            AllowPinning=true;RespectCloseHotkey=true;AllowBackgroundBlur=true;
+            AllowPinning=true;RespectCloseHotkey=false;AllowBackgroundBlur=true;
         }
         public override void PostDraw() => HandleNativeCollapse(this, () => plugin.MinimizeLauncher("Planting"));
         public override void Draw() { plugin.DrawGardenPlansWindow(); }

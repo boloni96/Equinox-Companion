@@ -25,6 +25,13 @@ public static class GardenOverview
         if(beds.Any(b=>b.TendDue))return "tend";
         if(beds.Any(b=>b.State=="ready"))return "harvest";
         if(beds.Any(b=>b.State=="check-maturity"))return "check";
+        if(beds.Any(b=>b.State is "wet" or "keep-mature"))return "cared";
+        return "none";
+    }
+    public static string CombineAttention(IEnumerable<string> states)
+    {
+        var set=states.ToHashSet();
+        foreach(var priority in new[]{"dead","risk","tend","harvest","check","cared"})if(set.Contains(priority))return priority;
         return "none";
     }
     public static GardenOverviewHouse[] Houses(SharedPerson[] people, IEnumerable<SharedGardenPlan> plans)

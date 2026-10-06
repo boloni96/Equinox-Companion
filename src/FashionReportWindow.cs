@@ -34,7 +34,7 @@ public sealed partial class Plugin
             Size = new Vector2(720, 490);
             SizeCondition = ImGuiCond.FirstUseEver;
             SizeConstraints = new WindowSizeConstraints { MinimumSize = new Vector2(360, 260), MaximumSize = new Vector2(float.MaxValue) };
-            AllowPinning = true; RespectCloseHotkey = true;
+            AllowPinning = true; RespectCloseHotkey = false;
             AllowBackgroundBlur = true;
         }
         public void OpenReport()

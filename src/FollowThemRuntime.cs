@@ -50,7 +50,7 @@ public sealed partial class Plugin
     private bool CanIssueFollowMovement() => Player.IsLoaded && Objects.LocalPlayer is { IsTargetable: true } &&
         !FollowTransitionBusy() && !Conditions[ConditionFlag.Unconscious];
     private string followBarText = "";
-    private bool followFault;
+    private bool followFault,followThemSelectTab;
 
     private string lastFollowCommand = "";
     private DateTimeOffset lastFollowCommandAt;
@@ -106,8 +106,8 @@ public sealed partial class Plugin
         };
         var text = "FollowThem: " + label;
         if (text != followBarText) { followBar.Text = new SeStringBuilder().AddText(text).Build(); followBarText = text; }
-        followBar.Tooltip = new SeStringBuilder().AddText(followStatus + (followSession.Armed ? " Click to stop." : " Click to start.")).Build();
-        followBar.OnClick = _ => ToggleFollowThem();
+        followBar.Tooltip = new SeStringBuilder().AddText(followStatus + (followSession.Armed ? " Left-click to stop." : " Left-click to start.") + " Right-click to open Companion.").Build();
+        followBar.OnClick = e => { if(e.ClickType==MouseClickType.Right){followThemSelectTab=true;Open();} else if(e.ClickType==MouseClickType.Left) ToggleFollowThem(); };
     }
     private unsafe void UpdateFollowThem(DateTimeOffset now)
     {

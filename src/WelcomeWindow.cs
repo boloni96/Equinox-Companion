@@ -15,14 +15,15 @@ public sealed partial class Plugin
     private sealed class WelcomeWindow : Window
     {
         private readonly Plugin plugin;
-        public WelcomeWindow(Plugin plugin):base("Welcome to Equinox Companion###EquinoxWelcome",ImGuiWindowFlags.NoCollapse)
+        public WelcomeWindow(Plugin plugin):base("Welcome to Equinox Companion###EquinoxWelcome",ImGuiWindowFlags.None)
         {
-            this.plugin=plugin;
+            this.plugin=plugin;RespectCloseHotkey=false;
             IsOpen=plugin.config.WelcomeVersion!=CompanionVersion;
             Size=new Vector2(580,550);SizeCondition=ImGuiCond.FirstUseEver;
             SizeConstraints=new WindowSizeConstraints{MinimumSize=new Vector2(460,440),MaximumSize=new Vector2(900,850)};
         }
-        public override void OnClose()=>plugin.DismissWelcome();
+        public override void OnClose(){if(!plugin.minimizedLaunchers.Contains("Welcome"))plugin.DismissWelcome();}
+        public override void PostDraw()=>HandleNativeCollapse(this,()=>plugin.MinimizeLauncher("Welcome"));
         public override void Draw()
         {
             var icon=Textures.GetFromFile(Path.Combine(Pi.AssemblyLocation.DirectoryName!,"icon.png")).GetWrapOrDefault();
@@ -49,7 +50,7 @@ public sealed partial class Plugin
                 ImGui.BulletText("Gardening plans, submarine timers and supplies");
                 ImGui.BulletText("Fashion Report, right here in game");
                 ImGui.Spacing();ImGui.TextUnformatted("Version "+CompanionVersion);
-                ImGui.TextWrapped("New: choose from six coffer styles with red/green previews in Settings > Features > Treasure Coffer markers > Coffer appearance. Your selection applies to both maps and stays local. The original Game chest style is retained until you choose another. Native icon hiding/restoration needs in-game testing. FollowThem and Journal requirements are unchanged.");
+                ImGui.TextWrapped("New: optional nearby coffer auto-open (off by default), plus six coffer styles with red/green previews in Settings > Features > Treasure Coffer markers > Coffer appearance. Your selection applies to both maps and stays local. The original Game chest style is retained until you choose another. Auto-open waits through combat/loading and never moves you or clicks portals. Native opening and icon hiding/restoration need in-game testing. Right-click FollowThem or QuickLoot in the top bar to open Companion. Esc minimizes focused windows to their icons. Journal requirements are unchanged.");
                 ImGui.Spacing();
                 ImGui.TextWrapped(plugin.config.PairingKey.Length==64?"Your saved pairing and settings are kept. Journal V7.11.27 supports the new submarine cache sync; save once after updating the website.":"Start in Settings > Connection: paste the pairing key from your Journal's Game connection. Then choose what to sync in Settings > Tracking.");
                 ImGui.TextWrapped("/equinox opens Companion. /gardening opens the garden guide at an identified paired house. /fashionr opens the Fashion Report.");

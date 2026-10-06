@@ -6,7 +6,8 @@ public sealed partial class Plugin
 {
     private string plantingOverviewSearch="";
     private readonly Dictionary<string,bool> plantingOverviewAccounts=[];
-    private static Vector4 OverviewColour(IEnumerable<SharedGardenPlan> plans,DateTimeOffset now) => GardenOverview.Attention(plans,now) switch {"dead"=>Red,"risk" or "check"=>Orange,"tend"=>new(.4f,.75f,1,1),"harvest"=>Green,_=>Grey};
+    private static Vector4 OverviewColour(IEnumerable<SharedGardenPlan> plans,DateTimeOffset now) => OverviewStateColour(GardenOverview.Attention(plans,now));
+    private static Vector4 OverviewStateColour(string attention) => attention switch {"dead"=>Red,"risk" or "check"=>Orange,"tend"=>new(.4f,.75f,1,1),"harvest" or "cared"=>Green,_=>Grey};
     private float DrawGardenIndicators(IEnumerable<SharedGardenPlan> plans,DateTimeOffset now,Vector2 at,float size)
     {
         var icons=GardenOverview.Indicators(plans,now);var draw=ImGui.GetWindowDrawList();
@@ -41,6 +42,14 @@ public sealed partial class Plugin
         var now=DateTimeOffset.UtcNow;
         var people=roster.People.Select(p=>p with {Characters=OrderedSharedCharacters(p)}).ToArray();
         var houses=GardenOverview.Houses(people,GardenPlanSources().Select(EffectiveGardenPlan));
+        var houseAttention=houses.ToDictionary(h=>h.Batches[0].HouseId,h=>GardenOverview.Attention(h.Batches,now));
+        Vector4 GroupColour(IEnumerable<SharedCharacter> members)
+        {
+            var list=members.ToArray();var ids=list.Select(c=>c.Id).ToHashSet();
+            var linked=list.SelectMany(c=>c.Houses).Select(h=>h.Id).ToHashSet();
+            var states=houses.Where(h=>ids.Contains(h.Character?.Id??"")||linked.Contains(h.Batches[0].HouseId)).Select(h=>houseAttention[h.Batches[0].HouseId]);
+            return OverviewStateColour(GardenOverview.CombineAttention(states));
+        }
         ImGui.TextWrapped($"{houses.Length} houses · "+GardenOverview.Summary(houses.SelectMany(h=>h.Batches),now));
         ImGui.Separator();
         var searching=!string.IsNullOrWhiteSpace(plantingOverviewSearch);
@@ -64,9 +73,7 @@ public sealed partial class Plugin
                     var expanded=searching||plantingOverviewAccounts.GetValueOrDefault(key);
                     ImGui.SetNextItemOpen(expanded,ImGuiCond.Always);
                     var name=string.IsNullOrWhiteSpace(account.First().Account)?"Account":account.First().Account.Replace("##","");
-                    var accounts=person.Characters.Select(SharedCharacterGrouping.AccountKey).Distinct().ToArray();
-                    var accountIndex=Array.IndexOf(accounts,account.Key);
-                    var colour=accountIndex%2==0?new Vector4(.12f,.55f,.72f,1):new Vector4(.18f,.57f,.36f,1);
+                    var colour=GroupColour(account);
                     PushGardenGroupColour(colour);
                     var open=ImGui.CollapsingHeader($"{name} · {account.Count()} characters###account");
                     ImGui.PopStyleColor(3);
@@ -80,7 +87,7 @@ public sealed partial class Plugin
                             if(grouped.Length==0)continue;
                             ImGui.PushID(group);
                             ImGui.SetNextItemOpen(searching,searching?ImGuiCond.Always:ImGuiCond.Once);
-                            PushGardenGroupColour(colour);
+                            PushGardenGroupColour(GroupColour(grouped));
                             var groupOpen=ImGui.TreeNodeEx($"{group} · {grouped.Length}###group",ImGuiTreeNodeFlags.Framed|ImGuiTreeNodeFlags.SpanAvailWidth);
                             ImGui.PopStyleColor(3);
                             if(groupOpen)
