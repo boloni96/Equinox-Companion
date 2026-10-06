@@ -12,6 +12,8 @@ public sealed partial class Plugin
     private void DrawLifestreamSettings()
     {
         MessageToggle("Use Lifestream for supported travel",config.FollowThem.UseLifestream,v=>config.FollowThem.UseLifestream=v);
+        ImGui.TextWrapped("Requires the separate Lifestream plugin, installed and enabled. No vnavmesh dependency for Companion requests.");
+        if(!config.FollowThem.UseLifestream)return;
         MessageToggle("Follow World Visits (requires Lifestream)",config.FollowThem.FollowWorldVisits,v=>config.FollowThem.FollowWorldVisits=v);
         MessageToggle("Follow Data Center travel (Lifestream; logs this character out and back in)",config.FollowThem.FollowDataCenters,v=>config.FollowThem.FollowDataCenters=v);
         ImGui.TextWrapped("Optional Lifestream integration. Its own travel restrictions and service-account configuration apply. Companion requests no vnavmesh movement. World/DC travel waits for the leader to arrive before requesting the same World. Queues can take time; use Stop to cancel a request started here.");
@@ -55,7 +57,7 @@ public sealed partial class Plugin
     private void TryFollowWorldTravel(FollowPortalSignal s,DateTimeOffset now)
     {
         if(!config.FollowThem.UseLifestream||!config.FollowThem.FollowWorldVisits){TravelDiagnostic("World travel received; enable Lifestream and Follow World Visits to use it.");return;}
-        if(!FollowThemSession.Matches(config.FollowThem.TargetName,config.FollowThem.HomeWorld,s.Name,s.HomeWorld)||s.CurrentWorld!=Player.CurrentWorld.RowId||s.DestinationWorld==0||s.DestinationWorld==s.CurrentWorld||s.EntityId!=lastLeaderEntity||s.SentAt<followArmedAt||s.SentAt<now.ToUnixTimeMilliseconds()-15000||s.ExpiresAt<=now.ToUnixTimeMilliseconds())return;
+        if(!FollowThemSession.Matches(config.FollowThem.TargetName,config.FollowThem.HomeWorld,s.Name,s.HomeWorld)||s.CurrentWorld!=Player.CurrentWorld.RowId||s.DestinationWorld==0||s.DestinationWorld==s.CurrentWorld||s.EntityId!=lastLeaderEntity||s.SentAt<followArmedAt||s.SentAt<now.ToUnixTimeMilliseconds()-120000||s.ExpiresAt<=now.ToUnixTimeMilliseconds())return;
         if(FollowTransitionBusy()||Conditions[Dalamud.Game.ClientState.Conditions.ConditionFlag.InCombat]){TravelDiagnostic("World travel waiting until your character is free.");return;}
         var sheet=DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>();
         var destination=sheet.GetRowOrDefault(s.DestinationWorld);var current=sheet.GetRowOrDefault(Player.CurrentWorld.RowId);

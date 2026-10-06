@@ -11,6 +11,7 @@ public sealed class FollowThemSettings
     public bool SharePortalTransitions { get; set; }
     public bool UseSharedPortals { get; set; }
     public bool UseSharedTeleports { get; set; }
+    public bool LeaveDuties { get; set; }
     public bool FollowMount { get; set; } = true;
     public bool UseLifestream { get; set; }
     public bool FollowWorldVisits { get; set; }

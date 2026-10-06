@@ -14,7 +14,7 @@ public sealed partial class Plugin
     private Hook<FollowTeleportDelegate>? followTeleportHook;
     private FollowPortalSignal? outgoingTravel,pendingAethernet;
     private Task<bool>? travelAudience;
-    private DateTimeOffset travelAt,aethernetAt;
+    private DateTimeOffset travelAt,aethernetAt,aethernetNext;
     private Vector3 travelPosition;
     private uint travelTerritory;
     private int aethernetSelections;
@@ -23,7 +23,7 @@ public sealed partial class Plugin
     private unsafe FollowPortalSignal? TravelSignal(string kind,uint id,string destination,uint crystal,Vector3 position)
     {
         var self=Objects.LocalPlayer;var map=AgentMap.Instance();if(self==null||map==null||!Player.IsLoaded)return null;
-        return new(Guid.NewGuid().ToString("N"),Player.CharacterName,Player.HomeWorld.RowId,Player.CurrentWorld.RowId,self.GameObjectId.ToString(),Client.TerritoryType,map->CurrentMapId,crystal,0,position.X,position.Y,position.Z,DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),"",TravelKind:kind,AetheryteId:id,Destination:destination);
+        return new(Guid.NewGuid().ToString("N"),Player.CharacterName,Player.HomeWorld.RowId,Player.CurrentWorld.RowId,self.GameObjectId.ToString(),Client.TerritoryType,map->CurrentMapId,crystal,0,position.X,position.Y,position.Z,DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),"",TravelKind:kind,AetheryteId:id,Destination:destination,Approach:kind is "world" or "leaveDuty"?null:FollowTravelPosition.From(self.Position),DutyId:(uint)(FFXIVClientStructs.FFXIV.Client.Game.GameMain.Instance()==null?0:FFXIVClientStructs.FFXIV.Client.Game.GameMain.Instance()->CurrentContentFinderConditionId));
     }
     private void CaptureTravel(FollowPortalSignal? signal,uint destinationTerritory)
     {
@@ -84,7 +84,7 @@ public sealed partial class Plugin
         if(SharingTravel&&callbackIntHook is {IsEnabled:false})callbackIntHook.Enable();
         if(!SharingTravel)outgoingTravel=null;
         if(outgoingTravel is {} travel){
-            if(now-travelAt>TimeSpan.FromSeconds(30)||Player.IsLoaded&&(Player.CharacterName!=travel.Name||Player.HomeWorld.RowId!=travel.HomeWorld))outgoingTravel=null;
+            if(now-travelAt>TimeSpan.FromSeconds(120)||Player.IsLoaded&&(Player.CharacterName!=travel.Name||Player.HomeWorld.RowId!=travel.HomeWorld))outgoingTravel=null;
             else if(Player.IsLoaded&&!Conditions[ConditionFlag.BetweenAreas]&&!Conditions[ConditionFlag.BetweenAreas51]&&Objects.LocalPlayer is {} self&&
                 (travel.TravelKind is "teleport" or "estate"?Client.TerritoryType==travelTerritory&&(Client.TerritoryType!=travel.Territory||Vector3.Distance(self.Position,travelPosition)>12):Client.TerritoryType!=travel.Territory||Vector3.Distance(self.Position,travelPosition)>12)){
                 outgoingTravel=null;
@@ -97,14 +97,16 @@ public sealed partial class Plugin
             }
         }
         if(pendingAethernet is not {} pending)return;
-        if(!config.EnableFollowThem||!config.FollowThem.UseSharedTeleports||!followSession.Armed||now-aethernetAt>TimeSpan.FromSeconds(8)||Client.TerritoryType!=pending.Territory||Player.CurrentWorld.RowId!=pending.CurrentWorld||!FollowThemSession.Matches(config.FollowThem.TargetName,config.FollowThem.HomeWorld,pending.Name,pending.HomeWorld)){pendingAethernet=null;return;}
+        if(!config.EnableFollowThem||!config.FollowThem.UseSharedTeleports||!followSession.Armed||Client.TerritoryType!=pending.Territory||Player.CurrentWorld.RowId!=pending.CurrentWorld||!FollowThemSession.Matches(config.FollowThem.TargetName,config.FollowThem.HomeWorld,pending.Name,pending.HomeWorld)){pendingAethernet=null;return;}
         if(Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]){pendingAethernet=null;return;}
+        if(now-aethernetAt>TimeSpan.FromSeconds(30)){pendingAethernet=null;TravelDiagnostic("Aethernet timed out waiting for the destination menu; travel remains manual.");return;}
+        if(!travelStepReady||now<aethernetNext)return;
         var town=(AtkUnitBase*)GardenGui.GetAddonByName("TelepotTown").Address;
         if(town!=null&&town->IsVisible){
-            var choices=AethernetChoices(town).Where(x=>x.Name==pending.Destination).ToArray();
-            if(choices.Length!=1){pendingAethernet=null;FollowChatNotice("TRAVEL — Destination unavailable in your aethernet menu; waiting.");return;}
+            var choices=AethernetChoices(town).Where(x=>x.Name.Trim()==pending.Destination.Trim()).ToArray();
+            if(choices.Length!=1){TravelDiagnostic("Waiting for the selected destination in the aethernet menu.");return;}
             var args=stackalloc AtkValue[2];args[0].Type=AtkValueType.Int;args[0].Int=11;args[1].Type=AtkValueType.UInt;args[1].UInt=choices[0].Callback;
-            aethernetSelections++;if(aethernetSelections>=2)pendingAethernet=null;
+            aethernetNext=now.AddSeconds(2);aethernetSelections++;if(aethernetSelections>=2)pendingAethernet=null;
             usingSharedTravel=true;try{town->FireCallback(2,args,true);}finally{usingSharedTravel=false;}
             FollowChatNotice("TRAVEL — Requested aethernet: "+pending.Destination);return;
         }
@@ -112,7 +114,7 @@ public sealed partial class Plugin
         if(aethernetSelections==0&&!aethernetMenuSelected&&menu!=null&&menu->IsVisible&&menu->AtkValues!=null&&menu->AtkValuesCount>=8){
             if(((int)menu->AtkValues[5].Type&15) is not (3 or 5))return;var count=menu->AtkValues[5].UInt;if(count>16||7+count>menu->AtkValuesCount)return;
             for(var i=0;i<count;i++){var v=menu->AtkValues[7+i];if(((int)v.Type&15) is not (8 or 10))continue;var name=CopyMenuText(v.String.Value);
-                if(name is "Aethernet" or "Aethernet."){aethernetMenuSelected=true;menu->FireCallbackInt(i);return;}}
+                if(name is "Aethernet" or "Aethernet."){aethernetMenuSelected=true;aethernetNext=now.AddMilliseconds(750);usingSharedTravel=true;try{menu->FireCallbackInt(i);}finally{usingSharedTravel=false;}return;}}
         }
     }
     private unsafe void TryUseSharedTravel(FollowPortalSignal signal,DateTimeOffset now)
@@ -133,7 +135,7 @@ public sealed partial class Plugin
             if(crystal==null){FollowChatNotice("TRAVEL — Move closer to the same crystal; FollowThem is waiting.");return;}
             if(signal.TravelKind=="aethernet"&&TryLifestreamAethernet(signal))return;
             if(signal.TravelKind=="ward"){pendingWard=signal;wardAt=now;wardNext=default;wardStage=0;}
-            else pendingAethernet=signal;aethernetAt=now;aethernetMenuSelected=false;aethernetSelections=0;
+            else pendingAethernet=signal;aethernetAt=now;aethernetNext=now.AddMilliseconds(500);aethernetMenuSelected=false;aethernetSelections=0;
             lastPortalSignalId=signal.Id;
             PauseFollowForTravel();
             TargetSystem.Instance()->InteractWithObject((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)crystal.Address,true);return;

@@ -3,7 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 namespace EquinoxCompanion;
 
-public sealed record FollowPortalSignal(string Id,string Name,uint HomeWorld,uint CurrentWorld,string EntityId,uint Territory,uint MapId,uint BaseId,int HandlerType,float X,float Y,float Z,long SentAt,string Confirmation,long ExpiresAt=0,string TravelKind="portal",uint AetheryteId=0,string Destination="",int Ward=0,uint DestinationTerritory=0,float SourceRadius=0,FollowMenuStep[]? Steps=null,string SourceKind="",uint DestinationWorld=0,string FriendContentId="",string EstateId="");
+public sealed record FollowPortalSignal(string Id,string Name,uint HomeWorld,uint CurrentWorld,string EntityId,uint Territory,uint MapId,uint BaseId,int HandlerType,float X,float Y,float Z,long SentAt,string Confirmation,long ExpiresAt=0,string TravelKind="portal",uint AetheryteId=0,string Destination="",int Ward=0,uint DestinationTerritory=0,float SourceRadius=0,FollowMenuStep[]? Steps=null,string SourceKind="",uint DestinationWorld=0,string FriendContentId="",string EstateId="",FollowTravelPosition? Approach=null,uint DutyId=0);
 public sealed record FollowMenuStep(string Text,bool Confirmation=false);
 public sealed record FollowPortalEnvelope(FollowPortalSignal? Signal);
 public sealed class FollowPortalRelay : IDisposable

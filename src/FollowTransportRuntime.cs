@@ -27,14 +27,14 @@ public sealed partial class Plugin
     }
     private unsafe void CaptureTransportChoice(AtkUnitBase* addon,int index)
     {
-        if(!SharingTravel||usingSharedTravel||pendingTransport!=null||addon==null||transportCapture is not {} source||DateTimeOffset.UtcNow-transportCaptureAt>TimeSpan.FromSeconds(90)||index<0)return;
+        if(!SharingTravel||usingSharedTravel||pendingTransport!=null||addon==null||transportCapture is not {} source||DateTimeOffset.UtcNow-transportCaptureAt>TimeSpan.FromSeconds(120)||index<0)return;
         string text="";bool confirmation=false;
         if(addon==(AtkUnitBase*)GardenGui.GetAddonByName("SelectString").Address){
             var choices=TransportChoices(addon);if(index>=choices.Count)return;text=choices[index];
         }else if(addon==(AtkUnitBase*)GardenGui.GetAddonByName("SelectYesno").Address&&index==0){
             var yes=(AddonSelectYesno*)addon;if(yes->PromptText==null)return;text=yes->PromptText->NodeText.ToString();confirmation=true;
         }else return;
-        if(!(source.TravelKind=="friendestate"?FollowTransportPolicy.EstateChoice(text):FollowTransportPolicy.Choice(text))){transportCapture=null;if(source.Steps is {Length:>0})TravelDiagnostic("Unrecognized travel menu; this interaction remains manual.");return;}
+        if(!(source.TravelKind=="friendestate"?FollowTransportPolicy.EstateChoice(text):FollowTransportPolicy.StepSupported(text,confirmation))){transportCapture=null;if(source.Steps is {Length:>0})TravelDiagnostic("Unrecognized travel menu; this interaction remains manual.");return;}
         var now=DateTimeOffset.UtcNow;
         if(text==lastTransportChoice&&now-lastTransportChoiceAt<TimeSpan.FromMilliseconds(100))return;
         lastTransportChoice=text;lastTransportChoiceAt=now;
@@ -51,7 +51,7 @@ public sealed partial class Plugin
     private unsafe void UpdateFollowTransport(DateTimeOffset now)
     {
         if(transportCapture is {} capture){
-            if(!SharingTravel||now-transportCaptureAt>TimeSpan.FromSeconds(90))transportCapture=null;
+            if(!SharingTravel||now-transportCaptureAt>TimeSpan.FromSeconds(120))transportCapture=null;
             else if(Player.IsLoaded&&Player.CharacterName==capture.Name&&Player.HomeWorld.RowId==capture.HomeWorld&&Client.TerritoryType!=capture.Territory&&!Conditions[ConditionFlag.BetweenAreas]&&!Conditions[ConditionFlag.BetweenAreas51]){
                 transportCapture=null;
                 // More specific native aethernet/ward capture takes precedence.
@@ -62,6 +62,7 @@ public sealed partial class Plugin
         if(pendingTransport is not {} pending)return;
         if(!followSession.Armed||!config.EnableFollowThem||!config.FollowThem.UseSharedTeleports||!Player.IsLoaded||Client.TerritoryType!=pending.Territory||Player.CurrentWorld.RowId!=pending.CurrentWorld||Conditions[ConditionFlag.InCombat]||!FollowThemSession.Matches(config.FollowThem.TargetName,config.FollowThem.HomeWorld,pending.Name,pending.HomeWorld)){pendingTransport=null;return;}
         if(now-transportStarted>TimeSpan.FromSeconds(15)){pendingTransport=null;TravelDiagnostic("Transport timed out; menu or unlock differs. Waiting for your selected character.");return;}
+        if(!travelStepReady)return;
         if(now<transportNext||pending.Steps==null)return;
         var step=pending.Steps[transportStep];
         AtkUnitBase* menu=null;int index=-1;
@@ -72,7 +73,7 @@ public sealed partial class Plugin
         }else{
             menu=(AtkUnitBase*)GardenGui.GetAddonByName("SelectString").Address;var choices=TransportChoices(menu);
             if(choices.Count==0)return;
-            if(choices.Count(x=>x==step.Text)!=1){pendingTransport=null;TravelDiagnostic("Transport destination unavailable in your menu; waiting.");return;}index=choices.IndexOf(step.Text);
+            if(choices.Count(x=>x==step.Text)!=1){TravelDiagnostic("Waiting for the recorded transport menu choice to appear.");return;}index=choices.IndexOf(step.Text);
         }
         if(!FollowTransportPolicy.Affordable(step.Text,config.FollowThem.TeleportGilLimit)){pendingTransport=null;TravelDiagnostic("Transport fee is unknown or exceeds your gil limit; waiting.");return;}
         transportStep++;if(transportStep>=pending.Steps.Length)pendingTransport=null;

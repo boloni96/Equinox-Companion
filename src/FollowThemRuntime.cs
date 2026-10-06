@@ -79,7 +79,7 @@ public sealed partial class Plugin
         }
         followFlight.Reset();followStuck.Reset();followRecovery.Reset();mountAttempts=0;
         lastLeaderSeen = default;
-        receivedPortal = null;pendingAethernet=null;pendingWard=null;pendingTransport=null;CancelLifestreamTravel();
+        deferredTravel=null;receivedPortal = null;pendingAethernet=null;pendingWard=null;pendingTransport=null;CancelLifestreamTravel();CancelFollowApproach();pendingDutyLeave=null;
         relayGeneration++;
         followReady.Reset();
         if (wasArmed) followStatus = "STOPPED — " + reason;
@@ -135,6 +135,8 @@ public sealed partial class Plugin
             }
             if (followFault||now<followRetryAt) return;
             RefreshFollowBar();
+            if(pendingDutyLeave!=null){followSession.Pause();followStatus="WAITING — "+portalRelayStatus;RefreshFollowBar();return;}
+            if(followApproach!=null){followSession.Pause();followStatus="WAITING — "+portalRelayStatus;RefreshFollowBar();return;}
             if(lifestreamTravelOwned){followSession.Pause();followStatus="WAITING — Lifestream travel in progress.";return;}
             var transitioning = FollowTransitionBusy();
             // A transient missing local actor while zoning is not a character logout.
@@ -236,6 +238,7 @@ public sealed partial class Plugin
         if (addon == null || !addon->IsVisible || addon->PromptText == null) return;
         var prompt = addon->PromptText->NodeText.ToString();
         if (!FollowThemSession.IsPartyTeleportPrompt(prompt)) return;
+        if(!travelStepReady){PauseFollowForTravel();return;}
         nextTeleportAttempt = now.AddSeconds(5);
         addon->FireCallbackInt(0);
         FollowChatNotice("TELEPORT — Accepted the party teleport offer.");
@@ -259,6 +262,7 @@ public sealed partial class Plugin
         }
         MessageToggle("FollowThem chat messages", config.FollowThem.ChatMessages, v => config.FollowThem.ChatMessages = v);
         MessageToggle("Mount when the selected character mounts",config.FollowThem.FollowMount,v=>config.FollowThem.FollowMount=v);
+        MessageToggle("Leave duty when the followed character leaves (waits for loot)",config.FollowThem.LeaveDuties,v=>config.FollowThem.LeaveDuties=v);
         DrawLifestreamSettings();
         MessageToggle("Take off when the selected character flies (while mounted)",config.FollowThem.FollowTakeoff,v=>config.FollowThem.FollowTakeoff=v);
         MessageToggle("Stop FollowThem when I move (optional)",config.FollowThem.StopOnMovement,v=>config.FollowThem.StopOnMovement=v);

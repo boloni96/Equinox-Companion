@@ -29,7 +29,8 @@ public sealed partial class Plugin
             if(confirmation!=null&&confirmation->IsVisible&&confirmation->PromptText!=null){var text=confirmation->PromptText->NodeText.ToString();if(FollowPortalPolicy.IsConfirmationSupported(text))outgoingTravel=wardCandidate with {Confirmation=text};}
         }
         if(pendingWard is not {} s)return;
-        if(!followSession.Armed||!config.EnableFollowThem||!config.FollowThem.UseSharedTeleports||now-wardAt>TimeSpan.FromSeconds(12)||Client.TerritoryType!=s.Territory||Player.CurrentWorld.RowId!=s.CurrentWorld||Conditions[Dalamud.Game.ClientState.Conditions.ConditionFlag.InCombat]||!FollowThemSession.Matches(config.FollowThem.TargetName,config.FollowThem.HomeWorld,s.Name,s.HomeWorld)){pendingWard=null;return;}
+        if(!followSession.Armed||!config.EnableFollowThem||!config.FollowThem.UseSharedTeleports||now-wardAt>TimeSpan.FromSeconds(30)||Client.TerritoryType!=s.Territory||Player.CurrentWorld.RowId!=s.CurrentWorld||Conditions[Dalamud.Game.ClientState.Conditions.ConditionFlag.InCombat]||!FollowThemSession.Matches(config.FollowThem.TargetName,config.FollowThem.HomeWorld,s.Name,s.HomeWorld)){pendingWard=null;return;}
+        if(!travelStepReady)return;
         if(now<wardNext)return;wardNext=now.AddMilliseconds(500);
         var yes=(AddonSelectYesno*)GardenGui.GetAddonByName("SelectYesno").Address;
         if(wardStage==3&&yes!=null&&yes->IsVisible&&yes->PromptText!=null){

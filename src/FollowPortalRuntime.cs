@@ -15,7 +15,7 @@ public sealed partial class Plugin
     private readonly FollowNoticeGate portalNotices = new();
     private unsafe delegate ulong FollowInteractDelegate(TargetSystem* system,NativeObject* obj,bool checkLineOfSight);
     private Hook<FollowInteractDelegate>? followPortalHook;
-    private FollowPortalSignal? outgoingPortal,receivedPortal;
+    private FollowPortalSignal? outgoingPortal,receivedPortal,deferredTravel;
     private DateTimeOffset outgoingPortalAt,nextPortalPoll,receivedPortalAt,nextPortalTick;
     private Vector3 portalPreviousPosition;
     private string relayPairingKey="";
@@ -52,11 +52,11 @@ public sealed partial class Plugin
                 var clicked=Objects.FirstOrDefault(o=>o.Address==(nint)obj);
                 if(clicked!=null)CaptureTransportSource(clicked);
                 var kind=PortalHandler(obj);
-                if(clicked?.ObjectKind==ObjectKind.EventObj&&kind is 2 or 20 && Objects.LocalPlayer is {} self&&Vector3.Distance(self.Position,clicked.Position)<=4)
+                if(transportCapture?.TravelKind!="door"&&clicked?.ObjectKind==ObjectKind.EventObj&&kind is 2 or 20 && Objects.LocalPlayer is {} self&&Vector3.Distance(self.Position,clicked.Position)<=4)
                 {
                     transportCapture=null;
                     var map=AgentMap.Instance();var at=DateTimeOffset.UtcNow;var p=clicked.Position;
-                    outgoingPortal=new(Guid.NewGuid().ToString("N"),Player.CharacterName,Player.HomeWorld.RowId,Player.CurrentWorld.RowId,self.GameObjectId.ToString(),Client.TerritoryType,map!=null?map->CurrentMapId:0,clicked.BaseId,kind,p.X,p.Y,p.Z,at.ToUnixTimeMilliseconds(),"");
+                    outgoingPortal=new(Guid.NewGuid().ToString("N"),Player.CharacterName,Player.HomeWorld.RowId,Player.CurrentWorld.RowId,self.GameObjectId.ToString(),Client.TerritoryType,map!=null?map->CurrentMapId:0,clicked.BaseId,kind,p.X,p.Y,p.Z,at.ToUnixTimeMilliseconds(),"",Approach:FollowTravelPosition.From(self.Position),DutyId:(uint)(FFXIVClientStructs.FFXIV.Client.Game.GameMain.Instance()==null?0:FFXIVClientStructs.FFXIV.Client.Game.GameMain.Instance()->CurrentContentFinderConditionId));
                     outgoingPortalAt=at; portalPreviousPosition=self.Position;
                     portalAudienceTask=config.PairingKey.Length==64?portalRelay.HasFollowers(config.PairingKey,Player.CharacterName,Player.HomeWorld.RowId):Task.FromResult(false);
                     portalRelayStatus="Portal click observed; waiting for a confirmed area transition.";
@@ -80,9 +80,12 @@ public sealed partial class Plugin
         nextPortalTick=now.AddMilliseconds(100);
         try
         {
+            ObserveTravelStationary(now);
+            UpdateFollowDutyLeave(now);
             UpdateFollowLease(now);
+            UpdateFollowApproach(now);
             UpdateFollowTravel(now);
-            if(relayPairingKey!=config.PairingKey){relayPairingKey=config.PairingKey;relayGeneration++;receivedPortal=null;outgoingPortal=null;pendingAethernet=null;pendingWard=null;pendingTransport=null;transportCapture=null;worldSource=null;CancelLifestreamTravel();}
+            if(relayPairingKey!=config.PairingKey){relayPairingKey=config.PairingKey;relayGeneration++;deferredTravel=null;receivedPortal=null;outgoingPortal=null;pendingAethernet=null;pendingWard=null;pendingTransport=null;transportCapture=null;worldSource=null;CancelLifestreamTravel();CancelFollowApproach();pendingDutyLeave=null;}
             var sharing=config.EnableFollowThem&&config.FollowThem.SharePortalTransitions;
             if(sharing&&!portalHookFailed&&followPortalHook==null)
             {
@@ -99,13 +102,13 @@ public sealed partial class Plugin
             var loading=Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51];
             if(outgoingPortal is {} candidate)
             {
-                if(now-outgoingPortalAt>TimeSpan.FromSeconds(10)||!Player.IsLoaded||Player.CharacterName!=candidate.Name||Player.HomeWorld.RowId!=candidate.HomeWorld)
+                if(now-outgoingPortalAt>TimeSpan.FromSeconds(120)||Player.IsLoaded&&(Player.CharacterName!=candidate.Name||Player.HomeWorld.RowId!=candidate.HomeWorld))
                     outgoingPortal=null;
-                else if(loading||Client.TerritoryType!=candidate.Territory||(Objects.LocalPlayer is {} moved && Vector3.Distance(moved.Position,portalPreviousPosition)>12))
+                else if(Player.IsLoaded&&!loading&&(Client.TerritoryType!=candidate.Territory||(Objects.LocalPlayer is {} moved && Vector3.Distance(moved.Position,portalPreviousPosition)>12)))
                 {
                     outgoingPortal=null;
                     if(config.PairingKey.Length==64&&portalSendTask==null&&portalAudienceTask is {} audience)
-                        portalSendTask=SendPortalToAudience(config.PairingKey,candidate,audience);
+                        portalSendTask=SendPortalToAudience(config.PairingKey,candidate with {SentAt=now.ToUnixTimeMilliseconds()},audience);
                     else portalRelayStatus="Portal relay needs pairing; transition not queued for replay.";
                 }
                 else
@@ -119,8 +122,8 @@ public sealed partial class Plugin
                     if(Objects.LocalPlayer is {} current)portalPreviousPosition=current.Position;
                 }
             }
-            var receiving=config.EnableFollowThem&&(config.FollowThem.UseSharedPortals||config.FollowThem.UseSharedTeleports)&&followSession.Armed&&Player.IsLoaded;
-            if(!receiving){receivedPortal=null;return;}
+            var receiving=config.EnableFollowThem&&(config.FollowThem.UseSharedPortals||config.FollowThem.UseSharedTeleports)&&followSession.Armed;
+            if(!receiving){receivedPortal=null;deferredTravel=null;return;}
             if(portalReadTask?.IsCompleted==true)
             {
                 var result=portalReadTask.GetAwaiter().GetResult();portalReadTask=null;
@@ -129,15 +132,19 @@ public sealed partial class Plugin
                     portalRelayStatus=result.Status;
                     if(portalNotices.Changed(result.Status) && result.Status!="Portal relay ready.")
                         FollowChatNotice("ERROR — "+result.Status);
-                    if(result.Signal is {} signal&&signal.Id!=lastPortalSignalId)TryUseSharedPortal(signal,now);
+                    if(result.Signal is {} signal&&signal.Id!=lastPortalSignalId)deferredTravel=signal;
                     if(result.Status!="Portal relay ready.")nextPortalPoll=now.AddSeconds(10);
                 }
+            }
+            if(deferredTravel is {} deferred){
+                if(deferred.SentAt<followArmedAt||deferred.ExpiresAt<=now.ToUnixTimeMilliseconds())deferredTravel=null;
+                else if(Player.IsLoaded&&!loading&&followApproach==null&&pendingTransport==null&&pendingWard==null&&pendingAethernet==null&&receivedPortal==null){deferredTravel=null;QueueFollowApproach(deferred,now);}
             }
             if(receivedPortal is {} pending)
             {
                 if(now-receivedPortalAt>TimeSpan.FromSeconds(5)||loading||Client.TerritoryType!=pending.Territory){receivedPortal=null;return;}
                 var dialog=(AddonSelectYesno*)GardenGui.GetAddonByName("SelectYesno").Address;
-                if(pending.Confirmation.Length>0&&dialog!=null&&dialog->IsVisible&&dialog->PromptText!=null&&dialog->PromptText->NodeText.ToString()==pending.Confirmation)
+                if(travelStepReady&&pending.Confirmation.Length>0&&dialog!=null&&dialog->IsVisible&&dialog->PromptText!=null&&dialog->PromptText->NodeText.ToString()==pending.Confirmation)
                 {
                     receivedPortal=null;
                     dialog->FireCallbackInt(0);
@@ -145,7 +152,7 @@ public sealed partial class Plugin
                     FollowChatNotice("PORTAL — " + portalRelayStatus);
                 }
             }
-            if(loading||now<nextPortalPoll||portalReadTask!=null||lastLeaderSeen==default)return;
+            if(now<nextPortalPoll||portalReadTask!=null||lastLeaderSeen==default)return;
             if(config.PairingKey.Length!=64){portalRelayStatus="Pair both Companions with the same Journal key for portal relay.";return;}
             nextPortalPoll=now.AddSeconds(now-lastLeaderSeen>TimeSpan.FromSeconds(30)?3:1);portalReadGeneration=relayGeneration;
             portalReadTask=portalRelay.Read(config.PairingKey,config.FollowThem.TargetName,config.FollowThem.HomeWorld,followLeaseId);
@@ -160,6 +167,7 @@ public sealed partial class Plugin
     }
     private async Task<string> SendPortalToAudience(string key,FollowPortalSignal signal,Task<bool> audience)
     {
+        signal=NormalizeDutyDeparture(signal);
         if(!await audience)return "No active follower; portal transition not sent.";
         if(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()-signal.SentAt>10000)return "Portal transition expired; not sent.";
         return await portalRelay.Send(key,signal with {SentAt=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()});
