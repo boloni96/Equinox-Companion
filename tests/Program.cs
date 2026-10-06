@@ -1014,7 +1014,8 @@ Check("private tenant never gains private button",HouseShortcutSelection.For(upd
 Check("house checked before seven day boundary",HouseShortcutSelection.Checked(own40 with {LastEntry=updateNow.AddDays(-7).AddMilliseconds(1)},updateNow).ToString(),"True");
 Check("house check disappears at seven days",HouseShortcutSelection.Checked(own40 with {LastEntry=updateNow.AddDays(-7)},updateNow).ToString(),"False");
 Check("FC and private check independent",HouseShortcutSelection.Checked(fc40,updateNow).ToString(),"False");
-Check("current week score shown in hover",FashionCompletion.Tooltip(updateActor,[new(Guid.NewGuid().ToString("N"),"fashion.observed",updateNow,updateActor,null,Fashion:new(93,3,1,FashionCompletion.Cycle(updateNow).ToString("O")))],[],updateNow).Contains("93/100").ToString(),"True");
+var fashionHover59=DateTimeOffset.Parse("2026-10-04T12:00:00Z");
+Check("current week score shown in hover",FashionCompletion.Tooltip(updateActor,[new(Guid.NewGuid().ToString("N"),"fashion.observed",fashionHover59,updateActor,null,Fashion:new(93,3,1,FashionCompletion.Cycle(fashionHover59).ToString("O")))],[],fashionHover59).Contains("93/100").ToString(),"True");
 
 // Supply counts are character inventory, never FC totals or submarine capacity.
 var supplyNow=DateTimeOffset.Parse("2026-10-03T22:00:00Z");
@@ -1278,3 +1279,60 @@ Check("Garden group tending wins over ready",GardenOverview.CombineAttention(["h
 Check("Garden group risk remains orange",GardenOverview.CombineAttention(["risk","cared"]),"risk");
 Check("Garden group unknown only remains neutral",GardenOverview.CombineAttention(["none"]),"none");
 Check("Garden group empty has no false tending",GardenOverview.CombineAttention([]),"none");
+
+var supply59=new SubmarineSupplyView(100,30,50,140,DateTimeOffset.UtcNow,true);
+var now59=DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+Check("59 fleet sailing green",SubmarineAttention.Evaluate([now59+100],[false],supply59,1,now59).Level.ToString(),"1");
+Check("59 idle yellow",SubmarineAttention.Evaluate([0],[false],supply59,1,now59).Level.ToString(),"2");
+Check("59 returned yellow",SubmarineAttention.Evaluate([now59],[false],supply59,1,now59).Level.ToString(),"2");
+Check("59 repairs orange",SubmarineAttention.Evaluate([0],[true],supply59,1,now59).Level.ToString(),"3");
+Check("59 fuel orange",SubmarineAttention.Evaluate([0],[false],supply59 with {Ceruleum=0},1,now59).Level.ToString(),"3");
+Check("59 kits orange",SubmarineAttention.Evaluate([0],[false],supply59 with {RepairKits=0},1,now59).Level.ToString(),"3");
+Check("59 space orange",SubmarineAttention.Evaluate([0],[false],supply59 with {InventorySpace=0},1,now59).Level.ToString(),"3");
+Check("59 unlocked vacant slot yellow",SubmarineAttention.Evaluate([now59+100],[false],supply59,2,now59).Level.ToString(),"2");
+Check("59 available slot count",SubmarineAttention.Evaluate([now59+100],[false],supply59,3,now59).OpenSlots.ToString(),"2");
+Check("59 unknown capacity not inferred",SubmarineAttention.Evaluate([now59+100],[null],null,null,now59).OpenSlots.ToString(),"0");
+Check("59 absent fleet neutral",SubmarineAttention.Evaluate([],[],null,null,now59).Level.ToString(),"0");
+Check("59 worst state reaches account",SubmarineAttention.Combine([1,2,3,0]).ToString(),"3");
+Check("59 repair data roundtrip",System.Text.Json.JsonSerializer.Deserialize<SubmarineDetails>(System.Text.Json.JsonSerializer.Serialize(new SubmarineDetails(0,"Test",1,0,1,[1,2,3,4],[],true)))?.NeedsRepair.ToString(),"True");
+
+var stuck59=new FollowStuckWatch();var time59=DateTimeOffset.Parse("2026-10-06T09:00:00Z");
+Check("59 stationary start not stuck",stuck59.Observe(time59,System.Numerics.Vector3.Zero,10,true,60).ToString(),"False");
+Check("59 no early stuck",stuck59.Observe(time59.AddSeconds(59),System.Numerics.Vector3.Zero,10,true,60).ToString(),"False");
+Check("59 stuck at configurable deadline",stuck59.Observe(time59.AddSeconds(60),System.Numerics.Vector3.Zero,10,true,60).ToString(),"True");
+Check("59 stays waiting with leader far",stuck59.Observe(time59.AddSeconds(70),System.Numerics.Vector3.Zero,10,true,60).ToString(),"True");
+Check("59 pickup resumes nearby",stuck59.Observe(time59.AddSeconds(75),System.Numerics.Vector3.Zero,2,true,60).ToString(),"False");
+stuck59.Reset();stuck59.Observe(time59,System.Numerics.Vector3.Zero,10,true,10);
+Check("59 custom ten seconds",stuck59.Observe(time59.AddSeconds(10),System.Numerics.Vector3.Zero,10,true,10).ToString(),"True");
+Check("59 resume disabled stays waiting",stuck59.Observe(time59.AddSeconds(11),System.Numerics.Vector3.Zero,2,false,10).ToString(),"True");
+stuck59.Reset();stuck59.Observe(time59,System.Numerics.Vector3.Zero,2,true,60);
+Check("59 standing together never stuck",stuck59.Observe(time59.AddMinutes(5),System.Numerics.Vector3.Zero,2,true,60).ToString(),"False");
+stuck59.Reset();stuck59.Observe(time59,System.Numerics.Vector3.Zero,10,true,60);
+Check("59 movement resets timer",stuck59.Observe(time59.AddSeconds(59),new(1,0,0),10,true,60).ToString(),"False");
+Check("59 renewed movement time",stuck59.Observe(time59.AddSeconds(61),new(1,0,0),10,true,60).ToString(),"False");
+var session59=new FollowThemSession();session59.Arm();session59.Observe(true,true,false,true,true);session59.Pause();
+Check("59 manual movement pause stays armed",session59.Armed.ToString(),"True");
+Check("59 resumes after manual movement",session59.Observe(true,true,false,true,true).ToString(),"Start");
+session59.Observe(true,true,false,false,true);
+Check("59 absent target waiting",session59.Phase.ToString(),"Waiting");
+Check("59 absent target remains armed",session59.Armed.ToString(),"True");
+Check("59 return target resumes",session59.Observe(true,true,false,true,true).ToString(),"Start");
+Check("59 stop on movement defaults off",new FollowThemSettings().StopOnMovement.ToString(),"False");
+Check("59 stuck timeout defaults sixty",new FollowThemSettings().StuckSeconds.ToString(),"60");
+var flight59=new FollowFlightGate();Check("59 takeoff first try",flight59.Try(time59).ToString(),"True");
+Check("59 takeoff not repeated immediately",flight59.Try(time59).ToString(),"False");flight59.Try(time59.AddSeconds(1));flight59.Try(time59.AddSeconds(2));
+Check("59 takeoff bounded attempts",flight59.Try(time59.AddSeconds(10)).ToString(),"False");flight59.Reset();Check("59 takeoff resets",flight59.Try(time59.AddSeconds(11)).ToString(),"True");
+var travel59=new FollowPortalSignal(new string('a',32),"Leader",1,2,"10",3,4,0,0,0,0,0,time59.ToUnixTimeMilliseconds(),"",time59.AddSeconds(15).ToUnixTimeMilliseconds(),"teleport",5);
+bool CanTravel59(FollowPortalSignal s)=>FollowTravelPolicy.CanUse(s,time59.ToUnixTimeMilliseconds(),time59.AddSeconds(-1).ToUnixTimeMilliseconds(),"Leader",1,2,3,4,"10",2,System.Numerics.Vector3.Zero);
+Check("59 matching travel allowed",CanTravel59(travel59).ToString(),"True");
+Check("59 different leader blocked",CanTravel59(travel59 with {Name="Other"}).ToString(),"False");
+Check("59 different world blocked",CanTravel59(travel59 with {CurrentWorld=9}).ToString(),"False");
+Check("59 expired travel blocked",CanTravel59(travel59 with {ExpiresAt=time59.ToUnixTimeMilliseconds()}).ToString(),"False");
+Check("59 unknown kind blocked",CanTravel59(travel59 with {TravelKind="coffer"}).ToString(),"False");
+Check("59 destination missing blocked",CanTravel59(travel59 with {AetheryteId=0}).ToString(),"False");
+Check("59 far crystal blocked",CanTravel59(travel59 with {TravelKind="aethernet",BaseId=1,Destination="Market",X=4}).ToString(),"False");
+Check("59 nearby named crystal allowed",CanTravel59(travel59 with {TravelKind="aethernet",BaseId=1,Destination="Market",X=2}).ToString(),"True");
+
+Check("59 valid ward travel",CanTravel59(travel59 with {TravelKind="ward",BaseId=9,Ward=15,DestinationTerritory=339,Confirmation="Travel to Ward 15?"}).ToString(),"True");
+Check("59 invalid ward blocked",CanTravel59(travel59 with {TravelKind="ward",BaseId=9,Ward=0,DestinationTerritory=339,Confirmation="Travel to Ward 15?"}).ToString(),"False");
+Check("59 unrelated ward confirmation blocked",CanTravel59(travel59 with {TravelKind="ward",BaseId=9,Ward=15,DestinationTerritory=339,Confirmation="Delete this item?"}).ToString(),"False");

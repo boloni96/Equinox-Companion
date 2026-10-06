@@ -9,7 +9,7 @@ public sealed record GardenTargetDetails(uint Argument, float X, float Y, float 
 public sealed record StorageDetails(string Key, string Name, uint[] Items);
 public sealed record CollectionDetails(string Category, uint[] Known, uint[] Unlocked, uint[] Obtained);
 public sealed record FashionDetails(int Score, int Remaining, int ThemeId, string Cycle);
-public sealed record SubmarineDetails(int Slot, string Name, int Rank, long ReturnTime, uint RegisterTime, ushort[] Parts, [property: System.Text.Json.Serialization.JsonConverter(typeof(SubmarineRouteJson))] byte[] Route);
+public sealed record SubmarineDetails(int Slot, string Name, int Rank, long ReturnTime, uint RegisterTime, ushort[] Parts, [property: System.Text.Json.Serialization.JsonConverter(typeof(SubmarineRouteJson))] byte[] Route, bool? NeedsRepair = null);
 public sealed record VoyageDetails(string FcId, SubmarineDetails[] Submarines);
 public sealed record SyncResult(string[] Accepted, string Status, bool Retry);
 public sealed class CompanionSync : IDisposable

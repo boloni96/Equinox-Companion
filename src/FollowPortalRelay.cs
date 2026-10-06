@@ -3,7 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 namespace EquinoxCompanion;
 
-public sealed record FollowPortalSignal(string Id,string Name,uint HomeWorld,uint CurrentWorld,string EntityId,uint Territory,uint MapId,uint BaseId,int HandlerType,float X,float Y,float Z,long SentAt,string Confirmation,long ExpiresAt=0);
+public sealed record FollowPortalSignal(string Id,string Name,uint HomeWorld,uint CurrentWorld,string EntityId,uint Territory,uint MapId,uint BaseId,int HandlerType,float X,float Y,float Z,long SentAt,string Confirmation,long ExpiresAt=0,string TravelKind="portal",uint AetheryteId=0,string Destination="",int Ward=0,uint DestinationTerritory=0);
 public sealed record FollowPortalEnvelope(FollowPortalSignal? Signal);
 public sealed class FollowPortalRelay : IDisposable
 {
@@ -11,11 +11,11 @@ public sealed class FollowPortalRelay : IDisposable
     private readonly CancellationTokenSource cancel = new();
     private static readonly JsonSerializerOptions json = new(JsonSerializerDefaults.Web);
     private const string Endpoint="https://equinoxjournal.pages.dev/api/companion/portal";
-    public async Task<(FollowPortalSignal? Signal,string Status)> Read(string key,string name,uint world)
+    public async Task<(FollowPortalSignal? Signal,string Status)> Read(string key,string name,uint world,string session)
     {
         try
         {
-            using var request=new HttpRequestMessage(HttpMethod.Get,Endpoint+"?name="+Uri.EscapeDataString(name)+"&world="+world);
+            using var request=new HttpRequestMessage(HttpMethod.Get,Endpoint+"?name="+Uri.EscapeDataString(name)+"&world="+world+"&session="+session);
             request.Headers.Authorization=new AuthenticationHeaderValue("Bearer",key);
             using var response=await client.SendAsync(request,HttpCompletionOption.ResponseHeadersRead,cancel.Token);
             if(!response.IsSuccessStatusCode)return(null,Failure((int)response.StatusCode));
@@ -28,6 +28,34 @@ public sealed class FollowPortalRelay : IDisposable
         }
         catch(Exception e) when(e is HttpRequestException or TaskCanceledException or JsonException){return(null,"Portal relay unavailable; no portal action taken.");}
     }
+    public async Task<bool> Session(string key,string id,string name,uint world,bool active)
+    {
+        try
+        {
+            using var request=new HttpRequestMessage(active?HttpMethod.Post:HttpMethod.Delete,Endpoint+"?mode=session&session="+id);
+            request.Headers.Authorization=new AuthenticationHeaderValue("Bearer",key);
+            if(active)request.Content=JsonContent.Create(new {name,world});
+            using var response=await client.SendAsync(request,HttpCompletionOption.ResponseHeadersRead,cancel.Token);
+            return response.IsSuccessStatusCode;
+        }
+        catch(Exception e) when(e is HttpRequestException or TaskCanceledException){return false;}
+    }
+    public async Task<bool> HasFollowers(string key,string name,uint world)
+    {
+        try
+        {
+            using var request=new HttpRequestMessage(HttpMethod.Get,Endpoint+"?mode=followers&name="+Uri.EscapeDataString(name)+"&world="+world);
+            request.Headers.Authorization=new AuthenticationHeaderValue("Bearer",key);
+            using var response=await client.SendAsync(request,HttpCompletionOption.ResponseHeadersRead,cancel.Token);
+            if(!response.IsSuccessStatusCode)return false;
+            using var stream=await response.Content.ReadAsStreamAsync(cancel.Token);
+            var bytes=new byte[513];var count=0;
+            while(count<bytes.Length){var n=await stream.ReadAsync(bytes.AsMemory(count),cancel.Token);if(n==0)break;count+=n;}
+            return count<=512&&JsonSerializer.Deserialize<SessionReply>(bytes.AsSpan(0,count),json)?.Active==true;
+        }
+        catch(Exception e) when(e is HttpRequestException or TaskCanceledException or JsonException){return false;}
+    }
+    private sealed record SessionReply(bool Active);
     public async Task<string> Send(string key,FollowPortalSignal signal)
     {
         try
@@ -35,10 +63,10 @@ public sealed class FollowPortalRelay : IDisposable
             using var request=new HttpRequestMessage(HttpMethod.Post,Endpoint){Content=JsonContent.Create(signal,options:json)};
             request.Headers.Authorization=new AuthenticationHeaderValue("Bearer",key);
             using var response=await client.SendAsync(request,cancel.Token);
-            return response.IsSuccessStatusCode?"Portal transition shared for 15 seconds.":Failure((int)response.StatusCode);
+            return response.IsSuccessStatusCode?"Portal transition submitted for active followers (15-second expiry).":Failure((int)response.StatusCode);
         }
         catch(Exception e) when(e is HttpRequestException or TaskCanceledException){return "Portal relay unavailable; this transition was not queued for later replay.";}
     }
-    private static string Failure(int code)=>code switch{404=>"Deploy Journal V7.11.74 to enable portal relay.",403=>"Portal relay refused; check pairing and deploy Journal V7.11.74.",401=>"Portal relay needs a valid pairing key and Journal V7.11.74.",_=>"Portal relay unavailable (HTTP "+code+"). No portal action taken."};
+    private static string Failure(int code)=>code switch{404=>"Deploy Journal V7.11.76 to enable portal relay.",403=>"Portal relay refused; check pairing and deploy Journal V7.11.76.",401=>"Portal relay needs a valid pairing key and Journal V7.11.76.",_=>"Portal relay unavailable (HTTP "+code+"). No portal action taken."};
     public void Dispose(){cancel.Cancel();client.Dispose();cancel.Dispose();}
 }

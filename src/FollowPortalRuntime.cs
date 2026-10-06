@@ -25,6 +25,23 @@ public sealed partial class Plugin
     private int relayGeneration,portalReadGeneration;
     private long followArmedAt;
     private bool relayInteracting,portalHookFailed;
+    private Task<bool>? followLeaseTask,portalAudienceTask;
+    private string followLeaseId="",followLeaseKey="",followLeaseName="",followLeaseIdentity="";
+    private uint followLeaseWorld;
+    private bool followLeaseDeleting;
+    private DateTimeOffset nextFollowLease;
+    private void UpdateFollowLease(DateTimeOffset now)
+    {
+        var loading=Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51];
+        var desired=config.EnableFollowThem&&(config.FollowThem.UseSharedPortals||config.FollowThem.UseSharedTeleports)&&followSession.Armed&&(Player.IsLoaded||loading)&&config.PairingKey.Length==64;
+        var identity=desired?config.PairingKey+"/"+config.FollowThem.TargetName+"/"+config.FollowThem.HomeWorld+"/"+followArmedAt:"";
+        if(followLeaseTask is not null){if(!followLeaseTask.IsCompleted)return;var ok=followLeaseTask.GetAwaiter().GetResult();followLeaseTask=null;if(followLeaseDeleting){followLeaseId="";followLeaseDeleting=false;}else if(!ok)portalRelayStatus="Follow session unavailable — deploy Journal V7.11.76 and check pairing.";}
+        if(followLeaseId.Length>0&&identity!=followLeaseIdentity){followLeaseDeleting=true;followLeaseTask=portalRelay.Session(followLeaseKey,followLeaseId,followLeaseName,followLeaseWorld,false);return;}
+        if(!desired)return;
+        if(followLeaseId.Length==0){followLeaseId=Guid.NewGuid().ToString("N");followLeaseKey=config.PairingKey;followLeaseName=config.FollowThem.TargetName;followLeaseWorld=config.FollowThem.HomeWorld;followLeaseIdentity=identity;nextFollowLease=default;}
+        if(now<nextFollowLease)return;
+        nextFollowLease=now.AddSeconds(15);followLeaseTask=portalRelay.Session(followLeaseKey,followLeaseId,followLeaseName,followLeaseWorld,true);
+    }
     private unsafe ulong ObserveFollowPortalClick(TargetSystem* system,NativeObject* obj,bool checkLineOfSight)
     {
         try
@@ -39,6 +56,7 @@ public sealed partial class Plugin
                     var map=AgentMap.Instance();var at=DateTimeOffset.UtcNow;var p=clicked.Position;
                     outgoingPortal=new(Guid.NewGuid().ToString("N"),Player.CharacterName,Player.HomeWorld.RowId,Player.CurrentWorld.RowId,self.GameObjectId.ToString(),Client.TerritoryType,map!=null?map->CurrentMapId:0,clicked.BaseId,kind,p.X,p.Y,p.Z,at.ToUnixTimeMilliseconds(),"");
                     outgoingPortalAt=at; portalPreviousPosition=self.Position;
+                    portalAudienceTask=config.PairingKey.Length==64?portalRelay.HasFollowers(config.PairingKey,Player.CharacterName,Player.HomeWorld.RowId):Task.FromResult(false);
                     portalRelayStatus="Portal click observed; waiting for a confirmed area transition.";
                 }
             }
@@ -55,11 +73,13 @@ public sealed partial class Plugin
     }
     private unsafe void UpdateFollowPortalRelay(DateTimeOffset now)
     {
-        if(!config.EnableFollowThem&&followPortalHook==null&&portalSendTask==null&&portalReadTask==null)return;
+        if(!config.EnableFollowThem&&followPortalHook==null&&portalSendTask==null&&portalReadTask==null&&followLeaseId.Length==0&&followLeaseTask==null)return;
         if(now<nextPortalTick)return;
         nextPortalTick=now.AddMilliseconds(100);
         try
         {
+            UpdateFollowLease(now);
+            UpdateFollowTravel(now);
             if(relayPairingKey!=config.PairingKey){relayPairingKey=config.PairingKey;relayGeneration++;receivedPortal=null;outgoingPortal=null;}
             var sharing=config.EnableFollowThem&&config.FollowThem.SharePortalTransitions;
             if(sharing&&!portalHookFailed&&followPortalHook==null)
@@ -82,8 +102,8 @@ public sealed partial class Plugin
                 else if(loading||Client.TerritoryType!=candidate.Territory||(Objects.LocalPlayer is {} moved && Vector3.Distance(moved.Position,portalPreviousPosition)>12))
                 {
                     outgoingPortal=null;
-                    if(config.PairingKey.Length==64&&portalSendTask==null)
-                        portalSendTask=portalRelay.Send(config.PairingKey,candidate with {SentAt=now.ToUnixTimeMilliseconds()});
+                    if(config.PairingKey.Length==64&&portalSendTask==null&&portalAudienceTask is {} audience)
+                        portalSendTask=SendPortalToAudience(config.PairingKey,candidate,audience);
                     else portalRelayStatus="Portal relay needs pairing; transition not queued for replay.";
                 }
                 else
@@ -97,7 +117,7 @@ public sealed partial class Plugin
                     if(Objects.LocalPlayer is {} current)portalPreviousPosition=current.Position;
                 }
             }
-            var receiving=config.EnableFollowThem&&config.FollowThem.UseSharedPortals&&followSession.Armed&&Player.IsLoaded;
+            var receiving=config.EnableFollowThem&&(config.FollowThem.UseSharedPortals||config.FollowThem.UseSharedTeleports)&&followSession.Armed&&Player.IsLoaded;
             if(!receiving){receivedPortal=null;return;}
             if(portalReadTask?.IsCompleted==true)
             {
@@ -123,10 +143,10 @@ public sealed partial class Plugin
                     FollowChatNotice("PORTAL — " + portalRelayStatus);
                 }
             }
-            if(loading||now<nextPortalPoll||portalReadTask!=null||lastLeaderSeen==default||now-lastLeaderSeen>TimeSpan.FromSeconds(15))return;
+            if(loading||now<nextPortalPoll||portalReadTask!=null||lastLeaderSeen==default||now-lastLeaderSeen>TimeSpan.FromSeconds(30))return;
             if(config.PairingKey.Length!=64){portalRelayStatus="Pair both Companions with the same Journal key for portal relay.";return;}
             nextPortalPoll=now.AddSeconds(1);portalReadGeneration=relayGeneration;
-            portalReadTask=portalRelay.Read(config.PairingKey,config.FollowThem.TargetName,config.FollowThem.HomeWorld);
+            portalReadTask=portalRelay.Read(config.PairingKey,config.FollowThem.TargetName,config.FollowThem.HomeWorld,followLeaseId);
         }
         catch(Exception e)
         {
@@ -136,8 +156,16 @@ public sealed partial class Plugin
             errorJournal.Record("portal-relay",portalRelayStatus,exceptionType:e.GetType().Name);
         }
     }
+    private async Task<string> SendPortalToAudience(string key,FollowPortalSignal signal,Task<bool> audience)
+    {
+        if(!await audience)return "No active follower; portal transition not sent.";
+        if(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()-signal.SentAt>10000)return "Portal transition expired; not sent.";
+        return await portalRelay.Send(key,signal with {SentAt=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()});
+    }
     private unsafe void TryUseSharedPortal(FollowPortalSignal signal,DateTimeOffset now)
     {
+        if(signal.TravelKind!="portal"){TryUseSharedTravel(signal,now);return;}
+        if(!config.FollowThem.UseSharedPortals)return;
         var self=Objects.LocalPlayer;var map=AgentMap.Instance();
         if(self==null||map==null||!FollowPortalPolicy.CanUse(signal,now.ToUnixTimeMilliseconds(),followArmedAt,
             config.FollowThem.TargetName,config.FollowThem.HomeWorld,Player.CurrentWorld.RowId,Client.TerritoryType,map->CurrentMapId,

@@ -510,6 +510,8 @@ public sealed partial class Plugin : IDalamudPlugin
         // No game action is initiated; only submitted garden selections are observed.
         try
         {
+            CaptureWardMenu(addon,count,values);
+            ObserveFollowAethernetCallback(addon,count,values);
             if (ObservingGardens && Volatile.Read(ref activeGardenMenu)?.AddonAddress == (nint)addon && count is > 0 and <= 16 && values != null)
             {
                 var copied=new int?[(int)count];
@@ -1032,6 +1034,7 @@ public sealed partial class Plugin : IDalamudPlugin
         StopFollowThem();
         followBar?.Remove();
         followPortalHook?.Dispose();
+        followTeleportHook?.Dispose();
         portalRelay.Dispose();
         quickLootBarEntry?.Remove();
         sync.Dispose();

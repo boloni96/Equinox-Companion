@@ -3,6 +3,9 @@ namespace EquinoxCompanion;
 [Serializable]
 public sealed class Configuration : IPluginConfiguration
 {
+    public int SubmarineFuelReserve { get; set; } = 50;
+    public int SubmarineRepairReserve { get; set; } = 10;
+    public int SubmarineSpaceReserve { get; set; } = 20;
     public HashSet<string> GardenResyncBatches { get; set; } = [];
     public bool EnableCofferMarkers { get; set; }
     public bool CofferMinimap { get; set; } = true;

@@ -79,6 +79,15 @@ public sealed partial class Plugin
         collectionStatus = $"{group[0].Category}: {unlocked.Count}/{group.Length} unlocked · {obtained.Count} reward items held";
     }
 
+    private static unsafe bool? ReadSubmarineRepair(int index)
+    {
+        var inventory=InventoryManager.Instance();if(inventory==null)return null;
+        var container=inventory->GetInventoryContainer(InventoryType.HousingInteriorPlacedItems2);
+        if(container==null||!container->IsLoaded||container->Size<index*5+4)return null;
+        var repair=false;
+        for(var part=0;part<4;part++){var item=container->GetInventorySlot(index*5+part);if(item==null||item->ItemId==0)return null;repair|=item->Condition==0;}
+        return repair;
+    }
     private unsafe void ObserveActivities(DateTimeOffset now)
     {
         if (!config.SyncActivities) return;
@@ -97,7 +106,7 @@ public sealed partial class Plugin
         {
             ref var s = ref manager->WorkshopTerritory->Submersible.Data[i];
             if (s.RegisterTime == 0 || s.RankId == 0 || string.IsNullOrWhiteSpace(s.NameString)) continue;
-            subs.Add(new(i,s.NameString,s.RankId,s.ReturnTime,s.RegisterTime,[s.HullId,s.SternId,s.BowId,s.BridgeId],s.CurrentExplorationPoints.ToArray()));
+            subs.Add(new(i,s.NameString,s.RankId,s.ReturnTime,s.RegisterTime,[s.HullId,s.SternId,s.BowId,s.BridgeId],s.CurrentExplorationPoints.ToArray(),ReadSubmarineRepair(i)));
         }
         // An unloaded panel is not evidence that all vessels have been deleted.
         if (subs.Count > 0) KeepDiscovery(new(Guid.NewGuid().ToString("N"), "submarines.observed", now, actor, null, Voyage: new(fcId,subs.ToArray())));

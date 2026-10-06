@@ -10,6 +10,11 @@ public sealed class FollowThemSettings
     public bool AcceptPartyTeleports { get; set; }
     public bool SharePortalTransitions { get; set; }
     public bool UseSharedPortals { get; set; }
+    public bool UseSharedTeleports { get; set; }
+    public bool FollowTakeoff { get; set; } = true;
+    public bool StopOnMovement { get; set; }
+    public int StuckSeconds { get; set; } = 60;
+    public int TeleportGilLimit { get; set; } = 1000;
 }
 public enum FollowPhase { Stopped, Waiting, Loading, Following }
 public enum FollowAction { None, Start, Stop }
@@ -21,6 +26,7 @@ public sealed class FollowThemSession
     public FollowPhase Phase { get; private set; }
     public bool MovementRequested { get; private set; }
     public void Arm() { Armed = true; Phase = FollowPhase.Waiting; }
+    public FollowAction Pause() {var action=MovementRequested?FollowAction.Stop:FollowAction.None;MovementRequested=false;Phase=FollowPhase.Waiting;return action;}
     public FollowAction Stop()
     {
         var result = MovementRequested ? FollowAction.Stop : FollowAction.None;

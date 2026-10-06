@@ -85,3 +85,7 @@ observed crops, planting/care timestamps or batch identity. Valid later replacem
 Deploy Journal V7.11.75 to fix the exporter as well. No reset or replant is needed.
 973 automated checks passed; Release build has zero warnings/errors.
 In-game confirmation of the affected existing garden remains pending.
+
+## Companion 0.5.1.59
+
+See RELEASE-0.5.1.59.md for active FollowThem sessions, travel, waiting, takeoff and submarine colour rules. Journal V7.11.76 required for the updated relay. Native testing pending.
