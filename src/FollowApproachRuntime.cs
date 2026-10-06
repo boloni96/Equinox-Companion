@@ -56,12 +56,18 @@ public sealed partial class Plugin
         }
         if(signal.TravelKind=="portal"?!config.FollowThem.UseSharedPortals:signal.TravelKind!="world"&&!config.FollowThem.UseSharedTeleports){CancelFollowApproach();return;}
         if(approachOwnsMovement&&!config.FollowThem.UseLifestream){CancelFollowApproach();return;}
-        if(followManualInputSeen){followManualInputSeen=false;CancelFollowApproach();TravelDiagnostic("Your movement cancelled the pending travel action; FollowThem stays armed.");return;}
+        if(FollowMovementKeysHeld()||followManualInputSeen){
+            followManualInputSeen=false;
+            if(config.FollowThem.StopOnMovement){StopFollowThem("Your movement input.");return;}
+            if(approachOwnsMovement){try{if(LifestreamBusy())Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch(Exception){return;}approachOwnsMovement=false;}
+            approachStopRequested=false;travelStationary.Reset();nextApproachAttempt=now.AddMilliseconds(750);
+            TravelDiagnostic("Your movement paused travel; the queued trip is kept until its original expiry.");return;
+        }
         if(Objects.LocalPlayer is not {} self)return;
         var position=self.Position;var atPoint=signal.TravelKind is "teleport" or "estate" or "friendestate" or "world"||MatchingTravelMenu(signal)||WithinTravelInteractionRange(signal)||signal.Approach==null||Vector3.DistanceSquared(position,signal.Approach.Point)<=.5625f;
         if(!atPoint){
             travelStationary.Reset();
-            if(approachStopRequested){CancelFollowApproach();TravelDiagnostic("Moved away from the captured travel position; waiting without interacting.");return;}
+            if(approachStopRequested){approachStopRequested=false;travelStationary.Reset();nextApproachAttempt=now.AddMilliseconds(750);return;}
             if(approachOwnsMovement){
                 try{if(!LifestreamBusy()){CancelFollowApproach();TravelDiagnostic("Approach ended before reaching the travel position; waiting.");}}catch(Exception){CancelFollowApproach();}
                 return;
@@ -86,7 +92,7 @@ public sealed partial class Plugin
             RequestFollowMovementStop();approachStopRequested=true;travelStationary.Reset();
             TravelDiagnostic("At the travel position; stopping and confirming stationary.");return;
         }
-        if(followStopPending&&!MatchingTravelMenu(signal))return;
+        if(followStopUnconfirmed||followStopPending&&!MatchingTravelMenu(signal))return;
         if(!travelStationary.Observe(now,position,(!FollowTransitionBusy()||MatchingTravelMenu(signal))&&travelStepReady))return;
         followApproach=null;travelStationary.Reset();
         TravelDiagnostic("Stationary confirmed; performing the selected travel action.");

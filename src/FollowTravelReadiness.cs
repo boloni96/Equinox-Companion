@@ -10,10 +10,9 @@ public sealed partial class Plugin
     private bool travelStepReady;
     private unsafe void ObserveTravelStationary(DateTimeOffset now)
     {
-        var input=InputManager.Instance();
-        var moving=input!=null&&(input->GetInputStatus(InputCode.MOVE_FORE)||input->GetInputStatus(InputCode.MOVE_BACK)||input->GetInputStatus(InputCode.MOVE_LEFT)||input->GetInputStatus(InputCode.MOVE_RIGHT)||input->GetInputStatus(InputCode.MOVE_STRIFE_L)||input->GetInputStatus(InputCode.MOVE_STRIFE_R));
+        var moving=FollowMovementKeysHeld();
         var self=Objects.LocalPlayer;
-        travelStepReady=travelStepStationary.Observe(now,self?.Position??default,self!=null&&Player.IsLoaded&&!moving&&!Conditions[ConditionFlag.InCombat]&&!Conditions[ConditionFlag.Unconscious]&&!Conditions[ConditionFlag.BetweenAreas]&&!Conditions[ConditionFlag.BetweenAreas51]);
+        travelStepReady=travelStepStationary.Observe(now,self?.Position??default,self!=null&&Player.IsLoaded&&!moving&&!followStopUnconfirmed&&!Conditions[ConditionFlag.InCombat]&&!Conditions[ConditionFlag.Unconscious]&&!Conditions[ConditionFlag.BetweenAreas]&&!Conditions[ConditionFlag.BetweenAreas51]);
     }
     private unsafe bool BoundaryWardOpen(FollowPortalSignal signal)
     {

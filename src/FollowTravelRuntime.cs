@@ -18,7 +18,7 @@ public sealed partial class Plugin
     private Vector3 travelPosition;
     private uint travelTerritory;
     private int aethernetSelections;
-    private bool travelHookFailed,usingSharedTravel;
+    private bool travelHookFailed,usingSharedTravel,travelSawLoading;
     private bool SharingTravel=>config.EnableFollowThem&&config.FollowThem.SharePortalTransitions;
     private unsafe FollowPortalSignal? TravelSignal(string kind,uint id,string destination,uint crystal,Vector3 position)
     {
@@ -29,10 +29,13 @@ public sealed partial class Plugin
     {
         if(signal==null||config.PairingKey.Length!=64)return;
         var source=Objects.FirstOrDefault(x=>x.BaseId==signal.BaseId&&Vector3.Distance(x.Position,new(signal.X,signal.Y,signal.Z))<1);
-        if(source!=null)signal=signal with {SourceRadius=Math.Clamp(source.HitboxRadius,0,10)};
+        if(source!=null){
+            signal=signal with {SourceRadius=Math.Clamp(source.HitboxRadius,0,10)};
+            if(signal.TravelKind=="aethernet"&&signal.Approach is {} approach)signal=signal with {Approach=FollowTravelPosition.From(FollowCrystalApproach.Point(source.Position,approach.Point,signal.SourceRadius))};
+        }
         portalRelayStatus="Observed "+signal.TravelKind+" destination; waiting for departure.";
         if(outgoingTravel is {} prior&&prior.TravelKind==signal.TravelKind&&prior.AetheryteId==signal.AetheryteId&&prior.Destination==signal.Destination&&DateTimeOffset.UtcNow-travelAt<TimeSpan.FromSeconds(1))return;
-        outgoingTravel=signal;travelAt=DateTimeOffset.UtcNow;travelTerritory=destinationTerritory;
+        outgoingTravel=signal;travelSawLoading=false;travelAt=DateTimeOffset.UtcNow;travelTerritory=destinationTerritory;
         travelPosition=Objects.LocalPlayer?.Position??new(signal.X,signal.Y,signal.Z);
         travelAudience=portalRelay.HasFollowers(config.PairingKey,signal.Name,signal.HomeWorld);
     }
@@ -67,9 +70,10 @@ public sealed partial class Plugin
     {
         var result=new List<(string,uint)>();if(addon==null||addon->AtkValues==null||addon->AtkValuesCount<282)return result;
         for(var i=0;i<20;i++){
-            var n=addon->AtkValues[262+i];var c=addon->AtkValues[9+i*4];
+            var n=addon->AtkValues[262+i];var c=addon->AtkValues[9+i*4];var kind=addon->AtkValues[6+i*4];
+            if(((int)kind.Type&15) is not (3 or 5))continue;
             if(((int)n.Type&15) is not (8 or 10)||((int)c.Type&15) is not (3 or 5))continue;
-            var name=TravelMenuText(n.String.Value);if(!string.IsNullOrWhiteSpace(name)&&name.Length<=100)result.Add((name,c.UInt));
+            var name=TravelMenuText(n.String.Value);if(FollowAethernetEntry.IsDestination(kind.UInt,name))result.Add((name!,c.UInt));
         }return result;
     }
     private unsafe void ObserveFollowAethernetCallback(AtkUnitBase* addon,uint count,AtkValue* values)
@@ -93,9 +97,10 @@ public sealed partial class Plugin
         if(SharingTravel&&callbackIntHook is {IsEnabled:false})callbackIntHook.Enable();
         if(!SharingTravel)outgoingTravel=null;
         if(outgoingTravel is {} travel){
+            if(Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51])travelSawLoading=true;
             if(now-travelAt>TimeSpan.FromSeconds(120)||Player.IsLoaded&&(Player.CharacterName!=travel.Name||Player.HomeWorld.RowId!=travel.HomeWorld))outgoingTravel=null;
             else if(Player.IsLoaded&&!Conditions[ConditionFlag.BetweenAreas]&&!Conditions[ConditionFlag.BetweenAreas51]&&Objects.LocalPlayer is {} self&&
-                (travel.TravelKind is "teleport" or "estate"?Client.TerritoryType==travelTerritory&&(Client.TerritoryType!=travel.Territory||Vector3.Distance(self.Position,travelPosition)>12):Client.TerritoryType!=travel.Territory||Vector3.Distance(self.Position,travelPosition)>12)){
+                FollowDeparturePolicy.Arrived(travel.Territory,travelTerritory,Client.TerritoryType,Vector3.Distance(self.Position,travelPosition),travelSawLoading,travel.TravelKind is "teleport" or "estate")){
                 outgoingTravel=null;
                 if(travel.TravelKind=="ward"){
                     var housing=HousingManager.Instance();

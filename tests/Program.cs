@@ -1428,3 +1428,29 @@ Check("63 estate formatted fee",FollowEstatePrice.Read(["Private Estate","1,005 
 Check("63 estate missing fee rejected",FollowEstatePrice.Read(["Private Estate","Unavailable"])?.ToString(),null);
 Check("63 estate ambiguous numbers rejected",FollowEstatePrice.Read(["Private Estate","606","1000"])?.ToString(),null);
 Check("63 estate alternate currency rejected",FollowEstatePrice.Read(["Private Estate","606 MGP"])?.ToString(),null);
+
+// Recorded Ul'dah list: section headings and the main crystal both use callback 0.
+var menu64=new[]{(Kind:4u,Name:"Ul'dah - Steps of Nald",Callback:0u),(Kind:0u,Name:"Ul'dah Aetheryte Plaza",Callback:0u),(Kind:0u,Name:"Adventurers' Guild",Callback:1u),(Kind:4u,Name:"Other",Callback:0u)};
+Check("64 crystal callback zero resolves without section headers",string.Join(",",menu64.Where(x=>FollowAethernetEntry.IsDestination(x.Kind,x.Name)&&x.Callback==0).Select(x=>x.Name)),"Ul'dah Aetheryte Plaza");
+Check("64 ordinary shard preserved",menu64.Count(x=>FollowAethernetEntry.IsDestination(x.Kind,x.Name)&&x.Callback==1).ToString(),"1");
+Check("64 nearby estate loading is departure",FollowDeparturePolicy.Arrived(339,339,339,2,true,true).ToString(),"True");
+Check("64 nearby estate without departure not sent",FollowDeparturePolicy.Arrived(339,339,339,2,false,true).ToString(),"False");
+Check("64 wrong estate territory not accepted",FollowDeparturePolicy.Arrived(132,339,282,50,true,true).ToString(),"False");
+var chamber64=new FollowRoomTarget(1,"Leonis Verelle").Step();
+Check("64 chamber target survives relay JSON",FollowRoomTarget.Read(JsonSerializer.Deserialize<FollowMenuStep>(JsonSerializer.Serialize(chamber64))!)?.Room.ToString(),"1");
+Check("64 chamber owner preserved",FollowRoomTarget.Read(chamber64)?.Owner,"Leonis Verelle");
+Check("64 altered chamber identity rejected",FollowRoomTarget.Read(chamber64 with {Arguments=[2]})?.Owner,null);
+Check("64 chamber range rejected",FollowRoomTarget.Read(new FollowRoomTarget(513,"Leonis Verelle").Step())?.Owner,null);
+Check("64 legacy room fingerprint not semantic",FollowRoomTarget.Read(room62)?.Owner,null);
+Check("64 own chamber confirmation for owner",FollowRoomTarget.Confirmation("Retire to your own chambers?",true).ToString(),"True");
+Check("64 own chamber confirmation not for visitor",FollowRoomTarget.Confirmation("Retire to your own chambers?",false).ToString(),"False");
+Check("64 visitor chamber confirmation",FollowRoomTarget.Confirmation("Enter private chambers?",false).ToString(),"True");
+Check("64 unrelated confirmation rejected",FollowRoomTarget.Confirmation("Buy private chambers?",false).ToString(),"False");
+Check("64 exit private chambers choice",FollowTransportPolicy.Choice("Leave private chambers.").ToString(),"True");
+Check("64 delete private chambers rejected",FollowTransportPolicy.Choice("Delete private chambers.").ToString(),"False");
+Check("64 semantic room steps valid",FollowTransportPolicy.Valid(travel59 with {TravelKind="door",BaseId=9,SourceKind="EventObj",Steps=[new("Move to specified private chambers"),chamber64]}).ToString(),"True");
+
+var edge64=FollowCrystalApproach.Point(new(0,0,0),new(4,1,0),0);
+Check("64 crystal approach avoids center",edge64.X.ToString(System.Globalization.CultureInfo.InvariantCulture),"2.25");
+Check("64 crystal approach preserves floor",edge64.Y.ToString(),"1");
+Check("64 nearby valid crystal approach unchanged",FollowCrystalApproach.Point(new(0,0,0),new(1,1,0),0).ToString(),new System.Numerics.Vector3(1,1,0).ToString());

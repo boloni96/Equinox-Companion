@@ -673,6 +673,10 @@ public sealed partial class Plugin : IDalamudPlugin
 
     private void OnGardenChat(IHandleableChatMessage message)
     {
+        if(message.LogKind is XivChatType.SystemMessage or XivChatType.Notice&&message.OriginalMessage.ExtractText().Trim()=="No longer following a target."){
+            nativeFollowRequested=false;followStopUnconfirmed=false;
+            if(config.EnableFollowThem)RecordFollowTravel("Game follow cancelled",new {pendingStop=followStopPending});
+        }
         if (config.EnableFollowThem && message.LogKind is XivChatType.ErrorMessage or XivChatType.SystemError &&
             DateTimeOffset.UtcNow-lastFollowCommandAt < TimeSpan.FromSeconds(2) &&
             FollowCommandFeedback.IsRejection(message.OriginalMessage.ExtractText(),lastFollowCommand))
@@ -1044,6 +1048,7 @@ public sealed partial class Plugin : IDalamudPlugin
         followBar?.Remove();
         followPortalHook?.Dispose();
         followTeleportHook?.Dispose();
+        followStopPulseUntil=default;followInputHook?.Dispose();
         friendEstateHook?.Dispose();
         portalRelay.Dispose();
         quickLootBarEntry?.Remove();

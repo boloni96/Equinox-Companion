@@ -39,3 +39,25 @@ public static class FollowEstatePrice
         return fees.Length==1&&uint.TryParse(fees[0].Groups[1].Value.Replace(",",""),System.Globalization.NumberStyles.None,System.Globalization.CultureInfo.InvariantCulture,out var fee)?fee:null;
     }
 }
+
+public static class FollowAethernetEntry
+{
+    public static bool IsDestination(uint kind,string? name)=>kind==0&&!string.IsNullOrWhiteSpace(name)&&name.Length<=100;
+}
+public static class FollowDeparturePolicy
+{
+    public static bool Arrived(uint sourceTerritory,uint expectedTerritory,uint currentTerritory,float distance,bool sawLoading,bool teleport)=>
+        (!teleport||currentTerritory==expectedTerritory)&&(currentTerritory!=sourceTerritory||distance>12||sawLoading);
+}
+
+public static class FollowCrystalApproach
+{
+    public static Vector3 Point(Vector3 crystal,Vector3 leader,float radius)
+    {
+        var horizontal=new Vector3(leader.X-crystal.X,0,leader.Z-crystal.Z);
+        var reach=Math.Clamp(radius,0,10)+2.25f;
+        if(horizontal.LengthSquared()<=reach*reach)return leader;
+        var edge=crystal+Vector3.Normalize(horizontal)*reach;
+        return new(edge.X,leader.Y,edge.Z);
+    }
+}

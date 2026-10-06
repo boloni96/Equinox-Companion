@@ -117,8 +117,7 @@ public sealed partial class Plugin
     {
         UpdateFollowMovementStop(now);
         if (!config.EnableFollowThem) return;
-        var frameInput=InputManager.Instance();
-        if(followSession.Armed&&frameInput!=null&&(frameInput->GetInputStatus(InputCode.MOVE_FORE)||frameInput->GetInputStatus(InputCode.MOVE_BACK)||frameInput->GetInputStatus(InputCode.MOVE_LEFT)||frameInput->GetInputStatus(InputCode.MOVE_RIGHT)||frameInput->GetInputStatus(InputCode.MOVE_STRIFE_L)||frameInput->GetInputStatus(InputCode.MOVE_STRIFE_R)))followManualInputSeen=true;
+        if(followSession.Armed&&FollowMovementKeysHeld())followManualInputSeen=true;
         if (now < nextFollowCheck) return;
         nextFollowCheck = now.AddMilliseconds(250);
         try
@@ -126,7 +125,7 @@ public sealed partial class Plugin
             if (Interlocked.Exchange(ref followCommandRejected, 0) != 0)
             {
                 // Do not respond to a rejected command with another movement command.
-                followSession.Pause();followStuck.Pause();followReady.Reset();followRetryAt=now.AddSeconds(5);
+                nativeFollowRequested=false;followSession.Pause();followStuck.Pause();followReady.Reset();followRetryAt=now.AddSeconds(5);
                 receivedPortal=null;relayGeneration++;
                 followStatus="WAITING — The game rejected movement. FollowThem remains armed and will retry when available.";
                 RefreshFollowBar(); return;
@@ -138,7 +137,8 @@ public sealed partial class Plugin
                 var visibleLeader=Objects.OfType<IPlayerCharacter>().FirstOrDefault(p=>p.GameObjectId!=Objects.LocalPlayer?.GameObjectId&&p.IsTargetable&&FollowThemSession.Matches(config.FollowThem.TargetName,config.FollowThem.HomeWorld,p.Name.TextValue,p.HomeWorld.RowId));
                 if(visibleLeader!=null){lastLeaderPosition=visibleLeader.Position;lastLeaderSeen=now;lastLeaderEntity=visibleLeader.GameObjectId.ToString();}
             }
-            if(pendingTransport!=null||pendingWard!=null||pendingAethernet!=null||receivedPortal!=null){followSession.Pause();followStatus="WAITING — Completing the selected travel action.";return;}
+            if(followSession.Armed&&config.FollowThem.StopOnMovement&&FollowMovementKeysHeld()){StopFollowThem("Your movement input.");return;}
+            if(pendingTransport!=null||pendingWard!=null||pendingAethernet!=null||receivedPortal!=null||travelAwaitingArrival!=null){followSession.Pause();followStatus="WAITING — Completing the selected travel action.";return;}
             if(pendingDutyLeave!=null){followSession.Pause();followStatus="WAITING — "+portalRelayStatus;RefreshFollowBar();return;}
             if(followApproach!=null){followSession.Pause();followStatus="WAITING — "+portalRelayStatus;RefreshFollowBar();return;}
             if(lifestreamTravelOwned){followSession.Pause();followStatus="WAITING — Lifestream travel in progress.";return;}
@@ -171,10 +171,7 @@ public sealed partial class Plugin
                 followStatus = "WAITING — Loading or occupied; waiting until movement is available.";
                 RefreshFollowBar(); return;
             }
-            var input = InputManager.Instance();
-            if (followManualInputSeen || input != null && (input->GetInputStatus(InputCode.MOVE_FORE) || input->GetInputStatus(InputCode.MOVE_BACK) ||
-                input->GetInputStatus(InputCode.MOVE_LEFT) || input->GetInputStatus(InputCode.MOVE_RIGHT) ||
-                input->GetInputStatus(InputCode.MOVE_STRIFE_L) || input->GetInputStatus(InputCode.MOVE_STRIFE_R)))
+            if (followManualInputSeen || FollowMovementKeysHeld())
             { followManualInputSeen=false;if(config.FollowThem.StopOnMovement){StopFollowThem("Your movement input.");return;}followSession.Pause();followStuck.Reset();followRecovery.Reset();followStatus="WAITING — Your movement; follow resumes when you release movement keys.";RefreshFollowBar();return; }
             var settings = config.FollowThem;
             var target = Objects.OfType<IPlayerCharacter>().FirstOrDefault(p =>
@@ -202,7 +199,7 @@ public sealed partial class Plugin
             if (action == FollowAction.Start)
             {
                 var previous = Targets.Target;
-                try { Targets.Target = target; FollowCommand("/follow"); }
+                try { Targets.Target = target; FollowCommand("/follow");nativeFollowRequested=true; }
                 finally { Targets.Target = previous; }
             }
             followStatus = followSession.Phase switch

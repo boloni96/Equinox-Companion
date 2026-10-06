@@ -10,8 +10,7 @@ public sealed partial class Plugin
     private readonly HashSet<string> queuedTravelIds=new();
     private FollowPortalSignal? travelAwaitingArrival;
     private DateTimeOffset travelDispatchedAt;
-    private readonly FollowStationaryGate routeReady=new();
-    private void ResetTravelQueue(){travelQueue.Clear();queuedTravelIds.Clear();travelAwaitingArrival=null;portalReadCursor=0;routeArrivalConfirmed=false;routeSawLoading=false;routeExecutionStarted=false;routeReady.Reset();}
+    private void ResetTravelQueue(){travelQueue.Clear();queuedTravelIds.Clear();travelAwaitingArrival=null;portalReadCursor=0;routeArrivalConfirmed=false;routeSawLoading=false;routeExecutionStarted=false;}
     private void EnqueueTravel(FollowPortalSignal signal)
     {
         if(signal.SentAt<followArmedAt||signal.Id==lastPortalSignalId||queuedTravelIds.Contains(signal.Id))return;
@@ -39,7 +38,6 @@ public sealed partial class Plugin
                 TravelDiagnostic("Travel expired before arrival. Remaining trips cancelled; return to your follower before trying again.");
             }else return;
         }
-        if(!routeReady.Observe(now,Objects.LocalPlayer?.Position??default,!loading&&Player.IsLoaded&&Objects.LocalPlayer!=null))return;
         if(loading||!Player.IsLoaded||followApproach!=null||pendingTransport!=null||pendingWard!=null||pendingAethernet!=null||receivedPortal!=null||pendingDutyLeave!=null||lifestreamTravelOwned)return;
         while(travelQueue.TryPeek(out var next)){
             if(next.ExpiresAt<=now.ToUnixTimeMilliseconds()||next.SentAt<followArmedAt){travelQueue.Dequeue();continue;}

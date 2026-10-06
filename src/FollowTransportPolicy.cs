@@ -5,6 +5,7 @@ public static class FollowTransportPolicy
     {
         if(string.IsNullOrWhiteSpace(text)||text.Length>300||text.Any(char.IsControl))return false;
         var s=text.Trim();
+        if(s.TrimEnd('.')=="Leave private chambers")return true;
         if(new[]{"purchase","buy ","sell ","discard","delete","abandon","exchange","repair","reward","coffer","treasure"}.Any(x=>s.Contains(x,StringComparison.OrdinalIgnoreCase)))return false;
         return new[]{"Teleport to ","Travel to ","Go to ","Return to ","Journey to ","Take the ferry", "Board the ","Enter the ","Enter Eureka", "Enter Zadnor", "Enter Gangos", "Move to ","Proceed to ","Residential District Aethernet", "Specify a ward", "Select a ward", "Leave residential district"}.Any(x=>s.StartsWith(x,StringComparison.OrdinalIgnoreCase))
             || new[]{"Gangos","The Firmament","The Bozjan Southern Front","Zadnor","The Doman Enclave"}.Contains(s.TrimEnd('.'),StringComparer.OrdinalIgnoreCase);
