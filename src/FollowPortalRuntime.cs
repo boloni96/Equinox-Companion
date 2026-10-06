@@ -12,6 +12,7 @@ namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
     private readonly FollowPortalRelay portalRelay = new();
+    private readonly FollowNoticeGate portalNotices = new();
     private unsafe delegate ulong FollowInteractDelegate(TargetSystem* system,NativeObject* obj,bool checkLineOfSight);
     private Hook<FollowInteractDelegate>? followPortalHook;
     private FollowPortalSignal? outgoingPortal,receivedPortal;
@@ -68,7 +69,11 @@ public sealed partial class Plugin
             }
             if(followPortalHook!=null){if(sharing&&!followPortalHook.IsEnabled)followPortalHook.Enable();else if(!sharing&&followPortalHook.IsEnabled)followPortalHook.Disable();}
             if(!sharing)outgoingPortal=null;
-            if(portalSendTask?.IsCompleted==true){portalRelayStatus=portalSendTask.GetAwaiter().GetResult();portalSendTask=null;}
+            if(portalSendTask?.IsCompleted==true)
+            {
+                portalRelayStatus=portalSendTask.GetAwaiter().GetResult();portalSendTask=null;
+                if(portalNotices.Changed(portalRelayStatus))FollowChatNotice("PORTAL — "+portalRelayStatus);
+            }
             var loading=Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51];
             if(outgoingPortal is {} candidate)
             {
@@ -100,6 +105,8 @@ public sealed partial class Plugin
                 if(portalReadGeneration==relayGeneration)
                 {
                     portalRelayStatus=result.Status;
+                    if(portalNotices.Changed(result.Status) && result.Status!="Portal relay ready.")
+                        FollowChatNotice("ERROR — "+result.Status);
                     if(result.Signal is {} signal&&signal.Id!=lastPortalSignalId)TryUseSharedPortal(signal,now);
                     if(result.Status!="Portal relay ready.")nextPortalPoll=now.AddSeconds(10);
                 }
@@ -113,6 +120,7 @@ public sealed partial class Plugin
                     receivedPortal=null;
                     dialog->FireCallbackInt(0);
                     portalRelayStatus="Accepted the same portal confirmation as your selected character.";
+                    FollowChatNotice("PORTAL — " + portalRelayStatus);
                 }
             }
             if(loading||now<nextPortalPoll||portalReadTask!=null||lastLeaderSeen==default||now-lastLeaderSeen>TimeSpan.FromSeconds(15))return;
@@ -124,6 +132,7 @@ public sealed partial class Plugin
         {
             outgoingPortal=null;receivedPortal=null;nextPortalPoll=now.AddSeconds(10);
             portalRelayStatus="Portal relay paused; no portal action taken.";
+            if (portalNotices.Changed(portalRelayStatus)) FollowChatNotice("ERROR — " + portalRelayStatus);
             errorJournal.Record("portal-relay",portalRelayStatus,exceptionType:e.GetType().Name);
         }
     }
@@ -145,6 +154,7 @@ public sealed partial class Plugin
             relayInteracting=true;
             TargetSystem.Instance()->InteractWithObject((NativeObject*)target.Address,true);
             portalRelayStatus="Requested the portal shared by "+signal.Name+".";
+            FollowChatNotice("PORTAL — " + portalRelayStatus);
         }
         finally {relayInteracting=false;}
     }

@@ -41,3 +41,10 @@ and LazyLoot credits. See RELEASE-NOTES-0.5.1.49.md for behavior and live checks
 ## Optional local FollowThem and Treasure Coffer markers
 
 Companion 0.5.1.54 adds both under Settings > Features, disabled by default. Settings stay local; coffer state is not uploaded. FollowThem has party/friend selection, a top-bar start/stop control and optional wait/resume. No vnavmesh. Teleport acceptance requires an open English offer; optional portal relay requires Journal V7.11.74 and shares only confirmed recent transitions. Matching supported confirmations can be accepted; destination lists and other portal types remain manual. Coffer red/green markers use native minimap layout and confirmed opening state for the current visit. Native game validation remains pending. See RELEASE-0.5.1.54.md and checklist tests 251–263.
+
+## Companion 0.5.1.55
+
+FollowThem chat status messages (optional), guarded duty-entry movement commands,
+and single coloured coffer icons. Choose minimap/main-map displays independently
+under Settings > Features. Map alignment and duty entry require live testing.
+Journal remains V7.11.74; no new website deployment for this update.

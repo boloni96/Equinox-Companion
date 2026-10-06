@@ -49,7 +49,7 @@ public sealed partial class Plugin
                 ImGui.BulletText("Gardening plans, submarine timers and supplies");
                 ImGui.BulletText("Fashion Report, right here in game");
                 ImGui.Spacing();ImGui.TextUnformatted("Version "+CompanionVersion);
-                ImGui.TextWrapped("New: local FollowThem and red/green Treasure Coffer minimap markers. Enable each separately in Settings > Features; both start disabled. FollowThem supports party/friends, a clickable top-bar control and optional waiting. Optional portal relay uses Journal V7.11.74 to share recent portal transitions. Portal support and minimap markers need in-game testing. QuickLoot has moved to Features; its saved rules are kept.");
+                ImGui.TextWrapped("New: FollowThem chat status messages and guarded movement commands during duty entry. Coffer markers use a single coloured chest icon, with separate minimap and main-map toggles. Existing settings are kept. Main-map alignment and duty-entry behavior need in-game testing. Portal relay still requires Journal V7.11.74; no new website deployment is needed for this update.");
                 ImGui.Spacing();
                 ImGui.TextWrapped(plugin.config.PairingKey.Length==64?"Your saved pairing and settings are kept. Journal V7.11.27 supports the new submarine cache sync; save once after updating the website.":"Start in Settings > Connection: paste the pairing key from your Journal's Game connection. Then choose what to sync in Settings > Tracking.");
                 ImGui.TextWrapped("/equinox opens Companion. /gardening opens the garden guide at an identified paired house. /fashionr opens the Fashion Report.");

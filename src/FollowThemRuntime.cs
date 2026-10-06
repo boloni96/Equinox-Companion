@@ -25,22 +25,50 @@ public sealed partial class Plugin
     private Vector3 lastLeaderPosition;
     private uint followTerritory;
     private ulong followLogin;
-    private string followStatus = "Stopped. Choose a character, then Start.";
+    private readonly FollowReadyGate followReady = new();
+    private readonly FollowNoticeGate followNotices = new();
+    private string followStatusText = "Stopped. Choose a character, then Start.";
+    private string followStatus
+    {
+        get => followStatusText;
+        set
+        {
+            followStatusText = value;
+            if (followNotices.Changed(value) && config.FollowThem.ChatMessages)
+                Chat.Print("[FollowThem] " + value);
+        }
+    }
+    private bool FollowTransitionBusy() =>
+        Conditions[ConditionFlag.BetweenAreas] || Conditions[ConditionFlag.BetweenAreas51] ||
+        Conditions[ConditionFlag.Occupied] || Conditions[ConditionFlag.Occupied30] ||
+        Conditions[ConditionFlag.OccupiedInEvent] || Conditions[ConditionFlag.OccupiedInQuestEvent] ||
+        Conditions[ConditionFlag.Occupied33] || Conditions[ConditionFlag.Occupied38] ||
+        Conditions[ConditionFlag.Occupied39] || Conditions[ConditionFlag.OccupiedSummoningBell] ||
+        Conditions[ConditionFlag.OccupiedInCutSceneEvent] || Conditions[ConditionFlag.WatchingCutscene] ||
+        Conditions[ConditionFlag.WatchingCutscene78] || Conditions[ConditionFlag.Casting] ||
+        Conditions[ConditionFlag.MountOrOrnamentTransition] || Conditions[ConditionFlag.LoggingOut];
+    private bool CanIssueFollowMovement() => Player.IsLoaded && Objects.LocalPlayer is { IsTargetable: true } &&
+        !FollowTransitionBusy() && !Conditions[ConditionFlag.Unconscious];
     private string followBarText = "";
     private bool followFault;
 
-    private static unsafe void FollowCommand(string command)
+    private string lastFollowCommand = "";
+    private DateTimeOffset lastFollowCommandAt;
+    private int followCommandRejected;
+    private unsafe void FollowCommand(string command)
     {
         // Only fixed game commands from this class reach this method; no names or chat input.
         var ui = UIModule.Instance();
         if (ui == null) throw new InvalidOperationException("Game command UI is unavailable.");
         using var text = new Utf8String();
         text.SetString(command);
+        lastFollowCommand=command; lastFollowCommandAt=DateTimeOffset.UtcNow;
         ui->ProcessChatBoxEntry(&text, 0, false);
     }
     private void StopFollowThem(string reason = "Stopped.")
     {
-        if (followSession.Stop() == FollowAction.Stop && Objects.LocalPlayer != null)
+        var wasArmed = followSession.Armed;
+        if (followSession.Stop() == FollowAction.Stop && CanIssueFollowMovement())
         {
             try { FollowCommand("/automove off"); }
             catch (Exception e) { reason = "FollowThem stopped. Use a movement key to cancel game movement."; errorJournal.Record("follow-stop", "Could not send game stop command", exceptionType:e.GetType().Name); }
@@ -48,8 +76,13 @@ public sealed partial class Plugin
         lastLeaderSeen = default;
         receivedPortal = null;
         relayGeneration++;
-        followStatus = reason;
+        followReady.Reset();
+        if (wasArmed) followStatus = "STOPPED — " + reason;
         RefreshFollowBar();
+    }
+    private void FollowChatNotice(string message)
+    {
+        if (config.FollowThem.ChatMessages) Chat.Print("[FollowThem] " + message);
     }
     private void ToggleFollowThem()
     {
@@ -57,9 +90,9 @@ public sealed partial class Plugin
         if (string.IsNullOrWhiteSpace(config.FollowThem.TargetName) || config.FollowThem.HomeWorld == 0)
         { followStatus = "Choose a party member or friend first."; return; }
         if (Objects.LocalPlayer == null) { followStatus = "Log in before starting FollowThem."; return; }
-        followFault = false;
+        followFault = false; Interlocked.Exchange(ref followCommandRejected, 0); followReady.Reset();
         followSession.Arm(); followArmedAt=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(); relayGeneration++; nextFollowCheck = default;
-        followStatus = "Looking for the selected character nearby.";
+        followStatus = "STARTED — Looking for " + config.FollowThem.TargetName + " nearby.";
     }
     private void RefreshFollowBar()
     {
@@ -83,27 +116,45 @@ public sealed partial class Plugin
         nextFollowCheck = now.AddMilliseconds(250);
         try
         {
+            if (Interlocked.Exchange(ref followCommandRejected, 0) != 0)
+            {
+                // Do not respond to a rejected command with another movement command.
+                followSession.Stop(); followReady.Reset(); lastLeaderSeen=default;
+                receivedPortal=null; relayGeneration++; followFault=true;
+                followStatus="ERROR — The game rejected a movement command. FollowThem stopped; press Start when ready. Use a movement key if still moving.";
+                RefreshFollowBar(); return;
+            }
             if (followFault) return;
             RefreshFollowBar();
-            var login = Player.IsLoaded ? Player.ContentId : 0;
+            var transitioning = FollowTransitionBusy();
+            // A transient missing local actor while zoning is not a character logout.
+            var loading = Conditions[ConditionFlag.BetweenAreas] || Conditions[ConditionFlag.BetweenAreas51];
+            var login = Player.IsLoaded ? Player.ContentId : (loading ? followLogin : 0);
             if (followLogin != login)
             {
-                if (followLogin != 0) StopFollowThem("Stopped after logout or character change.");
+                if (followLogin != 0) StopFollowThem("Logout or character change.");
                 followLogin = login;
             }
             if (!followSession.Armed) return;
+            if (followTerritory != Client.TerritoryType)
+            {
+                followTerritory = Client.TerritoryType; lastLeaderSeen = default;
+                followReady.Reset();
+                followSession.Observe(true, login != 0, true, false, true);
+            }
+            if (Conditions[ConditionFlag.InCombat] || Conditions[ConditionFlag.Unconscious])
+            { StopFollowThem("Combat or incapacitation. Start again when ready."); return; }
+            if (!followReady.Observe(now, !transitioning && CanIssueFollowMovement()))
+            {
+                followSession.Observe(true, login != 0, true, false, true);
+                followStatus = "WAITING — Loading or occupied; waiting until movement is available.";
+                RefreshFollowBar(); return;
+            }
             var input = InputManager.Instance();
             if (input != null && (input->GetInputStatus(InputCode.MOVE_FORE) || input->GetInputStatus(InputCode.MOVE_BACK) ||
                 input->GetInputStatus(InputCode.MOVE_LEFT) || input->GetInputStatus(InputCode.MOVE_RIGHT) ||
                 input->GetInputStatus(InputCode.MOVE_STRIFE_L) || input->GetInputStatus(InputCode.MOVE_STRIFE_R)))
-            { StopFollowThem("Stopped by your movement input."); return; }
-            var loading = Conditions[ConditionFlag.BetweenAreas] || Conditions[ConditionFlag.BetweenAreas51];
-            if (loading) { followSession.Observe(true, login != 0, true, false, true); followStatus = "Loading; waiting to find your selected character."; return; }
-            if (followTerritory != Client.TerritoryType)
-            {
-                followTerritory = Client.TerritoryType; lastLeaderSeen = default;
-                followSession.Observe(true, login != 0, true, false, true);
-            }
+            { StopFollowThem("Your movement input."); return; }
             var settings = config.FollowThem;
             var target = Objects.OfType<IPlayerCharacter>().FirstOrDefault(p =>
                 p.GameObjectId != Objects.LocalPlayer?.GameObjectId &&
@@ -111,12 +162,10 @@ public sealed partial class Plugin
             var self = Objects.LocalPlayer;
             var nearby = target != null && self != null && target.IsTargetable && Vector3.Distance(self.Position, target.Position) <= 30;
             if (nearby) { lastLeaderPosition = target!.Position; lastLeaderSeen = now; lastLeaderEntity = target.GameObjectId.ToString(); }
-            var blocked = Conditions[ConditionFlag.OccupiedInCutSceneEvent] || Conditions[ConditionFlag.WatchingCutscene] || Conditions[ConditionFlag.Unconscious] || Conditions[ConditionFlag.InCombat];
-            if (blocked) { StopFollowThem("Stopped during combat, a cutscene or incapacitation. Start again when ready."); return; }
             TryFollowTeleport(now);
 
             var action = followSession.Observe(true, login != 0, false, nearby, settings.ResumeNearby);
-            if (action == FollowAction.Stop && self != null) FollowCommand("/automove off");
+            if (action == FollowAction.Stop && CanIssueFollowMovement()) FollowCommand("/automove off");
             if (action == FollowAction.Start)
             {
                 var previous = Targets.Target;
@@ -125,9 +174,9 @@ public sealed partial class Plugin
             }
             followStatus = followSession.Phase switch
             {
-                FollowPhase.Following => "Following " + settings.TargetName + " using the game's simple follow. No obstacle navigation.",
-                FollowPhase.Waiting => "Your selected character isn’t nearby. FollowThem is waiting.",
-                _ => "Your selected character isn’t nearby. FollowThem stopped; press Start to try again."
+                FollowPhase.Following => "FOLLOWING — Follow requested for " + settings.TargetName + ".",
+                FollowPhase.Waiting => "WAITING — Your selected character isn’t nearby. FollowThem is waiting.",
+                _ => "STOPPED — Your selected character isn’t nearby; press Start to try again."
             };
             RefreshFollowBar();
         }
@@ -135,7 +184,7 @@ public sealed partial class Plugin
         {
             try { StopFollowThem(); } catch { followSession.Stop(); }
             followFault = true;
-            followStatus = "FollowThem paused after an error. Use movement keys to cancel game follow; press Start to retry.";
+            followStatus = "ERROR — FollowThem paused after an error. Use movement keys to cancel game follow; press Start to retry.";
             errorJournal.Record("followthem", "FollowThem update failed", exceptionType: e.GetType().Name);
             RefreshFollowBar();
         }
@@ -151,6 +200,7 @@ public sealed partial class Plugin
         if (!FollowThemSession.IsPartyTeleportPrompt(prompt)) return;
         nextTeleportAttempt = now.AddSeconds(5);
         addon->FireCallbackInt(0);
+        FollowChatNotice("TELEPORT — Accepted the party teleport offer.");
     }
     private unsafe void DrawFollowThem()
     {
@@ -169,6 +219,7 @@ public sealed partial class Plugin
                 foreach (var friend in friends->CharDataSpan) FollowCandidate(friend.NameString, friend.HomeWorld, "friend");
             ImGui.EndCombo();
         }
+        MessageToggle("FollowThem chat messages", config.FollowThem.ChatMessages, v => config.FollowThem.ChatMessages = v);
         MessageToggle("Resume when the selected character comes nearby", config.FollowThem.ResumeNearby, v => config.FollowThem.ResumeNearby = v);
         MessageToggle("Accept party teleport offers while FollowThem is started", config.FollowThem.AcceptPartyTeleports, v => config.FollowThem.AcceptPartyTeleports = v);
         MessageToggle("Share my portal transitions with paired Companions", config.FollowThem.SharePortalTransitions, v => config.FollowThem.SharePortalTransitions = v);

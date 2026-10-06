@@ -5,6 +5,8 @@ public sealed class Configuration : IPluginConfiguration
 {
     public HashSet<string> GardenResyncBatches { get; set; } = [];
     public bool EnableCofferMarkers { get; set; }
+    public bool CofferMinimap { get; set; } = true;
+    public bool CofferMainMap { get; set; } = true;
     public bool EnableFollowThem { get; set; }
     public FollowThemSettings FollowThem { get; set; } = new();
     public QuickLootSettings QuickLoot { get; set; } = new();

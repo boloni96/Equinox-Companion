@@ -84,7 +84,7 @@ public sealed partial class Plugin
         ImGui.TextWrapped("Disabled by default. Enable to show the QuickLoot tab and its loot settings. Disabling hides the tab, stops rolling and removes its top-bar entry; your rules are kept.");
         ImGui.Separator();
         MessageToggle("Enable Treasure Coffer markers", config.EnableCofferMarkers, SetCofferMarkers);
-        ImGui.TextWrapped("Disabled on installation. Red/green coffer icons on the minimap; local to this visit.");
+        ImGui.TextWrapped("Disabled on installation. Red/green coffer icons on the minimap and main map; local to this visit.");
         if(config.EnableCofferMarkers) DrawCofferSettings();
         ImGui.Separator();
         MessageToggle("Enable FollowThem", config.EnableFollowThem, v => {

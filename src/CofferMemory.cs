@@ -27,3 +27,12 @@ public sealed class CofferMemory
         return before.Length != points.Count || before.Any(p => !points.TryGetValue(p.Id,out var current) || current != p);
     }
 }
+
+public static class CofferMapProjection
+{
+    public static bool SameMap(uint territory, uint map, uint selectedTerritory, uint selectedMap) =>
+        territory != 0 && map != 0 && territory == selectedTerritory && map == selectedMap;
+    // World X/Z -> normalized location in the game's 2048-pixel map texture.
+    public static Vector2 TexturePosition(Vector3 point, short offsetX, short offsetY, float sizeFactor) =>
+        (new Vector2(point.X + offsetX, point.Z + offsetY) * sizeFactor + new Vector2(1024)) / 2048;
+}

@@ -5,6 +5,7 @@ public sealed class FollowThemSettings
 {
     public string TargetName { get; set; } = "";
     public uint HomeWorld { get; set; }
+    public bool ChatMessages { get; set; } = true;
     public bool ResumeNearby { get; set; } = true;
     public bool AcceptPartyTeleports { get; set; }
     public bool SharePortalTransitions { get; set; }
@@ -51,4 +52,35 @@ public sealed class FollowThemSession
         string.Equals(wanted, actual, StringComparison.Ordinal);
     public static bool IsPartyTeleportPrompt(string text) =>
         text.Trim().StartsWith("Accept Teleport to ", StringComparison.OrdinalIgnoreCase) && text.Trim().EndsWith('?');
+}
+
+// Require a stable playable interval after loading or an occupied event clears.
+public sealed class FollowReadyGate
+{
+    private DateTimeOffset? readySince;
+    public void Reset() => readySince = null;
+    public bool Observe(DateTimeOffset now, bool playable)
+    {
+        if (!playable) { Reset(); return false; }
+        readySince ??= now;
+        return now - readySince.Value >= TimeSpan.FromMilliseconds(750);
+    }
+}
+public sealed class FollowNoticeGate
+{
+    private string last = "";
+    public bool Changed(string status)
+    {
+        if (status == last) return false;
+        last = status;
+        return true;
+    }
+}
+
+public static class FollowCommandFeedback
+{
+    public static bool IsRejection(string text, string command) =>
+        command is "/follow <t>" or "/automove off" && text.Length <= 512 &&
+        text.Contains(command, StringComparison.Ordinal) &&
+        text.Contains("unavailable", StringComparison.OrdinalIgnoreCase);
 }

@@ -665,6 +665,10 @@ public sealed partial class Plugin : IDalamudPlugin
 
     private void OnGardenChat(IHandleableChatMessage message)
     {
+        if (config.EnableFollowThem && message.LogKind is XivChatType.ErrorMessage or XivChatType.SystemError &&
+            DateTimeOffset.UtcNow-lastFollowCommandAt < TimeSpan.FromSeconds(2) &&
+            FollowCommandFeedback.IsRejection(message.OriginalMessage.ExtractText(),lastFollowCommand))
+            Interlocked.Exchange(ref followCommandRejected,1);
         ObserveHarvestChat(message);
         if (!ObservingGardens || cropChats.Count >= 128 || !Player.IsLoaded ||
             Conditions[ConditionFlag.BetweenAreas] || Conditions[ConditionFlag.BetweenAreas51] ||
