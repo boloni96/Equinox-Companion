@@ -16,6 +16,7 @@ public sealed partial class Plugin
         tabs.Add(("planting", "Gardening###equinox-planting", DrawPlantingOverview));
         tabs.Add(("submarines", "Submarines###equinox-submarines", DrawSubmarines));
         if(config.EnableQuickLoot)tabs.Add(("quickloot", "QuickLoot###equinox-quickloot", DrawQuickLoot));
+        if(config.EnableFollowThem)tabs.Add(("followthem", "FollowThem###equinox-followthem", DrawFollowThem));
         tabs.Add(("settings", "Settings###equinox-settings", DrawSettings));
         config.TabOrder ??= [];
         // Repair the old person-at-end layout once; retain subsequent user ordering.

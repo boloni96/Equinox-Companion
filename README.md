@@ -34,6 +34,10 @@ Use `/fashionr` to open the current V1 picture inside the game. Click the pictur
 
 ## Optional QuickLoot
 
-Disabled by default. Enable in Settings > Tracking to show the QuickLoot tab.
+Disabled by default. Enable in Settings > Features to show the QuickLoot tab.
 Shared settings, nested rolling/filter/rule/feedback sections, top-bar controls
 and LazyLoot credits. See RELEASE-NOTES-0.5.1.49.md for behavior and live checks.
+
+## Optional local FollowThem and Treasure Coffer markers
+
+Companion 0.5.1.54 adds both under Settings > Features, disabled by default. Settings stay local; coffer state is not uploaded. FollowThem has party/friend selection, a top-bar start/stop control and optional wait/resume. No vnavmesh. Teleport acceptance requires an open English offer; optional portal relay requires Journal V7.11.74 and shares only confirmed recent transitions. Matching supported confirmations can be accepted; destination lists and other portal types remain manual. Coffer red/green markers use native minimap layout and confirmed opening state for the current visit. Native game validation remains pending. See RELEASE-0.5.1.54.md and checklist tests 251–263.

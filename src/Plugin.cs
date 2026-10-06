@@ -175,6 +175,7 @@ public sealed partial class Plugin : IDalamudPlugin
         }
         catch (Exception ex) { errorJournal.Record("plugin", "Garden integer callback observer unavailable", exceptionType:ex.GetType().Name); Log.Error(ex, "Garden integer callback observer unavailable"); }
         config = Pi.GetPluginConfig() as Configuration ?? new();
+        config.FollowThem ??= new();
         config.PairingKey = config.PairingKey.Trim().ToLowerInvariant();
         syncStatus = config.PairingKey.Length == 64 ? "Saved pairing key loaded. Waiting to sync." : "Not paired. Local records only.";
         if (config.Version < 5) { config.RefreshSharedInBackground = true; config.Version = 5; Pi.SavePluginConfig(config); }
@@ -203,6 +204,7 @@ public sealed partial class Plugin : IDalamudPlugin
         Pi.UiBuilder.OpenConfigUi += Open;
         Framework.Update += Update;
         Client.Login += OnGardenNoticeLogin;
+        Client.TerritoryChanged += OnCofferTerritoryChanged;
         Chat.LogMessage += OnLog;
         Chat.ChatMessage += OnGardenChat;
         foreach (var menuEvent in MenuEvents) Addons.RegisterListener(menuEvent, GardenMenus, OnGardenMenu);
@@ -257,6 +259,9 @@ public sealed partial class Plugin : IDalamudPlugin
     {
         var now = DateTimeOffset.UtcNow;
         UpdateQuickLoot(now);
+        UpdateFollowPortalRelay(now);
+        UpdateFollowThem(now);
+        UpdateCofferMarkers(now);
         UpdateSync(now);
         UpdateSharedRoster(now);
         UpdateCharacterRegistration(now);
@@ -889,6 +894,7 @@ public sealed partial class Plugin : IDalamudPlugin
         visible = mainWindow.IsOpen;
         DrawFloatingLaunchers();
         DrawPlantingMarkers();
+        DrawCofferMarkers();
         if (!visible) showSavedPairingKey = false;
     }
 
@@ -1014,6 +1020,14 @@ public sealed partial class Plugin : IDalamudPlugin
 
     public void Dispose()
     {
+        var keepCoffersEnabled = config.EnableCofferMarkers;
+        SetCofferMarkers(false);
+        config.EnableCofferMarkers = keepCoffersEnabled;
+        cofferHook?.Dispose();
+        StopFollowThem();
+        followBar?.Remove();
+        followPortalHook?.Dispose();
+        portalRelay.Dispose();
         quickLootBarEntry?.Remove();
         sync.Dispose();
         StopRecording();
@@ -1029,6 +1043,7 @@ public sealed partial class Plugin : IDalamudPlugin
         foreach (var menuEvent in MenuEvents) Addons.UnregisterListener(menuEvent, GardenMenus, OnGardenMenu);
         Framework.Update -= Update;
         Client.Login -= OnGardenNoticeLogin;
+        Client.TerritoryChanged -= OnCofferTerritoryChanged;
         Pi.UiBuilder.Draw -= Draw;
         windows.RemoveAllWindows();
         fashionWindow.Dispose();

@@ -4,6 +4,9 @@ namespace EquinoxCompanion;
 public sealed class Configuration : IPluginConfiguration
 {
     public HashSet<string> GardenResyncBatches { get; set; } = [];
+    public bool EnableCofferMarkers { get; set; }
+    public bool EnableFollowThem { get; set; }
+    public FollowThemSettings FollowThem { get; set; } = new();
     public QuickLootSettings QuickLoot { get; set; } = new();
     public bool EnableQuickLoot { get; set; }
     public Dictionary<string, bool> SharedAccountExpanded { get; set; } = [];

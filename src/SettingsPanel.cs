@@ -22,6 +22,7 @@ public sealed partial class Plugin
     private void DrawSettings()
     {
         if (!ImGui.BeginTabBar("SettingsSections")) return;
+        if (ImGui.BeginTabItem("Features")) { DrawFeatureSettings(); ImGui.EndTabItem(); }
         if (ImGui.BeginTabItem("Tracking"))
         {
             DrawGeneralSettings();
@@ -73,7 +74,7 @@ public sealed partial class Plugin
         ImGui.TextWrapped("Share only with trusted people: this key reads the shared character/house list and allows sending game records to this Journal. It is not a view-only guest key.");
         ImGui.Separator();
     }
-    private void DrawGeneralSettings()
+    private void DrawFeatureSettings()
     {
         ImGui.TextUnformatted("Optional features");
         MessageToggle("Enable QuickLoot",config.EnableQuickLoot,v=>{
@@ -82,6 +83,18 @@ public sealed partial class Plugin
         });
         ImGui.TextWrapped("Disabled by default. Enable to show the QuickLoot tab and its loot settings. Disabling hides the tab, stops rolling and removes its top-bar entry; your rules are kept.");
         ImGui.Separator();
+        MessageToggle("Enable Treasure Coffer markers", config.EnableCofferMarkers, SetCofferMarkers);
+        ImGui.TextWrapped("Disabled on installation. Red/green coffer icons on the minimap; local to this visit.");
+        if(config.EnableCofferMarkers) DrawCofferSettings();
+        ImGui.Separator();
+        MessageToggle("Enable FollowThem", config.EnableFollowThem, v => {
+            if (!v) StopFollowThem("FollowThem disabled.");
+            config.EnableFollowThem = v; RefreshFollowBar();
+        });
+        ImGui.TextWrapped("Disabled on installation. Enables the FollowThem tab and clickable top-bar entry. Settings stay on this PC and are never paired. Disabling stops FollowThem; your selected character and portal settings are kept.");
+    }
+    private void DrawGeneralSettings()
+    {
         ImGui.TextUnformatted("Website sync");
         MessageToggle("Sync confirmed actions to Equinox Journal",config.SyncEnabled,v=>{config.SyncEnabled=v;nextSync=default;});
         MessageToggle("Refresh shared profiles while this window is closed",config.RefreshSharedInBackground,v=>{config.RefreshSharedInBackground=v;nextRosterRead=default;});
