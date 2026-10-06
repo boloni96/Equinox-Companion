@@ -23,7 +23,7 @@ public sealed partial class Plugin
     private unsafe FollowPortalSignal? TravelSignal(string kind,uint id,string destination,uint crystal,Vector3 position)
     {
         var self=Objects.LocalPlayer;var map=AgentMap.Instance();if(self==null||map==null||!Player.IsLoaded)return null;
-        return new(Guid.NewGuid().ToString("N"),Player.CharacterName,Player.HomeWorld.RowId,Player.CurrentWorld.RowId,self.GameObjectId.ToString(),Client.TerritoryType,map->CurrentMapId,crystal,0,position.X,position.Y,position.Z,DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),"",TravelKind:kind,AetheryteId:id,Destination:destination,Approach:kind is "world" or "leaveDuty"?null:FollowTravelPosition.From(self.Position),DutyId:(uint)(FFXIVClientStructs.FFXIV.Client.Game.GameMain.Instance()==null?0:FFXIVClientStructs.FFXIV.Client.Game.GameMain.Instance()->CurrentContentFinderConditionId));
+        return new(Guid.NewGuid().ToString("N"),Player.CharacterName,Player.HomeWorld.RowId,Player.CurrentWorld.RowId,self.GameObjectId.ToString(),Client.TerritoryType,map->CurrentMapId,crystal,0,position.X,position.Y,position.Z,DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),"",TravelKind:kind,AetheryteId:id,Destination:destination,Approach:kind is "world" or "leaveDuty" or "teleport" or "estate" or "friendestate"?null:FollowTravelPosition.From(self.Position),DutyId:(uint)(FFXIVClientStructs.FFXIV.Client.Game.GameMain.Instance()==null?0:FFXIVClientStructs.FFXIV.Client.Game.GameMain.Instance()->CurrentContentFinderConditionId));
     }
     private void CaptureTravel(FollowPortalSignal? signal,uint destinationTerritory)
     {
@@ -44,13 +44,22 @@ public sealed partial class Plugin
                 foreach(var entry in telepo->TeleportList)if(entry.AetheryteId==id&&entry.SubIndex==subIndex){
                     var estate=AddressOf(entry.HouseId);
                     signal=TravelSignal(estate!=null?"estate":"teleport",id,"",0,self.Position);
-                    if(estate!=null&&signal!=null)signal=signal with {EstateId=estate.HouseId,DestinationTerritory=estate.TerritoryTypeId};
+                    if(estate!=null&&signal!=null){
+                        signal=signal with {EstateId=estate.HouseId,DestinationTerritory=estate.TerritoryTypeId};
+                        if(HousingManager.GetOwnedHouseId(EstateType.PersonalEstate).Id==entry.HouseId.Id)
+                            signal=signal with {FriendContentId=Player.ContentId.ToString(),Destination="Private Estate"};
+                        else if(HousingManager.GetOwnedHouseId(EstateType.FreeCompanyEstate).Id==entry.HouseId.Id)
+                            signal=signal with {FriendContentId=Player.ContentId.ToString(),Destination="Free Company Estate"};
+                    }
                     else if(subIndex!=0||entry.Ward!=0||entry.Plot!=0)signal=null;
                     destination=entry.TerritoryId;break;
                 }
         }catch(Exception e){errorJournal.Record("follow-teleport","Could not observe teleport destination",exceptionType:e.GetType().Name);}
         var accepted=followTeleportHook!.Original(telepo,id,subIndex);
-        if(accepted&&signal!=null)CaptureTravel(signal,destination);
+        if(accepted&&signal!=null){
+            if(transportCapture is {TravelKind:"friendestate",Steps.Length:>0})outgoingTravel=null;
+            else CaptureTravel(signal,destination);
+        }
         return accepted;
     }
     // Read the native town list; require bounded, typed entries and exact names.
@@ -93,7 +102,7 @@ public sealed partial class Plugin
                     if(housing==null||housing->GetCurrentWard()!=travel.Ward-1||!FollowPortalPolicy.IsConfirmationSupported(travel.Confirmation))return;
                     travel=travel with {DestinationTerritory=Client.TerritoryType};
                 }
-                if(portalSendTask==null&&travelAudience!=null)portalSendTask=SendPortalToAudience(config.PairingKey,travel with {SentAt=now.ToUnixTimeMilliseconds()},travelAudience);
+                if(travelAudience!=null)EnqueueOutgoingTravel(config.PairingKey,travel with {SentAt=now.ToUnixTimeMilliseconds()},travelAudience);
             }
         }
         if(pendingAethernet is not {} pending)return;
@@ -111,34 +120,34 @@ public sealed partial class Plugin
             FollowChatNotice("TRAVEL — Requested aethernet: "+pending.Destination);return;
         }
         var menu=(AtkUnitBase*)GardenGui.GetAddonByName("SelectString").Address;
-        if(aethernetSelections==0&&!aethernetMenuSelected&&menu!=null&&menu->IsVisible&&menu->AtkValues!=null&&menu->AtkValuesCount>=8){
-            if(((int)menu->AtkValues[5].Type&15) is not (3 or 5))return;var count=menu->AtkValues[5].UInt;if(count>16||7+count>menu->AtkValuesCount)return;
-            for(var i=0;i<count;i++){var v=menu->AtkValues[7+i];if(((int)v.Type&15) is not (8 or 10))continue;var name=CopyMenuText(v.String.Value);
-                if(name is "Aethernet" or "Aethernet."){aethernetMenuSelected=true;aethernetNext=now.AddMilliseconds(750);usingSharedTravel=true;try{menu->FireCallbackInt(i);}finally{usingSharedTravel=false;}return;}}
+        if(aethernetSelections==0&&!aethernetMenuSelected){
+            var choices=TransportChoices(menu);
+            var i=choices.FindIndex(x=>x.Trim().TrimEnd('.')=="Aethernet");
+            if(i>=0){aethernetMenuSelected=true;aethernetNext=now.AddMilliseconds(750);usingSharedTravel=true;try{menu->FireCallbackInt(i);}finally{usingSharedTravel=false;}}
         }
     }
     private unsafe void TryUseSharedTravel(FollowPortalSignal signal,DateTimeOffset now)
     {
         if(signal.TravelKind=="world"){TryFollowWorldTravel(signal,now);return;}
         if(!config.FollowThem.UseSharedTeleports||Objects.LocalPlayer is not {} self){TravelDiagnostic("Shared travel is disabled or your character is unavailable.");return;}
-        var map=AgentMap.Instance();if(map==null||!FollowTravelPolicy.CanUse(signal,now.ToUnixTimeMilliseconds(),followArmedAt,config.FollowThem.TargetName,config.FollowThem.HomeWorld,Player.CurrentWorld.RowId,Client.TerritoryType,map->CurrentMapId,lastLeaderEntity,(now-lastLeaderSeen).TotalSeconds,self.Position)){TravelDiagnostic("Travel instruction rejected: stale session, different source location, or too far from the source. Move beside the leader before travel.");return;}
+        var map=AgentMap.Instance();if(map==null||!FollowTravelPolicy.CanUse(signal,now.ToUnixTimeMilliseconds(),followArmedAt,config.FollowThem.TargetName,config.FollowThem.HomeWorld,Player.CurrentWorld.RowId,Client.TerritoryType,map->CurrentMapId,lastLeaderEntity,(now-lastLeaderSeen).TotalSeconds,self.Position,config.FollowThem.MeetAtTeleports)){TravelDiagnostic("Travel instruction rejected: stale session, different source location, or too far from the source. Move beside the leader before travel.");return;}
         if(signal.TravelKind=="ward"&&signal.SourceKind=="boundary"){
             var block=(AtkUnitBase*)GardenGui.GetAddonByName("HousingSelectBlock").Address;
-            if(Conditions[ConditionFlag.InCombat]||block==null||!block->IsVisible){TravelDiagnostic("Walk into the same housing entrance to open ward selection; waiting.");return;}
+            if(Conditions[ConditionFlag.InCombat]||(block==null||!block->IsVisible)&&!MatchingTravelMenu(signal)){TravelDiagnostic("Walk into the same housing entrance to open ward selection; waiting.");return;}
             lastPortalSignalId=signal.Id;pendingWard=signal;wardAt=now;wardNext=default;wardStage=0;followSession.Pause();return;
         }
-        if(FollowTransitionBusy()||Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.Unconscious]){TravelDiagnostic("Waiting until your character is free to interact.");return;}
-        foreach(var name in new[]{"SelectYesno","SelectString","TelepotTown","Talk"}){var ui=(AtkUnitBase*)GardenGui.GetAddonByName(name).Address;if(ui!=null&&ui->IsVisible){TravelDiagnostic("Close your open dialogue to allow shared travel.");return;}}
+        if(FollowTransitionBusy()&&!MatchingTravelMenu(signal)||Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.Unconscious]){TravelDiagnostic("Waiting until your character is free to interact.");return;}
+        foreach(var name in new[]{"SelectYesno","SelectString","TelepotTown","Talk"}){var ui=(AtkUnitBase*)GardenGui.GetAddonByName(name).Address;if(ui!=null&&ui->IsVisible&&!MatchingTravelMenu(signal)){TravelDiagnostic("Close your open dialogue to allow shared travel.");return;}}
         if(signal.TravelKind is "transport" or "friendestate" or "door"){TryFollowTransport(signal,now);return;}
         if(signal.TravelKind is "aethernet" or "ward"){
             var crystal=Objects.FirstOrDefault(x=>x.ObjectKind==ObjectKind.Aetheryte&&x.BaseId==signal.BaseId&&x.IsTargetable&&Vector3.Distance(x.Position,new(signal.X,signal.Y,signal.Z))<1&&Vector3.Distance(x.Position,self.Position)<=x.HitboxRadius+3);
             if(crystal==null){FollowChatNotice("TRAVEL — Move closer to the same crystal; FollowThem is waiting.");return;}
-            if(signal.TravelKind=="aethernet"&&TryLifestreamAethernet(signal))return;
+            // Native menus are used consistently; optional Lifestream handles approach/world travel.
             if(signal.TravelKind=="ward"){pendingWard=signal;wardAt=now;wardNext=default;wardStage=0;}
             else pendingAethernet=signal;aethernetAt=now;aethernetNext=now.AddMilliseconds(500);aethernetMenuSelected=false;aethernetSelections=0;
             lastPortalSignalId=signal.Id;
             PauseFollowForTravel();
-            TargetSystem.Instance()->InteractWithObject((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)crystal.Address,true);return;
+            if(!MatchingTravelMenu(signal))TargetSystem.Instance()->InteractWithObject((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)crystal.Address,true);return;
         }
         lastPortalSignalId=signal.Id;
         if(signal.TravelKind=="teleport"&&config.FollowThem.AcceptPartyTeleports&&FollowParty.Any(x=>FollowThemSession.Matches(config.FollowThem.TargetName,config.FollowThem.HomeWorld,x.Name.TextValue,x.World.RowId))){FollowChatNotice("TRAVEL — Waiting for the party teleport offer.");return;}
@@ -147,6 +156,9 @@ public sealed partial class Plugin
         foreach(var destination in telepo->TeleportList)if((signal.TravelKind=="estate"?destination.HouseId.Id.ToString("X16")==signal.EstateId:destination.AetheryteId==signal.AetheryteId&&destination.SubIndex==0&&destination.Ward==0&&destination.Plot==0)){
             if(destination.GilCost>Math.Max(0,config.FollowThem.TeleportGilLimit)||destination.GilCost>inventory->GetGil()){FollowChatNotice("TRAVEL — Teleport exceeds your gil limit or available gil; waiting.");return;}
             usingSharedTravel=true;try{var ok=telepo->Teleport(destination.AetheryteId,destination.SubIndex);FollowChatNotice(ok?"TRAVEL — Requested the selected character's Teleport destination.":"TRAVEL — Game refused Teleport; FollowThem is waiting.");}finally{usingSharedTravel=false;}return;
+        }
+        if(signal.TravelKind=="estate"&&signal.FriendContentId.Length>0&&signal.Destination is "Private Estate" or "Free Company Estate"){
+            TryFollowTransport(signal with {TravelKind="friendestate",SourceKind="FriendEstate",Steps=[new(signal.Destination)]},now);return;
         }
         FollowChatNotice("TRAVEL — That Teleport destination or exact estate is not available on this character; FollowThem is waiting.");
     }

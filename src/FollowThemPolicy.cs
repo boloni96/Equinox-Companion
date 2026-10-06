@@ -11,6 +11,10 @@ public sealed class FollowThemSettings
     public bool SharePortalTransitions { get; set; }
     public bool UseSharedPortals { get; set; }
     public bool UseSharedTeleports { get; set; }
+    public bool MeetAtTeleports { get; set; }
+    public bool AcceptPartyInvites { get; set; }
+    public bool AcceptDutyReady { get; set; }
+    public bool FollowDismount { get; set; } = true;
     public bool LeaveDuties { get; set; }
     public bool FollowMount { get; set; } = true;
     public bool UseLifestream { get; set; }
@@ -91,7 +95,7 @@ public sealed class FollowNoticeGate
 public static class FollowCommandFeedback
 {
     public static bool IsRejection(string text, string command) =>
-        command is "/follow <t>" or "/automove off" && text.Length <= 512 &&
+        command is "/follow <t>" or "/automove off" or "/automove" && text.Length <= 512 &&
         text.Contains(command, StringComparison.Ordinal) &&
         text.Contains("unavailable", StringComparison.OrdinalIgnoreCase);
 }

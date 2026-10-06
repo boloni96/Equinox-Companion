@@ -50,12 +50,15 @@ public sealed partial class Plugin
                 for(var i=0;evt!=null&&i<16;i++,evt=evt->NextEvent)if(evt->State.EventType==AtkEventType.ButtonClick&&evt->Listener==(AtkEventListener*)block){wardStage=3;block->ReceiveEvent(evt->State.EventType,(int)evt->Param,evt);return;}
             }return;
         }
-        var menu=(AtkUnitBase*)GardenGui.GetAddonByName("SelectString").Address;if(menu==null||!menu->IsVisible||menu->AtkValues==null||menu->AtkValuesCount<8||((int)menu->AtkValues[5].Type&15) is not (3 or 5))return;
-        var count=menu->AtkValues[5].UInt;if(count>16||7+count>menu->AtkValuesCount)return;
+        var menu=(AtkUnitBase*)GardenGui.GetAddonByName("SelectString").Address;
+        var choices=TransportChoices(menu);
         var go=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Addon>().GetRow(6349).Text.ToString().Trim();
-        for(var i=0;i<count;i++){var v=menu->AtkValues[7+i];if(((int)v.Type&15) is not (8 or 10))continue;var text=CopyMenuText(v.String.Value)?.Trim();
-            if(wardStage==0&&text is "Residential District Aethernet." or "Residential District Aethernet"){menu->FireCallbackInt(i);wardStage=1;return;}
-            if(wardStage<=1&&text==go){menu->FireCallbackInt(i);wardStage=1;return;}
+        for(var i=0;i<choices.Count;i++){
+            var text=choices[i].Trim();
+            if((wardStage==0&&text.TrimEnd('.')=="Residential District Aethernet")||(wardStage<=1&&(text==go||text.StartsWith("Go to specified ward",StringComparison.Ordinal)))){
+                usingSharedTravel=true;try{menu->FireCallbackInt(i);}finally{usingSharedTravel=false;}
+                wardStage=1;return;
+            }
         }
     }
 }

@@ -13,7 +13,7 @@ public sealed partial class Plugin
     private string lastTransportChoice="";
     private readonly FollowNoticeGate travelDiagnostics=new();
     private void TravelDiagnostic(string message){portalRelayStatus=message;if(travelDiagnostics.Changed(message))FollowChatNotice("TRAVEL — "+message);}
-    private void PauseFollowForTravel(){if(followSession.Pause()==FollowAction.Stop&&CanIssueFollowMovement())FollowCommand("/automove off");followReady.Reset();}
+    private void PauseFollowForTravel(){followSession.Pause();RequestFollowMovementStop();followReady.Reset();}
     private unsafe void CaptureTransportSource(Dalamud.Game.ClientState.Objects.Types.IGameObject clicked)
     {
         transportCapture=null;
@@ -27,6 +27,13 @@ public sealed partial class Plugin
     }
     private unsafe void CaptureTransportChoice(AtkUnitBase* addon,int index)
     {
+        if(SharingTravel&&!usingSharedTravel&&transportCapture==null&&addon!=null&&addon==(AtkUnitBase*)GardenGui.GetAddonByName("SelectString").Address&&Objects.LocalPlayer is {} local){
+            var list=TransportChoices(addon);
+            var housing=FFXIVClientStructs.FFXIV.Client.Game.HousingManager.Instance();
+            if(index>=0&&index<list.Count&&list[index].Trim().TrimEnd('.')=="Leave residential district"&&housing!=null&&housing->GetCurrentHousingTerritoryType()==FFXIVClientStructs.FFXIV.Client.Game.HousingTerritoryType.Outdoor){
+                if(TravelSignal("transport",0,"",0,local.Position) is {} captured)transportCapture=captured with {SourceKind="boundary",Steps=[]};transportCaptureAt=DateTimeOffset.UtcNow;
+            }
+        }
         if(!SharingTravel||usingSharedTravel||pendingTransport!=null||addon==null||transportCapture is not {} source||DateTimeOffset.UtcNow-transportCaptureAt>TimeSpan.FromSeconds(120)||index<0)return;
         string text="";bool confirmation=false;
         if(addon==(AtkUnitBase*)GardenGui.GetAddonByName("SelectString").Address){
@@ -44,9 +51,11 @@ public sealed partial class Plugin
     private unsafe List<string> TransportChoices(AtkUnitBase* menu)
     {
         var result=new List<string>();
-        if(menu==null||!menu->IsVisible||menu->AtkValues==null||menu->AtkValuesCount<8||((int)menu->AtkValues[5].Type&15) is not (3 or 5))return result;
-        var count=menu->AtkValues[5].UInt;if(count>16||count+7>menu->AtkValuesCount)return result;
-        for(var i=0;i<count;i++){var v=menu->AtkValues[7+i];result.Add(((int)v.Type&15) is 8 or 10?CopyMenuText(v.String.Value)??"":"");}return result;
+        if(menu==null||!menu->IsVisible)return result;
+        var popup=&((AddonSelectString*)menu)->PopupMenu.PopupMenu;
+        if(popup->EntryNames==null||popup->EntryCount is <1 or >32)return result;
+        for(var i=0;i<popup->EntryCount;i++)result.Add(CopyMenuText(popup->EntryNames[i].Value)??"");
+        return result;
     }
     private unsafe void UpdateFollowTransport(DateTimeOffset now)
     {
@@ -55,8 +64,8 @@ public sealed partial class Plugin
             else if(Player.IsLoaded&&Player.CharacterName==capture.Name&&Player.HomeWorld.RowId==capture.HomeWorld&&Client.TerritoryType!=capture.Territory&&!Conditions[ConditionFlag.BetweenAreas]&&!Conditions[ConditionFlag.BetweenAreas51]){
                 transportCapture=null;
                 // More specific native aethernet/ward capture takes precedence.
-                if(outgoingTravel==null&&portalSendTask==null&&FollowTransportPolicy.Valid(capture)&&config.PairingKey.Length==64)
-                    portalSendTask=SendPortalToAudience(config.PairingKey,capture with {SentAt=now.ToUnixTimeMilliseconds()},portalRelay.HasFollowers(config.PairingKey,capture.Name,capture.HomeWorld));
+                if(outgoingTravel==null&&FollowTransportPolicy.Valid(capture)&&config.PairingKey.Length==64)
+                    EnqueueOutgoingTravel(config.PairingKey,capture with {SentAt=now.ToUnixTimeMilliseconds()},portalRelay.HasFollowers(config.PairingKey,capture.Name,capture.HomeWorld));
             }
         }
         if(pendingTransport is not {} pending)return;
@@ -65,6 +74,10 @@ public sealed partial class Plugin
         if(!travelStepReady)return;
         if(now<transportNext||pending.Steps==null)return;
         var step=pending.Steps[transportStep];
+        if(step.Addon.Length>0){
+            if(ReplayFollowRoom(step)){transportStep++;if(transportStep>=pending.Steps.Length)pendingTransport=null;transportNext=now.AddMilliseconds(750);}
+            return;
+        }
         AtkUnitBase* menu=null;int index=-1;
         if(step.Confirmation){
             var yes=(AddonSelectYesno*)GardenGui.GetAddonByName("SelectYesno").Address;
@@ -73,7 +86,7 @@ public sealed partial class Plugin
         }else{
             menu=(AtkUnitBase*)GardenGui.GetAddonByName("SelectString").Address;var choices=TransportChoices(menu);
             if(choices.Count==0)return;
-            if(choices.Count(x=>x==step.Text)!=1){TravelDiagnostic("Waiting for the recorded transport menu choice to appear.");return;}index=choices.IndexOf(step.Text);
+            if(choices.Count(x=>x.Trim().TrimEnd('.')==step.Text.Trim().TrimEnd('.'))!=1){TravelDiagnostic("Waiting for the recorded transport menu choice to appear.");return;}index=choices.FindIndex(x=>x.Trim().TrimEnd('.')==step.Text.Trim().TrimEnd('.'));
         }
         if(!FollowTransportPolicy.Affordable(step.Text,config.FollowThem.TeleportGilLimit)){pendingTransport=null;TravelDiagnostic("Transport fee is unknown or exceeds your gil limit; waiting.");return;}
         transportStep++;if(transportStep>=pending.Steps.Length)pendingTransport=null;
@@ -88,9 +101,13 @@ public sealed partial class Plugin
             if(!OpenSharedFriendEstate(signal)){TravelDiagnostic("Friend estate unavailable: open your Friends List to refresh it, and confirm this person is your friend with estate teleport enabled.");return;}
             lastPortalSignalId=signal.Id;pendingTransport=signal;transportStep=0;transportStarted=now;transportNext=now.AddMilliseconds(500);return;
         }
+        if(signal.SourceKind=="boundary"){
+            if(!MatchingTravelMenu(signal)){TravelDiagnostic("Waiting for the residential exit menu at the recorded entrance.");return;}
+            lastPortalSignalId=signal.Id;pendingTransport=signal;transportStep=0;transportStarted=now;transportNext=now.AddMilliseconds(500);return;
+        }
         var source=Objects.FirstOrDefault(x=>x.ObjectKind.ToString()==signal.SourceKind&&x.BaseId==signal.BaseId&&x.IsTargetable&&Vector3.Distance(x.Position,new(signal.X,signal.Y,signal.Z))<1&&Vector3.Distance(x.Position,self.Position)<=x.HitboxRadius+3);
         if(source==null){TravelDiagnostic("Move beside the same transport NPC or crystal; waiting.");return;}
         lastPortalSignalId=signal.Id;pendingTransport=signal.Steps is {Length:>0}?signal:null;transportStep=0;transportStarted=now;transportNext=now.AddMilliseconds(500);
-        PauseFollowForTravel();relayInteracting=true;try{TargetSystem.Instance()->InteractWithObject((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)source.Address,true);}finally{relayInteracting=false;}
+        PauseFollowForTravel();if(MatchingTravelMenu(signal))return;relayInteracting=true;try{TargetSystem.Instance()->InteractWithObject((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)source.Address,true);}finally{relayInteracting=false;}
     }
 }

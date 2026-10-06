@@ -513,6 +513,7 @@ public sealed partial class Plugin : IDalamudPlugin
         {
             if(count==1&&values!=null&&((int)values[0].Type&15) is 3 or 5)CaptureTransportChoice(addon,values[0].Int);
             CaptureWardMenu(addon,count,values);
+            CaptureFollowRoom(addon,count,values);
             ObserveFollowAethernetCallback(addon,count,values);
             if (ObservingGardens && Volatile.Read(ref activeGardenMenu)?.AddonAddress == (nint)addon && count is > 0 and <= 16 && values != null)
             {
@@ -674,6 +675,8 @@ public sealed partial class Plugin : IDalamudPlugin
             DateTimeOffset.UtcNow-lastFollowCommandAt < TimeSpan.FromSeconds(2) &&
             FollowCommandFeedback.IsRejection(message.OriginalMessage.ExtractText(),lastFollowCommand))
             Interlocked.Exchange(ref followCommandRejected,1);
+        if(config.EnableFollowThem&&followSession.Armed&&(pendingTransport!=null||receivedPortal!=null||travelAwaitingArrival!=null)&&message.LogKind is XivChatType.ErrorMessage or XivChatType.SystemError&&message.OriginalMessage.ExtractText().Contains("Unable to execute action from this location",StringComparison.Ordinal))
+            TravelDiagnostic("The game rejected the interaction position. Move closer to the doorway on the same floor; the trip is not complete.");
         ObserveHarvestChat(message);
         if (!ObservingGardens || cropChats.Count >= 128 || !Player.IsLoaded ||
             Conditions[ConditionFlag.BetweenAreas] || Conditions[ConditionFlag.BetweenAreas51] ||

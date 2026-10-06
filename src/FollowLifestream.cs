@@ -48,9 +48,9 @@ public sealed partial class Plugin
         }
         if(!SharingTravel){worldSource=null;return;}
         if(!Player.IsLoaded||Objects.LocalPlayer is not {} self)return;
-        if(worldSource is {} source&&source.Name==Player.CharacterName&&source.HomeWorld==Player.HomeWorld.RowId&&source.CurrentWorld!=Player.CurrentWorld.RowId&&now-worldSourceAt<TimeSpan.FromMinutes(30)&&portalSendTask==null&&config.PairingKey.Length==64){
+        if(worldSource is {} source&&source.Name==Player.CharacterName&&source.HomeWorld==Player.HomeWorld.RowId&&source.CurrentWorld!=Player.CurrentWorld.RowId&&now-worldSourceAt<TimeSpan.FromMinutes(30)&&config.PairingKey.Length==64){
             var signal=source with {DestinationWorld=Player.CurrentWorld.RowId,SentAt=now.ToUnixTimeMilliseconds()};
-            portalSendTask=SendPortalToAudience(config.PairingKey,signal,portalRelay.HasFollowers(config.PairingKey,source.Name,source.HomeWorld));
+            EnqueueOutgoingTravel(config.PairingKey,signal,portalRelay.HasFollowers(config.PairingKey,source.Name,source.HomeWorld));
         }
         worldSource=TravelSignal("world",0,"",0,self.Position);worldSourceAt=now;
     }

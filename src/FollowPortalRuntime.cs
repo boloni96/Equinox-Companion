@@ -15,12 +15,12 @@ public sealed partial class Plugin
     private readonly FollowNoticeGate portalNotices = new();
     private unsafe delegate ulong FollowInteractDelegate(TargetSystem* system,NativeObject* obj,bool checkLineOfSight);
     private Hook<FollowInteractDelegate>? followPortalHook;
-    private FollowPortalSignal? outgoingPortal,receivedPortal,deferredTravel;
+    private FollowPortalSignal? outgoingPortal,receivedPortal;
     private DateTimeOffset outgoingPortalAt,nextPortalPoll,receivedPortalAt,nextPortalTick;
     private Vector3 portalPreviousPosition;
     private string relayPairingKey="";
     private Task<string>? portalSendTask;
-    private Task<(FollowPortalSignal? Signal,string Status)>? portalReadTask;
+    private Task<(FollowPortalSignal[] Signals,string Status)>? portalReadTask;
     private string portalRelayStatus="Portal relay options are off.",lastLeaderEntity="",lastPortalSignalId="";
     private int relayGeneration,portalReadGeneration;
     private long followArmedAt;
@@ -85,7 +85,7 @@ public sealed partial class Plugin
             UpdateFollowLease(now);
             UpdateFollowApproach(now);
             UpdateFollowTravel(now);
-            if(relayPairingKey!=config.PairingKey){relayPairingKey=config.PairingKey;relayGeneration++;deferredTravel=null;receivedPortal=null;outgoingPortal=null;pendingAethernet=null;pendingWard=null;pendingTransport=null;transportCapture=null;worldSource=null;CancelLifestreamTravel();CancelFollowApproach();pendingDutyLeave=null;}
+            if(relayPairingKey!=config.PairingKey){relayPairingKey=config.PairingKey;relayGeneration++;ResetTravelQueue();receivedPortal=null;outgoingPortal=null;pendingAethernet=null;pendingWard=null;pendingTransport=null;transportCapture=null;worldSource=null;CancelLifestreamTravel();CancelFollowApproach();pendingDutyLeave=null;}
             var sharing=config.EnableFollowThem&&config.FollowThem.SharePortalTransitions;
             if(sharing&&!portalHookFailed&&followPortalHook==null)
             {
@@ -99,6 +99,7 @@ public sealed partial class Plugin
                 portalRelayStatus=portalSendTask.GetAwaiter().GetResult();portalSendTask=null;
                 if(portalNotices.Changed(portalRelayStatus))FollowChatNotice("PORTAL — "+portalRelayStatus);
             }
+            FlushOutgoingTravel();
             var loading=Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51];
             if(outgoingPortal is {} candidate)
             {
@@ -107,8 +108,8 @@ public sealed partial class Plugin
                 else if(Player.IsLoaded&&!loading&&(Client.TerritoryType!=candidate.Territory||(Objects.LocalPlayer is {} moved && Vector3.Distance(moved.Position,portalPreviousPosition)>12)))
                 {
                     outgoingPortal=null;
-                    if(config.PairingKey.Length==64&&portalSendTask==null&&portalAudienceTask is {} audience)
-                        portalSendTask=SendPortalToAudience(config.PairingKey,candidate with {SentAt=now.ToUnixTimeMilliseconds()},audience);
+                    if(config.PairingKey.Length==64&&portalAudienceTask is {} audience)
+                        EnqueueOutgoingTravel(config.PairingKey,candidate with {SentAt=now.ToUnixTimeMilliseconds()},audience);
                     else portalRelayStatus="Portal relay needs pairing; transition not queued for replay.";
                 }
                 else
@@ -123,23 +124,20 @@ public sealed partial class Plugin
                 }
             }
             var receiving=config.EnableFollowThem&&(config.FollowThem.UseSharedPortals||config.FollowThem.UseSharedTeleports)&&followSession.Armed;
-            if(!receiving){receivedPortal=null;deferredTravel=null;return;}
+            if(!receiving){receivedPortal=null;ResetTravelQueue();return;}
             if(portalReadTask?.IsCompleted==true)
             {
                 var result=portalReadTask.GetAwaiter().GetResult();portalReadTask=null;
                 if(portalReadGeneration==relayGeneration)
                 {
-                    portalRelayStatus=result.Status;
+                    if(result.Status!="Portal relay ready.")portalRelayStatus=result.Status;
                     if(portalNotices.Changed(result.Status) && result.Status!="Portal relay ready.")
                         FollowChatNotice("ERROR — "+result.Status);
-                    if(result.Signal is {} signal&&signal.Id!=lastPortalSignalId)deferredTravel=signal;
+                    foreach(var signal in result.Signals){EnqueueTravel(signal);portalReadCursor=Math.Max(portalReadCursor,signal.Sequence);}
                     if(result.Status!="Portal relay ready.")nextPortalPoll=now.AddSeconds(10);
                 }
             }
-            if(deferredTravel is {} deferred){
-                if(deferred.SentAt<followArmedAt||deferred.ExpiresAt<=now.ToUnixTimeMilliseconds())deferredTravel=null;
-                else if(Player.IsLoaded&&!loading&&followApproach==null&&pendingTransport==null&&pendingWard==null&&pendingAethernet==null&&receivedPortal==null){deferredTravel=null;QueueFollowApproach(deferred,now);}
-            }
+            UpdateTravelQueue(now,loading);
             if(receivedPortal is {} pending)
             {
                 if(now-receivedPortalAt>TimeSpan.FromSeconds(5)||loading||Client.TerritoryType!=pending.Territory){receivedPortal=null;return;}
@@ -152,10 +150,10 @@ public sealed partial class Plugin
                     FollowChatNotice("PORTAL — " + portalRelayStatus);
                 }
             }
-            if(now<nextPortalPoll||portalReadTask!=null||lastLeaderSeen==default)return;
+            if(now<nextPortalPoll||portalReadTask!=null||lastLeaderSeen==default&&!config.FollowThem.MeetAtTeleports)return;
             if(config.PairingKey.Length!=64){portalRelayStatus="Pair both Companions with the same Journal key for portal relay.";return;}
             nextPortalPoll=now.AddSeconds(now-lastLeaderSeen>TimeSpan.FromSeconds(30)?3:1);portalReadGeneration=relayGeneration;
-            portalReadTask=portalRelay.Read(config.PairingKey,config.FollowThem.TargetName,config.FollowThem.HomeWorld,followLeaseId);
+            portalReadTask=portalRelay.Read(config.PairingKey,config.FollowThem.TargetName,config.FollowThem.HomeWorld,followLeaseId,portalReadCursor);
         }
         catch(Exception e)
         {

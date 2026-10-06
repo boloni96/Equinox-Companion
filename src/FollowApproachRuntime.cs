@@ -31,9 +31,9 @@ public sealed partial class Plugin
         var valid=signal.TravelKind=="world"?
             FollowThemSession.Matches(config.FollowThem.TargetName,config.FollowThem.HomeWorld,signal.Name,signal.HomeWorld)&&signal.CurrentWorld==Player.CurrentWorld.RowId&&signal.EntityId==lastLeaderEntity&&signal.SentAt>=followArmedAt&&signal.ExpiresAt>now.ToUnixTimeMilliseconds():
             signal.TravelKind=="portal"?config.FollowThem.UseSharedPortals&&FollowPortalPolicy.CanUse(signal,now.ToUnixTimeMilliseconds(),followArmedAt,config.FollowThem.TargetName,config.FollowThem.HomeWorld,Player.CurrentWorld.RowId,Client.TerritoryType,map->CurrentMapId,lastLeaderEntity,(now-lastLeaderSeen).TotalSeconds,point):
-            config.FollowThem.UseSharedTeleports&&FollowTravelPolicy.CanUse(signal,now.ToUnixTimeMilliseconds(),followArmedAt,config.FollowThem.TargetName,config.FollowThem.HomeWorld,Player.CurrentWorld.RowId,Client.TerritoryType,map->CurrentMapId,lastLeaderEntity,(now-lastLeaderSeen).TotalSeconds,point);
+            config.FollowThem.UseSharedTeleports&&FollowTravelPolicy.CanUse(signal,now.ToUnixTimeMilliseconds(),followArmedAt,config.FollowThem.TargetName,config.FollowThem.HomeWorld,Player.CurrentWorld.RowId,Client.TerritoryType,map->CurrentMapId,lastLeaderEntity,(now-lastLeaderSeen).TotalSeconds,point,config.FollowThem.MeetAtTeleports);
         if(!valid){TravelDiagnostic("Travel position rejected: stale instruction, different session or source location.");return;}
-        if(signal.Approach!=null&&!FollowApproachPolicy.CanApproach(signal,self.Position)){TravelDiagnostic("Travel position is too far away, on another level or invalid; waiting.");return;}
+        if(signal.TravelKind is not ("teleport" or "estate" or "friendestate" or "world")&&signal.Approach!=null&&!FollowApproachPolicy.CanApproach(signal,self.Position)){TravelDiagnostic("Travel position is too far away, on another level or invalid; waiting.");return;}
         followApproach=signal;approachKey=config.PairingKey;approachCharacter=Player.ContentId;approachSession=followArmedAt;
         lastPortalSignalId=signal.Id;travelStationary.Reset();approachStopRequested=false;nextApproachAttempt=default;
         PauseFollowForTravel();TravelDiagnostic("Preparing the selected travel action; checking the captured position.");
@@ -47,14 +47,15 @@ public sealed partial class Plugin
             return;
         }
         var map=AgentMap.Instance();
-        if(!config.EnableFollowThem||!followSession.Armed||followArmedAt!=approachSession||config.PairingKey!=approachKey||Player.IsLoaded&&Player.ContentId!=approachCharacter||Player.CurrentWorld.RowId!=signal.CurrentWorld||Client.TerritoryType!=signal.Territory||map==null||map->CurrentMapId!=signal.MapId||!FollowThemSession.Matches(config.FollowThem.TargetName,config.FollowThem.HomeWorld,signal.Name,signal.HomeWorld)||signal.ExpiresAt<=now.ToUnixTimeMilliseconds()||Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.Unconscious]){
+        var remote=config.FollowThem.MeetAtTeleports&&signal.TravelKind is "teleport" or "estate" or "friendestate";
+        if(!config.EnableFollowThem||!followSession.Armed||followArmedAt!=approachSession||config.PairingKey!=approachKey||Player.IsLoaded&&Player.ContentId!=approachCharacter||Player.CurrentWorld.RowId!=signal.CurrentWorld||map==null||!remote&&(Client.TerritoryType!=signal.Territory||map->CurrentMapId!=signal.MapId)||!FollowThemSession.Matches(config.FollowThem.TargetName,config.FollowThem.HomeWorld,signal.Name,signal.HomeWorld)||signal.ExpiresAt<=now.ToUnixTimeMilliseconds()||Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.Unconscious]){
             CancelFollowApproach();TravelDiagnostic("Travel preparation cancelled or expired; no action performed.");return;
         }
         if(signal.TravelKind=="portal"?!config.FollowThem.UseSharedPortals:signal.TravelKind!="world"&&!config.FollowThem.UseSharedTeleports){CancelFollowApproach();return;}
         if(approachOwnsMovement&&!config.FollowThem.UseLifestream){CancelFollowApproach();return;}
         if(followManualInputSeen){followManualInputSeen=false;CancelFollowApproach();TravelDiagnostic("Your movement cancelled the pending travel action; FollowThem stays armed.");return;}
         if(Objects.LocalPlayer is not {} self)return;
-        var position=self.Position;var atPoint=signal.Approach==null||Vector3.DistanceSquared(position,signal.Approach.Point)<=.5625f;
+        var position=self.Position;var atPoint=signal.TravelKind is "teleport" or "estate" or "friendestate" or "world"||MatchingTravelMenu(signal)||WithinTravelInteractionRange(signal)||signal.Approach==null||Vector3.DistanceSquared(position,signal.Approach.Point)<=.5625f;
         if(!atPoint){
             travelStationary.Reset();
             if(approachStopRequested){CancelFollowApproach();TravelDiagnostic("Moved away from the captured travel position; waiting without interacting.");return;}
@@ -69,7 +70,7 @@ public sealed partial class Plugin
                 if(LifestreamBusy()){TravelDiagnostic("Lifestream is busy; waiting without replacing its task.");return;}
                 Pi.GetIpcSubscriber<List<Vector3>,bool?,float?,float?,object>("Lifestream.MoveEx").InvokeAction([signal.Approach!.Point],false,.5f,.25f);
                 approachOwnsMovement=true;TravelDiagnostic("Approaching the leader's captured travel position.");
-            }catch(Exception){TravelDiagnostic("Direct approach unavailable; move to the captured position manually.");}
+            }catch(Exception e){errorJournal.Record("follow-approach-ipc",e.Message,exceptionType:e.GetType().Name);TravelDiagnostic("Direct approach unavailable ("+e.GetType().Name+"); move to the captured position manually.");}
             return;
         }
         if(!approachStopRequested){
@@ -78,11 +79,11 @@ public sealed partial class Plugin
                 catch(Exception){TravelDiagnostic("Waiting: cannot confirm that approach movement stopped.");return;}
                 approachOwnsMovement=false;
             }
-            if(!CanIssueFollowMovement()&&!BoundaryWardOpen(signal))return;
-            if(CanIssueFollowMovement())FollowCommand("/automove off");approachStopRequested=true;travelStationary.Reset();
+            if(!CanIssueFollowMovement()&&!MatchingTravelMenu(signal))return;
+            RequestFollowMovementStop();approachStopRequested=true;travelStationary.Reset();
             TravelDiagnostic("At the travel position; stopping and confirming stationary.");return;
         }
-        if(!travelStationary.Observe(now,position,(!FollowTransitionBusy()||BoundaryWardOpen(signal))&&travelStepReady))return;
+        if(!travelStationary.Observe(now,position,(!FollowTransitionBusy()||MatchingTravelMenu(signal))&&travelStepReady))return;
         followApproach=null;travelStationary.Reset();
         TravelDiagnostic("Stationary confirmed; performing the selected travel action.");
         TryUseSharedPortal(signal,now);
