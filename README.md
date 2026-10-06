@@ -48,3 +48,11 @@ FollowThem chat status messages (optional), guarded duty-entry movement commands
 and single coloured coffer icons. Choose minimap/main-map displays independently
 under Settings > Features. Map alignment and duty entry require live testing.
 Journal remains V7.11.74; no new website deployment for this update.
+
+## Companion 0.5.1.56
+
+Six local coffer appearances with clickable red/green previews: Game chest, Classic,
+Rounded, Royal jewel, Pixel, and Minimal outline. Choose under Settings > Features
+> Treasure Coffer markers > Coffer appearance. Applies to both maps. Custom styles
+hide the underlying minimap symbol and restore it when switching back/disabling.
+Native drawing and cleanup still require in-game testing. Journal stays V7.11.74.

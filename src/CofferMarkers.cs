@@ -25,7 +25,7 @@ public sealed partial class Plugin
     private const uint CofferIcon = 60460;
     private readonly List<(short X, short Y, bool Opened)> cofferRendered = [];
     // Only keep values, never dereference cached native pointers after an addon is rebuilt.
-    private readonly Dictionary<nint, (byte R, byte G, byte B, byte AppliedR, byte AppliedG, byte AppliedB)> cofferTints = [];
+    private readonly Dictionary<nint, (byte R, byte G, byte B, byte A, byte AppliedR, byte AppliedG, byte AppliedB, byte AppliedA)> cofferTints = [];
     private readonly HashSet<nint> cofferLiveNodes = [];
 
     private void OnCofferTerritoryChanged(uint territory) { cofferMemory.Clear(); cofferRendered.Clear(); cofferTerritory=territory; nextCofferCheck=default; }
@@ -149,19 +149,31 @@ public sealed partial class Plugin
             var match = enabled && marker.IconId == CofferIcon ? cofferRendered.FindIndex(p => p.X == marker.X && p.Y == marker.Y) : -1;
             var opened = match >= 0 && cofferRendered[match].Opened;
             byte r = opened ? (byte)45 : (byte)255, g = opened ? (byte)255 : (byte)45, b=45;
+            var custom=false;
+            if(match>=0 && CofferStyles.Normalize(config.CofferStyle)!=0 && MarkerVisible(node))
+            {
+                Bounds bounds;node->GetBounds(&bounds);
+                if(bounds.Width is >=4 and <=80 && bounds.Height is >=4 and <=80)
+                {
+                    var center=ImGui.GetMainViewport().Pos+new Vector2((bounds.Pos1.X+bounds.Pos2.X)/2,(bounds.Pos1.Y+bounds.Pos2.Y)/2);
+                    DrawCofferSymbol(ImGui.GetForegroundDrawList(),center,Math.Clamp(bounds.Width*.4f,6,13),opened,config.CofferStyle);
+                    custom=true;
+                }
+            }
+            byte alpha=custom?(byte)0:(cofferTints.TryGetValue(key,out var previous)?previous.A:node->Color.A);
             if(match >= 0 && cofferTints.TryGetValue(key,out var kept) &&
-                kept.AppliedR==r && kept.AppliedG==g && kept.AppliedB==b &&
-                node->MultiplyRed==r && node->MultiplyGreen==g && node->MultiplyBlue==b)continue;
+                kept.AppliedR==r && kept.AppliedG==g && kept.AppliedB==b && kept.AppliedA==alpha &&
+                node->MultiplyRed==r && node->MultiplyGreen==g && node->MultiplyBlue==b && node->Color.A==alpha)continue;
             // Restore before deciding whether the game has recycled this node for another icon.
             if (cofferTints.Remove(key, out var old) && node->MultiplyRed == old.AppliedR &&
-                node->MultiplyGreen == old.AppliedG && node->MultiplyBlue == old.AppliedB)
+                node->MultiplyGreen == old.AppliedG && node->MultiplyBlue == old.AppliedB && node->Color.A==old.AppliedA)
             {
-                node->MultiplyRed=old.R; node->MultiplyGreen=old.G; node->MultiplyBlue=old.B;
+                node->MultiplyRed=old.R; node->MultiplyGreen=old.G; node->MultiplyBlue=old.B;node->SetAlpha(old.A);
                 node->IsDirty=true;
             }
             if (match < 0) continue;
-            cofferTints[key]=(node->MultiplyRed,node->MultiplyGreen,node->MultiplyBlue,r,g,b);
-            node->MultiplyRed=r; node->MultiplyGreen=g; node->MultiplyBlue=b; node->IsDirty=true;
+            cofferTints[key]=(node->MultiplyRed,node->MultiplyGreen,node->MultiplyBlue,node->Color.A,r,g,b,alpha);
+            node->MultiplyRed=r; node->MultiplyGreen=g; node->MultiplyBlue=b; node->SetAlpha(alpha); node->IsDirty=true;
         }
         foreach (var key in cofferTints.Keys.Where(k => !cofferLiveNodes.Contains(k)).ToArray()) cofferTints.Remove(key);
     }
@@ -183,8 +195,7 @@ public sealed partial class Plugin
         var clipMin=origin+new Vector2(clipBounds.Pos1.X,clipBounds.Pos1.Y);
         var clipMax=origin+new Vector2(clipBounds.Pos2.X,clipBounds.Pos2.Y);
         if (textureSize.X<=0 || textureSize.Y<=0 || clipMin.X>=clipMax.X || clipMin.Y>=clipMax.Y) return;
-        var icon=Textures.GetFromGameIcon(CofferIcon).GetWrapOrDefault();
-        if(icon==null)return;
+
         var draw=ImGui.GetForegroundDrawList();
         draw.PushClipRect(clipMin,clipMax,true);
         try
@@ -195,8 +206,7 @@ public sealed partial class Plugin
                 if(!float.IsFinite(uv.X)||!float.IsFinite(uv.Y)||uv.X<0||uv.Y<0||uv.X>1||uv.Y>1)continue;
                 var center=textureMin+uv*textureSize;
                 if(center.X<clipMin.X||center.X>clipMax.X||center.Y<clipMin.Y||center.Y>clipMax.Y)continue;
-                var half=new Vector2(12*addon->Scale);
-                draw.AddImage(icon.Handle,center-half,center+half,Vector2.Zero,Vector2.One,point.Opened?0xff2dff2du:0xff2d2dffu);
+                DrawCofferSymbol(draw,center,12*addon->Scale,point.Opened,config.CofferStyle);
             }
         }
         finally { draw.PopClipRect(); }
@@ -212,6 +222,7 @@ public sealed partial class Plugin
             config.CofferMinimap=v; RestoreCofferTints(); cofferRendered.Clear(); RefreshCofferMinimap();
         });
         MessageToggle("Show coffers on main map", config.CofferMainMap, v => config.CofferMainMap=v);
+        DrawCofferAppearance();
         ImGui.TextWrapped(cofferStatus);
         ImGui.TextWrapped("Red: unopened. Green: confirmed opened, including by another player. Opened locations remain for this territory visit; logout or changing territory clears them. Ordinary treasure objects are supported; special Event Object coffers need separate support. No Journal sync and no automatic opening.");
         if(ImGui.Button("Clear this visit's coffer markers"))SetCofferMarkers(true);
