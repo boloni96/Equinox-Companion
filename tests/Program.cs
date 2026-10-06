@@ -1482,3 +1482,36 @@ Check("66 source proximity cannot reconcile",FollowArrivalPolicy.AlreadyAtAether
 Check("66 wrong floor cannot reconcile",FollowArrivalPolicy.AlreadyAtAethernetArrival(arrival66,2,30,40,new(10,4,10)).ToString(),"False");
 Check("66 distant arrival cannot reconcile",FollowArrivalPolicy.AlreadyAtAethernetArrival(arrival66,2,30,40,new(40,0,10)).ToString(),"False");
 Check("66 missing arrival cannot reconcile",FollowArrivalPolicy.AlreadyAtAethernetArrival(arrival66 with {Arrival=null},2,30,40,new(10,0,10)).ToString(),"False");
+
+// .67: exact room identity and instance-aware travel.
+Check("67 named room confirmation",FollowRoomTarget.Confirmation("Enter Leonis Verelle's room?",false,"Leonis Verelle").ToString(),"True");
+Check("67 named room curly apostrophe",FollowRoomTarget.Confirmation("Enter Leonis Verelle’s room?",false,"Leonis Verelle").ToString(),"True");
+Check("67 other owner rejected",FollowRoomTarget.Confirmation("Enter Dorian Example's room?",false,"Leonis Verelle").ToString(),"False");
+Check("67 owner prefix rejected",FollowRoomTarget.Confirmation("Enter Leonis Verelle Extra's room?",false,"Leonis Verelle").ToString(),"False");
+Check("67 unrelated named action rejected",FollowRoomTarget.Confirmation("Buy Leonis Verelle's room?",false,"Leonis Verelle").ToString(),"False");
+var instanceChoices67=new[]{"No preference.","Central Shroud \uE0B1. (0)","Central Shroud \uE0B2. (0)","Central Shroud \uE0B3. (1)"};
+Check("67 chooses instance not row guess",FollowInstancePolicy.Choice(instanceChoices67,2).ToString(),"2");
+Check("67 absent instance stays manual",FollowInstancePolicy.Choice(instanceChoices67,8).ToString(),"-1");
+Check("67 duplicate instance rejected",FollowInstancePolicy.Choice([..instanceChoices67,instanceChoices67[2]],2).ToString(),"-1");
+Check("67 unrelated single numbered text ignored",FollowInstancePolicy.Choice(["Reward \uE0B2"],2).ToString(),"-1");
+Check("67 zero instance does not click no preference",FollowInstancePolicy.Choice(instanceChoices67,0).ToString(),"-1");
+Check("67 wrong instance not arrival",FollowInstancePolicy.Arrived(2,1).ToString(),"False");
+Check("67 exact instance arrival",FollowInstancePolicy.Arrived(2,2).ToString(),"True");
+Check("67 legacy non-instance arrival",FollowInstancePolicy.Arrived(0,1).ToString(),"True");
+var boundary67=travel59 with {TravelKind="boundary",BaseId=0,SourceKind="boundary",Approach=new(1,0,0),Arrival=new(2,0,0),ArrivalWorld=2,ArrivalTerritory=30,ArrivalMap=40,ArrivalInstance=2};
+Check("67 valid boundary replay",CanTravel59(boundary67).ToString(),"True");
+Check("67 boundary missing arrival rejected",CanTravel59(boundary67 with {Arrival=null}).ToString(),"False");
+Check("67 boundary cross world rejected",CanTravel59(boundary67 with {ArrivalWorld=3}).ToString(),"False");
+Check("67 boundary same territory rejected",CanTravel59(boundary67 with {ArrivalTerritory=3}).ToString(),"False");
+Check("67 boundary duty rejected",CanTravel59(boundary67 with {DutyId=1}).ToString(),"False");
+Check("67 invalid instance rejected",CanTravel59(boundary67 with {ArrivalInstance=10}).ToString(),"False");
+Check("67 instance JSON roundtrip",JsonSerializer.Deserialize<FollowPortalSignal>(JsonSerializer.Serialize(boundary67))!.ArrivalInstance.ToString(),"2");
+
+var progress67=new FollowApproachProgress();
+progress67.Reset(time,new(0,0,0),new(10,0,0));
+Check("67 approach initially moving",progress67.Stuck(time.AddSeconds(9),new(0,2,0),new(10,0,0),10).ToString(),"False");
+Check("67 approach wall timeout ignores jumps",progress67.Stuck(time.AddSeconds(10),new(0,2,0),new(10,0,0),10).ToString(),"True");
+progress67.Reset(time,new(0,0,0),new(10,0,0));
+Check("67 approach progress resets timeout",progress67.Stuck(time.AddSeconds(9),new(2,0,0),new(10,0,0),10).ToString(),"False");
+Check("67 continued approach before new timeout",progress67.Stuck(time.AddSeconds(18),new(2,0,0),new(10,0,0),10).ToString(),"False");
+Check("67 approach new timeout",progress67.Stuck(time.AddSeconds(19),new(2,0,0),new(10,0,0),10).ToString(),"True");

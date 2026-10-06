@@ -49,7 +49,7 @@ public sealed partial class Plugin
             var yes=(FFXIVClientStructs.FFXIV.Client.UI.AddonSelectYesno*)GardenGui.GetAddonByName("SelectYesno").Address;
             if(yes!=null&&yes->IsVisible&&yes->PromptText!=null){
                 var prompt=yes->PromptText->NodeText.ToString();
-                if(!FollowRoomTarget.Confirmation(prompt,Player.CharacterName==target.Owner)){TravelDiagnostic("Private-chamber confirmation differs; waiting without accepting.");return false;}
+                if(!FollowRoomTarget.Confirmation(prompt,Player.CharacterName==target.Owner,target.Owner)){TravelDiagnostic("Private-chamber confirmation differs; waiting without accepting.");return false;}
                 usingSharedTravel=true;try{SelectTravelChoice((AtkUnitBase*)yes,0);}finally{usingSharedTravel=false;}
                 TravelDiagnostic("Requested private chamber "+target.Room+" belonging to "+target.Owner+".");return true;
             }

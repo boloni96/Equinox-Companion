@@ -43,7 +43,7 @@ public sealed partial class Plugin
     {
         FollowPortalSignal? signal=null;uint destination=0;
         try{
-            if(SharingTravel&&!usingSharedTravel&&telepo!=null&&Objects.LocalPlayer is {} self)
+            if(SharingTravel&&!SharingWorldIntent&&!usingSharedTravel&&telepo!=null&&Objects.LocalPlayer is {} self)
                 foreach(var entry in telepo->TeleportList)if(entry.AetheryteId==id&&entry.SubIndex==subIndex){
                     var estate=AddressOf(entry.HouseId);
                     signal=TravelSignal(estate!=null?"estate":"teleport",id,"",0,self.Position);
@@ -87,6 +87,8 @@ public sealed partial class Plugin
     }
     private unsafe void UpdateFollowTravel(DateTimeOffset now)
     {
+        UpdateFollowBoundary(now);
+        UpdateFollowWorldCommandHook();
         UpdateFriendEstateHook();
         UpdateFollowWard(now);
         UpdateFollowTransport(now);
@@ -156,7 +158,7 @@ public sealed partial class Plugin
             if(!MatchingTravelMenu(signal))RetryTravelInteraction(signal,now);return;
         }
         lastPortalSignalId=signal.Id;
-        if(signal.TravelKind=="teleport"&&config.FollowThem.AcceptPartyTeleports&&FollowParty.Any(x=>FollowThemSession.Matches(config.FollowThem.TargetName,config.FollowThem.HomeWorld,x.Name.TextValue,x.World.RowId))){FollowChatNotice("TRAVEL — Waiting for the party teleport offer.");return;}
+        if(signal.TravelKind=="teleport"&&config.FollowThem.AcceptPartyTeleports&&Telepo.Instance()!=null&&Telepo.Instance()->ActiveTeleportRequest&&VisibleFollowAddon("SelectYesno")&&FollowParty.Any(x=>FollowThemSession.Matches(config.FollowThem.TargetName,config.FollowThem.HomeWorld,x.Name.TextValue,x.World.RowId))){FollowChatNotice("TRAVEL — Waiting for the party teleport offer.");return;}
         var telepo=Telepo.Instance();var inventory=InventoryManager.Instance();if(telepo==null||inventory==null)return;
         telepo->UpdateAetheryteList();
         foreach(var destination in telepo->TeleportList)if((signal.TravelKind=="estate"?destination.HouseId.Id.ToString("X16")==signal.EstateId:destination.AetheryteId==signal.AetheryteId&&destination.SubIndex==0&&destination.Ward==0&&destination.Plot==0)){

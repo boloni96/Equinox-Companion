@@ -7,14 +7,31 @@ public sealed partial class Plugin
     private string interactionSignal="";
     private int interactionAttempts;
     private DateTimeOffset interactionNext;
+    private string facingSignal="";
+    private ulong facingObject;
+    private DateTimeOffset facingReadyAt;
+    private unsafe bool FaceTravelTarget(FollowPortalSignal signal,Dalamud.Game.ClientState.Objects.Types.IGameObject target,DateTimeOffset now)
+    {
+        if(Objects.LocalPlayer is not {} self)return false;
+        // Rotate only our actor toward the exact verified travel object. Never
+        // cycle targets, turn the camera, or synthesize a target-selection key.
+        if(facingSignal!=signal.Id||facingObject!=target.GameObjectId){
+            facingSignal=signal.Id;facingObject=target.GameObjectId;
+            var delta=target.Position-self.Position;
+            if(delta.X*delta.X+delta.Z*delta.Z>.001f)
+                ((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)self.Address)->SetRotation(MathF.Atan2(delta.X,delta.Z));
+            facingReadyAt=now.AddMilliseconds(250);return false;
+        }
+        return now>=facingReadyAt;
+    }
     private unsafe void RetryTravelInteraction(FollowPortalSignal signal,DateTimeOffset now)
     {
         if(interactionSignal!=signal.Id){interactionSignal=signal.Id;interactionAttempts=0;interactionNext=default;}
         if(now<interactionNext||interactionAttempts>=3||!travelStepReady||followStopPending||followStopUnconfirmed||FollowTransitionBusy()||Objects.LocalPlayer is not {} self)return;
         foreach(var name in new[]{"SelectString","SelectYesno","Talk","TelepotTown","HousingSelectBlock","HousingSelectRoom","MansionSelectRoom"})if(VisibleFollowAddon(name))return;
         var source=Objects.FirstOrDefault(x=>x.BaseId==signal.BaseId&&x.IsTargetable&&(signal.SourceKind.Length==0||x.ObjectKind.ToString()==signal.SourceKind)&&Vector3.DistanceSquared(x.Position,new(signal.X,signal.Y,signal.Z))<1&&Vector3.Distance(self.Position,x.Position)<=x.HitboxRadius+3);
-        if(source==null)return;
-        interactionAttempts++;interactionNext=now.AddSeconds(2);
+        if(source==null||!FaceTravelTarget(signal,source,now))return;
+        interactionAttempts++;interactionNext=now.AddSeconds(2);facingSignal="";
         relayInteracting=true;
         try{Targets.Target=source;TargetSystem.Instance()->InteractWithObject((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)source.Address,true);}
         finally{relayInteracting=false;}

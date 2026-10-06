@@ -259,7 +259,7 @@ public sealed partial class Plugin
         ImGui.BeginDisabled(!followSession.Armed&&(followStopPending||followStopUnconfirmed));
         if (ImGui.Button(followSession.Armed ? "Stop FollowThem" : followStopPending||followStopUnconfirmed ? "Waiting for stop confirmation" : "Start FollowThem")) ToggleFollowThem();
         ImGui.EndDisabled();
-        ImGui.TextWrapped("Local settings. Uses simple game follow; obstacles still require your help. Mounted takeoff assistance is optional. Party teleports need an open English confirmation. Ordered shared travel requires Journal V7.11.79 on Cloudflare. Transport menus must match on both characters.");
+        ImGui.TextWrapped("Local settings. Uses simple game follow; obstacles still require your help. Mounted takeoff assistance is optional. Party teleports need an open English confirmation. Instance and gate travel requires Journal V7.11.80 on Cloudflare. Transport menus must match on both characters.");
         var selected = config.FollowThem.TargetName.Length == 0 ? "Choose a party member or friend" : config.FollowThem.TargetName + " @ " + FollowWorldName(config.FollowThem.HomeWorld);
         if (ImGui.BeginCombo("Character", selected))
         {

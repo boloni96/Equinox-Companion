@@ -12,6 +12,7 @@ public sealed record FollowRoomTarget(int Room,string Owner)
         var owner=step.Text[prefix.Length..];
         return owner.Length is >0 and <=80&&!owner.Any(char.IsControl)&&step.MenuSignature==Signature(args[0],owner)?new(args[0],owner):null;
     }
-    public static bool Confirmation(string prompt,bool ownRoom)=>
+    public static bool Confirmation(string prompt,bool ownRoom,string owner="")=>
+        owner.Length>0&&(prompt==$"Enter {owner}'s room?"||prompt==$"Enter {owner}’s room?")||
         ownRoom&&prompt=="Retire to your own chambers?"||FollowPortalPolicy.IsConfirmationSupported(prompt)&&prompt.Contains("chambers",StringComparison.OrdinalIgnoreCase);
 }

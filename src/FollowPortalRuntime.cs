@@ -184,7 +184,7 @@ public sealed partial class Plugin
         if(dialog!=null&&dialog->IsVisible)return;
         var position=new Vector3(signal.X,signal.Y,signal.Z);
         var target=Objects.FirstOrDefault(o=>o.ObjectKind==ObjectKind.EventObj&&o.BaseId==signal.BaseId&&o.IsTargetable&&Vector3.Distance(o.Position,position)<.75f);
-        if(target==null||PortalHandler((NativeObject*)target.Address)!=signal.HandlerType)return;
+        if(target==null||PortalHandler((NativeObject*)target.Address)!=signal.HandlerType||!FaceTravelTarget(signal,target,now))return;
         lastPortalSignalId=signal.Id;receivedPortal=signal;receivedPortalAt=now;
         try
         {

@@ -68,3 +68,16 @@ public static class FollowCrystalApproach
         return new(edge.X,leader.Y,edge.Z);
     }
 }
+
+public sealed class FollowApproachProgress
+{
+    private DateTimeOffset since;
+    private float best;
+    public void Reset(DateTimeOffset now,Vector3 position,Vector3 goal){since=now;best=Vector2.Distance(new(position.X,position.Z),new(goal.X,goal.Z));}
+    public bool Stuck(DateTimeOffset now,Vector3 position,Vector3 goal,int seconds)
+    {
+        var distance=Vector2.Distance(new(position.X,position.Z),new(goal.X,goal.Z));
+        if(distance<best-.25f){best=distance;since=now;}
+        return now-since>=TimeSpan.FromSeconds(Math.Clamp(seconds,5,600));
+    }
+}

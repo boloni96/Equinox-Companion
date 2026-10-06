@@ -63,6 +63,11 @@ public sealed partial class Plugin
             nativeFollowRequested=false;followStopUnconfirmed=false;followStopPending=true;followStopStationary.Reset();
         }
         if(!followStopPending)return;
+        if(nativeFollowRequested&&FollowStopTextEntryActive()){
+            ReleaseFollowStopKey();followStopIssued=false;
+            if(now>=followStopNext){followStopNext=now.AddSeconds(30);TravelDiagnostic("Stop queued; close text input to finish stopping.");}
+            return;
+        }
         if(!nativeFollowRequested){
             ReleaseFollowStopKey();
             if(followStopStationary.Observe(now,Objects.LocalPlayer?.Position??default,Player.IsLoaded&&!FollowMovementKeysHeld())){
@@ -72,7 +77,9 @@ public sealed partial class Plugin
         }
         if(!followStopIssued){
             if(!CanIssueFollowMovement()||FollowStopTextEntryActive()||FollowMovementKeysHeld()){
-                if(now>=followStopNext){followStopPending=false;followStopUnconfirmed=true;TravelDiagnostic("Stop is not confirmed. Close text input and tap a movement key to cancel game follow.");}
+                // Keep the stop armed while chat or a transition prevents safe input.
+                // Closing chat must execute it without requiring a manual movement tap.
+                if(now>=followStopNext){followStopNext=now.AddSeconds(30);TravelDiagnostic("Stop queued; waiting for text input or loading to finish.");}
                 return;
             }
             followStopKey=FollowStopBoundKey();

@@ -11,6 +11,8 @@ public sealed partial class Plugin
     private string approachKey="",lastApproachRejection="";
     private ulong approachCharacter;
     private long approachSession;
+    private int approachDispatchAttempts;
+    private readonly FollowApproachProgress approachProgress=new();
     private void CancelFollowApproach()
     {
         followApproach=null;travelStationary.Reset();approachStopRequested=false;
@@ -42,7 +44,7 @@ public sealed partial class Plugin
         }
         if(signal.TravelKind is not ("teleport" or "estate" or "friendestate" or "world")&&signal.Approach!=null&&!FollowApproachPolicy.CanApproach(signal,self.Position)){TravelDiagnostic("Travel position is too far away, on another level or invalid; waiting.");return;}
         followApproach=signal;approachKey=config.PairingKey;approachCharacter=Player.ContentId;approachSession=followArmedAt;
-        lastPortalSignalId=signal.Id;travelStationary.Reset();approachStopRequested=false;nextApproachAttempt=default;
+        lastPortalSignalId=signal.Id;approachDispatchAttempts=0;travelStationary.Reset();approachStopRequested=false;nextApproachAttempt=default;
         PauseFollowForTravel();TravelDiagnostic("Preparing the selected travel action; checking the captured position.");
     }
     private unsafe void UpdateFollowApproach(DateTimeOffset now)
@@ -68,6 +70,7 @@ public sealed partial class Plugin
             TravelDiagnostic("Your movement paused travel; the queued trip is kept until its original expiry.");return;
         }
         if(followStopPending||followStopUnconfirmed)return;
+        if(signal.TravelKind=="boundary"&&TrySelectFollowInstance(signal,now))return;
         if(now<nextApproachAttempt)return;
         if(Objects.LocalPlayer is not {} self)return;
         var position=self.Position;var atPoint=signal.TravelKind is "teleport" or "estate" or "friendestate" or "world"||MatchingTravelMenu(signal)||WithinTravelInteractionRange(signal)||signal.Approach==null||Vector3.DistanceSquared(position,signal.Approach.Point)<=.5625f;
@@ -75,6 +78,10 @@ public sealed partial class Plugin
             travelStationary.Reset();
             if(approachStopRequested){approachStopRequested=false;travelStationary.Reset();nextApproachAttempt=now.AddMilliseconds(750);return;}
             if(approachOwnsMovement){
+                if(approachProgress.Stuck(now,position,signal.Approach!.Point,config.FollowThem.StuckSeconds)){
+                    CancelFollowApproach();RequestFollowMovementStop();travelQueue.Clear();travelAwaitingArrival=null;
+                    TravelDiagnostic("No approach progress; movement stopped and dependent trips cleared. Return to your follower before retrying.");return;
+                }
                 try{if(!LifestreamBusy()){CancelFollowApproach();TravelDiagnostic("Approach ended before reaching the travel position; waiting.");}}catch(Exception){CancelFollowApproach();}
                 return;
             }
@@ -84,7 +91,7 @@ public sealed partial class Plugin
             try{
                 if(LifestreamBusy()){TravelDiagnostic("Lifestream is busy; waiting without replacing its task.");return;}
                 Pi.GetIpcSubscriber<List<Vector3>,bool?,float?,float?,object>("Lifestream.MoveEx").InvokeAction([signal.Approach!.Point],true,.5f,.25f);
-                approachOwnsMovement=true;TravelDiagnostic("Approaching the leader's captured travel position.");
+                approachOwnsMovement=true;approachProgress.Reset(now,position,signal.Approach!.Point);if(signal.TravelKind=="boundary")routeExecutionStarted=true;TravelDiagnostic("Approaching the leader's captured travel position.");
             }catch(Exception e){errorJournal.Record("follow-approach-ipc",e.Message,exceptionType:e.GetType().Name);TravelDiagnostic("Direct approach unavailable ("+e.GetType().Name+"); move to the captured position manually.");}
             return;
         }
@@ -100,15 +107,22 @@ public sealed partial class Plugin
         }
         if(followStopUnconfirmed||followStopPending&&!MatchingTravelMenu(signal))return;
         if(!travelStationary.Observe(now,position,(!FollowTransitionBusy()||MatchingTravelMenu(signal))&&travelStepReady))return;
+        if(signal.TravelKind=="boundary"){
+            routeExecutionStarted=true;TravelDiagnostic("At the gate; waiting for instance selection or area loading.");return;
+        }
         followApproach=null;travelStationary.Reset();
         TravelDiagnostic("Stationary confirmed; performing the selected travel action.");
         if(travelAwaitingArrival?.Id==signal.Id){routeStartPosition=position;routeExecutionStarted=true;routeSawLoading=false;}
         TryUseSharedPortal(signal,now);
         // A failed interaction dispatch is not a departure. Keep the exact trip
         // and its original expiry so a transient range/menu failure can recover.
-        if(signal.TravelKind is "door" or "transport" or "aethernet" or "ward"&&pendingTransport==null&&pendingWard==null&&pendingAethernet==null&&receivedPortal==null){
-            followApproach=signal;approachStopRequested=false;nextApproachAttempt=now.AddSeconds(1);routeExecutionStarted=false;
-            RecordFollowTravel("Travel dispatch deferred",new {signal.Id,signal.TravelKind,position,source=new Vector3(signal.X,signal.Y,signal.Z)});
+        if(signal.TravelKind is "portal" or "door" or "transport" or "aethernet" or "ward"&&pendingTransport==null&&pendingWard==null&&pendingAethernet==null&&receivedPortal==null){
+            routeExecutionStarted=false;
+            if(++approachDispatchAttempts>=3){
+                travelQueue.Clear();travelAwaitingArrival=null;CancelFollowApproach();
+                TravelDiagnostic("Travel could not start after three attempts. Remaining trips cleared; move beside the source and retry the trip.");
+            }else{followApproach=signal;nextApproachAttempt=now.AddSeconds(2);}
+            RecordFollowTravel("Travel dispatch deferred",new {signal.Id,signal.TravelKind,attempt=approachDispatchAttempts,position=FollowTravelPosition.From(position),source=new FollowTravelPosition(signal.X,signal.Y,signal.Z)});
         }
     }
 }

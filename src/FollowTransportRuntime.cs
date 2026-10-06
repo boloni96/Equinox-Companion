@@ -47,7 +47,7 @@ public sealed partial class Plugin
             if(room is <1 or >512){transportCapture=null;TravelDiagnostic("Own chamber number is unavailable; choose it from the numbered room list to share this trip.");return;}
             transportCapture=source with {Steps=[new("Move to specified private chambers"),new FollowRoomTarget(room,Player.CharacterName).Step()]};return;
         }
-        if(source.TravelKind=="door"&&confirmation&&source.Steps?.Any(x=>FollowRoomTarget.Read(x)!=null)==true&&FollowRoomTarget.Confirmation(text,true))return;
+        if(source.TravelKind=="door"&&confirmation&&source.Steps?.Select(FollowRoomTarget.Read).Any(x=>x!=null&&FollowRoomTarget.Confirmation(text,Player.CharacterName==x.Owner,x.Owner))==true)return;
         if(!(source.TravelKind=="friendestate"?FollowTransportPolicy.EstateChoice(text):FollowTransportPolicy.StepSupported(text,confirmation))){transportCapture=null;if(source.Steps is {Length:>0})TravelDiagnostic("Unrecognized travel menu; this interaction remains manual.");return;}
         var now=DateTimeOffset.UtcNow;
         if(text==lastTransportChoice&&now-lastTransportChoiceAt<TimeSpan.FromMilliseconds(100))return;

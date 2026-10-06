@@ -218,6 +218,7 @@ public sealed partial class Plugin : IDalamudPlugin
     private readonly Dalamud.Game.Text.SeStringHandling.Payloads.DalamudLinkPayload fashionBrowserLink;
     private void OnCommand(string command, string args)
     {
+        if(args.Trim().StartsWith("travel ",StringComparison.OrdinalIgnoreCase)){StartSharedWorldTravel(args.Trim()[7..]);return;}
         if(args.Trim().StartsWith("loot",StringComparison.OrdinalIgnoreCase)){OnQuickLootCommand(args.Trim()[4..].Trim());return;}
         if (args.Trim().Equals("fashion", StringComparison.OrdinalIgnoreCase)) OnFashionCommand(command, args);
         else if ((args.Trim().Equals("planting", StringComparison.OrdinalIgnoreCase) || args.Trim().Equals("gardening", StringComparison.OrdinalIgnoreCase))) OnPlantingCommand(command, args);
@@ -511,7 +512,7 @@ public sealed partial class Plugin : IDalamudPlugin
         // No game action is initiated; only submitted garden selections are observed.
         try
         {
-            if(count==1&&values!=null&&((int)values[0].Type&15) is 3 or 5)CaptureTransportChoice(addon,values[0].Int);
+            if(count==1&&values!=null&&((int)values[0].Type&15) is 3 or 5){CaptureFollowInstanceChoice(addon,values[0].Int);CaptureTransportChoice(addon,values[0].Int);}
             ObserveTravelCallbackDiagnostic(addon,count,values);
             CaptureWardMenu(addon,count,values);
             CaptureFollowRoom(addon,count,values);
@@ -537,6 +538,7 @@ public sealed partial class Plugin : IDalamudPlugin
         try
         {
             var diagnosticValue=new AtkValue{Type=AtkValueType.Int,Int=value};ObserveTravelCallbackDiagnostic(addon,1,&diagnosticValue);
+            CaptureFollowInstanceChoice(addon,value);
             CaptureTransportChoice(addon,value);
             if (ObservingGardens && Volatile.Read(ref activeGardenMenu)?.AddonAddress == (nint)addon)
                 ObserveGardenSelection(addon,[value],false,"FireCallbackInt");
@@ -1049,6 +1051,7 @@ public sealed partial class Plugin : IDalamudPlugin
         followBar?.Remove();
         followPortalHook?.Dispose();
         followTeleportHook?.Dispose();
+        followWorldCommandHook?.Dispose();
         ReleaseFollowStopKey();
         friendEstateHook?.Dispose();
         portalRelay.Dispose();
