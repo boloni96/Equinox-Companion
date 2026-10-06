@@ -8,7 +8,6 @@ namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
     private DateTimeOffset characterReadyAt;
-    private int emptyCompanySamples;
     private static string Ordinal(int n) => n + (n % 100 is 11 or 12 or 13 ? "th" : (n % 10) switch { 1 => "st", 2 => "nd", 3 => "rd", _ => "th" });
     private unsafe CharacterDetails AddIdentityAndProgress(CharacterDetails details)
     {
@@ -20,9 +19,8 @@ public sealed partial class Plugin
         // Completed level-15 MSQ: the two game-data variants of It's Probably Pirates.
         var msq15 = QuestManager.IsQuestComplete(65781) || QuestManager.IsQuestComplete(66211);
         var hasTag = !string.IsNullOrWhiteSpace(local.CompanyTag.TextValue);
-        if (hasTag || details.FreeCompany is not null) emptyCompanySamples = 0;
-        else emptyCompanySamples++;
-        bool? membership = hasTag || details.FreeCompany is not null ? true : emptyCompanySamples >= 3 && Player.HomeWorld.RowId == Player.CurrentWorld.RowId ? false : null;
+        // Missing tag/proxy data is unknown, not evidence of leaving an FC.
+        bool? membership = hasTag || details.FreeCompany is not null ? true : null;
         var accountKey = "";
         var lobby = AgentLobby.Instance();
         // The loaded local player above proves the active character. Character-

@@ -1379,7 +1379,8 @@ Check("60 missing friend identity rejected",CanTravel59(friend60 with {FriendCon
 Check("60 door only native object",FollowTransportPolicy.Valid(travel59 with {TravelKind="door",BaseId=9,SourceKind="EventObj",Steps=[]}).ToString(),"True");
 Check("60 treasure never door",FollowTransportPolicy.Valid(travel59 with {TravelKind="door",BaseId=9,SourceKind="Treasure",Steps=[]}).ToString(),"False");
 var visible60=new FollowStuckWatch();visible60.Observe(time,System.Numerics.Vector3.Zero,20,true,5,new(20,0,0));visible60.Observe(time.AddSeconds(5),System.Numerics.Vector3.Zero,20,true,5,new(20,0,0));
-Check("60 visible pickup no three yalm requirement",visible60.Observe(time.AddSeconds(6),System.Numerics.Vector3.Zero,21,true,5,new(21,0,0)).ToString(),"False");
+Check("63 leader moving farther does not restart stuck follower",visible60.Observe(time.AddSeconds(6),System.Numerics.Vector3.Zero,21,true,5,new(21,0,0)).ToString(),"True");
+Check("63 leader approaching resumes pickup",visible60.Observe(time.AddSeconds(7),System.Numerics.Vector3.Zero,18,true,5,new(18,0,0)).ToString(),"False");
 var status60=new FollowRecoveryWatch();status60.Retry(time,System.Numerics.Vector3.Zero,8);status60.Retry(time.AddSeconds(2),System.Numerics.Vector3.Zero,8);
 Check("60 stalled follow shows waiting",status60.AwaitingMovement.ToString(),"True");
 status60.Retry(time.AddSeconds(3),new(1,0,0),8);Check("60 observed progress clears waiting",status60.AwaitingMovement.ToString(),"False");
@@ -1417,3 +1418,13 @@ Check("62 remote correct target allowed",FollowTravelPolicy.CanUse(travel59,time
 Check("62 remote other leader blocked",FollowTravelPolicy.CanUse(travel59,time59.ToUnixTimeMilliseconds(),time59.AddSeconds(-1).ToUnixTimeMilliseconds(),"Other Example",1,2,99,99,"",999,new(1000,0,0),true).ToString(),"False");
 Check("62 remote portal cannot bypass source",FollowTravelPolicy.CanUse(travel59 with {TravelKind="aethernet",BaseId=123,Destination="Crystal"},time59.ToUnixTimeMilliseconds(),time59.AddSeconds(-1).ToUnixTimeMilliseconds(),"Leader",1,2,99,99,"",999,new(1000,0,0),true).ToString(),"False");
 Check("62 movement toggle rejection recognized",FollowCommandFeedback.IsRejection("The command “/automove” is unavailable at this time.","/automove").ToString(),"True");
+
+Check("63 already near destination is not departure",FollowArrivalPolicy.HasDeparted(travel59,false,false,travel59.CurrentWorld,travel59.Territory,travel59.MapId,new(0,0,0),new(0,0,0)).ToString(),"False");
+Check("63 approach movement is not arrival",FollowArrivalPolicy.HasDeparted(travel59,true,false,travel59.CurrentWorld,travel59.Territory,travel59.MapId,new(0,0,0),new(25,0,0)).ToString(),"False");
+Check("63 same territory loading confirms departure",FollowArrivalPolicy.HasDeparted(travel59,false,true,travel59.CurrentWorld,travel59.Territory,travel59.MapId,new(0,0,0),new(0,0,0)).ToString(),"True");
+Check("63 source map transition confirms departure",FollowArrivalPolicy.HasDeparted(travel59,false,false,travel59.CurrentWorld,travel59.Territory,travel59.MapId+1,new(0,0,0),new(0,0,0)).ToString(),"True");
+Check("63 estate fee 606",FollowEstatePrice.Read(["Free Company Estate","Plot 11, 15th Ward, Shirogane (Small)","606"])?.ToString(),"606");
+Check("63 estate formatted fee",FollowEstatePrice.Read(["Private Estate","1,005 gil"])?.ToString(),"1005");
+Check("63 estate missing fee rejected",FollowEstatePrice.Read(["Private Estate","Unavailable"])?.ToString(),null);
+Check("63 estate ambiguous numbers rejected",FollowEstatePrice.Read(["Private Estate","606","1000"])?.ToString(),null);
+Check("63 estate alternate currency rejected",FollowEstatePrice.Read(["Private Estate","606 MGP"])?.ToString(),null);

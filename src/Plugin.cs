@@ -283,7 +283,7 @@ public sealed partial class Plugin : IDalamudPlugin
         {
             gardenBedSync=null;
             gate.Reset(); StopRecording(); character = Player.ContentId;
-            nextDiscovery = default; nextCharacterRefresh = default; characterReadyAt = now.AddSeconds(15); emptyCompanySamples = 0;
+            nextDiscovery = default; nextCharacterRefresh = default; characterReadyAt = now.AddSeconds(15);
             fashionWindow.Tick(login: true);
         }
         fashionWindow.Tick();
@@ -512,6 +512,7 @@ public sealed partial class Plugin : IDalamudPlugin
         try
         {
             if(count==1&&values!=null&&((int)values[0].Type&15) is 3 or 5)CaptureTransportChoice(addon,values[0].Int);
+            ObserveTravelCallbackDiagnostic(addon,count,values);
             CaptureWardMenu(addon,count,values);
             CaptureFollowRoom(addon,count,values);
             ObserveFollowAethernetCallback(addon,count,values);
@@ -535,6 +536,7 @@ public sealed partial class Plugin : IDalamudPlugin
     {
         try
         {
+            var diagnosticValue=new AtkValue{Type=AtkValueType.Int,Int=value};ObserveTravelCallbackDiagnostic(addon,1,&diagnosticValue);
             CaptureTransportChoice(addon,value);
             if (ObservingGardens && Volatile.Read(ref activeGardenMenu)?.AddonAddress == (nint)addon)
                 ObserveGardenSelection(addon,[value],false,"FireCallbackInt");
@@ -890,7 +892,7 @@ public sealed partial class Plugin : IDalamudPlugin
             Directory.CreateDirectory(dir);
             exportPath = Path.Combine(dir, $"equinox-test-{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.json");
             File.WriteAllText(exportPath, JsonSerializer.Serialize(new {
-                schemaVersion = 5, pluginVersion = typeof(Plugin).Assembly.GetName().Version?.ToString(), errorLog = errorJournal.Snapshot(), recentGardenMessages=gardenMessageJournal.Snapshot(), exportedAt = DateTimeOffset.UtcNow,
+                schemaVersion = 6, followTravel = followTravelDiagnostics.ToArray(), pluginVersion = typeof(Plugin).Assembly.GetName().Version?.ToString(), errorLog = errorJournal.Snapshot(), recentGardenMessages=gardenMessageJournal.Snapshot(), exportedAt = DateTimeOffset.UtcNow,
                 mode = "local-diagnostics", gardeningConfirmed = false, performance = new { maxDrawMs,maxUpdateMs,maxSnapshotMs, configurationError },
                 houseObservations = config.Houses, confirmedTending = config.Tending, confirmedPlanting = config.Planting, observedDetails = config.Discoveries, diagnostics
             }, json));

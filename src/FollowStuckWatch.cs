@@ -14,8 +14,8 @@ public sealed class FollowStuckWatch
     {
         if(WaitingForPickup){
             if(distance==null){lostLeader=true;return true;}
-            var moved=leader is {} current&&waitingLeader is {} previous?Vector3.DistanceSquared(current,previous)>.25f:waitingDistance is {} old&&Math.Abs(distance.Value-old)>.5f;
-            if(resume&&(lostLeader||moved)){Reset();return false;}return true;
+            var moved=leader is {} current&&waitingLeader is {} previous?Vector3.DistanceSquared(current,previous)>.25f:waitingDistance is {} old&&distance.Value<old-.5f;
+            if(resume&&(distance<=3||lostLeader&&distance<=10||moved&&waitingDistance is {} priorDistance&&distance.Value<priorDistance-.5f)){Reset();return false;}return true;
         }
         if(distance is null or <=3){lastProgress=null;return false;}
         if(lastProgress==null||Vector3.DistanceSquared(self,anchor)>=.25f){anchor=self;lastProgress=now;return false;}

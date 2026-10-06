@@ -22,7 +22,8 @@ public sealed partial class Plugin
         var sourceBlock=(AtkUnitBase*)GardenGui.GetAddonByName("HousingSelectBlock").Address;
         if(SharingTravel&&!usingSharedTravel&&pendingWard==null&&sourceBlock!=null&&sourceBlock->IsVisible&&outgoingTravel==null&&Objects.LocalPlayer is {} self){
             var crystal=Objects.Where(x=>x.ObjectKind==ObjectKind.Aetheryte&&Vector3.Distance(x.Position,self.Position)<=x.HitboxRadius+4).MinBy(x=>Vector3.DistanceSquared(x.Position,self.Position));
-            if(TravelSignal("ward",0,"",crystal?.BaseId??0,crystal?.Position??self.Position) is {} signal)CaptureTravel(signal with {Ward=1,SourceKind=crystal==null?"boundary":"Aetheryte"},0);
+            if(transportCapture is {SourceKind:"EventNpc"} npc&&now-transportCaptureAt<TimeSpan.FromSeconds(120))CaptureTravel(npc with {TravelKind="ward",Ward=1},0);
+            else if(TravelSignal("ward",0,"",crystal?.BaseId??0,crystal?.Position??self.Position) is {} signal)CaptureTravel(signal with {Ward=1,SourceKind=crystal==null?"boundary":"Aetheryte"},0);
         }
         if(outgoingTravel is {TravelKind:"ward"} wardCandidate){
             var confirmation=(AddonSelectYesno*)GardenGui.GetAddonByName("SelectYesno").Address;
@@ -32,6 +33,8 @@ public sealed partial class Plugin
         if(!followSession.Armed||!config.EnableFollowThem||!config.FollowThem.UseSharedTeleports||now-wardAt>TimeSpan.FromSeconds(30)||Client.TerritoryType!=s.Territory||Player.CurrentWorld.RowId!=s.CurrentWorld||Conditions[Dalamud.Game.ClientState.Conditions.ConditionFlag.InCombat]||!FollowThemSession.Matches(config.FollowThem.TargetName,config.FollowThem.HomeWorld,s.Name,s.HomeWorld)){pendingWard=null;return;}
         if(!travelStepReady)return;
         if(now<wardNext)return;wardNext=now.AddMilliseconds(500);
+        if(AdvanceTravelTalk(s))return;
+        RetryTravelInteraction(s,now);
         var yes=(AddonSelectYesno*)GardenGui.GetAddonByName("SelectYesno").Address;
         if(wardStage==3&&yes!=null&&yes->IsVisible&&yes->PromptText!=null){
             if(yes->PromptText->NodeText.ToString()==s.Confirmation){
@@ -53,10 +56,14 @@ public sealed partial class Plugin
         var menu=(AtkUnitBase*)GardenGui.GetAddonByName("SelectString").Address;
         var choices=TransportChoices(menu);
         var go=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Addon>().GetRow(6349).Text.ToString().Trim();
+        if(s.SourceKind=="EventNpc"&&s.Steps is {Length:>0} steps){
+            var recorded=steps.FirstOrDefault(step=>!step.Confirmation&&FollowTransportPolicy.Choice(step.Text)&&choices.Contains(step.Text));
+            if(recorded!=null){var index=choices.IndexOf(recorded.Text);usingSharedTravel=true;try{SelectTravelChoice(menu,index);}finally{usingSharedTravel=false;}return;}
+        }
         for(var i=0;i<choices.Count;i++){
             var text=choices[i].Trim();
-            if((wardStage==0&&text.TrimEnd('.')=="Residential District Aethernet")||(wardStage<=1&&(text==go||text.StartsWith("Go to specified ward",StringComparison.Ordinal)))){
-                usingSharedTravel=true;try{menu->FireCallbackInt(i);}finally{usingSharedTravel=false;}
+            if((wardStage<=1&&text.TrimEnd('.')=="Residential District Aethernet")||(wardStage<=1&&(text==go||text.StartsWith("Go to specified ward",StringComparison.Ordinal)))){
+                usingSharedTravel=true;try{SelectTravelChoice(menu,i);}finally{usingSharedTravel=false;}
                 wardStage=1;return;
             }
         }

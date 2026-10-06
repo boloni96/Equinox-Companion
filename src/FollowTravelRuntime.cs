@@ -18,7 +18,7 @@ public sealed partial class Plugin
     private Vector3 travelPosition;
     private uint travelTerritory;
     private int aethernetSelections;
-    private bool travelHookFailed,usingSharedTravel,aethernetMenuSelected;
+    private bool travelHookFailed,usingSharedTravel;
     private bool SharingTravel=>config.EnableFollowThem&&config.FollowThem.SharePortalTransitions;
     private unsafe FollowPortalSignal? TravelSignal(string kind,uint id,string destination,uint crystal,Vector3 position)
     {
@@ -33,7 +33,7 @@ public sealed partial class Plugin
         portalRelayStatus="Observed "+signal.TravelKind+" destination; waiting for departure.";
         if(outgoingTravel is {} prior&&prior.TravelKind==signal.TravelKind&&prior.AetheryteId==signal.AetheryteId&&prior.Destination==signal.Destination&&DateTimeOffset.UtcNow-travelAt<TimeSpan.FromSeconds(1))return;
         outgoingTravel=signal;travelAt=DateTimeOffset.UtcNow;travelTerritory=destinationTerritory;
-        travelPosition=new(signal.X,signal.Y,signal.Z);
+        travelPosition=Objects.LocalPlayer?.Position??new(signal.X,signal.Y,signal.Z);
         travelAudience=portalRelay.HasFollowers(config.PairingKey,signal.Name,signal.HomeWorld);
     }
     private unsafe bool ObserveFollowTeleport(Telepo* telepo,uint id,byte subIndex)
@@ -69,7 +69,7 @@ public sealed partial class Plugin
         for(var i=0;i<20;i++){
             var n=addon->AtkValues[262+i];var c=addon->AtkValues[9+i*4];
             if(((int)n.Type&15) is not (8 or 10)||((int)c.Type&15) is not (3 or 5))continue;
-            var name=CopyMenuText(n.String.Value);if(!string.IsNullOrWhiteSpace(name)&&name.Length<=100)result.Add((name,c.UInt));
+            var name=TravelMenuText(n.String.Value);if(!string.IsNullOrWhiteSpace(name)&&name.Length<=100)result.Add((name,c.UInt));
         }return result;
     }
     private unsafe void ObserveFollowAethernetCallback(AtkUnitBase* addon,uint count,AtkValue* values)
@@ -110,6 +110,7 @@ public sealed partial class Plugin
         if(Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]){pendingAethernet=null;return;}
         if(now-aethernetAt>TimeSpan.FromSeconds(30)){pendingAethernet=null;TravelDiagnostic("Aethernet timed out waiting for the destination menu; travel remains manual.");return;}
         if(!travelStepReady||now<aethernetNext)return;
+        RetryTravelInteraction(pending,now);
         var town=(AtkUnitBase*)GardenGui.GetAddonByName("TelepotTown").Address;
         if(town!=null&&town->IsVisible){
             var choices=AethernetChoices(town).Where(x=>x.Name.Trim()==pending.Destination.Trim()).ToArray();
@@ -120,10 +121,10 @@ public sealed partial class Plugin
             FollowChatNotice("TRAVEL — Requested aethernet: "+pending.Destination);return;
         }
         var menu=(AtkUnitBase*)GardenGui.GetAddonByName("SelectString").Address;
-        if(aethernetSelections==0&&!aethernetMenuSelected){
+        if(aethernetSelections==0){
             var choices=TransportChoices(menu);
             var i=choices.FindIndex(x=>x.Trim().TrimEnd('.')=="Aethernet");
-            if(i>=0){aethernetMenuSelected=true;aethernetNext=now.AddMilliseconds(750);usingSharedTravel=true;try{menu->FireCallbackInt(i);}finally{usingSharedTravel=false;}}
+            if(i>=0){aethernetNext=now.AddMilliseconds(750);usingSharedTravel=true;try{SelectTravelChoice(menu,i);}finally{usingSharedTravel=false;}}
         }
     }
     private unsafe void TryUseSharedTravel(FollowPortalSignal signal,DateTimeOffset now)
@@ -140,14 +141,14 @@ public sealed partial class Plugin
         foreach(var name in new[]{"SelectYesno","SelectString","TelepotTown","Talk"}){var ui=(AtkUnitBase*)GardenGui.GetAddonByName(name).Address;if(ui!=null&&ui->IsVisible&&!MatchingTravelMenu(signal)){TravelDiagnostic("Close your open dialogue to allow shared travel.");return;}}
         if(signal.TravelKind is "transport" or "friendestate" or "door"){TryFollowTransport(signal,now);return;}
         if(signal.TravelKind is "aethernet" or "ward"){
-            var crystal=Objects.FirstOrDefault(x=>x.ObjectKind==ObjectKind.Aetheryte&&x.BaseId==signal.BaseId&&x.IsTargetable&&Vector3.Distance(x.Position,new(signal.X,signal.Y,signal.Z))<1&&Vector3.Distance(x.Position,self.Position)<=x.HitboxRadius+3);
+            var crystal=Objects.FirstOrDefault(x=>(x.ObjectKind==ObjectKind.Aetheryte||signal.TravelKind=="ward"&&signal.SourceKind=="EventNpc"&&x.ObjectKind==ObjectKind.EventNpc)&&x.BaseId==signal.BaseId&&x.IsTargetable&&Vector3.Distance(x.Position,new(signal.X,signal.Y,signal.Z))<1&&Vector3.Distance(x.Position,self.Position)<=x.HitboxRadius+3);
             if(crystal==null){FollowChatNotice("TRAVEL — Move closer to the same crystal; FollowThem is waiting.");return;}
             // Native menus are used consistently; optional Lifestream handles approach/world travel.
             if(signal.TravelKind=="ward"){pendingWard=signal;wardAt=now;wardNext=default;wardStage=0;}
-            else pendingAethernet=signal;aethernetAt=now;aethernetNext=now.AddMilliseconds(500);aethernetMenuSelected=false;aethernetSelections=0;
+            else pendingAethernet=signal;aethernetAt=now;aethernetNext=now.AddMilliseconds(500);aethernetSelections=0;
             lastPortalSignalId=signal.Id;
             PauseFollowForTravel();
-            if(!MatchingTravelMenu(signal))TargetSystem.Instance()->InteractWithObject((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)crystal.Address,true);return;
+            if(!MatchingTravelMenu(signal))RetryTravelInteraction(signal,now);return;
         }
         lastPortalSignalId=signal.Id;
         if(signal.TravelKind=="teleport"&&config.FollowThem.AcceptPartyTeleports&&FollowParty.Any(x=>FollowThemSession.Matches(config.FollowThem.TargetName,config.FollowThem.HomeWorld,x.Name.TextValue,x.World.RowId))){FollowChatNotice("TRAVEL — Waiting for the party teleport offer.");return;}

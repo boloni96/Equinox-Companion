@@ -12,7 +12,7 @@ public sealed partial class Plugin
         try{
             if(SharingTravel&&!usingSharedTravel&&Objects.LocalPlayer is {} self&&TravelSignal("friendestate",0,"",0,self.Position) is {} source){
                 transportCapture=source with {SourceKind="FriendEstate",FriendContentId=contentId.ToString(),Steps=[]};
-                transportCaptureAt=DateTimeOffset.UtcNow;lastTransportChoice="";
+                transportSawLoading=false;transportCaptureAt=DateTimeOffset.UtcNow;lastTransportChoice="";
             }
         }catch(Exception e){Log.Debug(e,"Could not observe friend estate destination");}
         friendEstateHook!.Original(agent,contentId);

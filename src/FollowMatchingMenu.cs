@@ -12,6 +12,7 @@ public sealed partial class Plugin
     private unsafe bool MatchingTravelMenu(FollowPortalSignal s)
     {
         if(Objects.LocalPlayer is not {} self)return false;
+        if(s.TravelKind is "estate" or "friendestate"&&s.FriendContentId.Length>0&&VisibleFollowAddon("TeleportHousingFriend"))return true;
         if(s.SourceKind!="boundary"&&!Objects.Any(x=>x.BaseId==s.BaseId&&Vector3.Distance(x.Position,new(s.X,s.Y,s.Z))<1&&Vector3.Distance(self.Position,x.Position)<=x.HitboxRadius+3))return false;
         if(BoundaryWardOpen(s))return true;
         var menu=(AtkUnitBase*)GardenGui.GetAddonByName("SelectString").Address;

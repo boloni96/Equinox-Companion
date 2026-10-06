@@ -10,13 +10,14 @@ public sealed partial class Plugin
     private FollowPortalSignal? transportCapture,pendingTransport;
     private DateTimeOffset transportCaptureAt,transportNext,transportStarted,lastTransportChoiceAt;
     private int transportStep;
+    private bool transportSawLoading;
     private string lastTransportChoice="";
     private readonly FollowNoticeGate travelDiagnostics=new();
-    private void TravelDiagnostic(string message){portalRelayStatus=message;if(travelDiagnostics.Changed(message))FollowChatNotice("TRAVEL — "+message);}
+    private void TravelDiagnostic(string message){if(portalRelayStatus!=message)RecordFollowTravel("Status",message);portalRelayStatus=message;if(travelDiagnostics.Changed(message))FollowChatNotice("TRAVEL — "+message);}
     private void PauseFollowForTravel(){followSession.Pause();RequestFollowMovementStop();followReady.Reset();}
     private unsafe void CaptureTransportSource(Dalamud.Game.ClientState.Objects.Types.IGameObject clicked)
     {
-        transportCapture=null;
+        transportCapture=null;transportSawLoading=false;
         if(!SharingTravel||usingSharedTravel||relayInteracting||clicked.ObjectKind is not (ObjectKind.Aetheryte or ObjectKind.EventNpc or ObjectKind.EventObj))return;
         var observed=TravelSignal("transport",0,"",clicked.BaseId,clicked.Position);if(observed==null)return;
         transportCapture=observed with {SourceKind=clicked.ObjectKind.ToString(),SourceRadius=Math.Clamp(clicked.HitboxRadius,0,10),Steps=[]};
@@ -31,7 +32,7 @@ public sealed partial class Plugin
             var list=TransportChoices(addon);
             var housing=FFXIVClientStructs.FFXIV.Client.Game.HousingManager.Instance();
             if(index>=0&&index<list.Count&&list[index].Trim().TrimEnd('.')=="Leave residential district"&&housing!=null&&housing->GetCurrentHousingTerritoryType()==FFXIVClientStructs.FFXIV.Client.Game.HousingTerritoryType.Outdoor){
-                if(TravelSignal("transport",0,"",0,local.Position) is {} captured)transportCapture=captured with {SourceKind="boundary",Steps=[]};transportCaptureAt=DateTimeOffset.UtcNow;
+                if(TravelSignal("transport",0,"",0,local.Position) is {} captured)transportCapture=captured with {SourceKind="boundary",Steps=[]};transportSawLoading=false;transportCaptureAt=DateTimeOffset.UtcNow;
             }
         }
         if(!SharingTravel||usingSharedTravel||pendingTransport!=null||addon==null||transportCapture is not {} source||DateTimeOffset.UtcNow-transportCaptureAt>TimeSpan.FromSeconds(120)||index<0)return;
@@ -54,14 +55,15 @@ public sealed partial class Plugin
         if(menu==null||!menu->IsVisible)return result;
         var popup=&((AddonSelectString*)menu)->PopupMenu.PopupMenu;
         if(popup->EntryNames==null||popup->EntryCount is <1 or >32)return result;
-        for(var i=0;i<popup->EntryCount;i++)result.Add(CopyMenuText(popup->EntryNames[i].Value)??"");
+        for(var i=0;i<popup->EntryCount;i++)result.Add(TravelMenuText(popup->EntryNames[i].Value)??"");
         return result;
     }
     private unsafe void UpdateFollowTransport(DateTimeOffset now)
     {
         if(transportCapture is {} capture){
+            if(Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51])transportSawLoading=true;
             if(!SharingTravel||now-transportCaptureAt>TimeSpan.FromSeconds(120))transportCapture=null;
-            else if(Player.IsLoaded&&Player.CharacterName==capture.Name&&Player.HomeWorld.RowId==capture.HomeWorld&&Client.TerritoryType!=capture.Territory&&!Conditions[ConditionFlag.BetweenAreas]&&!Conditions[ConditionFlag.BetweenAreas51]){
+            else if(Player.IsLoaded&&Player.CharacterName==capture.Name&&Player.HomeWorld.RowId==capture.HomeWorld&&(Client.TerritoryType!=capture.Territory||transportSawLoading)&&!Conditions[ConditionFlag.BetweenAreas]&&!Conditions[ConditionFlag.BetweenAreas51]){
                 transportCapture=null;
                 // More specific native aethernet/ward capture takes precedence.
                 if(outgoingTravel==null&&FollowTransportPolicy.Valid(capture)&&config.PairingKey.Length==64)
@@ -69,11 +71,21 @@ public sealed partial class Plugin
             }
         }
         if(pendingTransport is not {} pending)return;
-        if(!followSession.Armed||!config.EnableFollowThem||!config.FollowThem.UseSharedTeleports||!Player.IsLoaded||Client.TerritoryType!=pending.Territory||Player.CurrentWorld.RowId!=pending.CurrentWorld||Conditions[ConditionFlag.InCombat]||!FollowThemSession.Matches(config.FollowThem.TargetName,config.FollowThem.HomeWorld,pending.Name,pending.HomeWorld)){pendingTransport=null;return;}
+        if(!followSession.Armed||!config.EnableFollowThem||!config.FollowThem.UseSharedTeleports||!Player.IsLoaded||(Client.TerritoryType!=pending.Territory&&!(pending.TravelKind=="friendestate"&&config.FollowThem.MeetAtTeleports))||Player.CurrentWorld.RowId!=pending.CurrentWorld||Conditions[ConditionFlag.InCombat]||!FollowThemSession.Matches(config.FollowThem.TargetName,config.FollowThem.HomeWorld,pending.Name,pending.HomeWorld)){pendingTransport=null;return;}
         if(now-transportStarted>TimeSpan.FromSeconds(15)){pendingTransport=null;TravelDiagnostic("Transport timed out; menu or unlock differs. Waiting for your selected character.");return;}
         if(!travelStepReady)return;
         if(now<transportNext||pending.Steps==null)return;
+        if(AdvanceTravelTalk(pending)){transportNext=now.AddMilliseconds(750);return;}
+        RetryTravelInteraction(pending,now);
+        if(transportStep>=pending.Steps.Length)return;
         var step=pending.Steps[transportStep];
+        if(pending.TravelKind=="friendestate"&&!step.Confirmation&&step.Text is "Private Estate" or "Free Company Estate"){
+            transportNext=now.AddSeconds(1);
+            if(!TrySelectFriendEstate(pending,step.Text))return;
+            transportStep++;transportNext=now.AddSeconds(1);
+            if(transportStep>=pending.Steps.Length){pendingTransport=null;TravelDiagnostic("Estate row selected; waiting for departure. If a confirmation remains open, confirm it manually for this test.");}
+            return;
+        }
         if(step.Addon.Length>0){
             if(ReplayFollowRoom(step)){transportStep++;if(transportStep>=pending.Steps.Length)pendingTransport=null;transportNext=now.AddMilliseconds(750);}
             return;
@@ -90,7 +102,7 @@ public sealed partial class Plugin
         }
         if(!FollowTransportPolicy.Affordable(step.Text,config.FollowThem.TeleportGilLimit)){pendingTransport=null;TravelDiagnostic("Transport fee is unknown or exceeds your gil limit; waiting.");return;}
         transportStep++;if(transportStep>=pending.Steps.Length)pendingTransport=null;
-        transportNext=now.AddMilliseconds(750);usingSharedTravel=true;try{menu->FireCallbackInt(index);}finally{usingSharedTravel=false;}
+        transportNext=now.AddMilliseconds(750);usingSharedTravel=true;try{SelectTravelChoice(menu,index);}finally{usingSharedTravel=false;}
         TravelDiagnostic("Requested transport: "+step.Text);
     }
     private unsafe void TryFollowTransport(FollowPortalSignal signal,DateTimeOffset now)
@@ -107,7 +119,7 @@ public sealed partial class Plugin
         }
         var source=Objects.FirstOrDefault(x=>x.ObjectKind.ToString()==signal.SourceKind&&x.BaseId==signal.BaseId&&x.IsTargetable&&Vector3.Distance(x.Position,new(signal.X,signal.Y,signal.Z))<1&&Vector3.Distance(x.Position,self.Position)<=x.HitboxRadius+3);
         if(source==null){TravelDiagnostic("Move beside the same transport NPC or crystal; waiting.");return;}
-        lastPortalSignalId=signal.Id;pendingTransport=signal.Steps is {Length:>0}?signal:null;transportStep=0;transportStarted=now;transportNext=now.AddMilliseconds(500);
-        PauseFollowForTravel();if(MatchingTravelMenu(signal))return;relayInteracting=true;try{TargetSystem.Instance()->InteractWithObject((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)source.Address,true);}finally{relayInteracting=false;}
+        lastPortalSignalId=signal.Id;pendingTransport=signal;transportStep=0;transportStarted=now;transportNext=now.AddMilliseconds(500);
+        PauseFollowForTravel();if(MatchingTravelMenu(signal))return;RetryTravelInteraction(signal,now);
     }
 }

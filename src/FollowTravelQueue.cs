@@ -4,12 +4,14 @@ namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
     private long portalReadCursor;
-    private bool routeArrivalConfirmed;
+    private bool routeArrivalConfirmed,routeSawLoading,routeExecutionStarted;
+    private Vector3 routeStartPosition;
     private readonly Queue<FollowPortalSignal> travelQueue=new();
     private readonly HashSet<string> queuedTravelIds=new();
     private FollowPortalSignal? travelAwaitingArrival;
     private DateTimeOffset travelDispatchedAt;
-    private void ResetTravelQueue(){travelQueue.Clear();queuedTravelIds.Clear();travelAwaitingArrival=null;portalReadCursor=0;routeArrivalConfirmed=false;}
+    private readonly FollowStationaryGate routeReady=new();
+    private void ResetTravelQueue(){travelQueue.Clear();queuedTravelIds.Clear();travelAwaitingArrival=null;portalReadCursor=0;routeArrivalConfirmed=false;routeSawLoading=false;routeExecutionStarted=false;routeReady.Reset();}
     private void EnqueueTravel(FollowPortalSignal signal)
     {
         if(signal.SentAt<followArmedAt||signal.Id==lastPortalSignalId||queuedTravelIds.Contains(signal.Id))return;
@@ -25,23 +27,26 @@ public sealed partial class Plugin
     {
         if(!followSession.Armed){ResetTravelQueue();return;}
         if(travelAwaitingArrival is {} active){
+            routeSawLoading|=loading;
             var map=AgentMap.Instance();
-            var arrived=!loading&&Player.IsLoaded&&Objects.LocalPlayer is {} self&&map!=null&&active.Arrival is {Valid:true} point&&Player.CurrentWorld.RowId==active.ArrivalWorld&&Client.TerritoryType==active.ArrivalTerritory&&map->CurrentMapId==active.ArrivalMap&&Vector3.DistanceSquared(self.Position,point.Point)<225;
+            var departed=map!=null&&Objects.LocalPlayer is {} moved&&FollowArrivalPolicy.HasDeparted(active,!routeExecutionStarted||followApproach!=null,routeSawLoading,Player.CurrentWorld.RowId,Client.TerritoryType,map->CurrentMapId,routeStartPosition,moved.Position);
+            var arrived=followApproach==null&&departed&&!loading&&Player.IsLoaded&&Objects.LocalPlayer is {} self&&map!=null&&active.Arrival is {Valid:true} point&&Player.CurrentWorld.RowId==active.ArrivalWorld&&Client.TerritoryType==active.ArrivalTerritory&&map->CurrentMapId==active.ArrivalMap&&Vector3.DistanceSquared(self.Position,point.Point)<225;
             if(arrived&&now-travelDispatchedAt>TimeSpan.FromSeconds(1)){
-                travelAwaitingArrival=null;routeArrivalConfirmed=true;followApproach=null;pendingTransport=null;pendingWard=null;pendingAethernet=null;receivedPortal=null;
+                travelAwaitingArrival=null;routeArrivalConfirmed=true;CancelFollowApproach();pendingTransport=null;pendingWard=null;pendingAethernet=null;receivedPortal=null;
                 TravelDiagnostic("Arrival confirmed; checking the next queued trip.");
             }else if(active.ExpiresAt<=now.ToUnixTimeMilliseconds()){
                 travelAwaitingArrival=null;travelQueue.Clear();CancelFollowApproach();pendingTransport=null;pendingWard=null;pendingAethernet=null;receivedPortal=null;
                 TravelDiagnostic("Travel expired before arrival. Remaining trips cancelled; return to your follower before trying again.");
             }else return;
         }
+        if(!routeReady.Observe(now,Objects.LocalPlayer?.Position??default,!loading&&Player.IsLoaded&&Objects.LocalPlayer!=null))return;
         if(loading||!Player.IsLoaded||followApproach!=null||pendingTransport!=null||pendingWard!=null||pendingAethernet!=null||receivedPortal!=null||pendingDutyLeave!=null||lifestreamTravelOwned)return;
         while(travelQueue.TryPeek(out var next)){
             if(next.ExpiresAt<=now.ToUnixTimeMilliseconds()||next.SentAt<followArmedAt){travelQueue.Dequeue();continue;}
             travelQueue.Dequeue();
-            if(routeArrivalConfirmed&&FollowThemSession.Matches(config.FollowThem.TargetName,config.FollowThem.HomeWorld,next.Name,next.HomeWorld)&&next.CurrentWorld==Player.CurrentWorld.RowId&&next.Territory==Client.TerritoryType){lastLeaderEntity=next.EntityId;lastLeaderSeen=now;}
+            if(routeArrivalConfirmed&&FollowThemSession.Matches(config.FollowThem.TargetName,config.FollowThem.HomeWorld,next.Name,next.HomeWorld)&&next.CurrentWorld==Player.CurrentWorld.RowId&&next.Territory==Client.TerritoryType&&AgentMap.Instance()!=null&&next.MapId==AgentMap.Instance()->CurrentMapId){lastLeaderEntity=next.EntityId;lastLeaderSeen=now;}
             QueueFollowApproach(next,now);
-            if((followApproach!=null||pendingDutyLeave!=null)&&next.Arrival!=null){travelAwaitingArrival=next;travelDispatchedAt=now;}
+            if((followApproach!=null||pendingDutyLeave!=null)&&next.Arrival!=null){travelAwaitingArrival=next;travelDispatchedAt=now;routeExecutionStarted=pendingDutyLeave!=null;routeSawLoading=false;routeStartPosition=Objects.LocalPlayer?.Position??default;}
             if(followApproach==null&&pendingDutyLeave==null){travelQueue.Clear();TravelDiagnostic("Queued trip could not start; remaining trips cancelled. Return to your follower.");}
             return;
         }

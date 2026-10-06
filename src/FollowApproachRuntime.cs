@@ -32,7 +32,10 @@ public sealed partial class Plugin
             FollowThemSession.Matches(config.FollowThem.TargetName,config.FollowThem.HomeWorld,signal.Name,signal.HomeWorld)&&signal.CurrentWorld==Player.CurrentWorld.RowId&&signal.EntityId==lastLeaderEntity&&signal.SentAt>=followArmedAt&&signal.ExpiresAt>now.ToUnixTimeMilliseconds():
             signal.TravelKind=="portal"?config.FollowThem.UseSharedPortals&&FollowPortalPolicy.CanUse(signal,now.ToUnixTimeMilliseconds(),followArmedAt,config.FollowThem.TargetName,config.FollowThem.HomeWorld,Player.CurrentWorld.RowId,Client.TerritoryType,map->CurrentMapId,lastLeaderEntity,(now-lastLeaderSeen).TotalSeconds,point):
             config.FollowThem.UseSharedTeleports&&FollowTravelPolicy.CanUse(signal,now.ToUnixTimeMilliseconds(),followArmedAt,config.FollowThem.TargetName,config.FollowThem.HomeWorld,Player.CurrentWorld.RowId,Client.TerritoryType,map->CurrentMapId,lastLeaderEntity,(now-lastLeaderSeen).TotalSeconds,point,config.FollowThem.MeetAtTeleports);
-        if(!valid){TravelDiagnostic("Travel position rejected: stale instruction, different session or source location.");return;}
+        if(!valid){
+            var reason=signal.SentAt<followArmedAt?"instruction belongs to an earlier follow session":signal.ExpiresAt<=now.ToUnixTimeMilliseconds()?"instruction expired":signal.CurrentWorld!=Player.CurrentWorld.RowId?"source world differs":signal.Territory!=Client.TerritoryType?"source territory differs":signal.MapId!=map->CurrentMapId?"source map differs":signal.EntityId!=lastLeaderEntity?"leader instance identity differs":(now-lastLeaderSeen).TotalSeconds>120?"leader observation expired":"source range, settings or instruction validation failed";
+            TravelDiagnostic("Travel rejected ("+signal.TravelKind+"): "+reason+".");return;
+        }
         if(signal.TravelKind is not ("teleport" or "estate" or "friendestate" or "world")&&signal.Approach!=null&&!FollowApproachPolicy.CanApproach(signal,self.Position)){TravelDiagnostic("Travel position is too far away, on another level or invalid; waiting.");return;}
         followApproach=signal;approachKey=config.PairingKey;approachCharacter=Player.ContentId;approachSession=followArmedAt;
         lastPortalSignalId=signal.Id;travelStationary.Reset();approachStopRequested=false;nextApproachAttempt=default;
@@ -68,7 +71,7 @@ public sealed partial class Plugin
             if(now<nextApproachAttempt)return;nextApproachAttempt=now.AddSeconds(3);
             try{
                 if(LifestreamBusy()){TravelDiagnostic("Lifestream is busy; waiting without replacing its task.");return;}
-                Pi.GetIpcSubscriber<List<Vector3>,bool?,float?,float?,object>("Lifestream.MoveEx").InvokeAction([signal.Approach!.Point],false,.5f,.25f);
+                Pi.GetIpcSubscriber<List<Vector3>,bool?,float?,float?,object>("Lifestream.MoveEx").InvokeAction([signal.Approach!.Point],true,.5f,.25f);
                 approachOwnsMovement=true;TravelDiagnostic("Approaching the leader's captured travel position.");
             }catch(Exception e){errorJournal.Record("follow-approach-ipc",e.Message,exceptionType:e.GetType().Name);TravelDiagnostic("Direct approach unavailable ("+e.GetType().Name+"); move to the captured position manually.");}
             return;
@@ -83,9 +86,11 @@ public sealed partial class Plugin
             RequestFollowMovementStop();approachStopRequested=true;travelStationary.Reset();
             TravelDiagnostic("At the travel position; stopping and confirming stationary.");return;
         }
+        if(followStopPending&&!MatchingTravelMenu(signal))return;
         if(!travelStationary.Observe(now,position,(!FollowTransitionBusy()||MatchingTravelMenu(signal))&&travelStepReady))return;
         followApproach=null;travelStationary.Reset();
         TravelDiagnostic("Stationary confirmed; performing the selected travel action.");
+        if(travelAwaitingArrival?.Id==signal.Id){routeStartPosition=position;routeExecutionStarted=true;routeSawLoading=false;}
         TryUseSharedPortal(signal,now);
     }
 }

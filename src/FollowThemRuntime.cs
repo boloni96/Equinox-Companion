@@ -74,7 +74,7 @@ public sealed partial class Plugin
         var wasArmed = followSession.Armed;
         followSession.Stop();
         if(wasArmed)RequestFollowMovementStop();
-        followFlight.Reset();followStuck.Reset();followRecovery.Reset();mountAttempts=0;
+        followFlight.Reset();followStuck.Reset();followRecovery.Reset();mountAttempts=0;followStuckStopRequested=false;
         lastLeaderSeen = default;
         ResetTravelQueue();receivedPortal = null;pendingAethernet=null;pendingWard=null;pendingTransport=null;CancelLifestreamTravel();CancelFollowApproach();pendingDutyLeave=null;
         relayGeneration++;
@@ -93,7 +93,7 @@ public sealed partial class Plugin
         { followStatus = "Choose a party member or friend first."; return; }
         if (Objects.LocalPlayer == null) { followStatus = "Log in before starting FollowThem."; return; }
         followFault = false; Interlocked.Exchange(ref followCommandRejected, 0); followReady.Reset();
-        followFlight.Reset();followStuck.Reset();followRecovery.Reset();mountAttempts=0;followManualInputSeen=false;followRetryAt=default;
+        followFlight.Reset();followStuck.Reset();followRecovery.Reset();mountAttempts=0;followStuckStopRequested=false;followManualInputSeen=false;followRetryAt=default;
         followSession.Arm(); followArmedAt=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(); relayGeneration++; nextFollowCheck = default;
         followStatus = "STARTED — Looking for " + config.FollowThem.TargetName + " nearby.";
     }
@@ -112,7 +112,7 @@ public sealed partial class Plugin
         followBar.Tooltip = new SeStringBuilder().AddText(followStatus + (followSession.Armed ? " Left-click to stop." : " Left-click to start.") + " Right-click to open Companion.").Build();
         followBar.OnClick = e => { if(e.ClickType==MouseClickType.Right){followThemSelectTab=true;Open();} else if(e.ClickType==MouseClickType.Left) ToggleFollowThem(); };
     }
-    private bool followManualInputSeen;
+    private bool followManualInputSeen,followStuckStopRequested;
     private unsafe void UpdateFollowThem(DateTimeOffset now)
     {
         UpdateFollowMovementStop(now);
@@ -133,6 +133,11 @@ public sealed partial class Plugin
             }
             if (followFault||now<followRetryAt) return;
             RefreshFollowBar();
+            // Menu/loading gates must not age out a leader who is still visible.
+            if(followSession.Armed&&!Conditions[ConditionFlag.BetweenAreas]&&!Conditions[ConditionFlag.BetweenAreas51]){
+                var visibleLeader=Objects.OfType<IPlayerCharacter>().FirstOrDefault(p=>p.GameObjectId!=Objects.LocalPlayer?.GameObjectId&&p.IsTargetable&&FollowThemSession.Matches(config.FollowThem.TargetName,config.FollowThem.HomeWorld,p.Name.TextValue,p.HomeWorld.RowId));
+                if(visibleLeader!=null){lastLeaderPosition=visibleLeader.Position;lastLeaderSeen=now;lastLeaderEntity=visibleLeader.GameObjectId.ToString();}
+            }
             if(pendingTransport!=null||pendingWard!=null||pendingAethernet!=null||receivedPortal!=null){followSession.Pause();followStatus="WAITING — Completing the selected travel action.";return;}
             if(pendingDutyLeave!=null){followSession.Pause();followStatus="WAITING — "+portalRelayStatus;RefreshFollowBar();return;}
             if(followApproach!=null){followSession.Pause();followStatus="WAITING — "+portalRelayStatus;RefreshFollowBar();return;}
@@ -179,10 +184,12 @@ public sealed partial class Plugin
             var nearby = target != null && self != null && target.IsTargetable;
             if (nearby) { lastLeaderPosition = target!.Position; lastLeaderSeen = now; lastLeaderEntity = target.GameObjectId.ToString(); }
             if(self!=null&&followStuck.Observe(now,self.Position,nearby?Vector3.Distance(self.Position,target!.Position):null,settings.ResumeNearby,settings.StuckSeconds,nearby?target!.Position:null)){
-                followSession.Pause();RequestFollowMovementStop();
-                followStatus="WAITING — No movement progress; waiting for your selected character to move or become visible again.";RefreshFollowBar();return;
+                if(!followStuckStopRequested){RequestFollowMovementStop();followStuckStopRequested=true;}
+                followSession.Pause();
+                followStatus="WAITING — No movement progress; waiting for your selected character to return closer.";RefreshFollowBar();return;
             }
 
+            followStuckStopRequested=false;
             if(nearby&&TryFollowMount(target!,now)){RefreshFollowBar();return;}
             if(nearby&&TryFollowTakeoff(target!,now)){RefreshFollowBar();return;}
             if(nearby&&followSession.MovementRequested&&followRecovery.Retry(now,self!.Position,Vector3.Distance(self.Position,target!.Position))){
@@ -190,12 +197,12 @@ public sealed partial class Plugin
             }
             if(!nearby)followRecovery.Reset();
             var action = followSession.Observe(true, login != 0, false, nearby, settings.ResumeNearby);
-            if (action == FollowAction.Stop) RequestFollowMovementStop();
+            if (action == FollowAction.Stop || !nearby && InputManager.IsAutoRunning()) RequestFollowMovementStop();
             if (action == FollowAction.Start && followStopPending){followSession.Pause();return;}
             if (action == FollowAction.Start)
             {
                 var previous = Targets.Target;
-                try { Targets.Target = target; FollowCommand("/follow <t>"); }
+                try { Targets.Target = target; FollowCommand("/follow"); }
                 finally { Targets.Target = previous; }
             }
             followStatus = followSession.Phase switch

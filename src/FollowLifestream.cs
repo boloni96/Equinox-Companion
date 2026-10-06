@@ -12,6 +12,13 @@ public sealed partial class Plugin
     private void DrawLifestreamSettings()
     {
         MessageToggle("Use Lifestream for supported travel",config.FollowThem.UseLifestream,v=>config.FollowThem.UseLifestream=v);
+        ImGui.SameLine();
+        if(ImGui.SmallButton("Install guide##FollowLifestream"))
+        {
+            try { Dalamud.Utility.Util.OpenLink("https://github.com/NightmareXIV/Lifestream#installation"); }
+            catch(Exception) { Chat.Print("[FollowThem] Could not open the Lifestream installation page. Visit https://github.com/NightmareXIV/Lifestream#installation"); }
+        }
+        if(ImGui.IsItemHovered())ImGui.SetTooltip("Open Lifestream's installation instructions in your browser.");
         ImGui.TextWrapped("Requires the separate Lifestream plugin, installed and enabled. No vnavmesh dependency for Companion requests.");
         if(!config.FollowThem.UseLifestream)return;
         MessageToggle("Follow World Visits (requires Lifestream)",config.FollowThem.FollowWorldVisits,v=>config.FollowThem.FollowWorldVisits=v);

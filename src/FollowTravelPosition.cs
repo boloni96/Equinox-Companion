@@ -25,3 +25,17 @@ public static class FollowApproachPolicy
     public static bool CanApproach(FollowPortalSignal s,Vector3 self)=>s.TravelKind!="world"&&s.Approach is {Valid:true} a&&
         float.IsFinite(self.X)&&float.IsFinite(self.Y)&&float.IsFinite(self.Z)&&Vector3.DistanceSquared(self,a.Point)<=3600&&Math.Abs(self.Y-a.Y)<=5;
 }
+
+public static class FollowArrivalPolicy
+{
+    public static bool HasDeparted(FollowPortalSignal source,bool preparing,bool sawLoading,uint world,uint territory,uint map,Vector3 start,Vector3 current)=>
+        !preparing&&(sawLoading||world!=source.CurrentWorld||territory!=source.Territory||map!=source.MapId||Vector3.DistanceSquared(start,current)>144);
+}
+public static class FollowEstatePrice
+{
+    public static uint? Read(IEnumerable<string> texts)
+    {
+        var fees=texts.Select(t=>System.Text.RegularExpressions.Regex.Match(t,@"^([0-9][0-9,]*)\s*(?:gil|\p{Co})?$",System.Text.RegularExpressions.RegexOptions.IgnoreCase)).Where(m=>m.Success).ToArray();
+        return fees.Length==1&&uint.TryParse(fees[0].Groups[1].Value.Replace(",",""),System.Globalization.NumberStyles.None,System.Globalization.CultureInfo.InvariantCulture,out var fee)?fee:null;
+    }
+}

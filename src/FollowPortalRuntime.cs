@@ -81,6 +81,7 @@ public sealed partial class Plugin
         try
         {
             ObserveTravelStationary(now);
+            ObserveTravelMenuDiagnostics(now);
             UpdateFollowDutyLeave(now);
             UpdateFollowLease(now);
             UpdateFollowApproach(now);
