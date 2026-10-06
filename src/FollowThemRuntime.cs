@@ -89,6 +89,7 @@ public sealed partial class Plugin
     private void ToggleFollowThem()
     {
         if (followSession.Armed) { StopFollowThem(); return; }
+        if(followStopPending||followStopUnconfirmed){FollowChatNotice("Stop is awaiting confirmation. Tap and release a movement key before restarting.");return;}
         if (string.IsNullOrWhiteSpace(config.FollowThem.TargetName) || config.FollowThem.HomeWorld == 0)
         { followStatus = "Choose a party member or friend first."; return; }
         if (Objects.LocalPlayer == null) { followStatus = "Log in before starting FollowThem."; return; }
@@ -109,7 +110,7 @@ public sealed partial class Plugin
         };
         var text = "FollowThem: " + label;
         if (text != followBarText) { followBar.Text = new SeStringBuilder().AddText(text).Build(); followBarText = text; }
-        followBar.Tooltip = new SeStringBuilder().AddText(followStatus + (followSession.Armed ? " Left-click to stop." : " Left-click to start.") + " Right-click to open Companion.").Build();
+        followBar.Tooltip = new SeStringBuilder().AddText(followStatus + (followSession.Armed ? " Left-click to stop." : followStopPending||followStopUnconfirmed ? " Tap and release a movement key to confirm stop." : " Left-click to start.") + " Right-click to open Companion.").Build();
         followBar.OnClick = e => { if(e.ClickType==MouseClickType.Right){followThemSelectTab=true;Open();} else if(e.ClickType==MouseClickType.Left) ToggleFollowThem(); };
     }
     private bool followManualInputSeen,followStuckStopRequested;
@@ -125,8 +126,11 @@ public sealed partial class Plugin
             if (Interlocked.Exchange(ref followCommandRejected, 0) != 0)
             {
                 // Do not respond to a rejected command with another movement command.
-                nativeFollowRequested=false;followSession.Pause();followStuck.Pause();followReady.Reset();followRetryAt=now.AddSeconds(5);
-                receivedPortal=null;relayGeneration++;
+                nativeFollowRequested=false;followStopUnconfirmed=false;ReleaseFollowStopKey();followStopStationary.Reset();
+                RecordFollowTravel("Follow command rejected",new {command=lastFollowCommand});
+                if(!followSession.Armed){RequestFollowMovementStop();return;}
+                followSession.Pause();followStuck.Pause();followReady.Reset();followRetryAt=now.AddSeconds(5);
+                // Keep the captured trip: a rejected follow command must not discard travel.
                 followStatus="WAITING — The game rejected movement. FollowThem remains armed and will retry when available.";
                 RefreshFollowBar(); return;
             }
@@ -198,7 +202,8 @@ public sealed partial class Plugin
             if (action == FollowAction.Start)
             {
                 var previous = Targets.Target;
-                try { Targets.Target = target; FollowCommand("/follow");nativeFollowRequested=true; }
+                try { Targets.Target = target; nativeFollowRequested=true; FollowCommand("/follow <t>"); }
+                catch { nativeFollowRequested=false; throw; }
                 finally { Targets.Target = previous; }
             }
             followStatus = followSession.Phase switch
@@ -251,7 +256,9 @@ public sealed partial class Plugin
     private unsafe void DrawFollowThem()
     {
         ImGui.TextWrapped(followStatus);
-        if (ImGui.Button(followSession.Armed ? "Stop FollowThem" : "Start FollowThem")) ToggleFollowThem();
+        ImGui.BeginDisabled(!followSession.Armed&&(followStopPending||followStopUnconfirmed));
+        if (ImGui.Button(followSession.Armed ? "Stop FollowThem" : followStopPending||followStopUnconfirmed ? "Waiting for stop confirmation" : "Start FollowThem")) ToggleFollowThem();
+        ImGui.EndDisabled();
         ImGui.TextWrapped("Local settings. Uses simple game follow; obstacles still require your help. Mounted takeoff assistance is optional. Party teleports need an open English confirmation. Ordered shared travel requires Journal V7.11.79 on Cloudflare. Transport menus must match on both characters.");
         var selected = config.FollowThem.TargetName.Length == 0 ? "Choose a party member or friend" : config.FollowThem.TargetName + " @ " + FollowWorldName(config.FollowThem.HomeWorld);
         if (ImGui.BeginCombo("Character", selected))

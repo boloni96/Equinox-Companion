@@ -16,6 +16,7 @@ public sealed partial class Plugin
         if(signal.SentAt<followArmedAt||signal.Id==lastPortalSignalId||queuedTravelIds.Contains(signal.Id))return;
         if(travelQueue.Count>=16){TravelDiagnostic("Travel queue is full; wait for the follower before the next trip.");return;}
         queuedTravelIds.Add(signal.Id);travelQueue.Enqueue(signal);
+        RecordFollowTravel("Travel queued",new {signal.Id,signal.TravelKind,signal.Territory,signal.MapId,signal.CurrentWorld,signal.Approach,signal.Arrival,signal.ArrivalTerritory,signal.ArrivalMap,signal.SentAt,signal.ExpiresAt});
     }
     private unsafe FollowPortalSignal CaptureTravelArrival(FollowPortalSignal s)
     {
@@ -42,11 +43,18 @@ public sealed partial class Plugin
         if(now<nextQueueAttempt)return;
         while(travelQueue.TryPeek(out var next)){
             if(next.ExpiresAt<=now.ToUnixTimeMilliseconds()||next.SentAt<followArmedAt){travelQueue.Clear();TravelDiagnostic("Queued trip expired; dependent trips cancelled. Return to your follower.");return;}
+            if(Objects.LocalPlayer is {} located&&AgentMap.Instance()!=null&&
+                FollowThemSession.Matches(config.FollowThem.TargetName,config.FollowThem.HomeWorld,next.Name,next.HomeWorld)&&
+                FollowArrivalPolicy.AlreadyAtAethernetArrival(next,Player.CurrentWorld.RowId,Client.TerritoryType,AgentMap.Instance()->CurrentMapId,located.Position)){
+                travelQueue.Dequeue();routeArrivalConfirmed=true;
+                RecordFollowTravel("Queued arrival reconciled",new {next.Id,next.TravelKind});
+                TravelDiagnostic("Already at the queued aethernet destination; checking the next trip.");continue;
+            }
             if(routeArrivalConfirmed&&FollowThemSession.Matches(config.FollowThem.TargetName,config.FollowThem.HomeWorld,next.Name,next.HomeWorld)&&next.CurrentWorld==Player.CurrentWorld.RowId&&next.Territory==Client.TerritoryType&&AgentMap.Instance()!=null&&next.MapId==AgentMap.Instance()->CurrentMapId){lastLeaderEntity=next.EntityId;lastLeaderSeen=now;}
             QueueFollowApproach(next,now);
             if(followApproach!=null||pendingDutyLeave!=null)travelQueue.Dequeue();
             if((followApproach!=null||pendingDutyLeave!=null)&&next.Arrival!=null){travelAwaitingArrival=next;travelDispatchedAt=now;routeExecutionStarted=pendingDutyLeave!=null;routeSawLoading=false;routeStartPosition=Objects.LocalPlayer?.Position??default;}
-            if(followApproach==null&&pendingDutyLeave==null){nextQueueAttempt=now.AddSeconds(1);TravelDiagnostic("Queued trip is waiting for its source location; kept until its original expiry.");}
+            if(followApproach==null&&pendingDutyLeave==null){nextQueueAttempt=now.AddSeconds(1);}
             return;
         }
     }

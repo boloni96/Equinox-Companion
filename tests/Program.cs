@@ -1468,3 +1468,17 @@ for(var sec65=1;sec65<10;sec65++) jumpingStuck65.Observe(time.AddSeconds(sec65),
 Check("jumping at wall does not reset ten-second timeout",jumpingStuck65.Observe(time.AddSeconds(10),new(0,1,0),20,true,10,jumpLeader65).ToString(),"True");
 Check("stuck follower stays waiting while leader stationary",jumpingStuck65.Observe(time.AddSeconds(11),new(0,2,0),20,true,10,jumpLeader65).ToString(),"True");
 Check("stuck follower resumes when leader returns closer",jumpingStuck65.Observe(time.AddSeconds(12),new(0,0,0),2,true,10,new(2,0,0)).ToString(),"False");
+
+Check("66 bare follow invalid target",FollowCommandFeedback.IsRejection("\"/follow\" requires a valid target name.","/follow").ToString(),"True");
+Check("66 target follow invalid target",FollowCommandFeedback.IsRejection("\"/follow\" requires a valid target name.","/follow <t>").ToString(),"True");
+Check("66 bare follow unavailable",FollowCommandFeedback.IsRejection("The command /follow is unavailable at this time.","/follow").ToString(),"True");
+Check("66 unrelated target rejection ignored",FollowCommandFeedback.IsRejection("/dance requires a valid target name.","/follow <t>").ToString(),"False");
+Check("66 unrelated stop rejection ignored",FollowCommandFeedback.IsRejection("/follow requires a valid target name.","/automove").ToString(),"False");
+
+var arrival66=travel59 with {TravelKind="aethernet",Arrival=new(10,0,10),ArrivalWorld=2,ArrivalTerritory=30,ArrivalMap=40};
+Check("66 manually completed aethernet reconciles",FollowArrivalPolicy.AlreadyAtAethernetArrival(arrival66,2,30,40,new(10,0,10)).ToString(),"True");
+Check("66 wrong world cannot reconcile",FollowArrivalPolicy.AlreadyAtAethernetArrival(arrival66,3,30,40,new(10,0,10)).ToString(),"False");
+Check("66 source proximity cannot reconcile",FollowArrivalPolicy.AlreadyAtAethernetArrival(arrival66 with {ArrivalTerritory=3,ArrivalMap=4},2,3,4,new(10,0,10)).ToString(),"False");
+Check("66 wrong floor cannot reconcile",FollowArrivalPolicy.AlreadyAtAethernetArrival(arrival66,2,30,40,new(10,4,10)).ToString(),"False");
+Check("66 distant arrival cannot reconcile",FollowArrivalPolicy.AlreadyAtAethernetArrival(arrival66,2,30,40,new(40,0,10)).ToString(),"False");
+Check("66 missing arrival cannot reconcile",FollowArrivalPolicy.AlreadyAtAethernetArrival(arrival66 with {Arrival=null},2,30,40,new(10,0,10)).ToString(),"False");

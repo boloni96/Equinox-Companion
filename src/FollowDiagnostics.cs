@@ -4,6 +4,7 @@ public sealed partial class Plugin
 {
     private readonly Queue<object> followTravelDiagnostics=new();
     private DateTimeOffset nextTravelMenuDiagnostic;
+    private readonly Dictionary<string,DateTimeOffset> recentTravelCallbacks=new();
     private string lastTravelMenuDiagnostic="";
     private void RecordFollowTravel(string kind,object detail)
     {
@@ -37,6 +38,11 @@ public sealed partial class Plugin
         if(!config.EnableFollowThem||!followSession.Armed&&transportCapture==null||addon==null||args==null||count>8||!TravelDiagnosticAddons.Contains(addon->NameString))return;
         var arguments=new List<object>();
         for(var i=0;i<count;i++)if(((int)args[i].Type&15) is 3 or 5)arguments.Add(new {index=i,number=args[i].Int});
+        var callbackKey=addon->NameString+":"+usingSharedTravel+":"+System.Text.Json.JsonSerializer.Serialize(arguments);
+        var now=DateTimeOffset.UtcNow;
+        if(recentTravelCallbacks.TryGetValue(callbackKey,out var previous)&&now-previous<TimeSpan.FromSeconds(2))return;
+        if(recentTravelCallbacks.Count>128)recentTravelCallbacks.Clear();
+        recentTravelCallbacks[callbackKey]=now;
         RecordFollowTravel("Menu callback",new {addon=addon->NameString,automatic=usingSharedTravel,arguments,menu=ReadTravelMenuDiagnostic(addon)});
     }
 }

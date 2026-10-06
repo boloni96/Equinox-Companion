@@ -8,7 +8,7 @@ public sealed partial class Plugin
     private readonly FollowStationaryGate travelStationary=new();
     private bool approachOwnsMovement,approachStopRequested;
     private DateTimeOffset nextApproachAttempt;
-    private string approachKey="";
+    private string approachKey="",lastApproachRejection="";
     private ulong approachCharacter;
     private long approachSession;
     private void CancelFollowApproach()
@@ -34,7 +34,11 @@ public sealed partial class Plugin
             config.FollowThem.UseSharedTeleports&&FollowTravelPolicy.CanUse(signal,now.ToUnixTimeMilliseconds(),followArmedAt,config.FollowThem.TargetName,config.FollowThem.HomeWorld,Player.CurrentWorld.RowId,Client.TerritoryType,map->CurrentMapId,lastLeaderEntity,(now-lastLeaderSeen).TotalSeconds,point,config.FollowThem.MeetAtTeleports);
         if(!valid){
             var reason=signal.SentAt<followArmedAt?"instruction belongs to an earlier follow session":signal.ExpiresAt<=now.ToUnixTimeMilliseconds()?"instruction expired":signal.CurrentWorld!=Player.CurrentWorld.RowId?"source world differs":signal.Territory!=Client.TerritoryType?"source territory differs":signal.MapId!=map->CurrentMapId?"source map differs":signal.EntityId!=lastLeaderEntity?"leader instance identity differs":(now-lastLeaderSeen).TotalSeconds>120?"leader observation expired":"source range, settings or instruction validation failed";
-            TravelDiagnostic("Travel rejected ("+signal.TravelKind+"): "+reason+".");return;
+            if(lastApproachRejection!=signal.Id+reason){
+                lastApproachRejection=signal.Id+reason;
+                RecordFollowTravel("Travel source mismatch",new {signal.Id,reason,expected=new {signal.CurrentWorld,signal.Territory,signal.MapId,signal.Approach},actual=new {world=Player.CurrentWorld.RowId,territory=Client.TerritoryType,map=map->CurrentMapId,position=FollowTravelPosition.From(self.Position)}});
+            }
+            TravelDiagnostic("Travel waiting ("+signal.TravelKind+"): "+reason+"; original expiry retained.");return;
         }
         if(signal.TravelKind is not ("teleport" or "estate" or "friendestate" or "world")&&signal.Approach!=null&&!FollowApproachPolicy.CanApproach(signal,self.Position)){TravelDiagnostic("Travel position is too far away, on another level or invalid; waiting.");return;}
         followApproach=signal;approachKey=config.PairingKey;approachCharacter=Player.ContentId;approachSession=followArmedAt;

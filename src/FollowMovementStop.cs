@@ -57,6 +57,11 @@ public sealed partial class Plugin
     {
         if(followStopWindow!=0&&(now>=followStopPulseUntil||!Player.IsLoaded||Player.ContentId!=followStopCharacter||FollowStopTextEntryActive()))ReleaseFollowStopKey();
         if(followStopPending&&Player.IsLoaded&&Player.ContentId!=followStopCharacter){ReleaseFollowStopKey();followStopPending=false;nativeFollowRequested=false;followStopUnconfirmed=false;return;}
+        // A real movement input cancels native follow even if its chat notice was missed.
+        // Ignore our synthetic key pulse and require release plus stationary confirmation.
+        if((followStopPending||followStopUnconfirmed)&&CanIssueFollowMovement()&&!FollowStopTextEntryActive()&&followStopWindow==0&&now>=followStopPulseUntil.AddMilliseconds(100)&&FollowMovementKeysHeld()){
+            nativeFollowRequested=false;followStopUnconfirmed=false;followStopPending=true;followStopStationary.Reset();
+        }
         if(!followStopPending)return;
         if(!nativeFollowRequested){
             ReleaseFollowStopKey();

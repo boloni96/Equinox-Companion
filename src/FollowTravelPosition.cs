@@ -28,6 +28,13 @@ public static class FollowApproachPolicy
 
 public static class FollowArrivalPolicy
 {
+    // Recover a queued aethernet leg already completed manually. Never treat
+    // proximity in the source area as proof of travel.
+    public static bool AlreadyAtAethernetArrival(FollowPortalSignal s,uint world,uint territory,uint map,Vector3 position)=>
+        s.TravelKind=="aethernet" && (territory!=s.Territory||map!=s.MapId) &&
+        s.Arrival is {Valid:true} a && world==s.ArrivalWorld && territory==s.ArrivalTerritory && map==s.ArrivalMap &&
+        Vector3.DistanceSquared(position,a.Point)<225 && Math.Abs(position.Y-a.Y)<3;
+
     public static bool HasDeparted(FollowPortalSignal source,bool preparing,bool sawLoading,uint world,uint territory,uint map,Vector3 start,Vector3 current)=>
         !preparing&&(sawLoading||world!=source.CurrentWorld||territory!=source.Territory||map!=source.MapId||Vector3.DistanceSquared(start,current)>144);
 }
