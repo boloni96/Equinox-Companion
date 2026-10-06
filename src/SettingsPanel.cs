@@ -42,6 +42,7 @@ public sealed partial class Plugin
         }
         if (ImGui.BeginTabItem("Diagnostics"))
         {
+            DrawPerformanceDiagnostics();
             DrawGardenArtworkPreview();
             if(ImGui.Button("About Equinox Companion / What’s new"))welcomeWindow.IsOpen=true;
             DrawDiagnosticsTracking();

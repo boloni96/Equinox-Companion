@@ -21,7 +21,7 @@ public sealed partial class Plugin
         config.TabOrder ??= [];
         // Repair the old person-at-end layout once; retain subsequent user ordering.
         var order = TabOrderPolicy.Reconcile(config.TabOrder,tabs.Select(t=>t.Id),config.TabOrderVersion<1);
-        if(config.TabOrderVersion<1){config.TabOrderVersion=1;config.TabOrder=order;Pi.SavePluginConfig(config);}
+        if(config.TabOrderVersion<1){config.TabOrderVersion=1;config.TabOrder=order;SaveConfiguration();}
         // ImGui appends late-arriving tabs regardless of submission order. Recreate the
         // bar when the roster's tab membership changes, then restore the saved order.
         var tabBarId="CompanionSections-v2-"+string.Join("|",tabs.Select(t=>t.Id));
@@ -53,7 +53,7 @@ public sealed partial class Plugin
             if (!config.TabOrder.SequenceEqual(persisted))
             {
                 config.TabOrder = persisted;
-                Pi.SavePluginConfig(config);
+                SaveConfiguration();
             }
         }
         ImGui.EndTabBar();

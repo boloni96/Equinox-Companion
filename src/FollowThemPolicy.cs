@@ -11,10 +11,14 @@ public sealed class FollowThemSettings
     public bool SharePortalTransitions { get; set; }
     public bool UseSharedPortals { get; set; }
     public bool UseSharedTeleports { get; set; }
+    public bool FollowMount { get; set; } = true;
+    public bool UseLifestream { get; set; }
+    public bool FollowWorldVisits { get; set; }
+    public bool FollowDataCenters { get; set; }
     public bool FollowTakeoff { get; set; } = true;
     public bool StopOnMovement { get; set; }
     public int StuckSeconds { get; set; } = 60;
-    public int TeleportGilLimit { get; set; } = 1000;
+    public int TeleportGilLimit { get; set; } = 5000;
 }
 public enum FollowPhase { Stopped, Waiting, Loading, Following }
 public enum FollowAction { None, Start, Stop }

@@ -17,8 +17,8 @@ public sealed partial class Plugin
                 var r = rosterTask.Result; rosterStatus = r.Status;
                 if(r.Roster is not null||r.NotModified)registrationFreshKey=rosterTaskKey;
                 if (r.Roster is null && !r.NotModified) { errorJournal.Record("shared-roster", r.Status); nextRosterRead=now.AddSeconds(30); }
-                if (r.Roster is not null) { if((config.SharedRoster?.ProtocolVersion??0)<13&&r.Roster.ProtocolVersion>=13){autoRetainerForceRead=true;autoRetainerCharacters.Clear();nextAutoRetainerRead=default;} config.SharedRoster = r.Roster; Pi.SavePluginConfig(config); }
-                if (r.Unauthorized) { config.SharedRoster = null; Pi.SavePluginConfig(config); }
+                if (r.Roster is not null) { if((config.SharedRoster?.ProtocolVersion??0)<13&&r.Roster.ProtocolVersion>=13){autoRetainerForceRead=true;autoRetainerCharacters.Clear();nextAutoRetainerRead=default;} config.SharedRoster = r.Roster; SaveConfiguration(); }
+                if (r.Unauthorized) { config.SharedRoster = null; SaveConfiguration(); }
             }
             if (rosterTask.IsFaulted) errorJournal.Record("shared-roster", "Shared roster task failed.", exceptionType: rosterTask.Exception?.GetBaseException().GetType().Name);
             rosterTask = null;
@@ -99,7 +99,7 @@ public sealed partial class Plugin
             if (!searching && open != expanded)
             {
                 config.SharedAccountExpanded[key] = open;
-                Pi.SavePluginConfig(config);
+                SaveConfiguration();
             }
             if (open)
             {

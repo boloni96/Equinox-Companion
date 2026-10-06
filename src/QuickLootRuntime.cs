@@ -35,7 +35,7 @@ public sealed partial class Plugin
     private void SaveQuickLoot(QuickLootSettings settings)
     {
         config.QuickLoot=settings;
-        Pi.SavePluginConfig(config);
+        SaveConfiguration();
     }
     private void StopQuickLoot(string reason)
     {

@@ -22,6 +22,7 @@ public sealed partial class Plugin
     private readonly FollowThemSession followSession = new();
     private readonly FollowFlightGate followFlight = new();
     private readonly FollowStuckWatch followStuck = new();
+    private readonly FollowRecoveryWatch followRecovery = new();
     private DateTimeOffset followRetryAt;
     private IDtrBarEntry? followBar;
     private DateTimeOffset nextFollowCheck, lastLeaderSeen, nextTeleportAttempt;
@@ -76,9 +77,9 @@ public sealed partial class Plugin
             try { FollowCommand("/automove off"); }
             catch (Exception e) { reason = "FollowThem stopped. Use a movement key to cancel game movement."; errorJournal.Record("follow-stop", "Could not send game stop command", exceptionType:e.GetType().Name); }
         }
-        followFlight.Reset();followStuck.Reset();
+        followFlight.Reset();followStuck.Reset();followRecovery.Reset();mountAttempts=0;
         lastLeaderSeen = default;
-        receivedPortal = null;
+        receivedPortal = null;pendingAethernet=null;pendingWard=null;pendingTransport=null;CancelLifestreamTravel();
         relayGeneration++;
         followReady.Reset();
         if (wasArmed) followStatus = "STOPPED — " + reason;
@@ -95,7 +96,7 @@ public sealed partial class Plugin
         { followStatus = "Choose a party member or friend first."; return; }
         if (Objects.LocalPlayer == null) { followStatus = "Log in before starting FollowThem."; return; }
         followFault = false; Interlocked.Exchange(ref followCommandRejected, 0); followReady.Reset();
-        followFlight.Reset();followStuck.Reset();followRetryAt=default;
+        followFlight.Reset();followStuck.Reset();followRecovery.Reset();mountAttempts=0;followManualInputSeen=false;followRetryAt=default;
         followSession.Arm(); followArmedAt=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(); relayGeneration++; nextFollowCheck = default;
         followStatus = "STARTED — Looking for " + config.FollowThem.TargetName + " nearby.";
     }
@@ -104,7 +105,7 @@ public sealed partial class Plugin
         if (!config.EnableFollowThem) { followBar?.Remove(); followBar = null; followBarText = ""; return; }
         followBar ??= QuickLootBar.Get("Equinox FollowThem");
         followBar.Shown = true;
-        var label = followSession.Phase switch
+        var label = followSession.Armed&&followRecovery.AwaitingMovement ? "WAITING" : followSession.Phase switch
         {
             FollowPhase.Following => config.FollowThem.TargetName,
             FollowPhase.Waiting => "WAITING", FollowPhase.Loading => "LOADING", _ => "STOPPED"
@@ -114,9 +115,12 @@ public sealed partial class Plugin
         followBar.Tooltip = new SeStringBuilder().AddText(followStatus + (followSession.Armed ? " Left-click to stop." : " Left-click to start.") + " Right-click to open Companion.").Build();
         followBar.OnClick = e => { if(e.ClickType==MouseClickType.Right){followThemSelectTab=true;Open();} else if(e.ClickType==MouseClickType.Left) ToggleFollowThem(); };
     }
+    private bool followManualInputSeen;
     private unsafe void UpdateFollowThem(DateTimeOffset now)
     {
         if (!config.EnableFollowThem) return;
+        var frameInput=InputManager.Instance();
+        if(followSession.Armed&&frameInput!=null&&(frameInput->GetInputStatus(InputCode.MOVE_FORE)||frameInput->GetInputStatus(InputCode.MOVE_BACK)||frameInput->GetInputStatus(InputCode.MOVE_LEFT)||frameInput->GetInputStatus(InputCode.MOVE_RIGHT)||frameInput->GetInputStatus(InputCode.MOVE_STRIFE_L)||frameInput->GetInputStatus(InputCode.MOVE_STRIFE_R)))followManualInputSeen=true;
         if (now < nextFollowCheck) return;
         nextFollowCheck = now.AddMilliseconds(250);
         try
@@ -131,10 +135,12 @@ public sealed partial class Plugin
             }
             if (followFault||now<followRetryAt) return;
             RefreshFollowBar();
+            if(lifestreamTravelOwned){followSession.Pause();followStatus="WAITING — Lifestream travel in progress.";return;}
             var transitioning = FollowTransitionBusy();
             // A transient missing local actor while zoning is not a character logout.
             var loading = Conditions[ConditionFlag.BetweenAreas] || Conditions[ConditionFlag.BetweenAreas51];
             var login = Player.IsLoaded ? Player.ContentId : (loading ? followLogin : 0);
+            if(lifestreamTravelOwned&&!Player.IsLoaded)login=followLogin;
             if (followLogin != login)
             {
                 if (followLogin != 0) StopFollowThem("Logout or character change.");
@@ -159,23 +165,28 @@ public sealed partial class Plugin
                 RefreshFollowBar(); return;
             }
             var input = InputManager.Instance();
-            if (input != null && (input->GetInputStatus(InputCode.MOVE_FORE) || input->GetInputStatus(InputCode.MOVE_BACK) ||
+            if (followManualInputSeen || input != null && (input->GetInputStatus(InputCode.MOVE_FORE) || input->GetInputStatus(InputCode.MOVE_BACK) ||
                 input->GetInputStatus(InputCode.MOVE_LEFT) || input->GetInputStatus(InputCode.MOVE_RIGHT) ||
                 input->GetInputStatus(InputCode.MOVE_STRIFE_L) || input->GetInputStatus(InputCode.MOVE_STRIFE_R)))
-            { if(config.FollowThem.StopOnMovement){StopFollowThem("Your movement input.");return;}followSession.Pause();followStuck.Pause();followStatus="WAITING — Your movement; follow resumes when you release movement keys.";RefreshFollowBar();return; }
+            { followManualInputSeen=false;if(config.FollowThem.StopOnMovement){StopFollowThem("Your movement input.");return;}followSession.Pause();followStuck.Reset();followRecovery.Reset();followStatus="WAITING — Your movement; follow resumes when you release movement keys.";RefreshFollowBar();return; }
             var settings = config.FollowThem;
             var target = Objects.OfType<IPlayerCharacter>().FirstOrDefault(p =>
                 p.GameObjectId != Objects.LocalPlayer?.GameObjectId &&
                 FollowThemSession.Matches(settings.TargetName, settings.HomeWorld, p.Name.TextValue, p.HomeWorld.RowId));
             var self = Objects.LocalPlayer;
-            var nearby = target != null && self != null && target.IsTargetable && Vector3.Distance(self.Position, target.Position) <= 30;
+            var nearby = target != null && self != null && target.IsTargetable;
             if (nearby) { lastLeaderPosition = target!.Position; lastLeaderSeen = now; lastLeaderEntity = target.GameObjectId.ToString(); }
-            if(self!=null&&followStuck.Observe(now,self.Position,nearby?Vector3.Distance(self.Position,target!.Position):null,settings.ResumeNearby,settings.StuckSeconds)){
+            if(self!=null&&followStuck.Observe(now,self.Position,nearby?Vector3.Distance(self.Position,target!.Position):null,settings.ResumeNearby,settings.StuckSeconds,nearby?target!.Position:null)){
                 if(followSession.Pause()==FollowAction.Stop&&CanIssueFollowMovement())FollowCommand("/automove off");
-                followStatus="WAITING — No movement progress; waiting for your selected character to come back within 3 yalms.";RefreshFollowBar();return;
+                followStatus="WAITING — No movement progress; waiting for your selected character to move or become visible again.";RefreshFollowBar();return;
             }
 
+            if(nearby&&TryFollowMount(target!,now)){RefreshFollowBar();return;}
             if(nearby&&TryFollowTakeoff(target!,now)){RefreshFollowBar();return;}
+            if(nearby&&followSession.MovementRequested&&followRecovery.Retry(now,self!.Position,Vector3.Distance(self.Position,target!.Position))){
+                followSession.Pause();FollowChatNotice("WAITING — No movement detected; requesting follow again.");
+            }
+            if(!nearby)followRecovery.Reset();
             var action = followSession.Observe(true, login != 0, false, nearby, settings.ResumeNearby);
             if (action == FollowAction.Stop && CanIssueFollowMovement()) FollowCommand("/automove off");
             if (action == FollowAction.Start)
@@ -186,7 +197,7 @@ public sealed partial class Plugin
             }
             followStatus = followSession.Phase switch
             {
-                FollowPhase.Following => "FOLLOWING — Follow requested for " + settings.TargetName + ".",
+                FollowPhase.Following => followRecovery.AwaitingMovement ? "WAITING — Follow requested, but movement has not resumed." : "FOLLOWING — Follow requested for " + settings.TargetName + ".",
                 FollowPhase.Waiting => "WAITING — Your selected character isn’t nearby. FollowThem is waiting.",
                 _ => "STOPPED — Your selected character isn’t nearby; press Start to try again."
             };
@@ -233,7 +244,7 @@ public sealed partial class Plugin
     {
         ImGui.TextWrapped(followStatus);
         if (ImGui.Button(followSession.Armed ? "Stop FollowThem" : "Start FollowThem")) ToggleFollowThem();
-        ImGui.TextWrapped("Local settings. Uses simple game follow; obstacles still require your help. Mounted takeoff assistance is optional. Party teleports need an open English confirmation. Shared portals require Journal V7.11.76 on Cloudflare. Only supported Warp/Exit portals are relayed; destination menus are not guessed.");
+        ImGui.TextWrapped("Local settings. Uses simple game follow; obstacles still require your help. Mounted takeoff assistance is optional. Party teleports need an open English confirmation. Shared travel requires Journal V7.11.77 on Cloudflare. Transport menus must match on both characters.");
         var selected = config.FollowThem.TargetName.Length == 0 ? "Choose a party member or friend" : config.FollowThem.TargetName + " @ " + FollowWorldName(config.FollowThem.HomeWorld);
         if (ImGui.BeginCombo("Character", selected))
         {
@@ -247,20 +258,39 @@ public sealed partial class Plugin
             ImGui.EndCombo();
         }
         MessageToggle("FollowThem chat messages", config.FollowThem.ChatMessages, v => config.FollowThem.ChatMessages = v);
+        MessageToggle("Mount when the selected character mounts",config.FollowThem.FollowMount,v=>config.FollowThem.FollowMount=v);
+        DrawLifestreamSettings();
         MessageToggle("Take off when the selected character flies (while mounted)",config.FollowThem.FollowTakeoff,v=>config.FollowThem.FollowTakeoff=v);
         MessageToggle("Stop FollowThem when I move (optional)",config.FollowThem.StopOnMovement,v=>config.FollowThem.StopOnMovement=v);
-        var stuckSeconds=config.FollowThem.StuckSeconds;
-        if(ImGui.InputInt("Stuck timeout (seconds)",ref stuckSeconds)){config.FollowThem.StuckSeconds=Math.Clamp(stuckSeconds,5,600);Pi.SavePluginConfig(config);}
+        DrawCommittedInteger("Stuck timeout (seconds)", config.FollowThem.StuckSeconds, 5, 600, value => config.FollowThem.StuckSeconds = value);
         MessageToggle("Resume when the selected character comes nearby", config.FollowThem.ResumeNearby, v => config.FollowThem.ResumeNearby = v);
         MessageToggle("Accept party teleport offers while FollowThem is started", config.FollowThem.AcceptPartyTeleports, v => config.FollowThem.AcceptPartyTeleports = v);
         MessageToggle("Share my travel with active paired followers", config.FollowThem.SharePortalTransitions, v => config.FollowThem.SharePortalTransitions = v);
         MessageToggle("Follow shared Teleport / aethernet destinations (experimental)",config.FollowThem.UseSharedTeleports,v=>{config.FollowThem.UseSharedTeleports=v;relayGeneration++;});
-        var gilLimit=config.FollowThem.TeleportGilLimit;
-        if(ImGui.InputInt("Maximum gil per followed Teleport",ref gilLimit)){config.FollowThem.TeleportGilLimit=Math.Clamp(gilLimit,0,10000);Pi.SavePluginConfig(config);}
-        ImGui.TextWrapped("Shared travel requires an active follow session. Teleport uses your own unlocked public destination and gil, within this limit. Public ward selection from the same city crystal is supported; private estate shortcuts and world travel are excluded. Aethernet requires the same nearby crystal and a matching unlocked menu entry. Party offers use the separate option above.");
+        DrawCommittedInteger("Maximum gil per followed Teleport", config.FollowThem.TeleportGilLimit, 0, 10000, value => config.FollowThem.TeleportGilLimit = value);
+        ImGui.TextWrapped("Shared travel requires an active follow session. Teleport uses your own unlocked public destination and gil, within this limit. Ward entry, exact available estate teleports and matched transport menus are experimental. World/Data Center travel uses the separate Lifestream options. Aethernet requires the same nearby crystal and a matching unlocked menu entry. Party offers use the separate option above.");
         MessageToggle("Use my selected character's shared portal (experimental)", config.FollowThem.UseSharedPortals, v => { config.FollowThem.UseSharedPortals = v; receivedPortal=null; relayGeneration++; });
         ImGui.TextWrapped(portalRelayStatus);
-        ImGui.TextWrapped("Leader: enable Share my portal transitions; no need to start following anyone. Follower: select that character, enable Use shared portal, then Start. Both need the same pairing key. The instruction expires after 15 seconds and never enters Journal history. You must already be within three yalms. A matching confirmation can be accepted; destination lists and unsupported portals remain manual.");
+        ImGui.TextWrapped("Leader: enable Share my travel; no need to start following anyone. Follower: select that character, enable shared destinations and/or portals, then Start. Both need the same pairing key. The instruction expires after 15 seconds and never enters Journal history. Be beside the same source. Matching transport menus and confirmations can be replayed; unsupported dialogs remain manual. Lifestream must be installed separately for its optional routes.");
+    }
+    private readonly Dictionary<uint, int> integerEditDrafts = new();
+    private void DrawCommittedInteger(string label, int current, int minimum, int maximum, Action<int> apply, bool saveConfig = true)
+    {
+        var id = ImGui.GetID(label);
+        var value = integerEditDrafts.TryGetValue(id, out var draft) ? draft : current;
+        ImGui.InputInt(label, ref value);
+        integerEditDrafts[id] = value;
+        // Keep incomplete typing out of live travel settings and serialize only on commit.
+        if (ImGui.IsItemDeactivatedAfterEdit())
+        {
+            value = Math.Clamp(value, minimum, maximum);
+            if (value != current)
+            {
+                apply(value);
+                if (saveConfig) SaveConfiguration();
+            }
+        }
+        if (!ImGui.IsItemActive()) integerEditDrafts.Remove(id);
     }
     private string FollowWorldName(uint id) => DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().GetRowOrDefault(id)?.Name.ToString() ?? id.ToString();
     private void FollowCandidate(string name, uint world, string source)
@@ -269,7 +299,7 @@ public sealed partial class Plugin
         if (ImGui.Selectable(name + " @ " + FollowWorldName(world) + "##" + source + world + name))
         {
             StopFollowThem("Selected " + name + ". Press Start when ready.");
-            config.FollowThem.TargetName = name; config.FollowThem.HomeWorld = world; Pi.SavePluginConfig(config);
+            config.FollowThem.TargetName = name; config.FollowThem.HomeWorld = world; SaveConfiguration();
         }
     }
 }

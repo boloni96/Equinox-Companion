@@ -116,7 +116,7 @@ public sealed partial class Plugin : IDalamudPlugin
                 foreach (var id in result.Accepted) if (ids.Add(id)) config.SentEvents.Add(id);
                 var retained = config.Houses.Select(h => h.EventId).Concat(config.Tending.Select(t => t.EventId)).Concat(config.Planting.Select(t => t.EventId)).Concat(config.Discoveries.Select(e => e.Id)).ToHashSet();
                 config.SentEvents.RemoveAll(id => !retained.Contains(id));
-                Pi.SavePluginConfig(config);
+                SaveConfiguration();
                 syncStatus = result.Status;
                 if (result.Retry) errorJournal.Record("upload", result.Status);
                 syncFailures = result.Retry ? Math.Min(syncFailures + 1, 5) : 0;
@@ -175,10 +175,11 @@ public sealed partial class Plugin : IDalamudPlugin
         }
         catch (Exception ex) { errorJournal.Record("plugin", "Garden integer callback observer unavailable", exceptionType:ex.GetType().Name); Log.Error(ex, "Garden integer callback observer unavailable"); }
         config = Pi.GetPluginConfig() as Configuration ?? new();
+        configurationWriter = new(snapshot => Pi.SavePluginConfig(snapshot));
         config.FollowThem ??= new();
         config.PairingKey = config.PairingKey.Trim().ToLowerInvariant();
         syncStatus = config.PairingKey.Length == 64 ? "Saved pairing key loaded. Waiting to sync." : "Not paired. Local records only.";
-        if (config.Version < 5) { config.RefreshSharedInBackground = true; config.Version = 5; Pi.SavePluginConfig(config); }
+        if (config.Version < 5) { config.RefreshSharedInBackground = true; config.Version = 5; SaveConfiguration(); }
         try { plantHook = Interop.HookFromAddress<ConfirmPlantDelegate>(AgentHousingPlant.MemberFunctionPointers.ConfirmSeedAndSoilSelection, ObservePlantSelection); }
         catch (Exception ex) { errorJournal.Record("plugin", "Plant selection observer unavailable", exceptionType: ex.GetType().Name); Log.Error(ex, "Plant selection observer unavailable"); }
         try { signboardHook = Interop.HookFromAddress<SignboardDelegate>(AgentHousingSignboard.MemberFunctionPointers.ReadPacket, ObserveSignboard); signboardHook.Enable(); }
@@ -255,7 +256,7 @@ public sealed partial class Plugin : IDalamudPlugin
             id.RoomNumber, id.IsApartment, id.IsWorkshop, WorldName(id.WorldId), DistrictName(id.TerritoryTypeId));
     }
 
-    private unsafe void Update(IFramework framework)
+    private unsafe void UpdateCore(IFramework framework)
     {
         var now = DateTimeOffset.UtcNow;
         UpdateQuickLoot(now);
@@ -332,7 +333,7 @@ public sealed partial class Plugin : IDalamudPlugin
                     config.Houses.Add(visit);
                     if (config.NotifyHouseEntries && kind == "house.entered") pendingHouseNotices.Add(visit);
 
-                    Pi.SavePluginConfig(config);
+                    SaveConfiguration();
                 }
             }
             else if (type == HousingTerritoryType.Outdoor) gate.Observe("outside", now);
@@ -510,6 +511,7 @@ public sealed partial class Plugin : IDalamudPlugin
         // No game action is initiated; only submitted garden selections are observed.
         try
         {
+            if(count==1&&values!=null&&((int)values[0].Type&15) is 3 or 5)CaptureTransportChoice(addon,values[0].Int);
             CaptureWardMenu(addon,count,values);
             ObserveFollowAethernetCallback(addon,count,values);
             if (ObservingGardens && Volatile.Read(ref activeGardenMenu)?.AddonAddress == (nint)addon && count is > 0 and <= 16 && values != null)
@@ -532,6 +534,7 @@ public sealed partial class Plugin : IDalamudPlugin
     {
         try
         {
+            CaptureTransportChoice(addon,value);
             if (ObservingGardens && Volatile.Read(ref activeGardenMenu)?.AddonAddress == (nint)addon)
                 ObserveGardenSelection(addon,[value],false,"FireCallbackInt");
         }
@@ -594,7 +597,7 @@ public sealed partial class Plugin : IDalamudPlugin
         if (!force && last is not null && (!(e.Kind is "garden.empty" or "garden.empty.unmapped" or "garden.dead" or "garden.ready" or "garden.observed" or "garden.status" or "garden.status.unmapped") || e.At - last.At < TimeSpan.FromSeconds(2)) && !(e.GardenTarget is not null && e.At-last.At > TimeSpan.FromDays(30)) && !(e.Kind is "garden.ready" or "garden.observed" or "garden.status" or "garden.empty" or "garden.dead" && config.Planting.Any(p => p.Actor.ContentId == e.Actor.ContentId && p.Address.HouseId == e.Address?.HouseId && p.Patch == e.Patch && p.Bed == e.Bed && p.ConfirmedAt > last.At)) && JsonSerializer.Serialize(new { last.Actor, last.Address, last.House, last.Character, last.Crop, last.Collection, last.Fashion, last.Voyage, last.GardenTarget, last.Storage, last.Company, last.CachedVoyage, last.Supplies }) == JsonSerializer.Serialize(new { e.Actor, e.Address, e.House, e.Character, e.Crop, e.Collection, e.Fashion, e.Voyage, e.GardenTarget, e.Storage, e.Company, e.CachedVoyage, e.Supplies })) return;
         config.Discoveries.Add(e);
         if(e.Kind.StartsWith("garden.") || e.Kind.StartsWith("house.")) GardenActionRecorded();
-        if(collectingStorage)storageChanged=true;else Pi.SavePluginConfig(config);
+        if(collectingStorage)storageChanged=true;else SaveConfiguration();
     }
 
     private unsafe void ObserveDetails(DateTimeOffset now)
@@ -832,7 +835,7 @@ public sealed partial class Plugin : IDalamudPlugin
                 config.Tending.Add(confirmed);
                 GardenActionRecorded();
 
-                Pi.SavePluginConfig(config);
+                SaveConfiguration();
             }
             var planted = message.Plant?.Confirm(message.Id, message.Parameters, message.At, candidate);
             if (planted is not null && !config.Planting.Any(x => x.EventId == planted.EventId))
@@ -840,7 +843,7 @@ public sealed partial class Plugin : IDalamudPlugin
                 config.Planting.Add(planted);
                 GardenActionRecorded();
 
-                Pi.SavePluginConfig(config);
+                SaveConfiguration();
             }
             if (message.Id is >= 4005 and <= 4009) Volatile.Write(ref pendingPlant, null);
             var signal = GardenSignals.Classify(message.Id);
@@ -885,14 +888,14 @@ public sealed partial class Plugin : IDalamudPlugin
             exportPath = Path.Combine(dir, $"equinox-test-{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.json");
             File.WriteAllText(exportPath, JsonSerializer.Serialize(new {
                 schemaVersion = 5, pluginVersion = typeof(Plugin).Assembly.GetName().Version?.ToString(), errorLog = errorJournal.Snapshot(), recentGardenMessages=gardenMessageJournal.Snapshot(), exportedAt = DateTimeOffset.UtcNow,
-                mode = "local-diagnostics", gardeningConfirmed = false,
+                mode = "local-diagnostics", gardeningConfirmed = false, performance = new { maxDrawMs,maxUpdateMs,maxSnapshotMs, configurationError },
                 houseObservations = config.Houses, confirmedTending = config.Tending, confirmedPlanting = config.Planting, observedDetails = config.Discoveries, diagnostics
             }, json));
         }
         catch (Exception ex) { exportPath = null; status = "Export failed; see /xllog."; errorJournal.Record("plugin", "Equinox export failed", exceptionType: ex.GetType().Name); Log.Error(ex, "Equinox export failed"); }
     }
 
-    private void Draw()
+    private void DrawCore()
     {
         UpdateShortcuts();
         mainWindow.IsOpen = visible;
@@ -907,6 +910,7 @@ public sealed partial class Plugin : IDalamudPlugin
 
     private void DrawContents()
     {
+        if(configurationError.Length>0)ImGui.TextWrapped(configurationError);
         if (ImGui.BeginTable("companion-header", 2, ImGuiTableFlags.SizingStretchProp))
         {
         var shortcutSize = ImGui.GetFontSize() * 2.1f;
@@ -945,7 +949,7 @@ public sealed partial class Plugin : IDalamudPlugin
                         config.PairingKey = key.ToLowerInvariant(); showSavedPairingKey = false;
                         if (changed) { config.SharedRoster = null; config.SentEvents.Clear(); }
                         nextRosterRead = default; pairingInput = ""; nextSync = default;
-                        Pi.SavePluginConfig(config);
+                        SaveConfiguration();
                         syncStatus = changed ? "Paired. Enable sync to send saved entries and tending." : "Existing key kept. Retrying sync without resending acknowledged records.";
                     }
                     else syncStatus = "Paste the 64-character key from Game connection.";
@@ -1035,6 +1039,7 @@ public sealed partial class Plugin : IDalamudPlugin
         followBar?.Remove();
         followPortalHook?.Dispose();
         followTeleportHook?.Dispose();
+        friendEstateHook?.Dispose();
         portalRelay.Dispose();
         quickLootBarEntry?.Remove();
         sync.Dispose();
@@ -1062,5 +1067,6 @@ public sealed partial class Plugin : IDalamudPlugin
         if (gardeningCommandRegistered) Commands.RemoveHandler("/gardening");
         if (plantingCommandRegistered) Commands.RemoveHandler("/planting");
         Chat.RemoveChatLinkHandler(10513);
+        FlushConfiguration();
     }
 }

@@ -29,7 +29,7 @@ public sealed partial class Plugin
                 {
                     var binding=Shortcuts().First(s=>s.Name==name).Binding;
                     binding.Key=captured.Key;binding.Ctrl=captured.Ctrl;binding.Alt=captured.Alt;binding.Shift=captured.Shift;
-                    Pi.SavePluginConfig(config);shortcutCaptureStatus=$"Saved {name}: {binding.Label}";
+                    SaveConfiguration();shortcutCaptureStatus=$"Saved {name}: {binding.Label}";
                 }
                 capturingShortcut=null;shortcutCapture=null;
             }
@@ -65,7 +65,7 @@ public sealed partial class Plugin
             else if(ImGui.Button("Set shortcut")){capturingShortcut=name;shortcutCapture=new();shortcutCaptureStatus="";}
             ImGui.SameLine();
             if(ImGui.Button("Clear"))
-            {if(capturingShortcut==name){capturingShortcut=null;shortcutCapture=null;}binding.Key="None";binding.Ctrl=binding.Alt=binding.Shift=false;Pi.SavePluginConfig(config);shortcutCaptureStatus=name+" shortcut cleared.";}
+            {if(capturingShortcut==name){capturingShortcut=null;shortcutCapture=null;}binding.Key="None";binding.Ctrl=binding.Alt=binding.Shift=false;SaveConfiguration();shortcutCaptureStatus=name+" shortcut cleared.";}
             if(binding.Key!="None"&&Shortcuts().Count(x=>x.Binding.Matches(binding.Key,binding.Ctrl,binding.Alt,binding.Shift))>1)ImGui.TextWrapped("Duplicate shortcut: assign a different combination. Conflicting shortcuts are disabled.");
             ImGui.PopID();
         }
@@ -73,7 +73,7 @@ public sealed partial class Plugin
         ImGui.TextWrapped("Shortcuts pause while typing or editing a control and while the game is unfocused. They do not replace FFXIV keybinds: choose unused combinations. /gardening still requires an identified paired house.");
     }
     private void MessageToggle(string label,bool value,Action<bool> set)
-    { if(ImGui.Checkbox(label,ref value)){set(value);Pi.SavePluginConfig(config);} }
+    { if(ImGui.Checkbox(label,ref value)){set(value);SaveConfiguration();} }
     private void DrawChatMessageSettings()
     {
         ImGui.TextWrapped("Choose which Equinox messages appear in your own chat. These controls do not disable tracking or syncing.");

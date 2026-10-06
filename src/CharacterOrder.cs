@@ -50,7 +50,7 @@ public sealed partial class Plugin
         ImGui.TextUnformatted("Character order & hidden characters");
         var ownersFirst = config.HouseCharactersFirst;
         if (ImGui.Checkbox("Keep characters without houses at the bottom", ref ownersFirst))
-        { config.HouseCharactersFirst = ownersFirst; Pi.SavePluginConfig(config); }
+        { config.HouseCharactersFirst = ownersFirst; SaveConfiguration(); }
         ImGui.TextWrapped("Use Up / Down to arrange each list. With houses first enabled, moves stay within the house / no-house groups. Disable it to place anyone anywhere. Order is saved on this installation. The logged-in character temporarily appears first in the character tabs; your order here stays unchanged.");
         var owners = LocalHousingActors();
         DrawOrderList("local", "My Empire", OrderedLocalCharacters(true)
@@ -65,7 +65,7 @@ public sealed partial class Plugin
         if (ImGui.TreeNode(title + "###order-list"))
         {
             if (ImGui.SmallButton("Reset order"))
-            { config.CharacterOrders.Remove(scope); Pi.SavePluginConfig(config); }
+            { config.CharacterOrders.Remove(scope); SaveConfiguration(); }
             var hiddenCharacters = characters.Where(c => IsCharacterHidden(scope, c.Id)).ToArray();
             characters = characters.Where(c => !IsCharacterHidden(scope, c.Id)).ToArray();
             if (characters.Length == 0) ImGui.TextDisabled("No visible characters. Restore hidden characters below.");
@@ -89,13 +89,13 @@ public sealed partial class Plugin
                 if (hide)
                 {
                     if (!config.HiddenCharacters.TryGetValue(scope, out var hidden)) config.HiddenCharacters[scope] = hidden = [];
-                    hidden.Add(c.Id); Pi.SavePluginConfig(config); break;
+                    hidden.Add(c.Id); SaveConfiguration(); break;
                 }
                 if (move != 0)
                 {
                     (characters[i], characters[i + move]) = (characters[i + move], characters[i]);
                     config.CharacterOrders[scope] = characters.Select(x => x.Id).ToList();
-                    Pi.SavePluginConfig(config);
+                    SaveConfiguration();
                     break;
                 }
             }
@@ -106,7 +106,7 @@ public sealed partial class Plugin
                 {
                     ImGui.PushID("hidden-" + c.Id);
                     if (ImGui.SmallButton("Restore"))
-                    { config.HiddenCharacters[scope].Remove(c.Id); Pi.SavePluginConfig(config); }
+                    { config.HiddenCharacters[scope].Remove(c.Id); SaveConfiguration(); }
                     ImGui.SameLine(); ImGui.TextUnformatted(c.Label);
                     ImGui.PopID();
                 }

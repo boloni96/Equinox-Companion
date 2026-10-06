@@ -14,7 +14,7 @@ public sealed partial class Plugin
     {
         collectingStorage=true;storageChanged=false;
         try { ObserveStorageCore(now); }
-        finally { collectingStorage=false;if(storageChanged)Pi.SavePluginConfig(config); }
+        finally { collectingStorage=false;if(storageChanged)SaveConfiguration(); }
     }
     private unsafe void ObserveStorageCore(DateTimeOffset now)
     {

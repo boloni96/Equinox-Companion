@@ -89,3 +89,7 @@ In-game confirmation of the affected existing garden remains pending.
 ## Companion 0.5.1.59
 
 See RELEASE-0.5.1.59.md for active FollowThem sessions, travel, waiting, takeoff and submarine colour rules. Journal V7.11.76 required for the updated relay. Native testing pending.
+
+## Companion 0.5.1.60
+
+See RELEASE-0.5.1.60.md for background saves, diagnostics, movement recovery and experimental travel coverage. Deploy Journal V7.11.77 for the extended relay. Optional Lifestream integration; no vnavmesh dependency.

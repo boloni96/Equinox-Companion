@@ -50,9 +50,11 @@ public sealed partial class Plugin
             {
                 outgoingPortal=null;
                 var clicked=Objects.FirstOrDefault(o=>o.Address==(nint)obj);
+                if(clicked!=null)CaptureTransportSource(clicked);
                 var kind=PortalHandler(obj);
                 if(clicked?.ObjectKind==ObjectKind.EventObj&&kind is 2 or 20 && Objects.LocalPlayer is {} self&&Vector3.Distance(self.Position,clicked.Position)<=4)
                 {
+                    transportCapture=null;
                     var map=AgentMap.Instance();var at=DateTimeOffset.UtcNow;var p=clicked.Position;
                     outgoingPortal=new(Guid.NewGuid().ToString("N"),Player.CharacterName,Player.HomeWorld.RowId,Player.CurrentWorld.RowId,self.GameObjectId.ToString(),Client.TerritoryType,map!=null?map->CurrentMapId:0,clicked.BaseId,kind,p.X,p.Y,p.Z,at.ToUnixTimeMilliseconds(),"");
                     outgoingPortalAt=at; portalPreviousPosition=self.Position;
@@ -80,7 +82,7 @@ public sealed partial class Plugin
         {
             UpdateFollowLease(now);
             UpdateFollowTravel(now);
-            if(relayPairingKey!=config.PairingKey){relayPairingKey=config.PairingKey;relayGeneration++;receivedPortal=null;outgoingPortal=null;}
+            if(relayPairingKey!=config.PairingKey){relayPairingKey=config.PairingKey;relayGeneration++;receivedPortal=null;outgoingPortal=null;pendingAethernet=null;pendingWard=null;pendingTransport=null;transportCapture=null;worldSource=null;CancelLifestreamTravel();}
             var sharing=config.EnableFollowThem&&config.FollowThem.SharePortalTransitions;
             if(sharing&&!portalHookFailed&&followPortalHook==null)
             {
@@ -143,9 +145,9 @@ public sealed partial class Plugin
                     FollowChatNotice("PORTAL — " + portalRelayStatus);
                 }
             }
-            if(loading||now<nextPortalPoll||portalReadTask!=null||lastLeaderSeen==default||now-lastLeaderSeen>TimeSpan.FromSeconds(30))return;
+            if(loading||now<nextPortalPoll||portalReadTask!=null||lastLeaderSeen==default)return;
             if(config.PairingKey.Length!=64){portalRelayStatus="Pair both Companions with the same Journal key for portal relay.";return;}
-            nextPortalPoll=now.AddSeconds(1);portalReadGeneration=relayGeneration;
+            nextPortalPoll=now.AddSeconds(now-lastLeaderSeen>TimeSpan.FromSeconds(30)?3:1);portalReadGeneration=relayGeneration;
             portalReadTask=portalRelay.Read(config.PairingKey,config.FollowThem.TargetName,config.FollowThem.HomeWorld,followLeaseId);
         }
         catch(Exception e)

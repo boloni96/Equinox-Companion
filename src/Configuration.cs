@@ -3,6 +3,18 @@ namespace EquinoxCompanion;
 [Serializable]
 public sealed class Configuration : IPluginConfiguration
 {
+    public Configuration Snapshot()
+    {
+        // Published observation/roster records are immutable. Copy their mutable list
+        // containers, but do not serialize the large history on the game's thread.
+        var small=(Configuration)MemberwiseClone();
+        small.SharedRoster=null;small.Discoveries=[];small.Houses=[];
+        small.Planting=[];small.Tending=[];small.SentEvents=[];
+        var copy=System.Text.Json.JsonSerializer.Deserialize<Configuration>(System.Text.Json.JsonSerializer.Serialize(small))!;
+        copy.SharedRoster=SharedRoster;copy.Discoveries=[..Discoveries];copy.Houses=[..Houses];
+        copy.Planting=[..Planting];copy.Tending=[..Tending];copy.SentEvents=[..SentEvents];
+        return copy;
+    }
     public int SubmarineFuelReserve { get; set; } = 50;
     public int SubmarineRepairReserve { get; set; } = 10;
     public int SubmarineSpaceReserve { get; set; } = 20;

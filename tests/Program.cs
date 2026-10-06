@@ -1336,3 +1336,50 @@ Check("59 nearby named crystal allowed",CanTravel59(travel59 with {TravelKind="a
 Check("59 valid ward travel",CanTravel59(travel59 with {TravelKind="ward",BaseId=9,Ward=15,DestinationTerritory=339,Confirmation="Travel to Ward 15?"}).ToString(),"True");
 Check("59 invalid ward blocked",CanTravel59(travel59 with {TravelKind="ward",BaseId=9,Ward=0,DestinationTerritory=339,Confirmation="Travel to Ward 15?"}).ToString(),"False");
 Check("59 unrelated ward confirmation blocked",CanTravel59(travel59 with {TravelKind="ward",BaseId=9,Ward=15,DestinationTerritory=339,Confirmation="Delete this item?"}).ToString(),"False");
+
+Check("60 default gil budget",new FollowThemSettings().TeleportGilLimit.ToString(),"5000");
+Check("60 crystal surface distance",CanTravel59(travel59 with {TravelKind="aethernet",BaseId=1,Destination="Market",X=6,SourceRadius=4}).ToString(),"True");
+Check("60 radius bounded",CanTravel59(travel59 with {TravelKind="aethernet",BaseId=1,Destination="Market",X=6,SourceRadius=100}).ToString(),"False");
+Check("60 boundary ward",CanTravel59(travel59 with {TravelKind="ward",BaseId=0,SourceKind="boundary",Ward=2,DestinationTerritory=339,Confirmation="Travel to Ward 2?"}).ToString(),"True");
+Check("60 unknown empty source rejected",CanTravel59(travel59 with {TravelKind="ward",BaseId=0,Ward=2,DestinationTerritory=339,Confirmation="Travel to Ward 2?"}).ToString(),"False");
+foreach(var choice60 in new[]{"Travel to Gangos.","Board the ferry to Limsa Lominsa.","Enter the Bozjan Southern Front?"})Check("60 transport choice "+choice60,FollowTransportPolicy.Choice(choice60).ToString(),"True");
+foreach(var choice60 in new[]{"Buy a ticket","Open the treasure coffer?","Discard this item?","Talk about travel"})Check("60 unrelated choice "+choice60,FollowTransportPolicy.Choice(choice60).ToString(),"False");
+Check("60 fee allowed",FollowTransportPolicy.Affordable("Travel to Limsa for 1,200 gil?",5000).ToString(),"True");
+Check("60 fee blocked",FollowTransportPolicy.Affordable("Travel to Limsa for 6,000 gil?",5000).ToString(),"False");
+Check("60 unknown fee blocked",FollowTransportPolicy.Affordable("Travel for gil?",5000).ToString(),"False");
+var config60=new Configuration();config60.FollowThem.TeleportGilLimit=5000;config60.CharacterOrders["test"]=["A"];config60.SentEvents.Add("first");
+var snapshot60=config60.Snapshot();config60.FollowThem.TeleportGilLimit=10;config60.CharacterOrders["test"].Add("B");config60.SentEvents.Add("second");
+Check("60 snapshot isolated setting",snapshot60.FollowThem.TeleportGilLimit.ToString(),"5000");
+Check("60 snapshot isolated nested list",snapshot60.CharacterOrders["test"].Count.ToString(),"1");
+Check("60 snapshot isolated sent events",snapshot60.SentEvents.Count.ToString(),"1");
+using(var entered60=new ManualResetEventSlim())using(var release60=new ManualResetEventSlim()){
+ var writes60=new List<string>();var writer60=new LatestSnapshotWriter<string>(value=>{if(value=="first"){entered60.Set();if(!release60.Wait(TimeSpan.FromSeconds(5)))throw new TimeoutException();}writes60.Add(value);});
+ writer60.Enqueue("first");if(!entered60.Wait(TimeSpan.FromSeconds(5)))throw new TimeoutException();
+ writer60.Enqueue("second");writer60.Enqueue("third");release60.Set();writer60.Flush("final");
+ Check("60 latest snapshot final",writes60.Last(),"final");Check("60 stale queued snapshot coalesced",writes60.Contains("second").ToString(),"False");
+}
+var failing60=true;var recovered60="";var retry60=new LatestSnapshotWriter<string>(value=>{if(failing60)throw new IOException();recovered60=value;});
+try{retry60.Flush("old");}catch(IOException){}
+Check("60 write failure visible",(retry60.Failure!=null).ToString(),"True");failing60=false;retry60.Flush("latest");Check("60 retry preserves latest",recovered60,"latest");
+
+var recovery60=new FollowRecoveryWatch();
+Check("60 recovery starts tracking",recovery60.Retry(time,new(0,0,0),8).ToString(),"False");
+Check("60 recovery detects missed follow",recovery60.Retry(time.AddSeconds(4),new(0,0,0),8).ToString(),"True");
+Check("60 recovery does not spam",recovery60.Retry(time.AddSeconds(4.2),new(0,0,0),8).ToString(),"False");
+recovery60.Retry(time.AddSeconds(8),new(0,0,0),8);recovery60.Retry(time.AddSeconds(12),new(0,0,0),8);
+Check("60 recovery bounded attempts",recovery60.Retry(time.AddSeconds(20),new(0,0,0),8).ToString(),"False");
+Check("60 actual progress resets recovery",recovery60.Retry(time.AddSeconds(21),new(2,0,0),8).ToString(),"False");
+Check("60 recovery eligible after progress",recovery60.Retry(time.AddSeconds(25),new(2,0,0),8).ToString(),"True");
+var estate60=travel59 with {TravelKind="estate",EstateId="0123456789ABCDEF"};
+Check("60 exact estate instruction",CanTravel59(estate60).ToString(),"True");
+Check("60 ambiguous estate rejected",CanTravel59(estate60 with {EstateId=""}).ToString(),"False");
+var friend60=travel59 with {TravelKind="friendestate",SourceKind="FriendEstate",FriendContentId="12345",Steps=[new("Private Estate"),new("Teleport to the estate for 100 gil?",true)]};
+Check("60 friend estate menu valid",CanTravel59(friend60).ToString(),"True");
+Check("60 missing friend identity rejected",CanTravel59(friend60 with {FriendContentId=""}).ToString(),"False");
+Check("60 door only native object",FollowTransportPolicy.Valid(travel59 with {TravelKind="door",BaseId=9,SourceKind="EventObj",Steps=[]}).ToString(),"True");
+Check("60 treasure never door",FollowTransportPolicy.Valid(travel59 with {TravelKind="door",BaseId=9,SourceKind="Treasure",Steps=[]}).ToString(),"False");
+var visible60=new FollowStuckWatch();visible60.Observe(time,System.Numerics.Vector3.Zero,20,true,5,new(20,0,0));visible60.Observe(time.AddSeconds(5),System.Numerics.Vector3.Zero,20,true,5,new(20,0,0));
+Check("60 visible pickup no three yalm requirement",visible60.Observe(time.AddSeconds(6),System.Numerics.Vector3.Zero,21,true,5,new(21,0,0)).ToString(),"False");
+var status60=new FollowRecoveryWatch();status60.Retry(time,System.Numerics.Vector3.Zero,8);status60.Retry(time.AddSeconds(2),System.Numerics.Vector3.Zero,8);
+Check("60 stalled follow shows waiting",status60.AwaitingMovement.ToString(),"True");
+status60.Retry(time.AddSeconds(3),new(1,0,0),8);Check("60 observed progress clears waiting",status60.AwaitingMovement.ToString(),"False");

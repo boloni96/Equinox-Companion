@@ -14,22 +14,22 @@ public sealed partial class Plugin
     {
         if(!SharingTravel||usingSharedTravel||addon==null||addon!=(AtkUnitBase*)GardenGui.GetAddonByName("HousingSelectBlock").Address||count!=2||values==null)return;
         if(((int)values[0].Type&15) is not (3 or 5)||values[0].Int!=1||((int)values[1].Type&15) is not (3 or 5)||values[1].Int is <0 or >=30)return;
-        if(outgoingTravel==null&&Objects.LocalPlayer is {} self){var crystal=Objects.Where(x=>x.ObjectKind==ObjectKind.Aetheryte&&Vector3.Distance(x.Position,self.Position)<=4).MinBy(x=>Vector3.DistanceSquared(x.Position,self.Position));if(crystal!=null&&TravelSignal("ward",0,"",crystal.BaseId,crystal.Position) is {} signal)CaptureTravel(signal with {Ward=values[1].Int+1},0);}
+        if(outgoingTravel==null&&Objects.LocalPlayer is {} self){var crystal=Objects.Where(x=>x.ObjectKind==ObjectKind.Aetheryte&&Vector3.Distance(x.Position,self.Position)<=x.HitboxRadius+4).MinBy(x=>Vector3.DistanceSquared(x.Position,self.Position));if(crystal!=null&&TravelSignal("ward",0,"",crystal.BaseId,crystal.Position) is {} signal)CaptureTravel(signal with {Ward=values[1].Int+1},0);}
         if(outgoingTravel is {TravelKind:"ward"} prior)outgoingTravel=prior with {Ward=values[1].Int+1};
     }
     private unsafe void UpdateFollowWard(DateTimeOffset now)
     {
         var sourceBlock=(AtkUnitBase*)GardenGui.GetAddonByName("HousingSelectBlock").Address;
         if(SharingTravel&&!usingSharedTravel&&pendingWard==null&&sourceBlock!=null&&sourceBlock->IsVisible&&outgoingTravel==null&&Objects.LocalPlayer is {} self){
-            var crystal=Objects.Where(x=>x.ObjectKind==ObjectKind.Aetheryte&&Vector3.Distance(x.Position,self.Position)<=4).MinBy(x=>Vector3.DistanceSquared(x.Position,self.Position));
-            if(crystal!=null&&TravelSignal("ward",0,"",crystal.BaseId,crystal.Position) is {} signal)CaptureTravel(signal with {Ward=1},0);
+            var crystal=Objects.Where(x=>x.ObjectKind==ObjectKind.Aetheryte&&Vector3.Distance(x.Position,self.Position)<=x.HitboxRadius+4).MinBy(x=>Vector3.DistanceSquared(x.Position,self.Position));
+            if(TravelSignal("ward",0,"",crystal?.BaseId??0,crystal?.Position??self.Position) is {} signal)CaptureTravel(signal with {Ward=1,SourceKind=crystal==null?"boundary":"Aetheryte"},0);
         }
         if(outgoingTravel is {TravelKind:"ward"} wardCandidate){
             var confirmation=(AddonSelectYesno*)GardenGui.GetAddonByName("SelectYesno").Address;
             if(confirmation!=null&&confirmation->IsVisible&&confirmation->PromptText!=null){var text=confirmation->PromptText->NodeText.ToString();if(FollowPortalPolicy.IsConfirmationSupported(text))outgoingTravel=wardCandidate with {Confirmation=text};}
         }
         if(pendingWard is not {} s)return;
-        if(!followSession.Armed||!config.EnableFollowThem||!config.FollowThem.UseSharedTeleports||now-wardAt>TimeSpan.FromSeconds(12)||Client.TerritoryType!=s.Territory){pendingWard=null;return;}
+        if(!followSession.Armed||!config.EnableFollowThem||!config.FollowThem.UseSharedTeleports||now-wardAt>TimeSpan.FromSeconds(12)||Client.TerritoryType!=s.Territory||Player.CurrentWorld.RowId!=s.CurrentWorld||Conditions[Dalamud.Game.ClientState.Conditions.ConditionFlag.InCombat]||!FollowThemSession.Matches(config.FollowThem.TargetName,config.FollowThem.HomeWorld,s.Name,s.HomeWorld)){pendingWard=null;return;}
         if(now<wardNext)return;wardNext=now.AddMilliseconds(500);
         var yes=(AddonSelectYesno*)GardenGui.GetAddonByName("SelectYesno").Address;
         if(wardStage==3&&yes!=null&&yes->IsVisible&&yes->PromptText!=null){

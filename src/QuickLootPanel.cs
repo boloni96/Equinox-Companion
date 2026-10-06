@@ -10,6 +10,10 @@ public sealed partial class Plugin
     private bool quickLootUiChanged;
     private string quickLootRuleSearch="",quickLootRuleQuery="",quickLootTransfer="",quickLootUiMessage="";
     private bool quickLootSearchDuties;
+    private DateTimeOffset quickLootSearchAfter;
+    private IEnumerator<(uint Id,string Name)>? quickLootSearchRows;
+    private string quickLootPendingSearch = "";
+    private bool quickLootSearchPending;
     private (uint Id,string Name)[] quickLootSearchResults=[];
     private int quickLootPreviewId;
     private string quickLootPreviewResult="Choose a current loot entry, or enter an item ID.";
@@ -18,7 +22,7 @@ public sealed partial class Plugin
     private void QCheck(string label,bool value,Action<bool> set)
     {if(ImGui.Checkbox(label,ref value)){set(value);quickLootUiChanged=true;}}
     private void QInt(string label,int value,int max,Action<int> set)
-    {if(ImGui.InputInt(label,ref value)){set(Math.Clamp(value,0,max));quickLootUiChanged=true;}}
+    {DrawCommittedInteger(label,value,0,max,v=>{set(v);quickLootUiChanged=true;},saveConfig:false);}
     private void QRoll(string label,QuickLootRoll value,Action<QuickLootRoll> set,bool filter=false)
     {
         if(!ImGui.BeginCombo(label,value.ToString()))return;
@@ -116,13 +120,37 @@ public sealed partial class Plugin
     {
         var s=CurrentQuickLoot;var rules=duties?s.Duties:s.Items;
         ImGui.TextWrapped("Precedence: weekly protection → item override → duty override → global filters. Do nothing leaves the entry for you.");
-        if(quickLootSearchDuties!=duties){quickLootSearchDuties=duties;quickLootRuleQuery="";quickLootSearchResults=[];}
+        var categoryChanged=quickLootSearchDuties!=duties;
+        quickLootSearchDuties=duties;
         ImGui.InputText("Search name or ID",ref quickLootRuleSearch,100);
-        if(quickLootRuleQuery!=quickLootRuleSearch)
+        if(categoryChanged||quickLootRuleQuery!=quickLootRuleSearch)
         {
-            quickLootRuleQuery=quickLootRuleSearch;var q=quickLootRuleSearch.Trim();uint.TryParse(q,out var id);
-            quickLootSearchResults=q.Length==0?[]:duties?DataManager.GetExcelSheet<ContentFinderCondition>().Where(x=>x.RowId==id||q.Length>=2&&x.Name.ToString().Contains(q,StringComparison.OrdinalIgnoreCase)).Take(60).Select(x=>(x.RowId,x.Name.ToString())).ToArray():DataManager.GetExcelSheet<Item>().Where(x=>x.RowId==id||q.Length>=2&&x.Name.ToString().Contains(q,StringComparison.OrdinalIgnoreCase)).Take(60).Select(x=>(x.RowId,x.Name.ToString())).ToArray();
+            quickLootRuleQuery=quickLootRuleSearch;
+            quickLootPendingSearch=quickLootRuleSearch.Trim();
+            quickLootSearchRows?.Dispose();quickLootSearchRows=null;
+            quickLootSearchResults=[];
+            quickLootSearchAfter=DateTimeOffset.UtcNow.AddMilliseconds(250);
+            quickLootSearchPending=quickLootPendingSearch.Length>0;
         }
+        if(quickLootSearchPending&&DateTimeOffset.UtcNow>=quickLootSearchAfter)
+        {
+            var q=quickLootPendingSearch;uint.TryParse(q,out var id);
+            quickLootSearchRows??=(duties
+                ? DataManager.GetExcelSheet<ContentFinderCondition>().Select(x=>(x.RowId,x.Name.ToString()))
+                : DataManager.GetExcelSheet<Item>().Select(x=>(x.RowId,x.Name.ToString()))).GetEnumerator();
+            var matches=new List<(uint Id,string Name)>(quickLootSearchResults);
+            // Bound native sheet traversal per frame, including queries with no matches.
+            for(var count=0;count<250&&matches.Count<60;count++)
+            {
+                if(!quickLootSearchRows.MoveNext()){quickLootSearchPending=false;break;}
+                var row=quickLootSearchRows.Current;
+                if(row.Id==id||q.Length>=2&&row.Name.Contains(q,StringComparison.OrdinalIgnoreCase))matches.Add(row);
+            }
+            quickLootSearchResults=matches.ToArray();
+            if(matches.Count>=60)quickLootSearchPending=false;
+            if(!quickLootSearchPending){quickLootSearchRows.Dispose();quickLootSearchRows=null;}
+        }
+        if(quickLootSearchPending)ImGui.TextDisabled("Searching…");
         if(ImGui.BeginChild("QuickLootSearch"+duties,new Vector2(0,110),true))foreach(var row in quickLootSearchResults)
         {if(ImGui.Selectable($"Add {row.Name} ({row.Id})")){if(!rules.Any(r=>r.Id==row.Id)){rules.Add(new(){Id=row.Id});quickLootUiChanged=true;}else quickLootUiMessage="This rule already exists.";}}
         ImGui.EndChild();

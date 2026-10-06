@@ -10,7 +10,7 @@ public sealed partial class Plugin
     {
         welcomeWindow.IsOpen=false;
         if(config.WelcomeVersion==CompanionVersion)return;
-        config.WelcomeVersion=CompanionVersion;Pi.SavePluginConfig(config);
+        config.WelcomeVersion=CompanionVersion;SaveConfiguration();
     }
     private sealed class WelcomeWindow : Window
     {
@@ -45,6 +45,10 @@ public sealed partial class Plugin
             ImGui.Spacing();ImGui.Separator();ImGui.Spacing();
             if(ImGui.CollapsingHeader("Companion guide & what's new"))
             {
+                ImGui.BulletText("0.5.1.60: Background local saves and performance timings");
+                ImGui.TextWrapped("Settings > Diagnostics measures draw, update and snapshot time. Typing numeric settings commits after editing. QuickLoot searches run in bounded batches.");
+                ImGui.BulletText("FollowThem travel and movement testing");
+                ImGui.TextWrapped("Mount matching, brief movement-input capture, bounded follow recovery, transport menu matching, and optional Lifestream World/DC travel. Deploy Journal V7.11.77 for new relay types. Native routes still need in-game testing.");
                 ImGui.BulletText("Characters, accounts and collections");
                 ImGui.BulletText("Housing visits and garden care reminders");
                 ImGui.BulletText("Gardening plans, submarine timers and supplies");

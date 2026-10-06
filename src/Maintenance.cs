@@ -24,7 +24,7 @@ public sealed partial class Plugin
             var retained = config.Houses.Select(x => x.EventId).Concat(config.Tending.Select(x => x.EventId))
                 .Concat(config.Planting.Select(x => x.EventId)).Concat(config.Discoveries.Select(x => x.Id)).ToHashSet();
             config.SentEvents.RemoveAll(id => !retained.Contains(id));
-            Pi.SavePluginConfig(config);
+            SaveConfiguration();
         }
         if (!config.NotifyHousingWarnings || !Player.IsLoaded || config.SharedRoster is null) return;
         var chars=config.SharedRoster.People.SelectMany(x=>x.Characters).ToArray();
@@ -35,7 +35,7 @@ public sealed partial class Plugin
             if (config.HousingWarnings.TryGetValue(h.Id,out var warned) && now-warned < TimeSpan.FromDays(1)) continue;
             Chat.Print(new SeStringBuilder().AddUiForeground(17).AddText($"[Equinox] Housing reminder: {h.Name} · {h.World} {h.District} W{h.Ward} P{h.Plot} — {(int)(now-at).TotalDays} days since the last eligible recorded entry. Enter with the private owner or an FC member; confirm the timer in game.").AddUiForegroundOff().Build());
             config.HousingWarnings[h.Id]=now;
-            Pi.SavePluginConfig(config);
+            SaveConfiguration();
         }
     }
 }

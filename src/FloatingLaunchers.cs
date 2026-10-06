@@ -4,16 +4,6 @@ using Dalamud.Interface.Utility;
 using Dalamud.Interface.Windowing;
 namespace EquinoxCompanion;
 
-[Serializable]
-public sealed class FloatingLauncherOptions
-{
-    public bool Enabled { get; set; } = true;
-    public float X { get; set; } = 24;
-    public float Y { get; set; } = 180;
-    public float Opacity { get; set; } = 1;
-    public bool Blur { get; set; }
-    public bool Locked { get; set; }
-}
 public sealed partial class Plugin
 {
     private static bool escapePopupWasOpen;
@@ -131,7 +121,7 @@ public sealed partial class Plugin
             }
             if (ImGui.IsItemDeactivated())
             {
-                if (draggedLauncher == name) { draggedLauncher = null; Pi.SavePluginConfig(config); }
+                if (draggedLauncher == name) { draggedLauncher = null; SaveConfiguration(); }
                 else if (hovered && minimizedLaunchers.Contains(name)) LauncherClick(name);
             }
             ImGui.SetCursorPos(Vector2.Zero);
@@ -153,7 +143,7 @@ public sealed partial class Plugin
         changed |= ImGui.Checkbox("Blur background", ref blur);
         changed |= ImGui.Checkbox("Lock position", ref locked);
         if (ImGui.Button("Reset position")) { o.X = 24; o.Y = 180 + (name == "Companion" ? 0 : name == "Fashion Report" ? 76 : name=="Planting"?152:name=="Welcome"?228:304); changed = true; }
-        if (changed) { o.Opacity = opacity; o.Blur = blur; o.Locked = locked; Pi.SavePluginConfig(config); }
+        if (changed) { o.Opacity = opacity; o.Blur = blur; o.Locked = locked; SaveConfiguration(); }
     }
     private void DrawFloatingLauncherSettings()
     {

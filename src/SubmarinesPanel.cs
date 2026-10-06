@@ -21,9 +21,9 @@ public sealed partial class Plugin
         ImGui.TextWrapped(config.SyncAutoRetainer?autoRetainerStatus:"Background submarine sync is off. Enable it in Settings > Tracking.");
         if(ImGui.TreeNode("Colour rules / reserve reminders")){
             ImGui.TextWrapped("Green: recorded fleet voyaging. Yellow: dispatch/collection or an unlocked empty slot. Orange: observed repair or supplies below your reserves. Grey: no fleet data. Counts are last recorded values; unknown repair/route costs are not assumed safe.");
-            var fuel=config.SubmarineFuelReserve;var kits=config.SubmarineRepairReserve;var space=config.SubmarineSpaceReserve;
-            var changed=ImGui.InputInt("Ceruleum reserve",ref fuel);changed|=ImGui.InputInt("Repair-kit reserve",ref kits);changed|=ImGui.InputInt("Free inventory slots reserve",ref space);
-            if(changed){config.SubmarineFuelReserve=Math.Clamp(fuel,1,100000);config.SubmarineRepairReserve=Math.Clamp(kits,1,100000);config.SubmarineSpaceReserve=Math.Clamp(space,1,140);Pi.SavePluginConfig(config);}
+            DrawCommittedInteger("Ceruleum reserve",config.SubmarineFuelReserve,1,100000,v=>config.SubmarineFuelReserve=v);
+            DrawCommittedInteger("Repair-kit reserve",config.SubmarineRepairReserve,1,100000,v=>config.SubmarineRepairReserve=v);
+            DrawCommittedInteger("Free inventory slots reserve",config.SubmarineSpaceReserve,1,140,v=>config.SubmarineSpaceReserve=v);
             ImGui.TreePop();
         }
         var observations=new List<SharedVoyage>(config.SharedRoster?.Voyages??[]);

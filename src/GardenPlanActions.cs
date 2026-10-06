@@ -33,7 +33,7 @@ public sealed partial class Plugin
         if(visitor){
             if(ImGui.Button("Reset batch mapping / resync")){
                 var patch=plan.PhysicalPatch>0?plan.PhysicalPatch:plan.Batch;
-                config.GardenResyncBatches.Add(GardenResyncKey(plan.HouseId,patch));gardenBedSync=null;canceledBedSync=(plan.HouseId,patch);gardenSelectionFollow.Reset();Pi.SavePluginConfig(config);
+                config.GardenResyncBatches.Add(GardenResyncKey(plan.HouseId,patch));gardenBedSync=null;canceledBedSync=(plan.HouseId,patch);gardenSelectionFollow.Reset();SaveConfiguration();
                 gardenPlanEditStatus="Sync beds is available again for this batch. Existing garden records were kept.";
             }
             ImGui.TextWrapped("Use Sync beds above, then follow the existing numbered steps through all eight beds.");return;
