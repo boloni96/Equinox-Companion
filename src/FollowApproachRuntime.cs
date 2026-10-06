@@ -63,6 +63,8 @@ public sealed partial class Plugin
             approachStopRequested=false;travelStationary.Reset();nextApproachAttempt=now.AddMilliseconds(750);
             TravelDiagnostic("Your movement paused travel; the queued trip is kept until its original expiry.");return;
         }
+        if(followStopPending||followStopUnconfirmed)return;
+        if(now<nextApproachAttempt)return;
         if(Objects.LocalPlayer is not {} self)return;
         var position=self.Position;var atPoint=signal.TravelKind is "teleport" or "estate" or "friendestate" or "world"||MatchingTravelMenu(signal)||WithinTravelInteractionRange(signal)||signal.Approach==null||Vector3.DistanceSquared(position,signal.Approach.Point)<=.5625f;
         if(!atPoint){
@@ -98,5 +100,11 @@ public sealed partial class Plugin
         TravelDiagnostic("Stationary confirmed; performing the selected travel action.");
         if(travelAwaitingArrival?.Id==signal.Id){routeStartPosition=position;routeExecutionStarted=true;routeSawLoading=false;}
         TryUseSharedPortal(signal,now);
+        // A failed interaction dispatch is not a departure. Keep the exact trip
+        // and its original expiry so a transient range/menu failure can recover.
+        if(signal.TravelKind is "door" or "transport" or "aethernet" or "ward"&&pendingTransport==null&&pendingWard==null&&pendingAethernet==null&&receivedPortal==null){
+            followApproach=signal;approachStopRequested=false;nextApproachAttempt=now.AddSeconds(1);routeExecutionStarted=false;
+            RecordFollowTravel("Travel dispatch deferred",new {signal.Id,signal.TravelKind,position,source=new Vector3(signal.X,signal.Y,signal.Z)});
+        }
     }
 }

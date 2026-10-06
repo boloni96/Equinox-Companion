@@ -9,8 +9,8 @@ public sealed partial class Plugin
     private readonly Queue<FollowPortalSignal> travelQueue=new();
     private readonly HashSet<string> queuedTravelIds=new();
     private FollowPortalSignal? travelAwaitingArrival;
-    private DateTimeOffset travelDispatchedAt;
-    private void ResetTravelQueue(){travelQueue.Clear();queuedTravelIds.Clear();travelAwaitingArrival=null;portalReadCursor=0;routeArrivalConfirmed=false;routeSawLoading=false;routeExecutionStarted=false;}
+    private DateTimeOffset travelDispatchedAt,nextQueueAttempt;
+    private void ResetTravelQueue(){travelQueue.Clear();queuedTravelIds.Clear();travelAwaitingArrival=null;portalReadCursor=0;routeArrivalConfirmed=false;routeSawLoading=false;routeExecutionStarted=false;nextQueueAttempt=default;}
     private void EnqueueTravel(FollowPortalSignal signal)
     {
         if(signal.SentAt<followArmedAt||signal.Id==lastPortalSignalId||queuedTravelIds.Contains(signal.Id))return;
@@ -39,13 +39,14 @@ public sealed partial class Plugin
             }else return;
         }
         if(loading||!Player.IsLoaded||followApproach!=null||pendingTransport!=null||pendingWard!=null||pendingAethernet!=null||receivedPortal!=null||pendingDutyLeave!=null||lifestreamTravelOwned)return;
+        if(now<nextQueueAttempt)return;
         while(travelQueue.TryPeek(out var next)){
-            if(next.ExpiresAt<=now.ToUnixTimeMilliseconds()||next.SentAt<followArmedAt){travelQueue.Dequeue();continue;}
-            travelQueue.Dequeue();
+            if(next.ExpiresAt<=now.ToUnixTimeMilliseconds()||next.SentAt<followArmedAt){travelQueue.Clear();TravelDiagnostic("Queued trip expired; dependent trips cancelled. Return to your follower.");return;}
             if(routeArrivalConfirmed&&FollowThemSession.Matches(config.FollowThem.TargetName,config.FollowThem.HomeWorld,next.Name,next.HomeWorld)&&next.CurrentWorld==Player.CurrentWorld.RowId&&next.Territory==Client.TerritoryType&&AgentMap.Instance()!=null&&next.MapId==AgentMap.Instance()->CurrentMapId){lastLeaderEntity=next.EntityId;lastLeaderSeen=now;}
             QueueFollowApproach(next,now);
+            if(followApproach!=null||pendingDutyLeave!=null)travelQueue.Dequeue();
             if((followApproach!=null||pendingDutyLeave!=null)&&next.Arrival!=null){travelAwaitingArrival=next;travelDispatchedAt=now;routeExecutionStarted=pendingDutyLeave!=null;routeSawLoading=false;routeStartPosition=Objects.LocalPlayer?.Position??default;}
-            if(followApproach==null&&pendingDutyLeave==null){travelQueue.Clear();TravelDiagnostic("Queued trip could not start; remaining trips cancelled. Return to your follower.");}
+            if(followApproach==null&&pendingDutyLeave==null){nextQueueAttempt=now.AddSeconds(1);TravelDiagnostic("Queued trip is waiting for its source location; kept until its original expiry.");}
             return;
         }
     }

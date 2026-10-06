@@ -1454,3 +1454,17 @@ var edge64=FollowCrystalApproach.Point(new(0,0,0),new(4,1,0),0);
 Check("64 crystal approach avoids center",edge64.X.ToString(System.Globalization.CultureInfo.InvariantCulture),"2.25");
 Check("64 crystal approach preserves floor",edge64.Y.ToString(),"1");
 Check("64 nearby valid crystal approach unchanged",FollowCrystalApproach.Point(new(0,0,0),new(1,1,0),0).ToString(),new System.Numerics.Vector3(1,1,0).ToString());
+
+// .65: do not synthesize UI/menu commands or modified shortcuts while stopping.
+Check("stop accepts configured backward letter",FollowStopKeyPolicy.Allowed(0x53,0).ToString(),"True");
+Check("stop accepts configured arrow",FollowStopKeyPolicy.Allowed(0x28,0).ToString(),"True");
+Check("stop rejects modifier shortcut",FollowStopKeyPolicy.Allowed(0x53,2).ToString(),"False");
+foreach(var unsafeStopKey in new[]{0,1,2,0x0D,0x1B,0x20,0x09,0x70})
+    Check("stop rejects non-movement key "+unsafeStopKey,FollowStopKeyPolicy.Allowed(unsafeStopKey,0).ToString(),"False");
+var jumpingStuck65=new FollowStuckWatch();
+var jumpLeader65=new System.Numerics.Vector3(20,0,0);
+jumpingStuck65.Observe(time,System.Numerics.Vector3.Zero,20,true,10,jumpLeader65);
+for(var sec65=1;sec65<10;sec65++) jumpingStuck65.Observe(time.AddSeconds(sec65),new(0,sec65%2==0?0:2,0),20,true,10,jumpLeader65);
+Check("jumping at wall does not reset ten-second timeout",jumpingStuck65.Observe(time.AddSeconds(10),new(0,1,0),20,true,10,jumpLeader65).ToString(),"True");
+Check("stuck follower stays waiting while leader stationary",jumpingStuck65.Observe(time.AddSeconds(11),new(0,2,0),20,true,10,jumpLeader65).ToString(),"True");
+Check("stuck follower resumes when leader returns closer",jumpingStuck65.Observe(time.AddSeconds(12),new(0,0,0),2,true,10,new(2,0,0)).ToString(),"False");

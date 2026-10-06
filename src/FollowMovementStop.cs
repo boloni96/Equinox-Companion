@@ -1,59 +1,88 @@
-using Dalamud.Hooking;
-using FFXIVClientStructs.FFXIV.Client.Game.Control;
+using FFXIVClientStructs.FFXIV.Client.System.Input;
+using FFXIVClientStructs.FFXIV.Client.UI;
+using FFXIVClientStructs.FFXIV.Component.GUI;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
-    private unsafe delegate bool FollowInputDelegate(InputManager* manager,InputCode code);
-    private Hook<FollowInputDelegate>? followInputHook;
-    private bool followInputUnavailable,followStopPending,followStopIssued,nativeFollowRequested,followStopUnconfirmed;
+    private bool followStopPending,followStopIssued,nativeFollowRequested,followStopUnconfirmed;
     private DateTimeOffset followStopNext,followStopPulseUntil;
     private ulong followStopCharacter;
-    private int followStopPulseReads;
+    private int followStopKey;
+    private nint followStopWindow;
     private readonly FollowStationaryGate followStopStationary=new();
-    // A short client-local backward-input pulse uses the same cancellation path
-    // as manual movement. No OS key events are sent to either game window.
-    private unsafe bool FollowInputDetour(InputManager* manager,InputCode code)
-    {
-        if(code==InputCode.MOVE_BACK&&DateTimeOffset.UtcNow<followStopPulseUntil&&Player.IsLoaded&&Player.ContentId==followStopCharacter&&CanIssueFollowMovement()){
-            followStopPulseReads++;return true;
-        }
-        return followInputHook!.Original(manager,code);
-    }
-    private unsafe bool ReadFollowInput(InputManager* input,InputCode code)=>input!=null&&(followInputHook?.IsEnabled==true?followInputHook.Original(input,code):input->GetInputStatus(code));
+    private static readonly InputId[] FollowMovementBindings=[InputId.MOVE_FORE,InputId.MOVE_BACK,InputId.MOVE_LEFT,InputId.MOVE_RIGHT,InputId.MOVE_STRIFE_L,InputId.MOVE_STRIFE_R];
+
+    // Read the stored, UI-filtered input data. Never call InputManager.GetInputStatus:
+    // the .64 stop hook received no reads and that path produced unwanted actions.
     private unsafe bool FollowMovementKeysHeld()
     {
-        var input=InputManager.Instance();
-        return ReadFollowInput(input,InputCode.MOVE_FORE)||ReadFollowInput(input,InputCode.MOVE_BACK)||ReadFollowInput(input,InputCode.MOVE_LEFT)||ReadFollowInput(input,InputCode.MOVE_RIGHT)||ReadFollowInput(input,InputCode.MOVE_STRIFE_L)||ReadFollowInput(input,InputCode.MOVE_STRIFE_R);
+        var input=UIInputData.Instance();if(input==null)return false;
+        if(Math.Abs(input->GamepadInputs.LeftStickX)>20||Math.Abs(input->GamepadInputs.LeftStickY)>20)return true;
+        foreach(var id in FollowMovementBindings){
+            if(input->Keybinds==null||(int)id>=input->NumKeybinds)continue;
+            foreach(var binding in input->Keybinds[(int)id].KeySettings){
+                var key=(int)binding.Key;
+                if(key<=0||key>=input->KeyboardInputs.KeyState.Length||key==followStopKey&&DateTimeOffset.UtcNow<followStopPulseUntil.AddMilliseconds(100))continue;
+                if(binding.KeyModifier==input->CurrentKeyModifier&&(input->GetKeyState(key)&KeyStateFlags.Down)!=0)return true;
+            }
+        }
+        return false;
+    }
+    private unsafe int FollowStopBoundKey()
+    {
+        var input=UIInputData.Instance();if(input==null||input->Keybinds==null||input->NumKeybinds<=(int)InputId.MOVE_BACK||input->CurrentKeyModifier!=0)return 0;
+        foreach(var binding in input->Keybinds[(int)InputId.MOVE_BACK].KeySettings){
+            var key=(int)binding.Key;
+            if(FollowStopKeyPolicy.Allowed(key,(int)binding.KeyModifier)&&key<input->KeyboardInputs.KeyState.Length&&(input->GetKeyState(key)&KeyStateFlags.Down)==0)return key;
+        }
+        return 0;
+    }
+    private unsafe bool FollowStopTextEntryActive()
+    {
+        var stage=AtkStage.Instance();
+        return stage==null||stage->AtkInputManager==null||stage->AtkInputManager->IsTextInputActive||Dalamud.Bindings.ImGui.ImGui.GetIO().WantTextInput;
+    }
+    private void ReleaseFollowStopKey()
+    {
+        if(followStopWindow==0)return;
+        FollowWindowInput.Release(followStopWindow,followStopKey);followStopWindow=0;
     }
     private void RequestFollowMovementStop()
     {
         if(followStopPending)return;
-        followStopIssued=false;followStopUnconfirmed=false;followStopPending=true;followStopCharacter=Player.IsLoaded?Player.ContentId:followLogin;followStopNext=default;followStopStationary.Reset();
+        followStopIssued=false;followStopUnconfirmed=false;followStopPending=true;followStopCharacter=Player.IsLoaded?Player.ContentId:followLogin;followStopNext=DateTimeOffset.UtcNow.AddSeconds(5);followStopStationary.Reset();
         UpdateFollowMovementStop(DateTimeOffset.UtcNow);
     }
     private unsafe void UpdateFollowMovementStop(DateTimeOffset now)
     {
-        if(followStopPending&&Player.IsLoaded&&Player.ContentId!=followStopCharacter){followStopPending=false;followStopPulseUntil=default;nativeFollowRequested=false;followStopUnconfirmed=false;return;}
-        if(now>=followStopPulseUntil&&followInputHook is {IsEnabled:true})followInputHook.Disable();
+        if(followStopWindow!=0&&(now>=followStopPulseUntil||!Player.IsLoaded||Player.ContentId!=followStopCharacter||FollowStopTextEntryActive()))ReleaseFollowStopKey();
+        if(followStopPending&&Player.IsLoaded&&Player.ContentId!=followStopCharacter){ReleaseFollowStopKey();followStopPending=false;nativeFollowRequested=false;followStopUnconfirmed=false;return;}
         if(!followStopPending)return;
-        if(!followStopIssued){
-            if(!CanIssueFollowMovement())return;
-            if(!followInputUnavailable&&followInputHook==null){
-                try{followInputHook=Interop.HookFromAddress<FollowInputDelegate>(InputManager.MemberFunctionPointers.GetInputStatus,FollowInputDetour);followInputHook.Enable();}
-                catch(Exception e){followInputUnavailable=true;errorJournal.Record("follow-stop", "Movement interrupt unavailable",exceptionType:e.GetType().Name);}
+        if(!nativeFollowRequested){
+            ReleaseFollowStopKey();
+            if(followStopStationary.Observe(now,Objects.LocalPlayer?.Position??default,Player.IsLoaded&&!FollowMovementKeysHeld())){
+                followStopPending=false;followStopUnconfirmed=false;if(!followSession.Armed){followStatus="STOPPED — Game follow cancelled; movement stopped.";RefreshFollowBar();}RecordFollowTravel("Movement stop confirmed",new {stationary=true,nativeFollowCancelled=true});
             }
-            if(followInputUnavailable){followStopPending=false;TravelDiagnostic("Movement interruption unavailable; tap a movement key to stop game follow.");return;}
-            if(followInputHook is {IsEnabled:false})followInputHook.Enable();
-            followStopPulseReads=0;followStopPulseUntil=now.AddMilliseconds(80);followStopNext=now.AddSeconds(2);followStopIssued=true;
-            RecordFollowTravel("Movement stop requested",new {method="client-local backward input",durationMs=80});return;
+            return;
         }
-        if(now<followStopPulseUntil)return;
-        if(followStopStationary.Observe(now,Objects.LocalPlayer?.Position??default,Player.IsLoaded&&!nativeFollowRequested&&!FollowMovementKeysHeld())){
-            followStopPending=false;RecordFollowTravel("Movement stop observation",new {inputReads=followStopPulseReads,stationary=true,nativeFollowStateVerified=false});return;
+        if(!followStopIssued){
+            if(!CanIssueFollowMovement()||FollowStopTextEntryActive()||FollowMovementKeysHeld()){
+                if(now>=followStopNext){followStopPending=false;followStopUnconfirmed=true;TravelDiagnostic("Stop is not confirmed. Close text input and tap a movement key to cancel game follow.");}
+                return;
+            }
+            followStopKey=FollowStopBoundKey();
+            if(followStopKey==0||!FollowWindowInput.Press(followStopKey,out followStopWindow)){
+                followStopPending=false;followStopUnconfirmed=true;
+                RecordFollowTravel("Movement stop unavailable",new {reason=followStopKey==0?"No unmodified backward movement binding available":"Current game window unavailable"});
+                TravelDiagnostic("Automatic stop unavailable; tap a movement key to cancel game follow.");return;
+            }
+            followStopPulseUntil=now.AddMilliseconds(100);followStopNext=now.AddSeconds(2);followStopIssued=true;
+            RecordFollowTravel("Movement stop requested",new {method="current-process window movement key",key=followStopKey,durationMs=100,process=Environment.ProcessId});return;
         }
         if(now>=followStopNext){
-            followStopPending=false;followStopUnconfirmed=nativeFollowRequested;RecordFollowTravel("Movement stop observation",new {inputReads=followStopPulseReads,stationary=false,nativeFollowStateVerified=false});
-            TravelDiagnostic("Movement has not stopped after the interrupt. Tap a movement key; automatic stop is not confirmed.");
+            ReleaseFollowStopKey();followStopPending=false;followStopUnconfirmed=true;
+            RecordFollowTravel("Movement stop unconfirmed",new {nativeFollowCancelled=false});
+            TravelDiagnostic("Game follow cancellation was not confirmed. Tap a movement key; travel is held.");
         }
     }
 }

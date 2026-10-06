@@ -48,7 +48,7 @@ public sealed partial class Plugin
     {
         if(lifestreamTravelOwned){
             if(!followSession.Armed||!config.EnableFollowThem||!config.FollowThem.UseLifestream||now-lifestreamTravelAt>TimeSpan.FromMinutes(30)||Player.IsLoaded&&Player.ContentId!=lifestreamCharacter){CancelLifestreamTravel();return;}
-            try{if(now-lifestreamTravelAt>TimeSpan.FromSeconds(2)&&!LifestreamBusy()){
+            try{if(Player.IsLoaded&&!Conditions[Dalamud.Game.ClientState.Conditions.ConditionFlag.BetweenAreas]&&!Conditions[Dalamud.Game.ClientState.Conditions.ConditionFlag.BetweenAreas51]&&now-lifestreamTravelAt>TimeSpan.FromSeconds(2)&&!LifestreamBusy()){
                 lifestreamTravelOwned=false;followReady.Reset();
                 TravelDiagnostic(Player.IsLoaded&&(lifestreamDestination==0||Player.CurrentWorld.RowId==lifestreamDestination)?"Lifestream travel finished; waiting for the selected character nearby.":"Lifestream stopped before arrival; waiting. Check its travel settings or queue message.");
             }}catch(Exception){lifestreamTravelOwned=false;TravelDiagnostic("Lifestream became unavailable; waiting.");}

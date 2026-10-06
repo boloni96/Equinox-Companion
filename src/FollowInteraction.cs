@@ -10,13 +10,13 @@ public sealed partial class Plugin
     private unsafe void RetryTravelInteraction(FollowPortalSignal signal,DateTimeOffset now)
     {
         if(interactionSignal!=signal.Id){interactionSignal=signal.Id;interactionAttempts=0;interactionNext=default;}
-        if(now<interactionNext||interactionAttempts>=3||!travelStepReady||followStopPending||FollowTransitionBusy()||Objects.LocalPlayer is not {} self)return;
+        if(now<interactionNext||interactionAttempts>=3||!travelStepReady||followStopPending||followStopUnconfirmed||FollowTransitionBusy()||Objects.LocalPlayer is not {} self)return;
         foreach(var name in new[]{"SelectString","SelectYesno","Talk","TelepotTown","HousingSelectBlock","HousingSelectRoom","MansionSelectRoom"})if(VisibleFollowAddon(name))return;
         var source=Objects.FirstOrDefault(x=>x.BaseId==signal.BaseId&&x.IsTargetable&&(signal.SourceKind.Length==0||x.ObjectKind.ToString()==signal.SourceKind)&&Vector3.DistanceSquared(x.Position,new(signal.X,signal.Y,signal.Z))<1&&Vector3.Distance(self.Position,x.Position)<=x.HitboxRadius+3);
         if(source==null)return;
         interactionAttempts++;interactionNext=now.AddSeconds(2);
         relayInteracting=true;
-        try{TargetSystem.Instance()->InteractWithObject((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)source.Address,true);}
+        try{Targets.Target=source;TargetSystem.Instance()->InteractWithObject((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)source.Address,true);}
         finally{relayInteracting=false;}
         RecordFollowTravel("Interact",new {signal.Id,signal.TravelKind,source=source.Name.TextValue,attempt=interactionAttempts});
     }

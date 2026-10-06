@@ -675,6 +675,7 @@ public sealed partial class Plugin : IDalamudPlugin
     {
         if(message.LogKind is XivChatType.SystemMessage or XivChatType.Notice&&message.OriginalMessage.ExtractText().Trim()=="No longer following a target."){
             nativeFollowRequested=false;followStopUnconfirmed=false;
+            if(!followSession.Armed&&!followStopPending){followStatus="STOPPED — Game follow cancelled.";RefreshFollowBar();}
             if(config.EnableFollowThem)RecordFollowTravel("Game follow cancelled",new {pendingStop=followStopPending});
         }
         if (config.EnableFollowThem && message.LogKind is XivChatType.ErrorMessage or XivChatType.SystemError &&
@@ -1048,7 +1049,7 @@ public sealed partial class Plugin : IDalamudPlugin
         followBar?.Remove();
         followPortalHook?.Dispose();
         followTeleportHook?.Dispose();
-        followStopPulseUntil=default;followInputHook?.Dispose();
+        ReleaseFollowStopKey();
         friendEstateHook?.Dispose();
         portalRelay.Dispose();
         quickLootBarEntry?.Remove();

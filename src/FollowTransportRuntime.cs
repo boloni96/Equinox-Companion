@@ -20,7 +20,7 @@ public sealed partial class Plugin
         transportCapture=null;transportSawLoading=false;
         if(!SharingTravel||usingSharedTravel||relayInteracting||clicked.ObjectKind is not (ObjectKind.Aetheryte or ObjectKind.EventNpc or ObjectKind.EventObj))return;
         var observed=TravelSignal("transport",0,"",clicked.BaseId,clicked.Position);if(observed==null)return;
-        transportCapture=observed with {SourceKind=clicked.ObjectKind.ToString(),SourceRadius=Math.Clamp(clicked.HitboxRadius,0,10),Steps=[]};
+        transportCapture=observed with {SourceKind=clicked.ObjectKind.ToString(),SourceRadius=Math.Clamp(clicked.HitboxRadius,0,10),Approach=FollowTravelPosition.From(FollowCrystalApproach.Point(clicked.Position,Objects.LocalPlayer!.Position,clicked.HitboxRadius)),Steps=[]};
         var housing=FFXIVClientStructs.FFXIV.Client.Game.HousingManager.Instance();
         if(clicked.ObjectKind==ObjectKind.EventObj&&clicked.Name.TextValue is "Entrance" or "Exit" or "Entrance to the Company Workshop" or "Entrance to Additional Chambers" or "Workshop Entrance"&&housing!=null&&housing->CurrentTerritory!=null)
             transportCapture=transportCapture with {TravelKind="door"};

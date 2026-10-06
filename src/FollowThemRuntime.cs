@@ -79,7 +79,7 @@ public sealed partial class Plugin
         ResetTravelQueue();receivedPortal = null;pendingAethernet=null;pendingWard=null;pendingTransport=null;CancelLifestreamTravel();CancelFollowApproach();pendingDutyLeave=null;
         relayGeneration++;
         followReady.Reset();
-        if (wasArmed) followStatus = "STOPPED — " + reason;
+        if (wasArmed) followStatus = followStopPending||followStopUnconfirmed ? "STOPPING — Stop requested; waiting for game follow cancellation." : "STOPPED — " + reason;
         RefreshFollowBar();
     }
     private void FollowChatNotice(string message)
@@ -102,7 +102,7 @@ public sealed partial class Plugin
         if (!config.EnableFollowThem) { followBar?.Remove(); followBar = null; followBarText = ""; return; }
         followBar ??= QuickLootBar.Get("Equinox FollowThem");
         followBar.Shown = true;
-        var label = followSession.Armed&&followRecovery.AwaitingMovement ? "WAITING" : followSession.Phase switch
+        var label = !followSession.Armed&&(followStopPending||followStopUnconfirmed) ? "STOPPING" : followSession.Armed&&followRecovery.AwaitingMovement ? "WAITING" : followSession.Phase switch
         {
             FollowPhase.Following => config.FollowThem.TargetName,
             FollowPhase.Waiting => "WAITING", FollowPhase.Loading => "LOADING", _ => "STOPPED"
@@ -138,6 +138,7 @@ public sealed partial class Plugin
                 if(visibleLeader!=null){lastLeaderPosition=visibleLeader.Position;lastLeaderSeen=now;lastLeaderEntity=visibleLeader.GameObjectId.ToString();}
             }
             if(followSession.Armed&&config.FollowThem.StopOnMovement&&FollowMovementKeysHeld()){StopFollowThem("Your movement input.");return;}
+            if(followSession.Armed){TryFollowInvitations(now);TryFollowTeleport(now);}
             if(pendingTransport!=null||pendingWard!=null||pendingAethernet!=null||receivedPortal!=null||travelAwaitingArrival!=null){followSession.Pause();followStatus="WAITING — Completing the selected travel action.";return;}
             if(pendingDutyLeave!=null){followSession.Pause();followStatus="WAITING — "+portalRelayStatus;RefreshFollowBar();return;}
             if(followApproach!=null){followSession.Pause();followStatus="WAITING — "+portalRelayStatus;RefreshFollowBar();return;}
@@ -160,8 +161,6 @@ public sealed partial class Plugin
                 followStuck.Pause();
                 followSession.Observe(true, login != 0, true, false, true);
             }
-            TryFollowInvitations(now);
-            TryFollowTeleport(now);
             if (Conditions[ConditionFlag.InCombat] || Conditions[ConditionFlag.Unconscious])
             { followSession.Pause();followStuck.Pause();followReady.Reset();followStatus="WAITING — Combat or incapacitation; follow remains armed.";RefreshFollowBar();return; }
             if (!followReady.Observe(now, !transitioning && CanIssueFollowMovement()))
@@ -194,8 +193,8 @@ public sealed partial class Plugin
             }
             if(!nearby)followRecovery.Reset();
             var action = followSession.Observe(true, login != 0, false, nearby, settings.ResumeNearby);
-            if (action == FollowAction.Stop || !nearby && InputManager.IsAutoRunning()) RequestFollowMovementStop();
-            if (action == FollowAction.Start && followStopPending){followSession.Pause();return;}
+            if (action == FollowAction.Stop || !nearby && nativeFollowRequested && !followStopUnconfirmed) RequestFollowMovementStop();
+            if (action == FollowAction.Start && (followStopPending||followStopUnconfirmed)){followSession.Pause();return;}
             if (action == FollowAction.Start)
             {
                 var previous = Targets.Target;
@@ -243,6 +242,7 @@ public sealed partial class Plugin
         if (addon == null || !addon->IsVisible || addon->PromptText == null) return;
         var prompt = addon->PromptText->NodeText.ToString();
         if (!FollowThemSession.IsPartyTeleportPrompt(prompt)) return;
+        if(followStopPending||followStopUnconfirmed)return;
         if(!travelStepReady){PauseFollowForTravel();return;}
         nextTeleportAttempt = now.AddSeconds(5);
         addon->FireCallbackInt(0);
