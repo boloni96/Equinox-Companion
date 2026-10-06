@@ -1140,3 +1140,12 @@ foreach(var order52 in new int[][]{[1,2,3],[1,3,2],[2,1,3],[2,3,1],[3,1,2],[3,2,
 Check("batch swap two occupied labels",string.Join(',',GardenBatchOrdering.Swap([1,2,3],1,3)),"3,2,1");
 Check("batch order rejects duplicates",GardenBatchOrdering.Valid(new("h",[1,1],null)).ToString(),"False");
 Check("batch order rejects missing positions",GardenBatchOrdering.Valid(new("h",[2],null)).ToString(),"False");
+Check("FC request placeholder rejected", CompanyProfileIdentity.Id(unchecked((long)0xE000000000000000UL)), "");
+Check("FC 32 bit placeholder rejected", CompanyProfileIdentity.ValidId("3758096384").ToString(), "False");
+Check("FC ulong overflow rejected", CompanyProfileIdentity.ValidId("18446744073709551616").ToString(), "False");
+var identity53 = new FreeCompanyDetails("9235475460853372045", "Company", "TAG", 86, "Master");
+Check("FC placeholder matched proxy", CompanyProfileIdentity.Resolve(unchecked((long)0xE000000000000000UL), "Company", 86, "Master", identity53), identity53.Id);
+Check("FC placeholder wrong world", CompanyProfileIdentity.Resolve(unchecked((long)0xE000000000000000UL), "Company", 56, "Master", identity53), "");
+Check("FC placeholder wrong master", CompanyProfileIdentity.Resolve(unchecked((long)0xE000000000000000UL), "Company", 86, "Other", identity53), "");
+Check("FC placeholder no proxy", CompanyProfileIdentity.Resolve(unchecked((long)0xE000000000000000UL), "Company", 86, "Master", null), "");
+Check("FC conflicting native IDs held", CompanyProfileIdentity.Resolve(unchecked((long)9281074407080476924UL), "Company", 86, "Master", identity53), "");

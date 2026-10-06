@@ -27,7 +27,21 @@ public static class CompanyProfileIdentity
 {
     public static string Flags(int bits, string[] labels) => bits == 0 ? "Not specified" : string.Join(", ", labels.Where((_,i)=>(bits & (1<<i))!=0));
     // Native RequestId is signed, while FC/Lodestone IDs use the entire unsigned 64-bit value.
-    public static string Id(long requestId) => unchecked((ulong)requestId).ToString(System.Globalization.CultureInfo.InvariantCulture);
+    public static bool ValidId(string? value) => ulong.TryParse(value, out var id) && id != 0 && id != ulong.MaxValue && id != 0xE000000000000000UL && id != 0xE0000000UL;
+    public static string Id(long requestId)
+    {
+        var value = unchecked((ulong)requestId).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return ValidId(value) ? value : "";
+    }
+    public static string Resolve(long requestId, string name, ushort world, string master, FreeCompanyDetails? proxy)
+    {
+        var id = Id(requestId);
+        var matching = proxy is not null && ValidId(proxy.Id) && proxy.WorldId == world &&
+            string.Equals(proxy.Name.Trim(), name.Trim(), StringComparison.OrdinalIgnoreCase) &&
+            !string.IsNullOrWhiteSpace(master) && string.Equals(proxy.MasterName.Trim(), master.Trim(), StringComparison.OrdinalIgnoreCase);
+        if (id.Length == 0) return matching ? proxy!.Id : "";
+        return matching && proxy!.Id != id ? "" : id;
+    }
     public static bool MatchesPlacard(FreeCompanyDetails company, PlacardDetails sign) =>
         company.WorldId == sign.Address.WorldId &&
         string.Equals(company.Name.Trim(), sign.OwnerName.Trim(), StringComparison.OrdinalIgnoreCase) &&

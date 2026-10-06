@@ -18,7 +18,7 @@ public static class SyncValidation
         Regex.IsMatch(a.ContentId ?? "", @"^[1-9]\d{0,19}$") &&
         !string.IsNullOrWhiteSpace(a.Name) && a.Name.Length <= 80 &&
         a.HomeWorldId is > 0 and <= 65535 && a.CurrentWorldId is > 0 and <= 65535;
-    private static bool FC(FreeCompanyDetails? f) => f is not null && Regex.IsMatch(f.Id ?? "", @"^[1-9]\d{0,19}$") && Text(f.Name) && f.Tag is not null && f.Tag.Length <= 10 && f.WorldId > 0;
+    private static bool FC(FreeCompanyDetails? f) => f is not null && CompanyProfileIdentity.ValidId(f.Id) && Regex.IsMatch(f.Id ?? "", @"^[1-9]\d{0,19}$") && Text(f.Name) && f.Tag is not null && f.Tag.Length <= 10 && f.WorldId > 0;
     public static bool CompanyReady(FreeCompanyDetails? f) => FC(f) && f!.MasterName.Length <= 80 && f.Profile is { Rank: >= 1 and <= 30, ActiveMembers: >= 1 and <= 512 } p &&
         p.Source is "company-profile" or "member-list" && Text(p.HomeWorld) &&
         new[] {p.Slogan,p.GrandCompany,p.Recruitment,p.Active,p.Focus,p.Seeking,p.EstateName}.All(x=>x is null || x.Length<=500 && !x.Any(char.IsControl)) &&
