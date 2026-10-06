@@ -73,3 +73,15 @@ its own game client. Dual-client native behavior still requires testing.
 Right-click FollowThem/QuickLoot on the top bar to open Companion without toggling.
 Esc minimizes the focused plugin window to its floating icon; popup dismissal
 takes precedence. X remains close. This applies to the five Companion windows.
+
+## Companion 0.5.1.58
+
+
+Older Journal exports incorrectly converted replantOrder=0 (no replacement) into 1.
+Companion now ignores a replacement step at or before its original planting step.
+This removes false remove/replant prompts and inflated totals without changing
+observed crops, planting/care timestamps or batch identity. Valid later replacements
+(such as starter Bed 1, step 9) remain supported.
+Deploy Journal V7.11.75 to fix the exporter as well. No reset or replant is needed.
+973 automated checks passed; Release build has zero warnings/errors.
+In-game confirmation of the affected existing garden remains pending.

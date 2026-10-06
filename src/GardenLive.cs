@@ -42,7 +42,10 @@ public static class GardenLive
     }
     public static SharedGardenBed[] Progress(SharedGardenBed[] beds,DateTimeOffset planAt)
     {
-        var result=beds.Select(b=>b.Crop.Length==0?b with {Status="actual"}:b with {Status=b.PlantEvent.Length==0||b.Planted<planAt||b.Planted is null||b.LastClearedAt>=b.Planted?"planned":!GardenCropIdentity.Same(b.ActualCrop,b.Crop)?"different":b.ActualSoil==b.Soil?"confirmed":b.ReplantOrder>0&&b.ActualSoil==b.StarterSoil?"starter":"different"}).ToArray();
+        // A replacement must follow its original planting. Older roster exports
+        // incorrectly clamped the no-replant sentinel (0) to step 1.
+        var normalized=beds.Select(b=>b.ReplantOrder>0&&b.ReplantOrder<=b.Order?b with {ReplantOrder=0}:b);
+        var result=normalized.Select(b=>b.Crop.Length==0?b with {Status="actual"}:b with {Status=b.PlantEvent.Length==0||b.Planted<planAt||b.Planted is null||b.LastClearedAt>=b.Planted?"planned":!GardenCropIdentity.Same(b.ActualCrop,b.Crop)?"different":b.ActualSoil==b.Soil?"confirmed":b.ReplantOrder>0&&b.ActualSoil==b.StarterSoil?"starter":"different"}).ToArray();
         for(var i=0;i<result.Length;i++)
         {
             var b=result[i];if(b.ReplantOrder==0)continue;

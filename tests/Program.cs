@@ -426,6 +426,17 @@ Check("local first plant confirms starter",GardenLive.Apply(livePlan,liveEvents.
 Check("local neighbours trigger replant",GardenLive.Apply(livePlan,liveEvents,x=>x).Beds[0].Status,"replant");
 var localDone=GardenLive.Apply(livePlan,liveEvents.Append(LivePlant(1,10,"Grade 3 Thanalan Topsoil")),x=>x);
 Check("local final planting completes plan",(localDone.CompletedAt is not null).ToString(),"True");
+// Regression: old website exports changed every no-replant zero into one.
+var brokenRoster58=localDone with {Beds=localDone.Beds.Select(b=>b with {ReplantOrder=b.Bed==1?9:1}).ToArray()};
+var repairedRoster58=GardenLive.Apply(brokenRoster58,[],x=>x);
+Check("58 bogus bed two replant removed",repairedRoster58.Beds[1].ReplantOrder.ToString(),"0");
+Check("58 bed two stays confirmed",repairedRoster58.Beds[1].Status,"confirmed");
+Check("58 legitimate starter step retained",repairedRoster58.Beds[0].ReplantOrder.ToString(),"9");
+Check("58 nine steps not sixteen",repairedRoster58.Beds.Sum(b=>b.ReplantOrder>0?2:1).ToString(),"9");
+Check("58 observed planting unchanged",repairedRoster58.Beds[1].Planted.ToString(),localDone.Beds[1].Planted.ToString());
+Check("58 observed crop unchanged",repairedRoster58.Beds[1].ActualCrop,localDone.Beds[1].ActualCrop);
+var allFalse58=GardenLive.Apply(localDone with {Beds=localDone.Beds.Select(b=>b with {ReplantOrder=1}).ToArray()},[],x=>x);
+Check("58 all false replacement flags cleared",allFalse58.Beds.All(b=>b.ReplantOrder==0&&b.Status=="confirmed").ToString(),"True");
 var localHarvest=GardenLive.Apply(localDone,[new SyncEvent("empty","garden.empty",liveAt.AddMinutes(11),liveActor,liveAddress,1,2)],x=>x);
 Check("local harvest keeps completed plan",(localHarvest.CompletedAt is not null).ToString(),"True");
 Check("other batch cannot confirm selected tab",GardenLive.Apply(livePlan,[liveEvents[0] with {Patch=2}],x=>x).Beds[0].Status,"planned");
