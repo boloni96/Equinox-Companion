@@ -13,14 +13,15 @@ public sealed partial class Plugin
     private static unsafe uint CurrentFollowInstance()=>UIState.Instance()==null?0:UIState.Instance()->PublicInstance.InstanceId;
     private unsafe bool TrySelectFollowInstance(FollowPortalSignal signal,DateTimeOffset now)
     {
-        if(!followSession.Armed||signal.ExpiresAt<=now.ToUnixTimeMilliseconds()||signal.ArrivalInstance==0||Player.CurrentWorld.RowId!=signal.CurrentWorld||(Client.TerritoryType!=signal.Territory&&Client.TerritoryType!=signal.ArrivalTerritory)||!Player.IsLoaded||FollowStopTextEntryActive()||followStopPending||followStopUnconfirmed)return false;
+        if(!config.EnableFollowThem||!config.FollowThem.UseSharedTeleports||!followSession.Armed||relayPairingKey!=config.PairingKey||signal.SentAt<followArmedAt||!FollowThemSession.Matches(config.FollowThem.TargetName,config.FollowThem.HomeWorld,signal.Name,signal.HomeWorld)||signal.ExpiresAt<=now.ToUnixTimeMilliseconds()||signal.ArrivalInstance==0||Player.CurrentWorld.RowId!=0&&Player.CurrentWorld.RowId!=signal.CurrentWorld||(Client.TerritoryType!=0&&Client.TerritoryType!=signal.Territory&&Client.TerritoryType!=signal.ArrivalTerritory)||FollowStopTextEntryActive())return false;
         var addon=(AtkUnitBase*)GardenGui.GetAddonByName("SelectString").Address;
         var index=FollowInstancePolicy.Choice(TransportChoices(addon),signal.ArrivalInstance);
-        if(index<0||addon==null||!addon->IsReady)return false;
+        if(index<0||addon==null||!addon->IsVisible||!addon->IsReady)return false;
         if(now<nextInstanceChoice)return true;
         if(approachOwnsMovement){try{if(LifestreamBusy())Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch(Exception){return true;}approachOwnsMovement=false;}
-        if(!travelStepReady)return true;
-        if(travelAwaitingArrival?.Id==signal.Id)routeExecutionStarted=true;
+        // A ready numbered instance menu can be shown over the loading screen.
+        // Selecting it does not issue movement; loading/stationary gates must not deadlock it.
+        if(travelAwaitingArrival?.Id==signal.Id){routeExecutionStarted=true;followApproach=null;}
         nextInstanceChoice=now.AddSeconds(3);
         usingSharedTravel=true;try{SelectTravelChoice(addon,index);}finally{usingSharedTravel=false;}
         RecordFollowTravel("Instance requested",new {signal.Id,instance=signal.ArrivalInstance});return true;

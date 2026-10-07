@@ -189,7 +189,7 @@ public sealed partial class Plugin
         try
         {
             relayInteracting=true;
-            TargetSystem.Instance()->InteractWithObject((NativeObject*)target.Address,true);
+            TargetSystem.Instance()->InteractWithObject((NativeObject*)target.Address,false);
             portalRelayStatus="Requested the portal shared by "+signal.Name+".";
             FollowChatNotice("PORTAL — " + portalRelayStatus);
         }

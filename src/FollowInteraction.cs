@@ -17,7 +17,11 @@ public sealed partial class Plugin
         // cycle targets, turn the camera, or synthesize a target-selection key.
         if(facingSignal!=signal.Id||facingObject!=target.GameObjectId){
             facingSignal=signal.Id;facingObject=target.GameObjectId;
-            var delta=target.Position-self.Position;
+            Targets.Target=target;
+            var targetPosition=target.Position;
+            var action=FFXIVClientStructs.FFXIV.Client.Game.ActionManager.Instance();
+            if(action!=null)action->AutoFaceTargetPosition(&targetPosition,target.GameObjectId);
+            var delta=targetPosition-self.Position;
             if(delta.X*delta.X+delta.Z*delta.Z>.001f)
                 ((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)self.Address)->SetRotation(MathF.Atan2(delta.X,delta.Z));
             facingReadyAt=now.AddMilliseconds(250);return false;
@@ -32,8 +36,9 @@ public sealed partial class Plugin
         var source=Objects.FirstOrDefault(x=>x.BaseId==signal.BaseId&&x.IsTargetable&&(signal.SourceKind.Length==0||x.ObjectKind.ToString()==signal.SourceKind)&&Vector3.DistanceSquared(x.Position,new(signal.X,signal.Y,signal.Z))<1&&Vector3.Distance(self.Position,x.Position)<=x.HitboxRadius+3);
         if(source==null||!FaceTravelTarget(signal,source,now))return;
         interactionAttempts++;interactionNext=now.AddSeconds(2);facingSignal="";
+        // Exact recorded object and range were verified above; do not require camera visibility.
         relayInteracting=true;
-        try{Targets.Target=source;TargetSystem.Instance()->InteractWithObject((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)source.Address,true);}
+        try{Targets.Target=source;TargetSystem.Instance()->InteractWithObject((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)source.Address,false);}
         finally{relayInteracting=false;}
         RecordFollowTravel("Interact",new {signal.Id,signal.TravelKind,source=source.Name.TextValue,attempt=interactionAttempts});
     }

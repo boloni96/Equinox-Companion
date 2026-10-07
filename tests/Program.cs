@@ -1515,3 +1515,23 @@ progress67.Reset(time,new(0,0,0),new(10,0,0));
 Check("67 approach progress resets timeout",progress67.Stuck(time.AddSeconds(9),new(2,0,0),new(10,0,0),10).ToString(),"False");
 Check("67 continued approach before new timeout",progress67.Stuck(time.AddSeconds(18),new(2,0,0),new(10,0,0),10).ToString(),"False");
 Check("67 approach new timeout",progress67.Stuck(time.AddSeconds(19),new(2,0,0),new(10,0,0),10).ToString(),"True");
+
+// 0.5.1.68: party arrivals and independent queue recovery.
+var party68=arrival66 with {TravelKind="teleport"};
+Check("68 party arrival skips late relay",FollowArrivalPolicy.AlreadyAtTravelArrival(party68,2,30,40,new(10,0,10),true).ToString(),"True");
+Check("68 independent teleport arrival reconciles",FollowArrivalPolicy.AlreadyAtTravelArrival(party68,2,30,40,new(10,0,10),false).ToString(),"True");
+Check("68 wrong destination never reconciles",FollowArrivalPolicy.AlreadyAtTravelArrival(party68,2,31,40,new(10,0,10),true).ToString(),"False");
+Check("68 wrong floor never reconciles",FollowArrivalPolicy.AlreadyAtTravelArrival(party68,2,30,40,new(10,4,10),true).ToString(),"False");
+Check("68 same source without accepted offer remains actionable",FollowArrivalPolicy.AlreadyAtTravelArrival(party68 with {ArrivalTerritory=3,ArrivalMap=4},2,3,4,new(10,0,10),false).ToString(),"False");
+Check("68 same source accepted offer reconciles",FollowArrivalPolicy.AlreadyAtTravelArrival(party68 with {ArrivalTerritory=3,ArrivalMap=4},2,3,4,new(10,0,10),true).ToString(),"True");
+Check("68 doors not mistaken for teleport arrivals",FollowArrivalPolicy.AlreadyAtTravelArrival(party68 with {TravelKind="door"},2,30,40,new(10,0,10),true).ToString(),"False");
+var recoverNow68=time59.ToUnixTimeMilliseconds();
+var failedDoor68=travel59 with {Id="door",TravelKind="door"};
+var recoverWorld68=travel59 with {Id="world",TravelKind="world"};
+var recoverTeleport68=travel59 with {Id="teleport",TravelKind="teleport"};
+Check("68 failed door retains world and following steps",string.Join(",",FollowArrivalPolicy.RecoveryTail([failedDoor68,recoverWorld68,failedDoor68],recoverNow68,false).Select(x=>x.Id)),"world,door");
+Check("68 failed door skips dependent trips",FollowArrivalPolicy.RecoveryTail([failedDoor68,failedDoor68],recoverNow68,true).Length.ToString(),"0");
+Check("68 remote teleport preserved when enabled",string.Join(",",FollowArrivalPolicy.RecoveryTail([failedDoor68,recoverTeleport68],recoverNow68,true).Select(x=>x.Id)),"teleport");
+Check("68 remote teleport not assumed when disabled",FollowArrivalPolicy.RecoveryTail([failedDoor68,recoverTeleport68],recoverNow68,false).Length.ToString(),"0");
+Check("68 expired world does not recover",FollowArrivalPolicy.RecoveryTail([recoverWorld68 with {ExpiresAt=recoverNow68}],recoverNow68,true).Length.ToString(),"0");
+Check("68 fresher world after expired world recovers",string.Join(",",FollowArrivalPolicy.RecoveryTail([recoverWorld68 with {ExpiresAt=recoverNow68},recoverWorld68],recoverNow68,false).Select(x=>x.Id)),"world");

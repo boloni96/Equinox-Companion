@@ -78,7 +78,7 @@ public sealed partial class Plugin
         }
         if(pendingTransport is not {} pending)return;
         if(!followSession.Armed||!config.EnableFollowThem||!config.FollowThem.UseSharedTeleports||!Player.IsLoaded||(Client.TerritoryType!=pending.Territory&&!(pending.TravelKind=="friendestate"&&config.FollowThem.MeetAtTeleports))||Player.CurrentWorld.RowId!=pending.CurrentWorld||Conditions[ConditionFlag.InCombat]||!FollowThemSession.Matches(config.FollowThem.TargetName,config.FollowThem.HomeWorld,pending.Name,pending.HomeWorld)){pendingTransport=null;return;}
-        if(now-transportStarted>TimeSpan.FromSeconds(15)){pendingTransport=null;TravelDiagnostic("Transport timed out; menu or unlock differs. Waiting for your selected character.");return;}
+        if(now-transportStarted>TimeSpan.FromSeconds(15)){FailFollowTrip("Transport timed out; menu or unlock differs.");return;}
         if(!travelStepReady)return;
         if(now<transportNext||pending.Steps==null)return;
         if(AdvanceTravelTalk(pending)){transportNext=now.AddMilliseconds(750);return;}

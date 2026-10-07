@@ -143,7 +143,7 @@ public sealed partial class Plugin
             }
             if(followSession.Armed&&config.FollowThem.StopOnMovement&&FollowMovementKeysHeld()){StopFollowThem("Your movement input.");return;}
             if(followSession.Armed){TryFollowInvitations(now);TryFollowTeleport(now);}
-            if(pendingTransport!=null||pendingWard!=null||pendingAethernet!=null||receivedPortal!=null||travelAwaitingArrival!=null){followSession.Pause();followStatus="WAITING — Completing the selected travel action.";return;}
+            if(travelQueue.Count>0||pendingTransport!=null||pendingWard!=null||pendingAethernet!=null||receivedPortal!=null||travelAwaitingArrival!=null){if(nativeFollowRequested&&!followStopPending&&!followStopUnconfirmed)RequestFollowMovementStop();followSession.Pause();followStatus="WAITING — Completing the selected travel action.";return;}
             if(pendingDutyLeave!=null){followSession.Pause();followStatus="WAITING — "+portalRelayStatus;RefreshFollowBar();return;}
             if(followApproach!=null){followSession.Pause();followStatus="WAITING — "+portalRelayStatus;RefreshFollowBar();return;}
             if(lifestreamTravelOwned){followSession.Pause();followStatus="WAITING — Lifestream travel in progress.";return;}
@@ -238,6 +238,7 @@ public sealed partial class Plugin
         }else if(followFlight.Exhausted)followStatus="WAITING — Takeoff was not confirmed. Take off manually or let the leader land nearby.";
         return true;
     }
+    private DateTimeOffset acceptedPartyTeleportAt;
     private unsafe void TryFollowTeleport(DateTimeOffset now)
     {
         if (Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.Unconscious]||Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]||!config.FollowThem.AcceptPartyTeleports || FollowParty.Length < 2 || now < nextTeleportAttempt) return;
@@ -250,7 +251,8 @@ public sealed partial class Plugin
         if(followStopPending||followStopUnconfirmed)return;
         if(!travelStepReady){PauseFollowForTravel();return;}
         nextTeleportAttempt = now.AddSeconds(5);
-        addon->FireCallbackInt(0);
+        acceptedPartyTeleportAt=now;
+        usingSharedTravel=true;try{addon->FireCallbackInt(0);}finally{usingSharedTravel=false;}
         FollowChatNotice("TELEPORT — Accepted the party teleport offer.");
     }
     private unsafe void DrawFollowThem()

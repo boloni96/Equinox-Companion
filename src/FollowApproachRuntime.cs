@@ -50,13 +50,14 @@ public sealed partial class Plugin
     private unsafe void UpdateFollowApproach(DateTimeOffset now)
     {
         if(followApproach is not {} signal)return;
+        if(TrySelectFollowInstance(signal,now))return;
         if(Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]||!Player.IsLoaded){
             travelStationary.Reset();
             if(!followSession.Armed||followArmedAt!=approachSession||config.PairingKey!=approachKey||signal.ExpiresAt<=now.ToUnixTimeMilliseconds())CancelFollowApproach();
             return;
         }
         var map=AgentMap.Instance();
-        var remote=config.FollowThem.MeetAtTeleports&&signal.TravelKind is "teleport" or "estate" or "friendestate";
+        var remote=signal.TravelKind=="world"||config.FollowThem.MeetAtTeleports&&signal.TravelKind is "teleport" or "estate" or "friendestate";
         if(!config.EnableFollowThem||!followSession.Armed||followArmedAt!=approachSession||config.PairingKey!=approachKey||Player.IsLoaded&&Player.ContentId!=approachCharacter||Player.CurrentWorld.RowId!=signal.CurrentWorld||map==null||!remote&&(Client.TerritoryType!=signal.Territory||map->CurrentMapId!=signal.MapId)||!FollowThemSession.Matches(config.FollowThem.TargetName,config.FollowThem.HomeWorld,signal.Name,signal.HomeWorld)||signal.ExpiresAt<=now.ToUnixTimeMilliseconds()||Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.Unconscious]){
             CancelFollowApproach();TravelDiagnostic("Travel preparation cancelled or expired; no action performed.");return;
         }
@@ -72,6 +73,7 @@ public sealed partial class Plugin
         if(followStopPending||followStopUnconfirmed)return;
         if(signal.TravelKind=="boundary"&&TrySelectFollowInstance(signal,now))return;
         if(now<nextApproachAttempt)return;
+        if(signal.TravelKind=="teleport"&&now-acceptedPartyTeleportAt<TimeSpan.FromSeconds(15))return;
         if(Objects.LocalPlayer is not {} self)return;
         var position=self.Position;var atPoint=signal.TravelKind is "teleport" or "estate" or "friendestate" or "world"||MatchingTravelMenu(signal)||WithinTravelInteractionRange(signal)||signal.Approach==null||Vector3.DistanceSquared(position,signal.Approach.Point)<=.5625f;
         if(!atPoint){
@@ -79,8 +81,7 @@ public sealed partial class Plugin
             if(approachStopRequested){approachStopRequested=false;travelStationary.Reset();nextApproachAttempt=now.AddMilliseconds(750);return;}
             if(approachOwnsMovement){
                 if(approachProgress.Stuck(now,position,signal.Approach!.Point,config.FollowThem.StuckSeconds)){
-                    CancelFollowApproach();RequestFollowMovementStop();travelQueue.Clear();travelAwaitingArrival=null;
-                    TravelDiagnostic("No approach progress; movement stopped and dependent trips cleared. Return to your follower before retrying.");return;
+                    RequestFollowMovementStop();FailFollowTrip("No approach progress; movement stop requested.");return;
                 }
                 try{if(!LifestreamBusy()){CancelFollowApproach();TravelDiagnostic("Approach ended before reaching the travel position; waiting.");}}catch(Exception){CancelFollowApproach();}
                 return;
@@ -114,13 +115,13 @@ public sealed partial class Plugin
         TravelDiagnostic("Stationary confirmed; performing the selected travel action.");
         if(travelAwaitingArrival?.Id==signal.Id){routeStartPosition=position;routeExecutionStarted=true;routeSawLoading=false;}
         TryUseSharedPortal(signal,now);
+        if(signal.TravelKind=="world"&&!lifestreamTravelOwned){followApproach=signal;nextApproachAttempt=now.AddSeconds(2);return;}
         // A failed interaction dispatch is not a departure. Keep the exact trip
         // and its original expiry so a transient range/menu failure can recover.
         if(signal.TravelKind is "portal" or "door" or "transport" or "aethernet" or "ward"&&pendingTransport==null&&pendingWard==null&&pendingAethernet==null&&receivedPortal==null){
             routeExecutionStarted=false;
             if(++approachDispatchAttempts>=3){
-                travelQueue.Clear();travelAwaitingArrival=null;CancelFollowApproach();
-                TravelDiagnostic("Travel could not start after three attempts. Remaining trips cleared; move beside the source and retry the trip.");
+                FailFollowTrip("Travel could not start after three attempts.");
             }else{followApproach=signal;nextApproachAttempt=now.AddSeconds(2);}
             RecordFollowTravel("Travel dispatch deferred",new {signal.Id,signal.TravelKind,attempt=approachDispatchAttempts,position=FollowTravelPosition.From(position),source=new FollowTravelPosition(signal.X,signal.Y,signal.Z)});
         }

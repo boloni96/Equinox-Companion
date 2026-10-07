@@ -115,7 +115,7 @@ public sealed partial class Plugin
         if(pendingAethernet is not {} pending)return;
         if(!config.EnableFollowThem||!config.FollowThem.UseSharedTeleports||!followSession.Armed||Client.TerritoryType!=pending.Territory||Player.CurrentWorld.RowId!=pending.CurrentWorld||!FollowThemSession.Matches(config.FollowThem.TargetName,config.FollowThem.HomeWorld,pending.Name,pending.HomeWorld)){pendingAethernet=null;return;}
         if(Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]){pendingAethernet=null;return;}
-        if(now-aethernetAt>TimeSpan.FromSeconds(30)){pendingAethernet=null;TravelDiagnostic("Aethernet timed out waiting for the destination menu; travel remains manual.");return;}
+        if(now-aethernetAt>TimeSpan.FromSeconds(30)){FailFollowTrip("Aethernet timed out waiting for its destination menu.");return;}
         if(!travelStepReady||now<aethernetNext)return;
         RetryTravelInteraction(pending,now);
         var town=(AtkUnitBase*)GardenGui.GetAddonByName("TelepotTown").Address;
@@ -138,7 +138,11 @@ public sealed partial class Plugin
     {
         if(signal.TravelKind=="world"){TryFollowWorldTravel(signal,now);return;}
         if(!config.FollowThem.UseSharedTeleports||Objects.LocalPlayer is not {} self){TravelDiagnostic("Shared travel is disabled or your character is unavailable.");return;}
-        var map=AgentMap.Instance();if(map==null||!FollowTravelPolicy.CanUse(signal,now.ToUnixTimeMilliseconds(),followArmedAt,config.FollowThem.TargetName,config.FollowThem.HomeWorld,Player.CurrentWorld.RowId,Client.TerritoryType,map->CurrentMapId,lastLeaderEntity,(now-lastLeaderSeen).TotalSeconds,self.Position,config.FollowThem.MeetAtTeleports)){TravelDiagnostic("Travel instruction rejected: stale session, different source location, or too far from the source. Move beside the leader before travel.");return;}
+        var map=AgentMap.Instance();
+        if(map!=null&&FollowArrivalPolicy.AlreadyAtTravelArrival(signal,Player.CurrentWorld.RowId,Client.TerritoryType,map->CurrentMapId,self.Position,acceptedPartyTeleportAt.ToUnixTimeMilliseconds()>=followArmedAt&&now-acceptedPartyTeleportAt<TimeSpan.FromSeconds(90))){
+            travelAwaitingArrival=null;routeArrivalConfirmed=true;TravelDiagnostic("Already at the shared destination; duplicate Teleport skipped.");return;
+        }
+        if(map==null||!FollowTravelPolicy.CanUse(signal,now.ToUnixTimeMilliseconds(),followArmedAt,config.FollowThem.TargetName,config.FollowThem.HomeWorld,Player.CurrentWorld.RowId,Client.TerritoryType,map->CurrentMapId,lastLeaderEntity,(now-lastLeaderSeen).TotalSeconds,self.Position,config.FollowThem.MeetAtTeleports)){TravelDiagnostic("Travel instruction rejected: stale session, different source location, or too far from the source. Move beside the leader before travel.");return;}
         if(signal.TravelKind=="ward"&&signal.SourceKind=="boundary"){
             var block=(AtkUnitBase*)GardenGui.GetAddonByName("HousingSelectBlock").Address;
             if(Conditions[ConditionFlag.InCombat]||(block==null||!block->IsVisible)&&!MatchingTravelMenu(signal)){TravelDiagnostic("Walk into the same housing entrance to open ward selection; waiting.");return;}
