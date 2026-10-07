@@ -33,7 +33,7 @@ public sealed partial class Plugin
         if(interactionSignal!=signal.Id){interactionSignal=signal.Id;interactionAttempts=0;interactionNext=default;}
         if(now<interactionNext||interactionAttempts>=3||!travelStepReady||followStopPending||followStopUnconfirmed||FollowTransitionBusy()||Objects.LocalPlayer is not {} self)return;
         foreach(var name in new[]{"SelectString","SelectYesno","Talk","TelepotTown","HousingSelectBlock","HousingSelectRoom","MansionSelectRoom"})if(VisibleFollowAddon(name))return;
-        var source=Objects.FirstOrDefault(x=>x.BaseId==signal.BaseId&&x.IsTargetable&&(signal.SourceKind.Length==0||x.ObjectKind.ToString()==signal.SourceKind)&&Vector3.DistanceSquared(x.Position,new(signal.X,signal.Y,signal.Z))<1&&Vector3.Distance(self.Position,x.Position)<=x.HitboxRadius+3);
+        var source=Objects.FirstOrDefault(x=>x.BaseId==signal.BaseId&&x.IsTargetable&&(signal.SourceKind.Length==0||x.ObjectKind.ToString()==signal.SourceKind)&&Vector3.DistanceSquared(x.Position,new(signal.X,signal.Y,signal.Z))<1&&FollowAethernetSource.InRange(signal,self.Position,x.Position,x.HitboxRadius,3));
         if(source==null||!FaceTravelTarget(signal,source,now))return;
         interactionAttempts++;interactionNext=now.AddSeconds(2);facingSignal="";
         // Exact recorded object and range were verified above; do not require camera visibility.
@@ -55,3 +55,4 @@ public sealed partial class Plugin
         return true;
     }
 }
+

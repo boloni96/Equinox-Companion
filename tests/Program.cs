@@ -1634,3 +1634,15 @@ Check("75 private friend row",FollowFriendEstateSelection.Kind(["Private Estate"
 Check("75 FC friend row",FollowFriendEstateSelection.Kind(["Free Company Estate","50 gil"])??"none","Free Company Estate");
 Check("75 ambiguous estate rejected",FollowFriendEstateSelection.Kind(["Private Estate","Free Company Estate"])??"none","none");
 Check("75 shared estate not mistaken for private",FollowFriendEstateSelection.Kind(["Shared Estate"])??"none","none");
+
+var source76=trip72 with {BaseId=1,SourceKind="Aetheryte",Name="Leader",HomeWorld=1,CurrentWorld=2,Territory=3,MapId=4,EntityId="5",SentAt=1000000,Approach=FollowTravelPosition.From(new System.Numerics.Vector3(0,0,0))};
+Check("76 retained clicked source",FollowAethernetSource.Matches(source76,1001000,"Leader",1,2,3,4,"5").ToString(),"True");
+Check("76 expired click rejected",FollowAethernetSource.Matches(source76,1120001,"Leader",1,2,3,4,"5").ToString(),"False");
+Check("76 other map rejected",FollowAethernetSource.Matches(source76,1001000,"Leader",1,2,3,6,"5").ToString(),"False");
+Check("76 other leader rejected",FollowAethernetSource.Matches(source76,1001000,"Other",1,2,3,4,"5").ToString(),"False");
+Check("76 other entity rejected",FollowAethernetSource.Matches(source76,1001000,"Leader",1,2,3,4,"6").ToString(),"False");
+Check("76 future click rejected",FollowAethernetSource.Matches(source76,999999,"Leader",1,2,3,4,"5").ToString(),"False");
+var raised76=source76 with {TravelKind="aethernet",SourceRadius=6.25f};
+Check("76 raised crystal from clicked ground point",FollowAethernetSource.InRange(raised76,new(0,0,0),new(0,8,0),1,3).ToString(),"True");
+Check("76 raised crystal not from distant ground point",FollowAethernetSource.InRange(raised76,new(5,0,0),new(0,8,0),1,3).ToString(),"False");
+Check("76 NPC range unchanged",FollowAethernetSource.InRange(raised76 with {TravelKind="transport"},new(0,0,0),new(0,8,0),1,3).ToString(),"False");

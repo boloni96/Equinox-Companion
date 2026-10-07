@@ -105,3 +105,15 @@ public sealed class FollowApproachProgress
     }
 }
 
+
+public static class FollowAethernetSource
+{
+    public static bool Matches(FollowPortalSignal s,long now,string name,uint home,uint world,uint territory,uint map,string entity)=>
+        s.BaseId!=0&&s.SourceKind is "Aetheryte" or "EventObj"&&s.Approach is {Valid:true}&&
+        now>=s.SentAt&&now-s.SentAt<=120000&&s.Name==name&&s.HomeWorld==home&&s.CurrentWorld==world&&
+        s.Territory==territory&&s.MapId==map&&s.EntityId==entity;
+    public static bool InRange(FollowPortalSignal s,Vector3 self,Vector3 source,float nativeRadius,float margin)=>
+        Vector3.Distance(self,source)<=nativeRadius+margin||
+        s.TravelKind=="aethernet"&&s.SourceRadius is >=0 and <=10&&s.Approach is {Valid:true} point&&
+        Vector3.DistanceSquared(self,point.Point)<=2.25f&&Vector3.Distance(self,source)<=s.SourceRadius+margin;
+}

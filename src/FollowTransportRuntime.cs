@@ -17,6 +17,7 @@ public sealed partial class Plugin
     private void PauseFollowForTravel(){followSession.Pause();RequestFollowMovementStop();followReady.Reset();}
     private unsafe void CaptureTransportSource(Dalamud.Game.ClientState.Objects.Types.IGameObject clicked)
     {
+        clickedAethernetSource=null;
         transportCapture=null;transportSawLoading=false;
         if(!SharingTravel||usingSharedTravel||relayInteracting||clicked.ObjectKind is not (ObjectKind.Aetheryte or ObjectKind.EventNpc or ObjectKind.EventObj))return;
         var observed=TravelSignal("transport",0,"",clicked.BaseId,clicked.Position);if(observed==null)return;
@@ -25,6 +26,14 @@ public sealed partial class Plugin
         if(clicked.ObjectKind==ObjectKind.EventObj&&clicked.Name.TextValue is "Entrance" or "Exit" or "Entrance to the Company Workshop" or "Entrance to Additional Chambers" or "Workshop Entrance"&&housing!=null&&housing->CurrentTerritory!=null)
             transportCapture=transportCapture with {TravelKind="door"};
         transportCaptureAt=DateTimeOffset.UtcNow;lastTransportChoice="";
+        if(clicked.ObjectKind is ObjectKind.Aetheryte or ObjectKind.EventObj){
+            var self=Objects.LocalPlayer!;
+            var distance=Vector3.Distance(self.Position,clicked.Position);
+            if(float.IsFinite(distance)&&distance<=11.75f){
+                clickedAethernetSource=observed with {SourceKind=clicked.ObjectKind.ToString(),SourceRadius=Math.Clamp(Math.Max(clicked.HitboxRadius,distance-1.75f),0,10),Approach=FollowTravelPosition.From(self.Position),Steps=[]};
+                RecordFollowTravel("Aethernet source interaction observed",new {clicked.BaseId,kind=clicked.ObjectKind.ToString(),distance,source=FollowTravelPosition.From(clicked.Position),approach=FollowTravelPosition.From(self.Position)});
+            }
+        }
     }
     private unsafe void CaptureTransportChoice(AtkUnitBase* addon,int index)
     {
@@ -129,3 +138,4 @@ public sealed partial class Plugin
         PauseFollowForTravel();if(MatchingTravelMenu(signal))return;RetryTravelInteraction(signal,now);
     }
 }
+

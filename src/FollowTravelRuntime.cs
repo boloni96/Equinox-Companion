@@ -12,7 +12,7 @@ public sealed partial class Plugin
 {
     private unsafe delegate byte FollowTeleportDelegate(Telepo* telepo,uint id,byte subIndex);
     private Hook<FollowTeleportDelegate>? followTeleportHook;
-    private FollowPortalSignal? outgoingTravel,pendingAethernet;
+    private FollowPortalSignal? outgoingTravel,pendingAethernet,clickedAethernetSource;
     private Task<bool>? travelAudience;
     private DateTimeOffset travelAt,aethernetAt,aethernetNext;
     private Vector3 travelPosition;
@@ -30,7 +30,7 @@ public sealed partial class Plugin
         if(signal==null||config.PairingKey.Length!=64)return;
         var source=Objects.FirstOrDefault(x=>x.BaseId==signal.BaseId&&Vector3.Distance(x.Position,new(signal.X,signal.Y,signal.Z))<1);
         if(source!=null){
-            signal=signal with {SourceRadius=Math.Clamp(source.HitboxRadius,0,10)};
+            signal=signal with {SourceRadius=Math.Clamp(Math.Max(source.HitboxRadius,signal.SourceRadius),0,10)};
             if(signal.TravelKind=="aethernet"&&signal.Approach is {} approach)signal=signal with {Approach=FollowTravelPosition.From(FollowCrystalApproach.Point(source.Position,approach.Point,signal.SourceRadius))};
         }
         portalRelayStatus="Observed "+signal.TravelKind+" destination; waiting for departure.";
@@ -85,6 +85,12 @@ public sealed partial class Plugin
         var choices=AethernetChoices(addon);
         var matches=choices.Where(x=>x.Callback==values[1].UInt).ToArray();
         if(matches.Length!=1||Objects.LocalPlayer is not {} self){RecordFollowTravel("Aethernet capture rejected",new {reason="destination unresolved",valueCount=addon->AtkValuesCount,callback=values[1].UInt,matches=matches.Length,choices=choices.Count});return;}
+        var map=AgentMap.Instance();
+        if(clickedAethernetSource is {} clicked&&map!=null&&FollowAethernetSource.Matches(clicked,DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),Player.CharacterName,Player.HomeWorld.RowId,Player.CurrentWorld.RowId,Client.TerritoryType,map->CurrentMapId,self.GameObjectId.ToString())&&
+            Objects.Any(x=>x.BaseId==clicked.BaseId&&x.ObjectKind.ToString()==clicked.SourceKind&&Vector3.DistanceSquared(x.Position,new(clicked.X,clicked.Y,clicked.Z))<1)){
+            RecordFollowTravel("Aethernet clicked source retained",new {clicked.BaseId,clicked.SourceKind,clicked.Approach,destination=matches[0].Name});
+            CaptureTravel(clicked with {Id=Guid.NewGuid().ToString("N"),TravelKind="aethernet",Destination=matches[0].Name,SentAt=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()},0);return;
+        }
         var crystal=Objects.Where(x=>x.ObjectKind==ObjectKind.Aetheryte&&Vector3.Distance(x.Position,self.Position)<=x.HitboxRadius+4).MinBy(x=>Vector3.DistanceSquared(x.Position,self.Position));
         if(crystal==null){RecordFollowTravel("Aethernet capture rejected",new {reason="source crystal unavailable",destination=matches[0].Name});return;}
         RecordFollowTravel("Aethernet destination captured",new {destination=matches[0].Name,callback=values[1].UInt,valueCount=addon->AtkValuesCount});
@@ -92,6 +98,7 @@ public sealed partial class Plugin
     }
     private unsafe void UpdateFollowTravel(DateTimeOffset now)
     {
+        if(!SharingTravel||Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51])clickedAethernetSource=null;
         UpdateFollowBoundary(now);
         UpdateFollowWorldCommandHook();
         UpdateFriendEstateHook();
@@ -158,7 +165,7 @@ public sealed partial class Plugin
         foreach(var name in new[]{"SelectYesno","SelectString","TelepotTown","Talk"}){var ui=(AtkUnitBase*)GardenGui.GetAddonByName(name).Address;if(ui!=null&&ui->IsVisible&&!MatchingTravelMenu(signal)){TravelDiagnostic("Close your open dialogue to allow shared travel.");return;}}
         if(signal.TravelKind is "transport" or "friendestate" or "door"){TryFollowTransport(signal,now);return;}
         if(signal.TravelKind is "aethernet" or "ward"){
-            var crystal=Objects.FirstOrDefault(x=>(x.ObjectKind==ObjectKind.Aetheryte||signal.TravelKind=="ward"&&signal.SourceKind=="EventNpc"&&x.ObjectKind==ObjectKind.EventNpc)&&x.BaseId==signal.BaseId&&x.IsTargetable&&Vector3.Distance(x.Position,new(signal.X,signal.Y,signal.Z))<1&&Vector3.Distance(x.Position,self.Position)<=x.HitboxRadius+3);
+            var crystal=Objects.FirstOrDefault(x=>(x.ObjectKind==ObjectKind.Aetheryte||signal.TravelKind=="aethernet"&&signal.SourceKind=="EventObj"&&x.ObjectKind==ObjectKind.EventObj||signal.TravelKind=="ward"&&signal.SourceKind=="EventNpc"&&x.ObjectKind==ObjectKind.EventNpc)&&x.BaseId==signal.BaseId&&x.IsTargetable&&Vector3.Distance(x.Position,new(signal.X,signal.Y,signal.Z))<1&&FollowAethernetSource.InRange(signal,self.Position,x.Position,x.HitboxRadius,3));
             if(crystal==null){FollowChatNotice("TRAVEL — Move closer to the same crystal; FollowThem is waiting.");return;}
             // Native menus are used consistently; optional Lifestream handles approach/world travel.
             if(signal.TravelKind=="ward"){pendingWard=signal;wardAt=now;wardNext=default;wardStage=0;}
