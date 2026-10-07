@@ -74,6 +74,7 @@ public sealed partial class Plugin
         var wasArmed = followSession.Armed;
         EndHelperSession();
         followSession.Stop();
+        UpdateFollowLease(DateTimeOffset.UtcNow);
         if(wasArmed)RequestFollowMovementStop();
         followFlight.Reset();followStuck.Reset();followRecovery.Reset();mountAttempts=0;followStuckStopRequested=false;
         lastLeaderSeen = default;

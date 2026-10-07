@@ -119,7 +119,7 @@ public sealed partial class Plugin
                     if(housing==null||housing->GetCurrentWard()!=travel.Ward-1||!FollowPortalPolicy.IsConfirmationSupported(travel.Confirmation))return;
                     travel=travel with {DestinationTerritory=Client.TerritoryType};
                 }
-                if(travelAudience!=null)EnqueueOutgoingTravel(config.PairingKey,travel with {SentAt=now.ToUnixTimeMilliseconds()},travelAudience);
+                if(travelAudience!=null)EnqueueOutgoingTravel(config.PairingKey,travel,travelAudience);
             }
         }
         if(pendingAethernet is not {} pending)return;

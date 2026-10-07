@@ -48,8 +48,11 @@ public sealed partial class Plugin
                 var fresh=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()-f.Updated<15000;
                 ImGui.TextWrapped(f.Name+" — "+(!fresh?"Status unavailable":f.Control=="stop"?"Stopped":f.Control=="pause"?"Paused by leader":f.Status));
                 ImGui.TextDisabled(f.Quest?"FollowThem + Quest Helper":"FollowThem");
-                ImGui.BeginDisabled(!fresh||f.Control=="stop"||helperControlTask!=null);
+                ImGui.BeginDisabled(!fresh||f.Control=="stop"||helperControlTask!=null||helperControls.Count>0);
                 if(ImGui.Button(f.Control=="pause"?"Resume FollowThem":"Pause FollowThem"))SendHelperControl(f,f.Control=="pause"?"resume":"pause");
+                if(ImGui.IsItemHovered())ImGui.SetTooltip("Pause discards travel. Resume only resumes following; it does not replay trips made while paused.");
+                if(ImGui.Button("Bring follower back"))RequestHelperBring(f);
+                if(ImGui.IsItemHovered())ImGui.SetTooltip("Resume this active session and request your latest supported teleport destination, only if you are still in that destination area. Requires Journal V7.11.85. The follower keeps their own travel settings and can Stop.");
                 if(f.Quest){if(ImGui.Button(f.QuestPaused?"Resume Quest Helper":"Pause Quest Helper"))SendHelperControl(f,f.QuestPaused?"questResume":"questPause");if(ImGui.IsItemHovered())ImGui.SetTooltip("Pauses NPC, dialogue and FATE Level Sync assistance. FollowThem and travel continue. Resume with a fresh NPC interaction.");}
                 ImGui.SameLine();if(ImGui.Button("Stop…"))helperStopConfirm=f.Id;
                 ImGui.EndDisabled();

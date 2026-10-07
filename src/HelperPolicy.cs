@@ -5,7 +5,7 @@ namespace EquinoxCompanion;
 public sealed record HelperNpc(string Conversation,uint BaseId,string Name,uint Territory,uint Map,uint World,FollowTravelPosition Position,FollowTravelPosition Approach,float Facing);
 public sealed record HelperAction(string Id,string Name,uint World,string Kind,long SentAt,HelperNpc Npc,string Text="",string Signature="",string Addon="",string Scene="",string[]? Sessions=null,long Sequence=0,uint QuestId=0,ushort FateId=0,int FateStart=0,HelperAction[]? Steps=null);
 public sealed record HelperFollower(string Id,string Name,uint World,string Status,bool Quest,bool Skip,bool Paused,string Control,long Updated,bool QuestPaused=false);
-public sealed record HelperReply(int Protocol=0,string Control="",HelperAction[]? Actions=null,HelperFollower[]? Followers=null,bool QuestPaused=false);
+public sealed record HelperReply(int Protocol=0,string Control="",HelperAction[]? Actions=null,HelperFollower[]? Followers=null,bool QuestPaused=false,long TravelAfter=0);
 public sealed class HelperPermission
 {
     public bool Active {get;private set;}
@@ -56,4 +56,9 @@ public static class HelperConversationPolicy
     public static int Delay(long previous,long current)=>(int)Math.Clamp(current-previous,450,600000);
     public static bool Cancellation(HelperAction a)=>a.Kind=="acceptQuest"&&a.Scene=="decline"||a.Kind=="eventReplay"&&a.Scene=="no";
     public static bool ValidSteps(HelperAction batch)=>batch.Steps is {Length:>0 and <=128} steps&&steps[0].Kind=="interact"&&steps.All(a=>a.Steps==null&&a.Npc==batch.Npc&&a.Name==batch.Name&&a.World==batch.World&&a.Kind is "interact" or "talk" or "choice" or "skip" or "acceptQuest" or "eventReplay")&&steps.Select(a=>a.Id).Distinct().Count()==steps.Length&&steps.Zip(steps.Skip(1)).All(p=>p.First.SentAt<=p.Second.SentAt);
+}
+
+public static class HelperSessionPolicy
+{
+    public static bool AcceptTravel(bool paused,long sentAt,long started,long discardedThrough)=>!paused&&sentAt>=started&&sentAt>discardedThrough;
 }

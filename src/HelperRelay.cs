@@ -14,7 +14,11 @@ public sealed class HelperRelay:IDisposable
             request.Headers.Authorization=new AuthenticationHeaderValue("Bearer",key);
             if(body!=null)request.Content=JsonContent.Create(body,options:json);
             using var response=await client.SendAsync(request,HttpCompletionOption.ResponseHeadersRead,cancel.Token);
-            if(!response.IsSuccessStatusCode)return(null,"Helper relay HTTP "+(int)response.StatusCode+". Deploy Journal V7.11.84 and check pairing.");
+            if(!response.IsSuccessStatusCode){
+                var operation=query.Split('&')[0];
+                var hint=(int)response.StatusCode switch {401 or 403=>"Check pairing and session permissions.",404=>"Deploy Journal V7.11.85.",410=>"This session ended; the follower must press Start again.",429=>"Relay rate limited; wait before retrying.",_=>"Request rejected; export diagnostics."};
+                return(null,"Helper "+operation+" HTTP "+(int)response.StatusCode+". "+hint);
+            }
             using var stream=await response.Content.ReadAsStreamAsync(cancel.Token);var bytes=new byte[1048577];var count=0;
             while(count<bytes.Length){var n=await stream.ReadAsync(bytes.AsMemory(count),cancel.Token);if(n==0)break;count+=n;}
             if(count==bytes.Length)return(null,"Helper reply too large; ignored.");

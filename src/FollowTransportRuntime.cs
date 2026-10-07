@@ -82,7 +82,7 @@ public sealed partial class Plugin
                 transportCapture=null;
                 // More specific native aethernet/ward capture takes precedence.
                 if(outgoingTravel==null&&FollowTransportPolicy.Valid(capture)&&config.PairingKey.Length==64)
-                    EnqueueOutgoingTravel(config.PairingKey,capture with {SentAt=now.ToUnixTimeMilliseconds()},portalRelay.HasFollowers(config.PairingKey,capture.Name,capture.HomeWorld));
+                    EnqueueOutgoingTravel(config.PairingKey,capture,portalRelay.HasFollowers(config.PairingKey,capture.Name,capture.HomeWorld));
             }
         }
         if(pendingTransport is not {} pending)return;

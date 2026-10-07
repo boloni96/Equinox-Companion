@@ -17,7 +17,7 @@ public sealed partial class Plugin
     private void ResetTravelQueue(){aethernetArrivalTrip="";aethernetArrivalId=0;aethernetArrivalLoading=false;routeTeleportAccepted=false;routeSettledAt=default;nextArrivalDiagnostic=default;travelQueue.Clear();queuedTravelIds.Clear();travelNeedsRecovery=false;travelAwaitingArrival=null;portalReadCursor=0;routeArrivalConfirmed=false;routeSawLoading=false;routeExecutionStarted=false;nextQueueAttempt=default;acceptedPartyTeleportAt=default;}
     private void EnqueueTravel(FollowPortalSignal signal)
     {
-        if(signal.SentAt<followArmedAt||signal.Id==lastPortalSignalId||queuedTravelIds.Contains(signal.Id))return;
+        if(!HelperSessionPolicy.AcceptTravel(HelperPaused,signal.SentAt,followArmedAt,helperTravelCutoff)||signal.Id==lastPortalSignalId||queuedTravelIds.Contains(signal.Id))return;
         if(travelQueue.Count>=16){TravelDiagnostic("Travel queue is full; wait for the follower before the next trip.");return;}
         queuedTravelIds.Add(signal.Id);travelQueue.Enqueue(signal);
         if(helperPendingFate is {} pendingFate&&pendingFate.SentAt<=signal.SentAt){helperPendingFate=null;CancelHelperFateApproach();}
@@ -122,6 +122,7 @@ public sealed partial class Plugin
         var now=DateTimeOffset.UtcNow;
         var captured=signal.TravelKind=="world"?signal:CaptureTravelArrival(signal);
         captured=captured with {ExpiresAt=FollowTravelRecovery.Deadline(captured)};
+        if(captured.TravelKind is "teleport" or "estate" or "friendestate")helperMeetTravel=captured;
         if(captured.TravelKind=="boundary"){
             if(lastBoundaryKey==key&&lastBoundarySent is {} previous&&now-lastBoundarySentAt<TimeSpan.FromSeconds(3)&&previous.Territory==captured.Territory&&previous.MapId==captured.MapId&&previous.ArrivalTerritory==captured.ArrivalTerritory&&previous.ArrivalInstance==captured.ArrivalInstance&&previous.Name==captured.Name&&previous.HomeWorld==captured.HomeWorld){RecordFollowTravel("Duplicate boundary capture skipped",new {captured.Id});return;}
             lastBoundarySent=captured;lastBoundarySentAt=now;lastBoundaryKey=key;
@@ -134,7 +135,7 @@ public sealed partial class Plugin
         if(portalSendTask!=null||DateTimeOffset.UtcNow<nextOutgoingTripAt)return;
         while(outgoingTrips.TryPeek(out var item)){
             var now=DateTimeOffset.UtcNow;
-            if(item.Key!=config.PairingKey||!SharingTravel||!FollowTravelRecovery.PendingFresh(item.Signal,now.ToUnixTimeMilliseconds())){
+            if(item.Key!=config.PairingKey||!SharingTravel||Player.IsLoaded&&(item.Signal.Name!=Player.CharacterName||item.Signal.HomeWorld!=Player.HomeWorld.RowId)||!FollowTravelRecovery.PendingFresh(item.Signal,now.ToUnixTimeMilliseconds())){
                 outgoingTrips.Dequeue();RecordFollowTravel("Outgoing travel discarded",new {item.Signal.Id,reason="expired or sharing changed"});continue;
             }
             if(!item.Audience.IsCompleted)return;
