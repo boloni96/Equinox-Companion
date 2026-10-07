@@ -16,7 +16,6 @@ public sealed partial class Plugin
     private readonly Queue<HelperAction> helperOutgoing=new(),helperIncoming=new();
     private readonly Queue<(HelperFollower Follower,string Command,string Identity)> helperControls=new();
     private readonly HashSet<string> helperSeen=new(),helperOpened=new();
-    private IDtrBarEntry? helperLeaderBar;
     private bool helperWindowOpen;
     private string helperBlocked="";
     private bool HelperPaused=>helperPermission.Active&&helperPermission.Paused;
@@ -84,13 +83,6 @@ public sealed partial class Plugin
         if(!Player.IsLoaded||helperControls.Count>=32)return;
         helperControls.Enqueue((f,command,config.PairingKey+"/"+Player.CharacterName+"/"+Player.HomeWorld.RowId));
     }
-    private void RefreshHelperLeaderBar()
-    {
-        var active=helperFollowers.Where(x=>x.Control!="stop"&&DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()-x.Updated<15000).ToArray();
-        if(!config.EnableFollowThem||active.Length==0){helperLeaderBar?.Remove();helperLeaderBar=null;return;}
-        helperLeaderBar??=QuickLootBar.Get("Equinox Helper Leader");helperLeaderBar.Shown=true;
-        helperLeaderBar.Text=new SeStringBuilder().AddText("FOLLOWED by "+string.Join(", ",active.Select(x=>x.Name))+(active.All(x=>x.Control=="pause")?" · PAUSED":"")).Build();
-        helperLeaderBar.Tooltip=new SeStringBuilder().AddText("Left-click to pause/resume. Right-click for Helper Controls. Follower Stop ends permission; only the follower can start again.").Build();
-        helperLeaderBar.OnClick=e=>{if(e.ClickType==MouseClickType.Right)helperWindowOpen=true;else if(e.ClickType==MouseClickType.Left){helperWindowOpen=true;var command=active.All(f=>f.Control=="pause")?"resume":"pause";foreach(var f in active)SendHelperControl(f,command);}};
-    }
+    private HelperFollower[] ActiveHelperFollowers()=>helperFollowers.Where(x=>x.Control!="stop"&&DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()-x.Updated<15000).ToArray();
+    private void RefreshHelperLeaderBar()=>RefreshFollowBar();
 }
