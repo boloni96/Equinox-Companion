@@ -16,6 +16,12 @@ internal static class Helper80Tests
   var npc=new HelperNpc("a",1,"NPC",1,1,1,new(0,0,0),new(1,0,0),0);var a=new HelperAction("id","Leader",1,"talk",1000,npc);
   Test("current action fresh",HelperPolicy.Fresh(a,2000,1000));Test("past session rejected",!HelperPolicy.Fresh(a,2000,1001));Test("expired action rejected",!HelperPolicy.Fresh(a,121000,1000));
   var f=new HelperFollower("id","Follower",1,"Following",true,false,false,"resume",1000);Test("active audience",HelperPolicy.Audience(f,2000));Test("paused excluded",!HelperPolicy.Audience(f with {Paused=true},2000));Test("leader pause excluded",!HelperPolicy.Audience(f with {Control="pause"},2000));Test("stale status excluded",!HelperPolicy.Audience(f,16000));Test("skip audience opt in",!HelperPolicy.Audience(f,2000,true));
+  p.Start(true,true);p.SetQuestPause(true);Test("quest pause keeps follow session active",p.Active&&!p.Paused&&!p.Allows("talk"));
+  p.Control("pause");p.SetQuestPause(false);Test("quest resume cannot undo whole pause",p.Paused&&!p.Allows("talk"));
+  p.SetQuestPause(true);p.Control("resume");Test("follow resume preserves quest pause",p.QuestPaused&&!p.Paused&&!p.Allows("acceptQuest"));
+  p.SetQuestPause(false);Test("quest resume permits acceptance",p.Allows("acceptQuest"));
+  p.Stop();p.SetQuestPause(false);p.Control("resume");Test("quest controls cannot restart stopped session",!p.Active);
+  Test("quest paused excluded from audience",!HelperPolicy.Audience(f with {QuestPaused=true},2000));
   Test("scene must match",!HelperPolicy.SceneMatches("1:2","1:3"));Test("unknown scene blocked",!HelperPolicy.SceneMatches("",""));
  }
 }

@@ -34,17 +34,17 @@ public sealed partial class Plugin
         var speaker=HelperCanonical(a->TalkName.ToString());var text=HelperCanonical(a->TalkText.ToString());
         return(text,text.Length is >0 and <=4000?HelperPolicy.Signature([speaker,text]):"");
     }
-    private void EmitHelper(string kind,string text="",string signature="",string addon="",string scene="")
+    private void EmitHelper(string kind,string text="",string signature="",string addon="",string scene="",uint questId=0)
     {
         var now=DateTimeOffset.UtcNow;
         if(!SharingQuest||helperReplaying||helperCaptureNpc is not {} npc||now-helperCaptureAt>TimeSpan.FromMinutes(10)||npc.World!=Player.CurrentWorld.RowId||npc.Territory!=Client.TerritoryType)return;
-        var key=kind+"/"+npc.Conversation+"/"+signature+"/"+text+"/"+scene;
+        var key=kind+"/"+npc.Conversation+"/"+signature+"/"+text+"/"+scene+"/"+questId;
         if(key==lastHelperCapture&&now-lastHelperCaptureAt<TimeSpan.FromMilliseconds(300))return;
         lastHelperCapture=key;lastHelperCaptureAt=now;
         var sessions=helperFollowers.Where(f=>HelperPolicy.Audience(f,now.ToUnixTimeMilliseconds(),kind=="skip")).Select(f=>f.Id).ToArray();
         if(sessions.Length==0)return;
         if(helperOutgoing.Count>=32){helperError="Quest actions are arriving faster than the relay. Pause and let followers catch up.";return;}
-        helperOutgoing.Enqueue(new(Guid.NewGuid().ToString("N"),Player.CharacterName,Player.HomeWorld.RowId,kind,now.ToUnixTimeMilliseconds(),npc,text,signature,addon,scene,sessions));
+        helperOutgoing.Enqueue(new(Guid.NewGuid().ToString("N"),Player.CharacterName,Player.HomeWorld.RowId,kind,now.ToUnixTimeMilliseconds(),npc,text,signature,addon,scene,sessions,QuestId:questId));
     }
     private string helperTalkText="",helperTalkSignature="",helperTalkScene="";
     private unsafe void ObserveHelperTalk(AddonEvent type,AddonArgs args)
@@ -88,7 +88,7 @@ public sealed partial class Plugin
             var list=HelperChoices(addon,name);if(index>=list.Count||list[index].Length==0)return;
             // Travel retains its established queue. Never duplicate ferry/estate actions here.
             if(SharingTravel&&FollowTransportPolicy.StepSupported(list[index],false))return;
-            EmitHelper("choice",list[index],HelperPolicy.Signature(list.OrderBy(x=>x,StringComparer.Ordinal)),name,HelperScene());return;
+            EmitHelper("choice",list[index],HelperPolicy.Signature(list.OrderBy(x=>x,StringComparer.Ordinal)),name,HelperScene(),questId:HelperQuestIdForName(list[index]));return;
         }
         // Quest rewards, purchases, and arbitrary Yes/No prompts remain manual.
     }

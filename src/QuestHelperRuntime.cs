@@ -23,7 +23,7 @@ public sealed partial class Plugin
     private void BlockHelper(string reason){helperBlocked=reason;helperQuestStatus="Blocked — "+reason;CancelHelperApproach();RequestFollowMovementStop();nextHelperStatus=default;}
     private unsafe void UpdateQuestHelper(DateTimeOffset now)
     {
-        if(!helperPermission.Active||!helperPermission.Quest||HelperPaused||helperBlocked.Length>0||!Player.IsLoaded||Objects.LocalPlayer is not {} self||now<helperNextAction)return;
+        if(!helperPermission.Active||!helperPermission.Quest||HelperPaused||helperPermission.QuestPaused||helperBlocked.Length>0||!Player.IsLoaded||Objects.LocalPlayer is not {} self||now<helperNextAction)return;
         if(Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]||Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.Unconscious]){helperQuestStatus="Loading or occupied; waiting.";return;}
         if(!helperIncoming.TryPeek(out var a))return;
         if(!HelperPolicy.Fresh(a,now.ToUnixTimeMilliseconds(),followArmedAt)){BlockHelper("Recorded dialogue expired. Stop/start, then ask the leader to click the NPC again.");return;}
@@ -61,6 +61,7 @@ public sealed partial class Plugin
             return;
         }
         if(helperNpcActive?.Conversation!=a.Npc.Conversation){BlockHelper("This dialogue belongs to a different NPC interaction.");return;}
+        if(a.Kind=="acceptQuest"){UpdateHelperQuestAccept(a,now);return;}
         if(a.Kind=="skip"){
             if(!helperPermission.Skip){CompleteHelperAction(now);return;}
             if(!HelperPolicy.SceneMatches(a.Scene,HelperScene())){if(now-helperActionStarted>TimeSpan.FromSeconds(8))BlockHelper("Cutscene differs; skip was not applied.");return;}
@@ -83,7 +84,9 @@ public sealed partial class Plugin
             var menu=(AtkUnitBase*)GardenGui.GetAddonByName(a.Addon).Address;var choices=HelperChoices(menu,a.Addon);
             if(choices.Count==0){if(now-helperActionStarted>TimeSpan.FromSeconds(8))BlockHelper("The recorded response menu did not appear.");return;}
             var index=HelperPolicy.Match(choices,a.Text);
-            if(index<0||HelperPolicy.Signature(choices.OrderBy(x=>x,StringComparer.Ordinal))!=a.Signature){BlockHelper("The NPC's responses differ from the leader's; choose manually.");return;}
+            var isQuest=a.QuestId!=0&&HelperQuestIdForName(a.Text)==a.QuestId;
+            if(isQuest&&index<0){SkipHelperConversation(a,"The same quest is unavailable in your NPC menu; waiting for the next interaction.");return;}
+            if(index<0||!isQuest&&HelperPolicy.Signature(choices.OrderBy(x=>x,StringComparer.Ordinal))!=a.Signature){BlockHelper("The NPC's responses differ from the leader's; choose manually.");return;}
             helperReplaying=true;try{SelectTravelChoice(menu,index);}finally{helperReplaying=false;}CompleteHelperAction(now);
         }
     }

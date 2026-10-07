@@ -10,3 +10,6 @@ Inspected 2026-10-07. Equinox's code remains self-contained; TextAdvance, YesAlr
 Equinox adds its own session permission, exact NPC and dialogue matching, expiry and source-area checks. A leader's skip is replayed only for the same event/scene. Normally unskippable scenes remain unskippable. An unavailable callback leaves the action waiting for the game's Skip prompt; it never sends global Esc input.
 
 Dialogue capture watches the Talk window's accepted text changes/closure, independently of whether the leader used mouse, keyboard, controller or another dialogue plugin. The recipient uses the existing bounded Talk event path. Distinct text may differ with quest progress or localization and deliberately blocks replay.
+
+## Quest acceptance (.82)
+TextAdvance ExecQuestAccept uses JournalAccept button 44; ReaderJournalAccept reads quest ID from AtkValue 266. FFXIVClientStructs QuestManager.IsQuestAccepted confirms the leader accepted and the follower completed acceptance. ECommons ClickHelper documents dispatch through the button registered event. Equinox watches offers without accepting them on the leader, sends only confirmed acceptance, then verifies exact quest and NPC conversation on the follower. No ECommons dependency or input injection.
