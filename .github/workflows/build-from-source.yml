@@ -1,7 +1,7 @@
 name: Build and verify Companion source
 on:
   push:
-    branches: [main, fix/followthem-75, feature/equinox-helper-80]
+    branches: [main, fix/followthem-75, feature/equinox-helper-80, feature/equinox-helper-85]
     paths: ['src/**', 'tests/**', 'scripts/publish_source.py', '.github/workflows/build-from-source.yml']
   workflow_dispatch:
 permissions:
