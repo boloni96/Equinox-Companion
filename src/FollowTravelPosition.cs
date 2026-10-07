@@ -120,6 +120,13 @@ public static class FollowAethernetSource
 
 public static class FollowAethernetArrival
 {
+    public static uint Resolve(IEnumerable<(uint Id,uint Territory,string Name)> candidates,uint territory,string name)
+    {
+        if(territory==0||string.IsNullOrWhiteSpace(name))return 0;
+        var matches=candidates.Where(x=>x.Id!=0&&x.Territory==territory&&string.Equals(x.Name.Trim(),name.Trim(),StringComparison.Ordinal))
+            .Select(x=>x.Id).Distinct().Take(2).ToArray();
+        return matches.Length==1?matches[0]:0;
+    }
     public static bool Confirmed(FollowPortalSignal trip,bool selected,bool sawLoading,bool loading,bool loaded,uint world,uint territory,uint map,uint instance,Vector3 self,Vector3 destination)=>
         trip.TravelKind=="aethernet"&&selected&&sawLoading&&!loading&&loaded&&
         trip.ArrivalWorld!=0&&trip.ArrivalTerritory!=0&&world==trip.ArrivalWorld&&territory==trip.ArrivalTerritory&&map==trip.ArrivalMap&&

@@ -138,7 +138,7 @@ public sealed partial class Plugin
             aethernetNext=now.AddSeconds(2);aethernetSelections++;if(aethernetSelections>=2)pendingAethernet=null;
             RecordAethernetSelection(pending,choices[0].Callback);
             usingSharedTravel=true;try{town->FireCallback(2,args,true);}finally{usingSharedTravel=false;}
-            FollowChatNotice("TRAVEL — Requested aethernet: "+pending.Destination);return;
+            FollowChatNotice((aethernetSelections==1?"TRAVEL — Selecting aethernet destination: ":"TRAVEL — Confirming aethernet travel: ")+pending.Destination);return;
         }
         var menu=(AtkUnitBase*)GardenGui.GetAddonByName("SelectString").Address;
         if(aethernetSelections==0){
