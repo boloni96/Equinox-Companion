@@ -49,6 +49,10 @@ public sealed class HelperDialogueCapture
 // A completed leader conversation is replayed in order, retaining its observed spacing.
 public static class HelperConversationPolicy
 {
+    public static bool MayRecord(bool recording,bool sharing)=>recording&&sharing;
+    public static bool CommitAtNextNpc(bool recording,bool failed,bool accepting,bool visible)=>recording&&!failed&&!accepting&&!visible;
+    public static bool RetryTalk(int attempts,double milliseconds)=>attempts<3&&milliseconds>=2000;
+    public static string NormalizePrompt(string text)=>System.Text.RegularExpressions.Regex.Replace(text,@"\s+"," ").Trim();
     public static int Delay(long previous,long current)=>(int)Math.Clamp(current-previous,450,600000);
     public static bool Cancellation(HelperAction a)=>a.Kind=="acceptQuest"&&a.Scene=="decline"||a.Kind=="eventReplay"&&a.Scene=="no";
     public static bool ValidSteps(HelperAction batch)=>batch.Steps is {Length:>0 and <=128} steps&&steps[0].Kind=="interact"&&steps.All(a=>a.Steps==null&&a.Npc==batch.Npc&&a.Name==batch.Name&&a.World==batch.World&&a.Kind is "interact" or "talk" or "choice" or "skip" or "acceptQuest" or "eventReplay")&&steps.Select(a=>a.Id).Distinct().Count()==steps.Length&&steps.Zip(steps.Skip(1)).All(p=>p.First.SentAt<=p.Second.SentAt);

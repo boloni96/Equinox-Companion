@@ -6,13 +6,21 @@ public sealed partial class Plugin
     private const string NocturneReplayPrompt="Do you wish to replay the event?";
     private bool NocturneNpc(HelperNpc npc)=>npc.Name=="Kipih Jakkya"&&npc.Territory==130;
     private uint NocturneFirstQuest=>HelperQuestIdForName("The Man in Black");
-    private static bool NocturneWarning(string text)=>text.StartsWith("If you proceed, the following quest(s) will be rendered incomplete:",StringComparison.Ordinal)&&new[]{"The Man in Black","In the Dark of Night","Messenger of the Winds","The Ironworks Vendor","The Recompense Officer"}.All(text.Contains);
+    private static string HelperPromptText(string text)=>HelperConversationPolicy.NormalizePrompt(text);
+    private static bool NocturneWarning(string text)=>HelperPromptText(text).StartsWith("If you proceed, the following quest(s) will be rendered incomplete:",StringComparison.Ordinal)&&new[]{"The Man in Black","In the Dark of Night","Messenger of the Winds","The Ironworks Vendor","The Recompense Officer"}.All(t=>HelperPromptText(text).Contains(t,StringComparison.Ordinal));
+    private unsafe AddonSelectYesno* HelperReplayDialog()
+    {
+        for(var index=1;index<=4;index++){
+            var yes=(AddonSelectYesno*)GardenGui.GetAddonByName("SelectYesno",index).Address;
+            if(yes==null||!yes->IsVisible||yes->PromptText==null)continue;
+            var text=HelperPromptText(yes->PromptText->NodeText.ToString());
+            if(text==NocturneReplayPrompt||NocturneWarning(text))return yes;
+        }
+        return null;
+    }
     private unsafe string HelperReplayPrompt()
     {
-        var yes=(AddonSelectYesno*)GardenGui.GetAddonByName("SelectYesno").Address;
-        if(yes==null||!yes->IsVisible||yes->PromptText==null)return "";
-        var text=yes->PromptText->NodeText.ToString();
-        return text==NocturneReplayPrompt||NocturneWarning(text)?text:"";
+        var yes=HelperReplayDialog();return yes==null?"":HelperPromptText(yes->PromptText->NodeText.ToString());
     }
     private bool HelperReplayPromptVisible()=>HelperReplayPrompt().Length>0;
     private string helperReplayCheckedPrompt="";
@@ -20,7 +28,7 @@ public sealed partial class Plugin
     private unsafe void ObserveHelperReplayCheck()
     {
         if(!SharingQuest||helperReplaying||!helperRecording||helperCaptureNpc is not {} npc||!NocturneNpc(npc)){helperReplayCheckedPrompt="";return;}
-        var prompt=HelperReplayPrompt();var yes=(AddonSelectYesno*)GardenGui.GetAddonByName("SelectYesno").Address;
+        var prompt=HelperReplayPrompt();var yes=HelperReplayDialog();
         if(!NocturneWarning(prompt)||yes==null||yes->ConfirmCheckBox==null){helperReplayCheckedPrompt="";return;}
         var check=yes->ConfirmCheckBox->IsChecked;
         if(helperReplayCheckedPrompt!=prompt){helperReplayCheckedPrompt=prompt;helperReplayChecked=false;}
@@ -30,7 +38,7 @@ public sealed partial class Plugin
     }
     private unsafe bool CaptureHelperEventReplay(AtkUnitBase* addon,int index)
     {
-        if(index is not (0 or 1)||helperCaptureNpc is not {} npc||!NocturneNpc(npc)||addon!=(AtkUnitBase*)GardenGui.GetAddonByName("SelectYesno").Address)return false;
+        if(index is not (0 or 1)||helperCaptureNpc is not {} npc||!NocturneNpc(npc)||addon!=(AtkUnitBase*)HelperReplayDialog())return false;
         var prompt=HelperReplayPrompt();if(prompt.Length==0)return false;
         var quest=NocturneFirstQuest;if(quest==0)return false;
         ObserveHelperReplayCheck();
@@ -46,7 +54,7 @@ public sealed partial class Plugin
             if(now-helperActionStarted>TimeSpan.FromSeconds(15))BlockHelper("The replay confirmation did not close after the selected response.");return;
         }
         if(prompt==action.Text){
-            var dialog=(AddonSelectYesno*)GardenGui.GetAddonByName("SelectYesno").Address;
+            var dialog=HelperReplayDialog();
             if(!dialog->IsReady)return;
             if(action.Scene is "checked" or "unchecked"){
                 var check=dialog->ConfirmCheckBox;

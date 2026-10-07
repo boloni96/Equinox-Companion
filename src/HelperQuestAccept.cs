@@ -23,9 +23,14 @@ public sealed partial class Plugin
                 var addon=(AtkUnitBase*)GardenGui.GetAddonByName(name).Address;
                 if(addon!=null&&addon->IsVisible){helperReplaying=true;try{addon->Close(true);}finally{helperReplaying=false;}}
             }
+            if(NocturneNpc(action.Npc)){
+                var replay=HelperReplayDialog();
+                if(replay!=null){helperReplaying=true;try{replay->FireCallbackInt(1);}finally{helperReplaying=false;}}
+            }
             helperNpcActive=null;
         }
         if(helperReservedConversation==action.Npc.Conversation)ClearHelperReservation();
+        helperConversations.Clear();
         CancelHelperApproach();helperBlocked="";helperError="Quest Helper: "+reason;helperQuestStatus=helperError;
         ResumeAfterConfirmedTravel();nextHelperStatus=default;
     }

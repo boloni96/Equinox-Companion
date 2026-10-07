@@ -22,7 +22,7 @@ public sealed partial class Plugin
     private bool HelperTravelBusy=>travelQueue.Count>0&&!HoldHelperTravel||travelAwaitingArrival!=null||followApproach!=null||pendingTransport!=null||pendingWard!=null||pendingAethernet!=null||receivedPortal!=null||pendingDutyLeave!=null||lifestreamTravelOwned;
     private bool HelperQuestBusy=>!HelperTravelBusy&&helperPermission.Active&&helperPermission.Quest&&!helperPermission.QuestPaused&&(helperReservedConversation.Length>0||helperIncoming.Count>0||helperBlocked.Length>0||helperNpcActive!=null&&QuestConversationVisible());
     private bool SharingQuest=>config.EnableFollowThem&&config.FollowThem.ShareQuestActions&&config.PairingKey.Length==64&&Player.IsLoaded&&helperFollowers.Any(x=>HelperPolicy.Audience(x,DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()));
-    private void ClearHelperActions(){ClearHelperReservation();helperIncoming.Clear();helperBlocked="";helperNpcActive=null;CancelHelperApproach();}
+    private void ClearHelperActions(){helperConversations.Clear();ClearHelperReservation();helperIncoming.Clear();helperBlocked="";helperNpcActive=null;CancelHelperApproach();}
     private void EndHelperSession(){CancelHelperFateApproach();helperPendingFate=null;helperPermission.Stop();ClearHelperActions();helperCursor=0;helperTravelAfter=0;helperSeen.Clear();helperSkippedConversations.Clear();nextHelperStatus=default;}
     private void ApplyHelperControl(string command)
     {

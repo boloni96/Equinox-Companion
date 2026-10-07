@@ -15,13 +15,20 @@ public sealed partial class Plugin
     private readonly FollowApproachProgress helperProgress=new();
     private readonly FollowStationaryGate helperStationary=new();
     private int helperInteractAttempts;
+    private int helperTalkAttempts;
+    private DateTimeOffset helperTalkSentAt;
     private bool QuestConversationVisible()=>VisibleFollowAddon("Talk")||VisibleFollowAddon("SelectString")||VisibleFollowAddon("SelectIconString")||VisibleFollowAddon("CutSceneSelectString")||VisibleFollowAddon("JournalAccept")||VisibleFollowAddon("JournalResult")||HelperReplayPromptVisible();
     private void CancelHelperApproach()
     {
         if(helperApproaching){try{if(LifestreamBusy())Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch(Exception){}}
         helperApproaching=false;helperStopRequested=false;helperStationary.Reset();helperWorkingId="";
     }
-    private void BlockHelper(string reason){RecordFollowTravel("Helper blocked",new {reason,npc=helperNpcActive?.Name});helperBlocked=reason;helperQuestStatus="Blocked — "+reason;CancelHelperApproach();RequestFollowMovementStop();nextHelperStatus=default;}
+    private void BlockHelper(string reason){
+        RecordFollowTravel("Helper blocked",new {reason,npc=helperNpcActive?.Name});
+        helperConversations.Clear();
+        if(helperIncoming.TryPeek(out var failed)&&helperNpcActive?.Conversation==failed.Npc.Conversation){SkipHelperConversation(failed,reason);return;}
+        ClearHelperActions();helperError="Quest Helper: "+reason;helperQuestStatus=helperError;ResumeAfterConfirmedTravel();nextHelperStatus=default;
+    }
     private unsafe void UpdateQuestHelper(DateTimeOffset now)
     {
         if(!helperPermission.Active||!helperPermission.Quest||HelperPaused||helperPermission.QuestPaused||helperBlocked.Length>0||!Player.IsLoaded||Objects.LocalPlayer is not {} self||now<helperNextAction)return;
@@ -30,7 +37,7 @@ public sealed partial class Plugin
         if(!(helperReservedConversation==a.Npc.Conversation&&now<helperPlaybackUntil)&&!HelperPolicy.Fresh(a,now.ToUnixTimeMilliseconds(),followArmedAt)){BlockHelper("Recorded dialogue expired. Stop/start, then ask the leader to click the NPC again.");return;}
         if(a.Npc.World!=Player.CurrentWorld.RowId||a.Npc.Territory!=Client.TerritoryType){helperQuestStatus="Waiting to reach the NPC's area.";return;}
         if(HelperTravelBusy){helperQuestStatus="Waiting for travel to finish.";return;}
-        if(helperWorkingId!=a.Id){helperWorkingId=a.Id;helperActionSubmitted=false;helperQuestMenuSelected=false;helperActionStarted=now;helperStopRequested=false;helperInteractAttempts=0;helperStationary.Reset();followSession.Pause();RequestFollowMovementStop();}
+        if(helperWorkingId!=a.Id){helperWorkingId=a.Id;helperActionSubmitted=false;helperTalkAttempts=0;helperQuestMenuSelected=false;helperActionStarted=now;helperStopRequested=false;helperInteractAttempts=0;helperStationary.Reset();followSession.Pause();RequestFollowMovementStop();}
         if(FollowMovementKeysHeld()){if(helperApproaching)CancelHelperApproach();helperQuestStatus="Your movement paused NPC approach.";return;}
         if(a.Kind=="interact"){
             if(QuestConversationVisible()){
@@ -86,9 +93,10 @@ public sealed partial class Plugin
             var talk=HelperTalk();
             if(helperActionSubmitted){
                 if(talk.Signature!=a.Signature||talk.Text!=a.Text){CompleteHelperAction(now);return;}
-                if(now-helperActionStarted>TimeSpan.FromSeconds(15))BlockHelper("The dialogue did not advance after the click.");return;
+                if(HelperConversationPolicy.RetryTalk(helperTalkAttempts,(now-helperTalkSentAt).TotalMilliseconds)){helperActionSubmitted=false;return;}
+                if(now-helperTalkSentAt>=TimeSpan.FromSeconds(2))BlockHelper("The matching dialogue did not advance after three spaced clicks.");return;
             }
-            if(talk.Signature==a.Signature&&talk.Text==a.Text){helperReplaying=true;try{if(AdvanceTravelTalk(HelperTargetSignal(a))){helperActionSubmitted=true;helperNextAction=now.AddMilliseconds(450);}}finally{helperReplaying=false;}return;}
+            if(talk.Signature==a.Signature&&talk.Text==a.Text){helperReplaying=true;try{if(AdvanceTravelTalk(HelperTargetSignal(a))){helperActionSubmitted=true;helperTalkAttempts++;helperTalkSentAt=now;helperNextAction=now.AddMilliseconds(450);}}finally{helperReplaying=false;}return;}
             if(now-helperActionStarted>TimeSpan.FromSeconds(5))BlockHelper("Dialogue differs from the leader's recorded line; no response selected.");return;
         }
         if(a.Kind=="choice"){
