@@ -93,6 +93,7 @@ public sealed partial class Plugin
     private void SendHelperControl(HelperFollower f,string command)
     {
         if(!Player.IsLoaded||helperControls.Count>=32)return;
+        if(command is "pause" or "questPause" or "stop")RemoveHelperRecordingAudience(f.Id);
         helperControls.Enqueue((f,command,config.PairingKey+"/"+Player.CharacterName+"/"+Player.HomeWorld.RowId));
     }
     private HelperFollower[] ActiveHelperFollowers()=>helperFollowers.Where(x=>x.Control!="stop").ToArray();

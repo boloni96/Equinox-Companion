@@ -27,6 +27,8 @@ public sealed partial class Plugin
     {
         if(!helperRecording)return;
         if(!SharingQuest||helperCaptureNpc is not {} npc||now-helperCaptureAt>TimeSpan.FromMinutes(10)||helperRecordingFailed){ResetHelperRecording();return;}
+        helperRecordAudience=helperRecordAudience.Where(id=>helperFollowers.Any(f=>f.Id==id&&HelperPolicy.Audience(f,now.ToUnixTimeMilliseconds()))).ToArray();
+        if(helperRecordAudience.Length==0){ResetHelperRecording();return;}
         if(QuestConversationVisible()||helperAcceptIntent||Conditions[ConditionFlag.OccupiedInQuestEvent]){helperRecordQuiet=default;return;}
         // A brief window replacement is not the end of a conversation.
         var evt=EventFramework.Instance();
@@ -65,6 +67,12 @@ public sealed partial class Plugin
     {
         RecordFollowTravel("Helper conversation finished",new {reason});
         ClearHelperActions();helperQuestStatus=reason;ResumeAfterConfirmedTravel();nextHelperStatus=default;
+    }
+    private void RemoveHelperRecordingAudience(string id)
+    {
+        helperRecordAudience=helperRecordAudience.Where(x=>x!=id).ToArray();
+        var pending=helperOutgoing.Select(a=>a with {Sessions=(a.Sessions??[]).Where(x=>x!=id).ToArray()}).Where(a=>a.Sessions!.Length>0).ToArray();
+        helperOutgoing.Clear();foreach(var a in pending)helperOutgoing.Enqueue(a);
     }
     private void ClearHelperReservation(){helperReservedConversation="";helperReservationUntil=default;helperPlaybackUntil=default;helperStepDelays.Clear();helperActionSubmitted=false;}
 }
