@@ -39,15 +39,30 @@ public sealed partial class Plugin
         }
         FailFollowTrip("The selected estate belongs to you, but its exact teleport is unavailable.");return true;
     }
+    private string friendRefreshTrip="";
+    private DateTimeOffset friendRefreshStarted;
+    private FollowPortalSignal? friendRefreshPending;
     private unsafe bool OpenSharedFriendEstate(FollowPortalSignal signal)
     {
-        if(!ulong.TryParse(signal.FriendContentId,out var id)||id==0)return false;
-        var friends=InfoProxyFriendList.Instance();if(friends==null||friends->CharData==null||friends->EntryCount>200)return false;
-        foreach(var friend in friends->CharDataSpan)if(friend.ContentId==id){
-            var agent=AgentFriendlist.Instance();if(agent==null)return false;
-            usingSharedTravel=true;try{agent->OpenFriendEstateTeleportation(id);}finally{usingSharedTravel=false;}return true;
+        if(!ulong.TryParse(signal.FriendContentId,out var id)||id==0){FailFollowTrip("Invalid estate owner; FollowThem remains active.");return false;}
+        var friends=InfoProxyFriendList.Instance();
+        if(friends!=null&&friends->CharData!=null&&friends->EntryCount is >0 and <=200){
+            foreach(var friend in friends->CharDataSpan)if(friend.ContentId==id){
+                var agent=AgentFriendlist.Instance();if(agent==null){FailFollowTrip("Friends menu is unavailable; FollowThem remains active.");return false;}
+                friendRefreshPending=null;
+                usingSharedTravel=true;try{agent->OpenFriendEstateTeleportation(id);}finally{usingSharedTravel=false;}return true;
+            }
+            friendRefreshPending=null;FailFollowTrip("Estate unavailable: owner isn't on your Friends List. FollowThem remains active.");return false;
         }
+        var now=DateTimeOffset.UtcNow;
+        if(friendRefreshTrip!=signal.Id){friendRefreshTrip=signal.Id;friendRefreshStarted=now;friendRefreshPending=signal;if(friends!=null)friends->RequestData();TravelDiagnostic("Refreshing Friends List before checking this estate.");}
+        if(now-friendRefreshStarted>=TimeSpan.FromSeconds(4)){friendRefreshPending=null;FailFollowTrip("Friends List is unavailable or empty; estate action cancelled. FollowThem remains active.");}
         return false;
     }
+    private void UpdateFriendEstateRefresh(DateTimeOffset now)
+    {
+        if(friendRefreshPending is not {} pending)return;
+        if(!followSession.Armed||travelAwaitingArrival?.Id!=pending.Id){friendRefreshPending=null;return;}
+        if(now-friendRefreshStarted>=TimeSpan.FromMilliseconds(500))TryFollowTransport(pending,now);
+    }
 }
-

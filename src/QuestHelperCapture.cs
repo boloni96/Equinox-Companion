@@ -1,0 +1,82 @@
+using System.Numerics;
+using Dalamud.Game.Addon.Lifecycle;
+using Dalamud.Game.Addon.Lifecycle.AddonArgTypes;
+using Dalamud.Game.ClientState.Objects.Enums;
+using Dalamud.Game.ClientState.Objects.Types;
+using FFXIVClientStructs.FFXIV.Client.UI;
+using FFXIVClientStructs.FFXIV.Client.UI.Agent;
+using FFXIVClientStructs.FFXIV.Client.Game.Event;
+using FFXIVClientStructs.FFXIV.Component.GUI;
+namespace EquinoxCompanion;
+public sealed partial class Plugin
+{
+    private HelperNpc? helperCaptureNpc;
+    private DateTimeOffset helperCaptureAt,lastHelperCaptureAt;
+    private string lastHelperCapture="";
+    private bool helperReplaying;
+    private unsafe void CaptureHelperNpc(IGameObject clicked)
+    {
+        if(!SharingQuest||helperReplaying||relayInteracting||usingSharedTravel||clicked.ObjectKind!=ObjectKind.EventNpc||Objects.LocalPlayer is not {} self||Vector3.Distance(self.Position,clicked.Position)>clicked.HitboxRadius+4)return;
+        var map=AgentMap.Instance();if(map==null)return;
+        helperCaptureNpc=new(Guid.NewGuid().ToString("N"),clicked.BaseId,clicked.Name.TextValue,Client.TerritoryType,map->CurrentMapId,Player.CurrentWorld.RowId,FollowTravelPosition.From(clicked.Position),FollowTravelPosition.From(self.Position),self.Rotation);
+        helperCaptureAt=DateTimeOffset.UtcNow;
+        EmitHelper("interact");
+    }
+    private string HelperCanonical(string text)=>text.Replace(Player.CharacterName,"{player}",StringComparison.Ordinal).Replace(config.FollowThem.TargetName.Length>0?config.FollowThem.TargetName:"\0","{player}",StringComparison.Ordinal).Trim();
+    private unsafe string HelperScene()
+    {
+        var f=EventFramework.Instance();if(f==null||f->EventState1.EventId.Id==0)return "";
+        return f->EventState1.EventId.Id+":"+f->Scene;
+    }
+    private unsafe (string Text,string Signature) HelperTalk()
+    {
+        var a=AgentCutscene.Instance();if(a==null||!VisibleFollowAddon("Talk"))return("","");
+        var speaker=HelperCanonical(a->TalkName.ToString());var text=HelperCanonical(a->TalkText.ToString());
+        return(text,text.Length is >0 and <=4000?HelperPolicy.Signature([speaker,text]):"");
+    }
+    private void EmitHelper(string kind,string text="",string signature="",string addon="",string scene="")
+    {
+        var now=DateTimeOffset.UtcNow;
+        if(!SharingQuest||helperReplaying||helperCaptureNpc is not {} npc||now-helperCaptureAt>TimeSpan.FromMinutes(10)||npc.World!=Player.CurrentWorld.RowId||npc.Territory!=Client.TerritoryType)return;
+        var key=kind+"/"+npc.Conversation+"/"+signature+"/"+text+"/"+scene;
+        if(key==lastHelperCapture&&now-lastHelperCaptureAt<TimeSpan.FromMilliseconds(300))return;
+        lastHelperCapture=key;lastHelperCaptureAt=now;
+        var sessions=helperFollowers.Where(f=>HelperPolicy.Audience(f,now.ToUnixTimeMilliseconds(),kind=="skip")).Select(f=>f.Id).ToArray();
+        if(sessions.Length==0)return;
+        if(helperOutgoing.Count>=32){helperError="Quest actions are arriving faster than the relay. Pause and let followers catch up.";return;}
+        helperOutgoing.Enqueue(new(Guid.NewGuid().ToString("N"),Player.CharacterName,Player.HomeWorld.RowId,kind,now.ToUnixTimeMilliseconds(),npc,text,signature,addon,scene,sessions));
+    }
+    private unsafe void ObserveHelperTalk(AddonEvent type,AddonArgs args)
+    {
+        if(!SharingQuest||helperReplaying||args is not AddonReceiveEventArgs e||(AtkEventType)e.AtkEventType!=AtkEventType.MouseClick)return;
+        try{var t=HelperTalk();if(t.Signature.Length>0)EmitHelper("talk",t.Text,t.Signature,"Talk",HelperScene());}
+        catch(Exception e2){Log.Debug(e2,"Helper dialogue capture unavailable");}
+    }
+    private unsafe List<string> HelperChoices(AtkUnitBase* addon,string name)
+    {
+        var result=new List<string>();if(addon==null||!addon->IsVisible)return result;
+        if(name=="SelectString")return TransportChoices(addon).Select(HelperCanonical).ToList();
+        if(name=="SelectIconString"){
+            var popup=&((AddonSelectIconString*)addon)->PopupMenu.PopupMenu;
+            if(popup->EntryNames==null||popup->EntryCount is <1 or >32)return result;
+            for(var i=0;i<popup->EntryCount;i++)result.Add(HelperCanonical(TravelMenuText(popup->EntryNames[i].Value)??""));
+        }else if(name=="CutSceneSelectString"&&addon->AtkValues!=null&&addon->AtkValuesCount is >5 and <=37){
+            for(var i=5;i<addon->AtkValuesCount;i++){var v=addon->AtkValues[i];if(((int)v.Type&15) is not (8 or 10))return [];result.Add(HelperCanonical(TravelMenuText(v.String.Value)??""));}
+        }
+        return result;
+    }
+    private unsafe void CaptureHelperChoice(AtkUnitBase* addon,int index)
+    {
+        if(!SharingQuest||helperReplaying||usingSharedTravel||addon==null||index<0)return;
+        var cut=AgentCutscene.Instance();
+        if(index==0&&cut!=null&&cut->SkipDialogAddonId!=0&&addon->Id==cut->SkipDialogAddonId){var scene=HelperScene();if(scene.Length>0)EmitHelper("skip",scene:scene);return;}
+        foreach(var name in new[]{"SelectString","SelectIconString","CutSceneSelectString"}){
+            if(addon!=(AtkUnitBase*)GardenGui.GetAddonByName(name).Address)continue;
+            var list=HelperChoices(addon,name);if(index>=list.Count||list[index].Length==0)return;
+            // Travel retains its established queue. Never duplicate ferry/estate actions here.
+            if(SharingTravel&&FollowTransportPolicy.StepSupported(list[index],false))return;
+            EmitHelper("choice",list[index],HelperPolicy.Signature(list.OrderBy(x=>x,StringComparer.Ordinal)),name,HelperScene());return;
+        }
+        // Quest rewards, purchases, and arbitrary Yes/No prompts remain manual.
+    }
+}

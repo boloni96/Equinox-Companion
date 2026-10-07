@@ -72,6 +72,7 @@ public sealed partial class Plugin
     private void StopFollowThem(string reason = "Stopped.")
     {
         var wasArmed = followSession.Armed;
+        EndHelperSession();
         followSession.Stop();
         if(wasArmed)RequestFollowMovementStop();
         followFlight.Reset();followStuck.Reset();followRecovery.Reset();mountAttempts=0;followStuckStopRequested=false;
@@ -95,7 +96,7 @@ public sealed partial class Plugin
         if (Objects.LocalPlayer == null) { followStatus = "Log in before starting FollowThem."; return; }
         followFault = false; Interlocked.Exchange(ref followCommandRejected, 0); followReady.Reset();
         followFlight.Reset();followStuck.Reset();followRecovery.Reset();mountAttempts=0;followStuckStopRequested=false;followManualInputSeen=false;followRetryAt=default;
-        followSession.Arm(); followArmedAt=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(); relayGeneration++; nextFollowCheck = default;
+        StartHelperSession();followSession.Arm(); followArmedAt=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(); relayGeneration++; nextFollowCheck = default;
         followStatus = "STARTED — Looking for " + config.FollowThem.TargetName + " nearby.";
     }
     private void RefreshFollowBar()
@@ -103,15 +104,15 @@ public sealed partial class Plugin
         if (!config.EnableFollowThem) { followBar?.Remove(); followBar = null; followBarText = ""; return; }
         followBar ??= QuickLootBar.Get("Equinox FollowThem");
         followBar.Shown = true;
-        var label = !followSession.Armed&&(followStopPending||followStopUnconfirmed) ? "STOPPING" : followSession.Armed&&followRecovery.AwaitingMovement ? "WAITING" : followSession.Phase switch
+        var label = HelperPaused ? "PAUSED" : !followSession.Armed&&(followStopPending||followStopUnconfirmed) ? "STOPPING" : followSession.Armed&&followRecovery.AwaitingMovement ? "WAITING" : followSession.Phase switch
         {
             FollowPhase.Following => config.FollowThem.TargetName,
             FollowPhase.Waiting => "WAITING", FollowPhase.Loading => "LOADING", _ => "STOPPED"
         };
         var text = "FollowThem: " + label;
         if (text != followBarText) { followBar.Text = new SeStringBuilder().AddText(text).Build(); followBarText = text; }
-        followBar.Tooltip = new SeStringBuilder().AddText(followStatus + (followSession.Armed ? " Left-click to stop." : followStopPending||followStopUnconfirmed ? " Tap and release a movement key to confirm stop." : " Left-click to start.") + " Right-click to open Companion.").Build();
-        followBar.OnClick = e => { if(e.ClickType==MouseClickType.Right){followThemSelectTab=true;Open();} else if(e.ClickType==MouseClickType.Left) ToggleFollowThem(); };
+        followBar.Tooltip = new SeStringBuilder().AddText(followStatus + (followSession.Armed ? " Left-click to stop." : followStopPending||followStopUnconfirmed ? " Tap and release a movement key to confirm stop." : " Left-click to start.") + " Right-click for Companion and Pause/Resume controls.").Build();
+        followBar.OnClick = e => { if(e.ClickType==MouseClickType.Right){followThemSelectTab=true;helperWindowOpen=true;Open();} else if(e.ClickType==MouseClickType.Left) ToggleFollowThem(); };
     }
     private bool followManualInputSeen,followStuckStopRequested;
     private unsafe void UpdateFollowThem(DateTimeOffset now)
@@ -135,6 +136,7 @@ public sealed partial class Plugin
                 RefreshFollowBar(); return;
             }
             if (followFault||now<followRetryAt) return;
+            if(HelperPaused||HelperQuestBusy){followSession.Pause();followStuck.Pause();followStatus=HelperPaused?"PAUSED — "+(helperPermission.LocalPaused?"Your pause; only you can resume it.":"Paused by the followed character."):"QUEST — "+(helperBlocked.Length>0?helperBlocked:helperQuestStatus);RefreshFollowBar();return;}
             RefreshFollowBar();
             // Menu/loading gates must not age out a leader who is still visible.
             if(followSession.Armed&&!Conditions[ConditionFlag.BetweenAreas]&&!Conditions[ConditionFlag.BetweenAreas51]){
@@ -270,6 +272,7 @@ public sealed partial class Plugin
         ImGui.BeginDisabled(!followSession.Armed&&(followStopPending||followStopUnconfirmed));
         if (ImGui.Button(followSession.Armed ? "Stop FollowThem" : followStopPending||followStopUnconfirmed ? "Waiting for stop confirmation" : "Start FollowThem")) ToggleFollowThem();
         ImGui.EndDisabled();
+        DrawHelperFollowerControls();
         ImGui.TextWrapped("Local settings. Uses simple game follow; obstacles still require your help. Mounted takeoff assistance is optional. Party teleports need an open English confirmation. Instance and gate travel requires Journal V7.11.80 on Cloudflare. Transport menus must match on both characters.");
         var selected = config.FollowThem.TargetName.Length == 0 ? "Choose a party member or friend" : config.FollowThem.TargetName + " @ " + FollowWorldName(config.FollowThem.HomeWorld);
         if (ImGui.BeginCombo("Character", selected))
@@ -283,6 +286,9 @@ public sealed partial class Plugin
                 foreach (var friend in friends->CharDataSpan) FollowCandidate(friend.NameString, friend.HomeWorld, "friend");
             ImGui.EndCombo();
         }
+        if(ImGui.CollapsingHeader("Movement & approach",ImGuiTreeNodeFlags.DefaultOpen)){
+        MessageToggle("Prefer the leader’s right side when approaching interactions",config.FollowThem.PreferRightSide,v=>config.FollowThem.PreferRightSide=v);
+        if(ImGui.IsItemHovered())ImGui.SetTooltip("Prefer a small right-side offset. If already in interaction range, stop and use the exact target without forcing the offset.");
         MessageToggle("FollowThem chat messages", config.FollowThem.ChatMessages, v => config.FollowThem.ChatMessages = v);
         MessageToggle("Accept party invitations from the selected character",config.FollowThem.AcceptPartyInvites,v=>config.FollowThem.AcceptPartyInvites=v);
         MessageToggle("Accept duty-ready prompts when queued with the selected character",config.FollowThem.AcceptDutyReady,v=>config.FollowThem.AcceptDutyReady=v);
@@ -294,6 +300,8 @@ public sealed partial class Plugin
         MessageToggle("Stop FollowThem when I move (optional)",config.FollowThem.StopOnMovement,v=>config.FollowThem.StopOnMovement=v);
         DrawCommittedInteger("Stuck timeout (seconds)", config.FollowThem.StuckSeconds, 5, 600, value => config.FollowThem.StuckSeconds = value);
         MessageToggle("Resume when the selected character comes nearby", config.FollowThem.ResumeNearby, v => config.FollowThem.ResumeNearby = v);
+        }
+        if(ImGui.CollapsingHeader("Travel & shared destinations")){
         MessageToggle("Accept party teleport offers while FollowThem is started", config.FollowThem.AcceptPartyTeleports, v => config.FollowThem.AcceptPartyTeleports = v);
         MessageToggle("Share my travel with active paired followers", config.FollowThem.SharePortalTransitions, v => config.FollowThem.SharePortalTransitions = v);
         MessageToggle("Follow shared Teleport / aethernet destinations (experimental)",config.FollowThem.UseSharedTeleports,v=>{config.FollowThem.UseSharedTeleports=v;relayGeneration++;});
@@ -302,7 +310,8 @@ public sealed partial class Plugin
         ImGui.TextWrapped("Shared travel requires an active follow session. Teleport uses your own unlocked public destination and gil, within this limit. Ward entry, exact available estate teleports and matched transport menus are experimental. World/Data Center travel uses the separate Lifestream options. Aethernet requires the same nearby crystal and a matching unlocked menu entry. Party offers use the separate option above.");
         MessageToggle("Use my selected character's shared portal (experimental)", config.FollowThem.UseSharedPortals, v => { config.FollowThem.UseSharedPortals = v; receivedPortal=null; relayGeneration++; });
         ImGui.TextWrapped(portalRelayStatus);
-        ImGui.TextWrapped("Leader: enable Share my travel; no need to start following anyone. Follower: select that character, enable shared destinations and/or portals, then Start. Both need the same pairing key. The instruction expires after 15 seconds and never enters Journal history. Be beside the same source. Matching transport menus and confirmations can be replayed; unsupported dialogs remain manual. Lifestream must be installed separately for its optional routes.");
+        ImGui.TextWrapped("Leader: enable Share my travel; no need to start following anyone. Follower: select that character, enable shared destinations and/or portals, then Start. Both need the same pairing key. The instruction expires after two minutes and never enters Journal history. Be beside the same source. Matching transport menus and confirmations can be replayed; unsupported dialogs remain manual. Lifestream must be installed separately for its optional routes.");
+        }
     }
     private readonly Dictionary<uint, int> integerEditDrafts = new();
     private void DrawCommittedInteger(string label, int current, int minimum, int maximum, Action<int> apply, bool saveConfig = true)

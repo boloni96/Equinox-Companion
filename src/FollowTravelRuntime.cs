@@ -102,13 +102,11 @@ public sealed partial class Plugin
         UpdateFollowBoundary(now);
         UpdateFollowWorldCommandHook();
         UpdateFriendEstateHook();
-        UpdateFollowWard(now);
-        UpdateFollowTransport(now);
-        UpdateFollowWorldTravel(now);
+        if(!HelperPaused&&!HelperQuestBusy){UpdateFriendEstateRefresh(now);UpdateFollowWard(now);UpdateFollowTransport(now);UpdateFollowWorldTravel(now); }
         if(SharingTravel&&!travelHookFailed&&followTeleportHook==null){try{followTeleportHook=Interop.HookFromAddress<FollowTeleportDelegate>(Telepo.MemberFunctionPointers.Teleport,ObserveFollowTeleport);}catch(Exception e){travelHookFailed=true;errorJournal.Record("follow-teleport","Travel observer unavailable",exceptionType:e.GetType().Name);}}
         if(followTeleportHook!=null){if(SharingTravel&&!followTeleportHook.IsEnabled)followTeleportHook.Enable();else if(!SharingTravel&&followTeleportHook.IsEnabled)followTeleportHook.Disable();}
-        if(SharingTravel&&callbackHook is {IsEnabled:false})callbackHook.Enable();
-        if(SharingTravel&&callbackIntHook is {IsEnabled:false})callbackIntHook.Enable();
+        if((SharingTravel||SharingQuest)&&callbackHook is {IsEnabled:false})callbackHook.Enable();
+        if((SharingTravel||SharingQuest)&&callbackIntHook is {IsEnabled:false})callbackIntHook.Enable();
         if(!SharingTravel)outgoingTravel=null;
         if(outgoingTravel is {} travel){
             if(Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51])travelSawLoading=true;

@@ -3,6 +3,10 @@ namespace EquinoxCompanion;
 [Serializable]
 public sealed class FollowThemSettings
 {
+    public bool QuestHelper {get;set;}
+    public bool ShareQuestActions {get;set;}
+    public bool SkipLeaderCutscenes {get;set;}
+    public bool PreferRightSide {get;set;} = true;
     public string TargetName { get; set; } = "";
     public uint HomeWorld { get; set; }
     public bool ChatMessages { get; set; } = true;

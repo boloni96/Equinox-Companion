@@ -153,6 +153,7 @@ public sealed partial class Plugin : IDalamudPlugin
         errorJournal = new ErrorJournal(Pi.GetPluginConfigDirectory());
         gardenMessageJournal = new GardenMessageJournal(Pi.GetPluginConfigDirectory());
         FollowAddonLifecycle.RegisterListener(Dalamud.Game.Addon.Lifecycle.AddonEvent.PreReceiveEvent,"TeleportHousingFriend",ObserveFriendEstateRow);
+        FollowAddonLifecycle.RegisterListener(Dalamud.Game.Addon.Lifecycle.AddonEvent.PreReceiveEvent,"Talk",ObserveHelperTalk);
         try
         {
             var logSheet = DataManager.GetExcelSheet<Lumina.Excel.Sheets.LogMessage>(Dalamud.Game.ClientLanguage.English);
@@ -268,6 +269,7 @@ public sealed partial class Plugin : IDalamudPlugin
         var now = DateTimeOffset.UtcNow;
         UpdateQuickLoot(now);
         UpdateFollowPortalRelay(now);
+        UpdateHelper(now);
         UpdateFollowThem(now);
         UpdateCofferMarkers(now);
         UpdateSync(now);
@@ -518,7 +520,7 @@ public sealed partial class Plugin : IDalamudPlugin
         // No game action is initiated; only submitted garden selections are observed.
         try
         {
-            if(count==1&&values!=null&&((int)values[0].Type&15) is 3 or 5){CaptureFollowInstanceChoice(addon,values[0].Int);CaptureTransportChoice(addon,values[0].Int);}
+            if(count==1&&values!=null&&((int)values[0].Type&15) is 3 or 5){CaptureFollowInstanceChoice(addon,values[0].Int);CaptureTransportChoice(addon,values[0].Int);CaptureHelperChoice(addon,values[0].Int);}
             ObserveTravelCallbackDiagnostic(addon,count,values);
             CaptureWardMenu(addon,count,values);
             CaptureFollowRoom(addon,count,values);
@@ -546,6 +548,7 @@ public sealed partial class Plugin : IDalamudPlugin
             var diagnosticValue=new AtkValue{Type=AtkValueType.Int,Int=value};ObserveTravelCallbackDiagnostic(addon,1,&diagnosticValue);
             CaptureFollowInstanceChoice(addon,value);
             CaptureTransportChoice(addon,value);
+            CaptureHelperChoice(addon,value);
             if (ObservingGardens && Volatile.Read(ref activeGardenMenu)?.AddonAddress == (nint)addon)
                 ObserveGardenSelection(addon,[value],false,"FireCallbackInt");
         }
@@ -923,6 +926,7 @@ public sealed partial class Plugin : IDalamudPlugin
         DrawFloatingLaunchers();
         DrawPlantingMarkers();
         DrawCofferMarkers();
+        DrawHelperControls();
         if (!visible) showSavedPairingKey = false;
     }
 
@@ -1061,6 +1065,8 @@ public sealed partial class Plugin : IDalamudPlugin
         EndNativeFollowStop();followBackDownHook?.Dispose();followBackPressedHook?.Dispose();
         friendEstateHook?.Dispose();
         FollowAddonLifecycle.UnregisterListener(ObserveFriendEstateRow);
+        FollowAddonLifecycle.UnregisterListener(ObserveHelperTalk);
+        helperLeaderBar?.Remove();helperRelay.Dispose();
         portalRelay.Dispose();
         quickLootBarEntry?.Remove();
         sync.Dispose();

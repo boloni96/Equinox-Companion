@@ -21,7 +21,7 @@ public sealed partial class Plugin
         transportCapture=null;transportSawLoading=false;
         if(!SharingTravel||usingSharedTravel||relayInteracting||clicked.ObjectKind is not (ObjectKind.Aetheryte or ObjectKind.EventNpc or ObjectKind.EventObj))return;
         var observed=TravelSignal("transport",0,"",clicked.BaseId,clicked.Position);if(observed==null)return;
-        transportCapture=observed with {SourceKind=clicked.ObjectKind.ToString(),SourceRadius=Math.Clamp(clicked.HitboxRadius,0,10),Approach=FollowTravelPosition.From(FollowCrystalApproach.Point(clicked.Position,Objects.LocalPlayer!.Position,clicked.HitboxRadius)),Steps=[]};
+        transportCapture=observed with {Facing=Objects.LocalPlayer!.Rotation,SourceKind=clicked.ObjectKind.ToString(),SourceRadius=Math.Clamp(clicked.HitboxRadius,0,10),Approach=FollowTravelPosition.From(FollowCrystalApproach.Point(clicked.Position,Objects.LocalPlayer!.Position,clicked.HitboxRadius)),Steps=[]};
         var housing=FFXIVClientStructs.FFXIV.Client.Game.HousingManager.Instance();
         if(clicked.ObjectKind==ObjectKind.EventObj&&clicked.Name.TextValue is "Entrance" or "Exit" or "Entrance to the Company Workshop" or "Entrance to Additional Chambers" or "Workshop Entrance"&&housing!=null&&housing->CurrentTerritory!=null)
             transportCapture=transportCapture with {TravelKind="door"};
@@ -30,7 +30,7 @@ public sealed partial class Plugin
             var self=Objects.LocalPlayer!;
             var distance=Vector3.Distance(self.Position,clicked.Position);
             if(float.IsFinite(distance)&&distance<=11.75f){
-                clickedAethernetSource=observed with {SourceKind=clicked.ObjectKind.ToString(),SourceRadius=Math.Clamp(Math.Max(clicked.HitboxRadius,distance-1.75f),0,10),Approach=FollowTravelPosition.From(self.Position),Steps=[]};
+                clickedAethernetSource=observed with {Facing=Objects.LocalPlayer!.Rotation,SourceKind=clicked.ObjectKind.ToString(),SourceRadius=Math.Clamp(Math.Max(clicked.HitboxRadius,distance-1.75f),0,10),Approach=FollowTravelPosition.From(self.Position),Steps=[]};
                 RecordFollowTravel("Aethernet source interaction observed",new {clicked.BaseId,kind=clicked.ObjectKind.ToString(),distance,source=FollowTravelPosition.From(clicked.Position),approach=FollowTravelPosition.From(self.Position)});
             }
         }
@@ -126,7 +126,7 @@ public sealed partial class Plugin
         if(signal.TravelKind=="friendestate"){
             if(TryOwnSharedEstate(signal,now))return;
             PauseFollowForTravel();
-            if(!OpenSharedFriendEstate(signal)){TravelDiagnostic("Friend estate unavailable: open your Friends List to refresh it, and confirm this person is your friend with estate teleport enabled.");return;}
+            if(!OpenSharedFriendEstate(signal))return;
             lastPortalSignalId=signal.Id;pendingTransport=signal;transportStep=0;transportStarted=now;transportNext=now.AddMilliseconds(500);return;
         }
         if(signal.SourceKind=="boundary"){

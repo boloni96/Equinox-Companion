@@ -3,7 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 namespace EquinoxCompanion;
 
-public sealed record FollowPortalSignal(string Id,string Name,uint HomeWorld,uint CurrentWorld,string EntityId,uint Territory,uint MapId,uint BaseId,int HandlerType,float X,float Y,float Z,long SentAt,string Confirmation,long ExpiresAt=0,string TravelKind="portal",uint AetheryteId=0,string Destination="",int Ward=0,uint DestinationTerritory=0,float SourceRadius=0,FollowMenuStep[]? Steps=null,string SourceKind="",uint DestinationWorld=0,string FriendContentId="",string EstateId="",FollowTravelPosition? Approach=null,uint DutyId=0,FollowTravelPosition? Arrival=null,uint ArrivalMap=0,uint ArrivalTerritory=0,uint ArrivalWorld=0,long Sequence=0,uint ArrivalInstance=0);
+public sealed record FollowPortalSignal(string Id,string Name,uint HomeWorld,uint CurrentWorld,string EntityId,uint Territory,uint MapId,uint BaseId,int HandlerType,float X,float Y,float Z,long SentAt,string Confirmation,long ExpiresAt=0,string TravelKind="portal",uint AetheryteId=0,string Destination="",int Ward=0,uint DestinationTerritory=0,float SourceRadius=0,FollowMenuStep[]? Steps=null,string SourceKind="",uint DestinationWorld=0,string FriendContentId="",string EstateId="",FollowTravelPosition? Approach=null,uint DutyId=0,FollowTravelPosition? Arrival=null,uint ArrivalMap=0,uint ArrivalTerritory=0,uint ArrivalWorld=0,long Sequence=0,uint ArrivalInstance=0,float? Facing=null);
 public sealed record FollowMenuStep(string Text,bool Confirmation=false,string Addon="",int[]? Arguments=null,string MenuSignature="");
 public sealed record FollowPortalEnvelope(FollowPortalSignal? Signal,FollowPortalSignal[]? Signals=null);
 public sealed class FollowPortalRelay : IDisposable
@@ -82,3 +82,4 @@ public sealed class FollowPortalRelay : IDisposable
     private static string Failure(int code)=>code switch{404=>"Deploy Journal V7.11.77 to enable portal relay.",403=>"Portal relay refused; check pairing and deploy Journal V7.11.77.",401=>"Portal relay needs a valid pairing key and Journal V7.11.77.",_=>"Portal relay unavailable (HTTP "+code+"). No portal action taken."};
     public void Dispose(){cancel.Cancel();client.Dispose();cancel.Dispose();}
 }
+

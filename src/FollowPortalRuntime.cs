@@ -33,7 +33,7 @@ public sealed partial class Plugin
     private void UpdateFollowLease(DateTimeOffset now)
     {
         var loading=Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51];
-        var desired=config.EnableFollowThem&&(config.FollowThem.UseSharedPortals||config.FollowThem.UseSharedTeleports)&&followSession.Armed&&(Player.IsLoaded||loading||lifestreamTravelOwned)&&(!Player.IsLoaded||followLogin==0||Player.ContentId==followLogin)&&config.PairingKey.Length==64;
+        var desired=config.EnableFollowThem&&(config.FollowThem.UseSharedPortals||config.FollowThem.UseSharedTeleports||helperPermission.Active)&&followSession.Armed&&(Player.IsLoaded||loading||lifestreamTravelOwned)&&(!Player.IsLoaded||followLogin==0||Player.ContentId==followLogin)&&config.PairingKey.Length==64;
         var identity=desired?config.PairingKey+"/"+config.FollowThem.TargetName+"/"+config.FollowThem.HomeWorld+"/"+followArmedAt:"";
         if(followLeaseTask is not null){if(!followLeaseTask.IsCompleted)return;var ok=followLeaseTask.GetAwaiter().GetResult();followLeaseTask=null;if(followLeaseDeleting){followLeaseId="";followLeaseDeleting=false;}else if(!ok)portalRelayStatus="Follow session unavailable — deploy Journal V7.11.76 and check pairing.";}
         if(followLeaseId.Length>0&&identity!=followLeaseIdentity){followLeaseDeleting=true;followLeaseTask=portalRelay.Session(followLeaseKey,followLeaseId,followLeaseName,followLeaseWorld,false);return;}
@@ -46,6 +46,7 @@ public sealed partial class Plugin
     {
         try
         {
+            if(obj!=null&&!relayInteracting){var helperClicked=Objects.FirstOrDefault(o=>o.Address==(nint)obj);if(helperClicked!=null)CaptureHelperNpc(helperClicked);}
             if(config.EnableFollowThem&&config.FollowThem.SharePortalTransitions&&!relayInteracting&&obj!=null&&Player.IsLoaded)
             {
                 outgoingPortal=null;boundaryDeparture=null;
@@ -82,13 +83,13 @@ public sealed partial class Plugin
         {
             ObserveTravelStationary(now);
             ObserveTravelMenuDiagnostics(now);
-            UpdateFollowDutyLeave(now);
+            if(!HelperPaused&&!HelperQuestBusy)UpdateFollowDutyLeave(now);
             UpdateFollowLease(now);
             ObservePartyTeleport(now,Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]);
-            UpdateFollowApproach(now);
+            if(!HelperPaused&&!HelperQuestBusy)UpdateFollowApproach(now);
             UpdateFollowTravel(now);
             if(relayPairingKey!=config.PairingKey){relayPairingKey=config.PairingKey;relayGeneration++;ResetTravelQueue();receivedPortal=null;outgoingPortal=null;pendingAethernet=null;pendingWard=null;pendingTransport=null;transportCapture=null;worldSource=null;CancelLifestreamTravel();CancelFollowApproach();pendingDutyLeave=null;}
-            var sharing=config.EnableFollowThem&&config.FollowThem.SharePortalTransitions;
+            var sharing=config.EnableFollowThem&&(config.FollowThem.SharePortalTransitions||SharingQuest);
             if(sharing&&!portalHookFailed&&followPortalHook==null)
             {
                 try { followPortalHook=Interop.HookFromAddress<FollowInteractDelegate>(TargetSystem.MemberFunctionPointers.InteractWithObject,ObserveFollowPortalClick);followPortalHook.Enable(); }
@@ -139,7 +140,8 @@ public sealed partial class Plugin
                     if(result.Status!="Portal relay ready.")nextPortalPoll=now.AddSeconds(10);
                 }
             }
-            UpdateTravelQueue(now,loading);
+            if(!HelperPaused&&!HelperQuestBusy)UpdateTravelQueue(now,loading);
+            if(HelperPaused||HelperQuestBusy)return;
             if(receivedPortal is {} pending)
             {
                 if(now-receivedPortalAt>TimeSpan.FromSeconds(5)||loading||Client.TerritoryType!=pending.Territory){receivedPortal=null;return;}

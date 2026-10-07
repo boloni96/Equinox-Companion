@@ -88,11 +88,11 @@ public sealed partial class Plugin
         ImGui.TextWrapped("Disabled on installation. Red/green coffer icons on the minimap and main map; local to this visit.");
         if(config.EnableCofferMarkers) DrawCofferSettings();
         ImGui.Separator();
-        MessageToggle("Enable FollowThem", config.EnableFollowThem, v => {
+        MessageToggle("Enable Equinox Helper", config.EnableFollowThem, v => {
             if (!v) StopFollowThem("FollowThem disabled.");
             config.EnableFollowThem = v; RefreshFollowBar();
         });
-        ImGui.TextWrapped("Disabled on installation. Enables the FollowThem tab and clickable top-bar entry. Settings stay on this PC and are never paired. Disabling stops FollowThem; your selected character and portal settings are kept.");
+        ImGui.TextWrapped("Disabled on installation. Enables the Helper tab (FollowThem and optional Quest Helper) and clickable top-bar entry. Settings stay on this PC and are never paired. Disabling stops FollowThem; your selected character and portal settings are kept.");
     }
     private void DrawGeneralSettings()
     {
@@ -117,3 +117,4 @@ public sealed partial class Plugin
         ImGui.TextWrapped("Open the Armoire, Glamour Dresser and each retainer to refresh their stored contents. Current state and unsent records are kept; older acknowledged history is pruned after 60 days.");
     }
 }
+

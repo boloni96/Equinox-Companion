@@ -1,7 +1,7 @@
 name: Build and verify Companion source
 on:
   push:
-    branches: [main, fix/followthem-75]
+    branches: [main, fix/followthem-75, feature/equinox-helper-80]
     paths: ['src/**', 'tests/**', 'scripts/publish_source.py', '.github/workflows/build-from-source.yml']
   workflow_dispatch:
 permissions:
@@ -55,5 +55,3 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: python scripts/publish_source.py
-
-# Retry publication after the GitHub server failure on 2026-10-07.

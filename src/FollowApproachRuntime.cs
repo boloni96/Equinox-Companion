@@ -45,7 +45,7 @@ public sealed partial class Plugin
         }
         if(signal.TravelKind is not ("teleport" or "estate" or "friendestate" or "world")&&signal.Approach!=null&&!FollowApproachPolicy.CanApproach(signal,self.Position)){TravelDiagnostic("Travel position is too far away, on another level or invalid; waiting.");return;}
         if(signal.Approach is {Valid:true} captured&&signal.BaseId!=0&&signal.TravelKind is "door" or "transport" or "aethernet" or "ward")
-            signal=signal with {Approach=FollowTravelPosition.From(FollowCrystalApproach.Point(new(signal.X,signal.Y,signal.Z),captured.Point,signal.SourceRadius))};
+            signal=signal with {Approach=FollowTravelPosition.From(FollowCrystalApproach.Point(new(signal.X,signal.Y,signal.Z),config.FollowThem.PreferRightSide&&signal.Facing is {} rotation?HelperPolicy.Right(captured.Point,rotation):captured.Point,signal.SourceRadius))};
         followApproach=signal;approachKey=config.PairingKey;approachCharacter=Player.ContentId;approachSession=followArmedAt;
         lastPortalSignalId=signal.Id;approachDispatchAttempts=0;travelStationary.Reset();approachStopRequested=false;nextApproachAttempt=default;
         PauseFollowForTravel();TravelDiagnostic("Preparing the selected travel action; checking the captured position.");
@@ -135,3 +135,4 @@ public sealed partial class Plugin
         }
     }
 }
+
