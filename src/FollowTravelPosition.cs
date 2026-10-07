@@ -36,7 +36,7 @@ public static class FollowArrivalPolicy
         Vector3.DistanceSquared(position,a.Point)<225 && Math.Abs(position.Y-a.Y)<3;
 
     public static bool AlreadyAtTravelArrival(FollowPortalSignal s,uint world,uint territory,uint map,Vector3 position,bool acceptedPartyOffer)=>
-        s.TravelKind is "aethernet" or "teleport" or "estate" or "friendestate" &&
+        s.TravelKind is "aethernet" or "teleport" or "estate" or "friendestate" or "boundary" or "door" or "transport" &&
         (territory!=s.Territory||map!=s.MapId||acceptedPartyOffer&&s.TravelKind=="teleport") &&
         s.Arrival is {Valid:true} a && world==s.ArrivalWorld && territory==s.ArrivalTerritory && map==s.ArrivalMap &&
         Vector3.DistanceSquared(position,a.Point)<225 && Math.Abs(position.Y-a.Y)<3;
@@ -74,7 +74,9 @@ public static class FollowCrystalApproach
     public static Vector3 Point(Vector3 crystal,Vector3 leader,float radius)
     {
         var horizontal=new Vector3(leader.X-crystal.X,0,leader.Z-crystal.Z);
-        var reach=Math.Clamp(radius,0,10)+2.25f;
+        var reach=Math.Clamp(radius,0,10)+1.75f;
+        var height=leader.Y-crystal.Y;
+        reach=MathF.Sqrt(Math.Max(.0625f,reach*reach-height*height));
         if(horizontal.LengthSquared()<=reach*reach)return leader;
         var edge=crystal+Vector3.Normalize(horizontal)*reach;
         return new(edge.X,leader.Y,edge.Z);

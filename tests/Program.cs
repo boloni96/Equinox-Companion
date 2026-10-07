@@ -1451,7 +1451,7 @@ Check("64 delete private chambers rejected",FollowTransportPolicy.Choice("Delete
 Check("64 semantic room steps valid",FollowTransportPolicy.Valid(travel59 with {TravelKind="door",BaseId=9,SourceKind="EventObj",Steps=[new("Move to specified private chambers"),chamber64]}).ToString(),"True");
 
 var edge64=FollowCrystalApproach.Point(new(0,0,0),new(4,1,0),0);
-Check("64 crystal approach avoids center",edge64.X.ToString(System.Globalization.CultureInfo.InvariantCulture),"2.25");
+Check("69 elevated crystal approach stays within 3D reach",(edge64.X>0 && Math.Abs(edge64.Length()-1.75f)<.001f).ToString(),"True");
 Check("64 crystal approach preserves floor",edge64.Y.ToString(),"1");
 Check("64 nearby valid crystal approach unchanged",FollowCrystalApproach.Point(new(0,0,0),new(1,1,0),0).ToString(),new System.Numerics.Vector3(1,1,0).ToString());
 
@@ -1524,7 +1524,7 @@ Check("68 wrong destination never reconciles",FollowArrivalPolicy.AlreadyAtTrave
 Check("68 wrong floor never reconciles",FollowArrivalPolicy.AlreadyAtTravelArrival(party68,2,30,40,new(10,4,10),true).ToString(),"False");
 Check("68 same source without accepted offer remains actionable",FollowArrivalPolicy.AlreadyAtTravelArrival(party68 with {ArrivalTerritory=3,ArrivalMap=4},2,3,4,new(10,0,10),false).ToString(),"False");
 Check("68 same source accepted offer reconciles",FollowArrivalPolicy.AlreadyAtTravelArrival(party68 with {ArrivalTerritory=3,ArrivalMap=4},2,3,4,new(10,0,10),true).ToString(),"True");
-Check("68 doors not mistaken for teleport arrivals",FollowArrivalPolicy.AlreadyAtTravelArrival(party68 with {TravelKind="door"},2,30,40,new(10,0,10),true).ToString(),"False");
+Check("69 completed door arrival reconciles",FollowArrivalPolicy.AlreadyAtTravelArrival(party68 with {TravelKind="door"},2,30,40,new(10,0,10),true).ToString(),"True");
 var recoverNow68=time59.ToUnixTimeMilliseconds();
 var failedDoor68=travel59 with {Id="door",TravelKind="door"};
 var recoverWorld68=travel59 with {Id="world",TravelKind="world"};
@@ -1535,3 +1535,18 @@ Check("68 remote teleport preserved when enabled",string.Join(",",FollowArrivalP
 Check("68 remote teleport not assumed when disabled",FollowArrivalPolicy.RecoveryTail([failedDoor68,recoverTeleport68],recoverNow68,false).Length.ToString(),"0");
 Check("68 expired world does not recover",FollowArrivalPolicy.RecoveryTail([recoverWorld68 with {ExpiresAt=recoverNow68}],recoverNow68,true).Length.ToString(),"0");
 Check("68 fresher world after expired world recovers",string.Join(",",FollowArrivalPolicy.RecoveryTail([recoverWorld68 with {ExpiresAt=recoverNow68},recoverWorld68],recoverNow68,false).Select(x=>x.Id)),"world");
+
+var doorSource69=new System.Numerics.Vector3(84.638626f,23.830397f,44.91763f);
+var doorLeader69=new System.Numerics.Vector3(82.777504f,22.153255f,46.942158f);
+var doorGoal69=FollowCrystalApproach.Point(doorSource69,doorLeader69,0);
+Check("69 reported door approach includes height and tolerance",(System.Numerics.Vector3.Distance(doorSource69,doorGoal69)+.5f<3).ToString(),"True");
+Check("69 approach retains ground height",doorGoal69.Y.ToString(),doorLeader69.Y.ToString());
+var partySignal69=travel59 with {SentAt=recoverNow68+3000,TravelKind="teleport",AetheryteId=5};
+Check("69 accepted party destination matches late relay",FollowPartyTeleportPolicy.Matches(partySignal69,5,2,recoverNow68,recoverNow68+17000,recoverNow68-1000).ToString(),"True");
+Check("69 unrelated party destination excluded",FollowPartyTeleportPolicy.Matches(partySignal69,6,2,recoverNow68,recoverNow68+17000,recoverNow68-1000).ToString(),"False");
+Check("69 old party offer cannot swallow later trip",FollowPartyTeleportPolicy.Matches(partySignal69 with {SentAt=recoverNow68+30000},5,2,recoverNow68,recoverNow68+31000,recoverNow68-1000).ToString(),"False");
+Check("69 old session party offer excluded",FollowPartyTeleportPolicy.Matches(partySignal69,5,2,recoverNow68,recoverNow68+17000,recoverNow68+1).ToString(),"False");
+Check("69 wrong world party offer excluded",FollowPartyTeleportPolicy.Matches(partySignal69,5,3,recoverNow68,recoverNow68+17000,recoverNow68-1000).ToString(),"False");
+Check("69 expired party offer excluded",FollowPartyTeleportPolicy.Matches(partySignal69,5,2,recoverNow68,recoverNow68+120001,recoverNow68-1000).ToString(),"False");
+Check("69 completed boundary reconciles",FollowArrivalPolicy.AlreadyAtTravelArrival(arrival66 with {TravelKind="boundary"},2,30,40,new(10,0,10),false).ToString(),"True");
+Check("69 boundary still at source not completed",FollowArrivalPolicy.AlreadyAtTravelArrival(arrival66 with {TravelKind="boundary",ArrivalTerritory=3,ArrivalMap=4},2,3,4,new(10,0,10),false).ToString(),"False");

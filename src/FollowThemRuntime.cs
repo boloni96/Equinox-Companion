@@ -186,7 +186,7 @@ public sealed partial class Plugin
             if(self!=null&&followStuck.Observe(now,self.Position,nearby?Vector3.Distance(self.Position,target!.Position):null,settings.ResumeNearby,settings.StuckSeconds,nearby?target!.Position:null)){
                 if(!followStuckStopRequested){RequestFollowMovementStop();followStuckStopRequested=true;}
                 followSession.Pause();
-                followStatus="WAITING — No movement progress; waiting for your selected character to return closer.";RefreshFollowBar();return;
+                followStatus=followStopPending||followStopUnconfirmed?"STOPPING — Stuck timeout reached; waiting for game movement cancellation.":"WAITING — No movement progress; waiting for your selected character to return closer.";RefreshFollowBar();return;
             }
 
             followStuckStopRequested=false;
@@ -251,7 +251,7 @@ public sealed partial class Plugin
         if(followStopPending||followStopUnconfirmed)return;
         if(!travelStepReady){PauseFollowForTravel();return;}
         nextTeleportAttempt = now.AddSeconds(5);
-        acceptedPartyTeleportAt=now;
+        CapturePartyTeleport(prompt,now);
         usingSharedTravel=true;try{addon->FireCallbackInt(0);}finally{usingSharedTravel=false;}
         FollowChatNotice("TELEPORT — Accepted the party teleport offer.");
     }

@@ -1052,7 +1052,7 @@ public sealed partial class Plugin : IDalamudPlugin
         followPortalHook?.Dispose();
         followTeleportHook?.Dispose();
         followWorldCommandHook?.Dispose();
-        ReleaseFollowStopKey();
+        ReleaseFollowStopKey();EndNativeFollowStop();followBackDownHook?.Dispose();followBackPressedHook?.Dispose();
         friendEstateHook?.Dispose();
         portalRelay.Dispose();
         quickLootBarEntry?.Remove();

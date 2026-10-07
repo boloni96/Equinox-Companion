@@ -48,7 +48,7 @@ public sealed partial class Plugin
         {
             if(config.EnableFollowThem&&config.FollowThem.SharePortalTransitions&&!relayInteracting&&obj!=null&&Player.IsLoaded)
             {
-                outgoingPortal=null;
+                outgoingPortal=null;boundaryDeparture=null;
                 var clicked=Objects.FirstOrDefault(o=>o.Address==(nint)obj);
                 if(clicked!=null)CaptureTransportSource(clicked);
                 var kind=PortalHandler(obj);
@@ -84,6 +84,7 @@ public sealed partial class Plugin
             ObserveTravelMenuDiagnostics(now);
             UpdateFollowDutyLeave(now);
             UpdateFollowLease(now);
+            ObservePartyTeleport(now,Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]);
             UpdateFollowApproach(now);
             UpdateFollowTravel(now);
             if(relayPairingKey!=config.PairingKey){relayPairingKey=config.PairingKey;relayGeneration++;ResetTravelQueue();receivedPortal=null;outgoingPortal=null;pendingAethernet=null;pendingWard=null;pendingTransport=null;transportCapture=null;worldSource=null;CancelLifestreamTravel();CancelFollowApproach();pendingDutyLeave=null;}
@@ -97,7 +98,7 @@ public sealed partial class Plugin
             if(!sharing)outgoingPortal=null;
             if(portalSendTask?.IsCompleted==true)
             {
-                portalRelayStatus=portalSendTask.GetAwaiter().GetResult();portalSendTask=null;
+                portalRelayStatus=portalSendTask.GetAwaiter().GetResult();portalSendTask=null;nextOutgoingTripAt=now.AddMilliseconds(2200);
                 if(portalNotices.Changed(portalRelayStatus))FollowChatNotice("PORTAL — "+portalRelayStatus);
             }
             FlushOutgoingTravel();

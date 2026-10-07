@@ -43,6 +43,8 @@ public sealed partial class Plugin
             TravelDiagnostic("Travel waiting ("+signal.TravelKind+"): "+reason+"; original expiry retained.");return;
         }
         if(signal.TravelKind is not ("teleport" or "estate" or "friendestate" or "world")&&signal.Approach!=null&&!FollowApproachPolicy.CanApproach(signal,self.Position)){TravelDiagnostic("Travel position is too far away, on another level or invalid; waiting.");return;}
+        if(signal.Approach is {Valid:true} captured&&signal.BaseId!=0&&signal.TravelKind is "door" or "transport" or "aethernet" or "ward")
+            signal=signal with {Approach=FollowTravelPosition.From(FollowCrystalApproach.Point(new(signal.X,signal.Y,signal.Z),captured.Point,signal.SourceRadius))};
         followApproach=signal;approachKey=config.PairingKey;approachCharacter=Player.ContentId;approachSession=followArmedAt;
         lastPortalSignalId=signal.Id;approachDispatchAttempts=0;travelStationary.Reset();approachStopRequested=false;nextApproachAttempt=default;
         PauseFollowForTravel();TravelDiagnostic("Preparing the selected travel action; checking the captured position.");
@@ -73,9 +75,12 @@ public sealed partial class Plugin
         if(followStopPending||followStopUnconfirmed)return;
         if(signal.TravelKind=="boundary"&&TrySelectFollowInstance(signal,now))return;
         if(now<nextApproachAttempt)return;
-        if(signal.TravelKind=="teleport"&&now-acceptedPartyTeleportAt<TimeSpan.FromSeconds(15))return;
+        if(MatchesAcceptedPartyTrip(signal,now)){
+            if(partyTripArrived){followApproach=null;travelAwaitingArrival=null;routeArrivalConfirmed=true;RecordFollowTravel("Party relay duplicate skipped",new {signal.Id});return;}
+            if(now-acceptedPartyTeleportAt<TimeSpan.FromSeconds(45)){TravelDiagnostic("Waiting for the accepted party teleport to finish.");return;}
+        }
         if(Objects.LocalPlayer is not {} self)return;
-        var position=self.Position;var atPoint=signal.TravelKind is "teleport" or "estate" or "friendestate" or "world"||MatchingTravelMenu(signal)||WithinTravelInteractionRange(signal)||signal.Approach==null||Vector3.DistanceSquared(position,signal.Approach.Point)<=.5625f;
+        var position=self.Position;var atPoint=signal.TravelKind is "teleport" or "estate" or "friendestate" or "world"||MatchingTravelMenu(signal)||WithinTravelInteractionRange(signal)||signal.Approach==null||signal.TravelKind=="boundary"&&Vector3.DistanceSquared(position,signal.Approach.Point)<=.5625f;
         if(!atPoint){
             travelStationary.Reset();
             if(approachStopRequested){approachStopRequested=false;travelStationary.Reset();nextApproachAttempt=now.AddMilliseconds(750);return;}

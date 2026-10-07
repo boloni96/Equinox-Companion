@@ -8,6 +8,7 @@ public sealed partial class Plugin
     private DateTimeOffset followStopNext,followStopPulseUntil;
     private ulong followStopCharacter;
     private int followStopKey;
+    private bool followStopHadText;
     private nint followStopWindow;
     private readonly FollowStationaryGate followStopStationary=new();
     private static readonly InputId[] FollowMovementBindings=[InputId.MOVE_FORE,InputId.MOVE_BACK,InputId.MOVE_LEFT,InputId.MOVE_RIGHT,InputId.MOVE_STRIFE_L,InputId.MOVE_STRIFE_R];
@@ -50,6 +51,7 @@ public sealed partial class Plugin
     private void RequestFollowMovementStop()
     {
         if(followStopPending)return;
+        followNativePulseAttempts=0;followNativeRetryAt=default;
         followStopIssued=false;followStopUnconfirmed=false;followStopPending=true;followStopCharacter=Player.IsLoaded?Player.ContentId:followLogin;followStopNext=DateTimeOffset.UtcNow.AddSeconds(5);followStopStationary.Reset();
         UpdateFollowMovementStop(DateTimeOffset.UtcNow);
     }
@@ -62,7 +64,12 @@ public sealed partial class Plugin
         if((followStopPending||followStopUnconfirmed)&&CanIssueFollowMovement()&&!FollowStopTextEntryActive()&&followStopWindow==0&&now>=followStopPulseUntil.AddMilliseconds(100)&&FollowMovementKeysHeld()){
             nativeFollowRequested=false;followStopUnconfirmed=false;followStopPending=true;followStopStationary.Reset();
         }
-        if(!followStopPending)return;
+        if(!followStopPending){EndNativeFollowStop();return;}
+        var textActive=FollowStopTextEntryActive();
+        if(followStopHadText&&!textActive){followNativePulseAttempts=0;followNativeRetryAt=default;followStopIssued=false;RecordFollowTravel("Text input released with pending stop",new {nativeFollowRequested});}
+        followStopHadText=textActive;
+        if(nativeFollowRequested&&TryNativeFollowStop(now))return;
+        if(now>=followNativePulseUntil)EndNativeFollowStop();
         if(nativeFollowRequested&&FollowStopTextEntryActive()){
             ReleaseFollowStopKey();followStopIssued=false;
             if(now>=followStopNext){followStopNext=now.AddSeconds(30);TravelDiagnostic("Stop queued; close text input to finish stopping.");}
@@ -71,7 +78,7 @@ public sealed partial class Plugin
         if(!nativeFollowRequested){
             ReleaseFollowStopKey();
             if(followStopStationary.Observe(now,Objects.LocalPlayer?.Position??default,Player.IsLoaded&&!FollowMovementKeysHeld())){
-                followStopPending=false;followStopUnconfirmed=false;if(!followSession.Armed){followStatus="STOPPED — Game follow cancelled; movement stopped.";RefreshFollowBar();}RecordFollowTravel("Movement stop confirmed",new {stationary=true,nativeFollowCancelled=true});
+                EndNativeFollowStop();followStopPending=false;followStopUnconfirmed=false;if(!followSession.Armed){followStatus="STOPPED — Game follow cancelled; movement stopped.";RefreshFollowBar();}RecordFollowTravel("Movement stop confirmed",new {stationary=true,nativeFollowCancelled=true});
             }
             return;
         }

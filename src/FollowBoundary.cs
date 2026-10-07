@@ -13,7 +13,7 @@ public sealed partial class Plugin
     private static unsafe uint CurrentFollowInstance()=>UIState.Instance()==null?0:UIState.Instance()->PublicInstance.InstanceId;
     private unsafe bool TrySelectFollowInstance(FollowPortalSignal signal,DateTimeOffset now)
     {
-        if(!config.EnableFollowThem||!config.FollowThem.UseSharedTeleports||!followSession.Armed||relayPairingKey!=config.PairingKey||signal.SentAt<followArmedAt||!FollowThemSession.Matches(config.FollowThem.TargetName,config.FollowThem.HomeWorld,signal.Name,signal.HomeWorld)||signal.ExpiresAt<=now.ToUnixTimeMilliseconds()||signal.ArrivalInstance==0||Player.CurrentWorld.RowId!=0&&Player.CurrentWorld.RowId!=signal.CurrentWorld||(Client.TerritoryType!=0&&Client.TerritoryType!=signal.Territory&&Client.TerritoryType!=signal.ArrivalTerritory)||FollowStopTextEntryActive())return false;
+        if(!config.EnableFollowThem||!config.FollowThem.UseSharedTeleports||!followSession.Armed||relayPairingKey!=config.PairingKey||signal.SentAt<followArmedAt||!FollowThemSession.Matches(config.FollowThem.TargetName,config.FollowThem.HomeWorld,signal.Name,signal.HomeWorld)||signal.ExpiresAt<=now.ToUnixTimeMilliseconds()||signal.ArrivalInstance==0||Player.CurrentWorld.RowId!=0&&Player.CurrentWorld.RowId!=signal.CurrentWorld||(Client.TerritoryType!=0&&Client.TerritoryType!=signal.Territory&&Client.TerritoryType!=signal.ArrivalTerritory))return false;
         var addon=(AtkUnitBase*)GardenGui.GetAddonByName("SelectString").Address;
         var index=FollowInstancePolicy.Choice(TransportChoices(addon),signal.ArrivalInstance);
         if(index<0||addon==null||!addon->IsVisible||!addon->IsReady)return false;
@@ -36,7 +36,7 @@ public sealed partial class Plugin
         if(!Enumerable.Range(1,9).Any(n=>FollowInstancePolicy.Choice(choices,(uint)n)==index))return;
         var direction=boundaryDirection.LengthSquared()>.01f?Vector3.Normalize(boundaryDirection):new Vector3(MathF.Sin(self.Rotation),0,MathF.Cos(self.Rotation));
         var signal=TravelSignal("boundary",0,"",0,self.Position);
-        if(signal!=null)CaptureTravel(signal with {SourceKind="boundary",Approach=FollowTravelPosition.From(self.Position+direction*3)},0);
+        if(signal!=null){boundaryDeparture=null;CaptureTravel(signal with {SourceKind="boundary",Approach=FollowTravelPosition.From(self.Position+direction*3)},0);}
     }
     private void UpdateFollowBoundary(DateTimeOffset now)
     {

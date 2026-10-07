@@ -62,10 +62,20 @@ public sealed class FollowPortalRelay : IDisposable
     {
         try
         {
-            using var request=new HttpRequestMessage(HttpMethod.Post,Endpoint){Content=JsonContent.Create(signal,options:json)};
-            request.Headers.Authorization=new AuthenticationHeaderValue("Bearer",key);
-            using var response=await client.SendAsync(request,cancel.Token);
-            return response.IsSuccessStatusCode?"Portal transition submitted for active followers (two-minute expiry).":Failure((int)response.StatusCode);
+            for(var attempt=0;attempt<3;attempt++){
+                using var request=new HttpRequestMessage(HttpMethod.Post,Endpoint){Content=JsonContent.Create(signal,options:json)};
+                request.Headers.Authorization=new AuthenticationHeaderValue("Bearer",key);
+                using var response=await client.SendAsync(request,HttpCompletionOption.ResponseHeadersRead,cancel.Token);
+                if(response.IsSuccessStatusCode)return "Portal transition submitted for active followers (two-minute expiry).";
+                if((int)response.StatusCode!=429)return Failure((int)response.StatusCode);
+                using var body=await response.Content.ReadAsStreamAsync(cancel.Token);
+                var bytes=new byte[1024];var count=await body.ReadAsync(bytes,cancel.Token);
+                var reason=System.Text.Encoding.UTF8.GetString(bytes,0,count);
+                if(!reason.Contains("Portal instructions are too frequent",StringComparison.Ordinal))return Failure(429);
+                if(attempt==2)return "Travel relay remained rate-limited; this trip was not shared.";
+                await Task.Delay(2200,cancel.Token);
+            }
+            return Failure(429);
         }
         catch(Exception e) when(e is HttpRequestException or TaskCanceledException){return "Portal relay unavailable; this transition was not queued for later replay.";}
     }

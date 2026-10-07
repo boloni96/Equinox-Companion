@@ -138,11 +138,12 @@ public sealed partial class Plugin
     {
         if(signal.TravelKind=="world"){TryFollowWorldTravel(signal,now);return;}
         if(!config.FollowThem.UseSharedTeleports||Objects.LocalPlayer is not {} self){TravelDiagnostic("Shared travel is disabled or your character is unavailable.");return;}
+        if(MatchesAcceptedPartyTrip(signal,now)&&partyTripArrived){travelAwaitingArrival=null;routeArrivalConfirmed=true;RecordFollowTravel("Party relay duplicate skipped",new {signal.Id});return;}
         var map=AgentMap.Instance();
         if(map!=null&&FollowArrivalPolicy.AlreadyAtTravelArrival(signal,Player.CurrentWorld.RowId,Client.TerritoryType,map->CurrentMapId,self.Position,acceptedPartyTeleportAt.ToUnixTimeMilliseconds()>=followArmedAt&&now-acceptedPartyTeleportAt<TimeSpan.FromSeconds(90))){
             travelAwaitingArrival=null;routeArrivalConfirmed=true;TravelDiagnostic("Already at the shared destination; duplicate Teleport skipped.");return;
         }
-        if(map==null||!FollowTravelPolicy.CanUse(signal,now.ToUnixTimeMilliseconds(),followArmedAt,config.FollowThem.TargetName,config.FollowThem.HomeWorld,Player.CurrentWorld.RowId,Client.TerritoryType,map->CurrentMapId,lastLeaderEntity,(now-lastLeaderSeen).TotalSeconds,self.Position,config.FollowThem.MeetAtTeleports)){TravelDiagnostic("Travel instruction rejected: stale session, different source location, or too far from the source. Move beside the leader before travel.");return;}
+        if(map==null||!FollowTravelPolicy.CanUse(signal,now.ToUnixTimeMilliseconds(),followArmedAt,config.FollowThem.TargetName,config.FollowThem.HomeWorld,Player.CurrentWorld.RowId,Client.TerritoryType,map->CurrentMapId,lastLeaderEntity,(now-lastLeaderSeen).TotalSeconds,self.Position,config.FollowThem.MeetAtTeleports)){RecordFollowTravel("Travel dispatch rejected",new {signal.Id,signal.TravelKind,distance=Vector3.Distance(self.Position,new(signal.X,signal.Y,signal.Z)),signal.SourceRadius,leaderAge=(now-lastLeaderSeen).TotalSeconds,expectedEntity=signal.EntityId,actualEntity=lastLeaderEntity,sourceTerritory=signal.Territory,currentTerritory=Client.TerritoryType});TravelDiagnostic("Travel instruction rejected: source, range or session validation failed.");return;}
         if(signal.TravelKind=="ward"&&signal.SourceKind=="boundary"){
             var block=(AtkUnitBase*)GardenGui.GetAddonByName("HousingSelectBlock").Address;
             if(Conditions[ConditionFlag.InCombat]||(block==null||!block->IsVisible)&&!MatchingTravelMenu(signal)){TravelDiagnostic("Walk into the same housing entrance to open ward selection; waiting.");return;}
