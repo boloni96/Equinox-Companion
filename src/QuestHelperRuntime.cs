@@ -14,13 +14,13 @@ public sealed partial class Plugin
     private readonly FollowApproachProgress helperProgress=new();
     private readonly FollowStationaryGate helperStationary=new();
     private int helperInteractAttempts;
-    private bool QuestConversationVisible()=>VisibleFollowAddon("Talk")||VisibleFollowAddon("SelectString")||VisibleFollowAddon("SelectIconString")||VisibleFollowAddon("CutSceneSelectString")||VisibleFollowAddon("JournalAccept")||VisibleFollowAddon("JournalResult");
+    private bool QuestConversationVisible()=>VisibleFollowAddon("Talk")||VisibleFollowAddon("SelectString")||VisibleFollowAddon("SelectIconString")||VisibleFollowAddon("CutSceneSelectString")||VisibleFollowAddon("JournalAccept")||VisibleFollowAddon("JournalResult")||HelperReplayPromptVisible();
     private void CancelHelperApproach()
     {
         if(helperApproaching){try{if(LifestreamBusy())Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch(Exception){}}
         helperApproaching=false;helperStopRequested=false;helperStationary.Reset();helperWorkingId="";
     }
-    private void BlockHelper(string reason){helperBlocked=reason;helperQuestStatus="Blocked — "+reason;CancelHelperApproach();RequestFollowMovementStop();nextHelperStatus=default;}
+    private void BlockHelper(string reason){RecordFollowTravel("Helper blocked",new {reason,npc=helperNpcActive?.Name});helperBlocked=reason;helperQuestStatus="Blocked — "+reason;CancelHelperApproach();RequestFollowMovementStop();nextHelperStatus=default;}
     private unsafe void UpdateQuestHelper(DateTimeOffset now)
     {
         if(!helperPermission.Active||!helperPermission.Quest||HelperPaused||helperPermission.QuestPaused||helperBlocked.Length>0||!Player.IsLoaded||Objects.LocalPlayer is not {} self||now<helperNextAction)return;
@@ -61,6 +61,11 @@ public sealed partial class Plugin
             return;
         }
         if(helperNpcActive?.Conversation!=a.Npc.Conversation){BlockHelper("This dialogue belongs to a different NPC interaction.");return;}
+        if(a.Kind=="talk"&&NocturneNpc(a.Npc)&&NocturneFirstQuest!=0&&VisibleHelperQuest()==NocturneFirstQuest){
+            // Replay introduction differs from the first-time quest offer. Wait for explicit Replay Yes or exact acceptance.
+            CompleteHelperAction(now);return;
+        }
+        if(a.Kind=="eventReplay"){UpdateHelperEventReplay(a,now);return;}
         if(a.Kind=="acceptQuest"){UpdateHelperQuestAccept(a,now);return;}
         if(a.Kind=="skip"){
             if(!helperPermission.Skip){CompleteHelperAction(now);return;}
@@ -83,6 +88,7 @@ public sealed partial class Plugin
         if(a.Kind=="choice"){
             var menu=(AtkUnitBase*)GardenGui.GetAddonByName(a.Addon).Address;var choices=HelperChoices(menu,a.Addon);
             if(choices.Count==0){if(now-helperActionStarted>TimeSpan.FromSeconds(8))BlockHelper("The recorded response menu did not appear.");return;}
+            RecordFollowTravel("Helper response menu",new {npc=a.Npc.Name,expected=a.Text,a.QuestId,choices});
             var index=HelperPolicy.Match(choices,a.Text);
             var isQuest=a.QuestId!=0&&HelperQuestIdForName(a.Text)==a.QuestId;
             if(isQuest&&index<0){SkipHelperConversation(a,"The same quest is unavailable in your NPC menu; waiting for the next interaction.");return;}

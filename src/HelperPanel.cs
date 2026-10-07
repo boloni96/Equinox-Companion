@@ -31,6 +31,7 @@ public sealed partial class Plugin
     private void DrawHelperFollowerControls()
     {
         if(!followSession.Armed)return;
+        if(helperPermission.QuestPaused)ImGui.TextWrapped("Quest Helper paused by the leader; FollowThem remains available.");
         if(helperPermission.LeaderPaused)ImGui.TextWrapped("Paused by the leader. You can stop the session at any time.");
         if(helperBlocked.Length>0&&ImGui.Button("Clear blocked dialogue and wait for a new NPC click")){ClearHelperActions();ResumeAfterConfirmedTravel();nextHelperStatus=default;}
     }

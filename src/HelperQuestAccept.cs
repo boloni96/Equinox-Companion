@@ -14,6 +14,7 @@ public sealed partial class Plugin
     private readonly HashSet<string> helperSkippedConversations=new();
     private unsafe void SkipHelperConversation(HelperAction action,string reason)
     {
+        RecordFollowTravel("Helper skipped quest",new {reason,action.QuestId,npc=action.Npc.Name});
         helperSkippedConversations.Add(action.Npc.Conversation);
         var keep=helperIncoming.Where(x=>x.Npc.Conversation!=action.Npc.Conversation).ToArray();helperIncoming.Clear();foreach(var x in keep)helperIncoming.Enqueue(x);
         if(helperNpcActive?.Conversation==action.Npc.Conversation){
@@ -56,7 +57,6 @@ public sealed partial class Plugin
         var manager=QuestManager.Instance();if(manager==null)return;
         if(action.QuestId==0){BlockHelper("Quest identity is missing; accept manually.");return;}
         if(manager->IsQuestAccepted(action.QuestId)){CompleteHelperAction(now);return;}
-        if(QuestManager.IsQuestComplete(action.QuestId)){SkipHelperConversation(action,"That quest is already completed; waiting for the next interaction.");return;}
         var offered=VisibleHelperQuest();
         if(offered!=0&&offered!=action.QuestId){SkipHelperConversation(action,"The offered quest differs from the leader's; nothing accepted.");return;}
         if(now-helperActionStarted>TimeSpan.FromSeconds(10)){BlockHelper("The matching quest could not be accepted. Check level, prerequisites and quest-log space.");return;}

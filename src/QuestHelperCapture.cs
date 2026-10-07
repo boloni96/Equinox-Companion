@@ -44,6 +44,7 @@ public sealed partial class Plugin
         var sessions=helperFollowers.Where(f=>HelperPolicy.Audience(f,now.ToUnixTimeMilliseconds(),kind=="skip")).Select(f=>f.Id).ToArray();
         if(sessions.Length==0)return;
         if(helperOutgoing.Count>=32){helperError="Quest actions are arriving faster than the relay. Pause and let followers catch up.";return;}
+        if(kind is "choice" or "acceptQuest" or "eventReplay")RecordFollowTravel("Helper captured choice",new {kind,npc=npc.Name,text,addon,questId});
         helperOutgoing.Enqueue(new(Guid.NewGuid().ToString("N"),Player.CharacterName,Player.HomeWorld.RowId,kind,now.ToUnixTimeMilliseconds(),npc,text,signature,addon,scene,sessions,QuestId:questId));
     }
     private string helperTalkText="",helperTalkSignature="",helperTalkScene="";
@@ -77,6 +78,7 @@ public sealed partial class Plugin
     private unsafe void CaptureHelperChoice(AtkUnitBase* addon,int index)
     {
         if(!SharingQuest||helperReplaying||usingSharedTravel||addon==null||index<0)return;
+        if(CaptureHelperEventReplay(addon,index))return;
         var cut=AgentCutscene.Instance();
         if(cut!=null&&cut->SkipDialogAddonId!=0&&addon->Id==cut->SkipDialogAddonId){
             var yes=index==0;
