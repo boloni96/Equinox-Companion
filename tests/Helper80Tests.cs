@@ -23,6 +23,11 @@ internal static class Helper80Tests
   p.Stop();p.SetQuestPause(false);p.Control("resume");Test("quest controls cannot restart stopped session",!p.Active);
   Test("quest paused excluded from audience",!HelperPolicy.Audience(f with {QuestPaused=true},2000));
   p.Start(false,false);Test("FATE sync requires Quest Helper",!p.Allows("fateSync"));p.Start(true,false);Test("FATE sync permitted",p.Allows("fateSync"));p.SetQuestPause(true);Test("quest pause blocks FATE",!p.Allows("fateSync")&&!p.Paused);p.SetQuestPause(false);p.Control("pause");Test("whole pause blocks FATE",!p.Allows("fateSync"));p.Stop();Test("stop blocks FATE",!p.Allows("fateSync"));
+  var dialogue=new HelperDialogueCapture();Test("first dialogue observed without advancing",dialogue.Observe("First","one","1")==null);
+  Test("repeat refresh does not duplicate",dialogue.Observe("First","one","1")==null);
+  Test("next line emits preceding line",dialogue.Observe("Second","two","1")?.Text=="First");
+  Test("closing talk before menu flushes last line",dialogue.Finish()?.Text=="Second");Test("finalize after flush cannot duplicate",dialogue.Finish()==null);
+  dialogue.Observe("Old","old","1");dialogue.Reset();Test("pause resets dialogue capture",dialogue.Finish()==null);
   Test("scene must match",!HelperPolicy.SceneMatches("1:2","1:3"));Test("unknown scene blocked",!HelperPolicy.SceneMatches("",""));
  }
 }

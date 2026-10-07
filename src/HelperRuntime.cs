@@ -75,6 +75,12 @@ public sealed partial class Plugin
             helperSendTask=helperRelay.Call(config.PairingKey,"op=action",outgoing);
         if(helperControlTask==null&&helperControls.TryDequeue(out var control)&&Player.IsLoaded&&control.Identity==config.PairingKey+"/"+Player.CharacterName+"/"+Player.HomeWorld.RowId)
             helperControlTask=helperRelay.Call(config.PairingKey,"op=control&session="+control.Follower.Id,new {name=Player.CharacterName,world=Player.HomeWorld.RowId,command=control.Command});
+        ObserveHelperDialogue();
+        if(helperBlocked.Length>0&&!QuestConversationVisible()){
+            if(helperNpcActive is {} failed)helperSkippedConversations.Add(failed.Conversation);
+            ClearHelperActions();ResumeAfterConfirmedTravel();nextHelperStatus=default;
+            RecordFollowTravel("Helper recovered",new {reason="NPC window closed; normal following resumed."});
+        }
         UpdateHelperFateSync(now);ObserveHelperQuestAcceptance(now);UpdateQuestHelper(now);RefreshHelperLeaderBar();
     }
     private string helperPairingIdentity="";

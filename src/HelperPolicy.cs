@@ -29,3 +29,17 @@ public static class HelperPolicy
     public static bool Audience(HelperFollower f,long now,bool skip=false)=>f.Quest&&!f.QuestPaused&&(!skip||f.Skip)&&!f.Paused&&f.Control=="resume"&&now-f.Updated<15000;
     public static bool SceneMatches(string expected,string actual)=>expected.Length>0&&expected==actual;
 }
+
+public sealed record HelperDialogueStep(string Text,string Signature,string Scene);
+public sealed class HelperDialogueCapture
+{
+    private HelperDialogueStep? current;
+    public HelperDialogueStep? Observe(string text,string signature,string scene)
+    {
+        if(signature.Length==0)return null;
+        if(current?.Signature==signature&&current.Scene==scene)return null;
+        var previous=current;current=new(text,signature,scene);return previous;
+    }
+    public HelperDialogueStep? Finish(){var previous=current;current=null;return previous;}
+    public void Reset()=>current=null;
+}

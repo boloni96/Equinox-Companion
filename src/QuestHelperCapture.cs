@@ -19,7 +19,7 @@ public sealed partial class Plugin
         if(!SharingQuest||helperReplaying||relayInteracting||usingSharedTravel||clicked.ObjectKind!=ObjectKind.EventNpc||Objects.LocalPlayer is not {} self||Vector3.Distance(self.Position,clicked.Position)>clicked.HitboxRadius+4)return;
         var map=AgentMap.Instance();if(map==null)return;
         helperCaptureNpc=new(Guid.NewGuid().ToString("N"),clicked.BaseId,clicked.Name.TextValue,Client.TerritoryType,map->CurrentMapId,Player.CurrentWorld.RowId,FollowTravelPosition.From(clicked.Position),FollowTravelPosition.From(self.Position),self.Rotation);
-        helperTalkText="";helperTalkSignature="";helperCaptureAt=DateTimeOffset.UtcNow;
+        helperDialogue.Reset();helperCaptureAt=DateTimeOffset.UtcNow;
         EmitHelper("interact");
     }
     private string HelperCanonical(string text)=>text.Replace(Player.CharacterName,"{player}",StringComparison.Ordinal).Replace(config.FollowThem.TargetName.Length>0?config.FollowThem.TargetName:"\0","{player}",StringComparison.Ordinal).Trim();
@@ -30,8 +30,11 @@ public sealed partial class Plugin
     }
     private unsafe (string Text,string Signature) HelperTalk()
     {
-        var a=AgentCutscene.Instance();if(a==null||!VisibleFollowAddon("Talk"))return("","");
-        var speaker=HelperCanonical(a->TalkName.ToString());var text=HelperCanonical(a->TalkText.ToString());
+        var a=(AtkUnitBase*)GardenGui.GetAddonByName("Talk").Address;
+        if(a==null||!a->IsVisible||a->AtkValues==null||a->AtkValuesCount<2)return("","");
+        var line=a->AtkValues[0];var who=a->AtkValues[1];
+        if(((int)line.Type&15) is not (8 or 10)||((int)who.Type&15) is not (8 or 10))return("","");
+        var speaker=HelperCanonical(TravelMenuText(who.String.Value)??"");var text=HelperCanonical(TravelMenuText(line.String.Value)??"");
         return(text,text.Length is >0 and <=4000?HelperPolicy.Signature([speaker,text]):"");
     }
     private void EmitHelper(string kind,string text="",string signature="",string addon="",string scene="",uint questId=0)
@@ -44,23 +47,28 @@ public sealed partial class Plugin
         var sessions=helperFollowers.Where(f=>HelperPolicy.Audience(f,now.ToUnixTimeMilliseconds(),kind=="skip")).Select(f=>f.Id).ToArray();
         if(sessions.Length==0)return;
         if(helperOutgoing.Count>=32){helperError="Quest actions are arriving faster than the relay. Pause and let followers catch up.";return;}
-        if(kind is "choice" or "acceptQuest" or "eventReplay")RecordFollowTravel("Helper captured choice",new {kind,npc=npc.Name,text,addon,questId});
+        if(kind is "talk" or "choice" or "acceptQuest" or "eventReplay")RecordFollowTravel("Helper captured choice",new {kind,npc=npc.Name,text,addon,questId});
         helperOutgoing.Enqueue(new(Guid.NewGuid().ToString("N"),Player.CharacterName,Player.HomeWorld.RowId,kind,now.ToUnixTimeMilliseconds(),npc,text,signature,addon,scene,sessions,QuestId:questId));
     }
-    private string helperTalkText="",helperTalkSignature="",helperTalkScene="";
-    private unsafe void ObserveHelperTalk(AddonEvent type,AddonArgs args)
+    private readonly HelperDialogueCapture helperDialogue=new();
+    private void FlushHelperTalk()
+    {
+        var previous=helperDialogue.Finish();if(previous!=null)EmitHelper("talk",previous.Text,previous.Signature,"Talk",previous.Scene);
+    }
+    private void ObserveHelperDialogue()
+    {
+        if(!SharingQuest){helperDialogue.Reset();return;}
+        if(helperReplaying)return;
+        if(!VisibleFollowAddon("Talk")){FlushHelperTalk();return;}
+        var talk=HelperTalk();
+        var previous=helperDialogue.Observe(talk.Text,talk.Signature,HelperScene());
+        if(previous!=null)EmitHelper("talk",previous.Text,previous.Signature,"Talk",previous.Scene);
+    }
+    private void ObserveHelperTalk(AddonEvent type,AddonArgs args)
     {
         if(!SharingQuest||helperReplaying)return;
-        try{
-            if(type==AddonEvent.PreFinalize){
-                if(helperTalkSignature.Length>0)EmitHelper("talk",helperTalkText,helperTalkSignature,"Talk",helperTalkScene);
-                helperTalkText="";helperTalkSignature="";return;
-            }
-            var t=HelperTalk();
-            if(t.Signature.Length==0)return;
-            if(helperTalkSignature.Length>0&&helperTalkSignature!=t.Signature)EmitHelper("talk",helperTalkText,helperTalkSignature,"Talk",helperTalkScene);
-            helperTalkText=t.Text;helperTalkSignature=t.Signature;helperTalkScene=HelperScene();
-        }catch(Exception e){Log.Debug(e,"Helper dialogue capture unavailable");}
+        try{if(type==AddonEvent.PreFinalize)FlushHelperTalk();else ObserveHelperDialogue();}
+        catch(Exception e){Log.Debug(e,"Helper dialogue capture unavailable");}
     }
     private unsafe List<string> HelperChoices(AtkUnitBase* addon,string name)
     {
@@ -78,6 +86,7 @@ public sealed partial class Plugin
     private unsafe void CaptureHelperChoice(AtkUnitBase* addon,int index)
     {
         if(!SharingQuest||helperReplaying||usingSharedTravel||addon==null||index<0)return;
+        if(!VisibleFollowAddon("Talk"))FlushHelperTalk();
         if(CaptureHelperEventReplay(addon,index))return;
         var cut=AgentCutscene.Instance();
         if(cut!=null&&cut->SkipDialogAddonId!=0&&addon->Id==cut->SkipDialogAddonId){

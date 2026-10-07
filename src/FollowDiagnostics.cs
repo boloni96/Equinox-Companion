@@ -11,7 +11,7 @@ public sealed partial class Plugin
         while(followTravelDiagnostics.Count>=120)followTravelDiagnostics.Dequeue();
         followTravelDiagnostics.Enqueue(new {at=DateTimeOffset.UtcNow,kind,detail});
     }
-    private static readonly string[] TravelDiagnosticAddons=["TeleportHousingFriend","HousingSelectRoom","MansionSelectRoom","HousingSelectBlock","TelepotTown","SelectString","SelectYesno","Talk"];
+    private static readonly string[] TravelDiagnosticAddons=["TeleportHousingFriend","HousingSelectRoom","MansionSelectRoom","HousingSelectBlock","TelepotTown","SelectString","SelectIconString","CutSceneSelectString","JournalAccept","JournalResult","SelectYesno","Talk"];
     private unsafe object? ReadTravelMenuDiagnostic(AtkUnitBase* addon)
     {
         if(addon==null||!addon->IsVisible||addon->AtkValues==null||addon->AtkValuesCount>1024)return null;
