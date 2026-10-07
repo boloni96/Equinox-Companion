@@ -129,7 +129,7 @@ public sealed partial class Plugin
                 nativeFollowRequested=false;followStopUnconfirmed=false;followStopStationary.Reset();
                 RecordFollowTravel("Follow command rejected",new {command=lastFollowCommand});
                 if(!followSession.Armed){RequestFollowMovementStop();return;}
-                followSession.Pause();followStuck.Pause();followReady.Reset();followRetryAt=now.AddSeconds(5);
+                followSession.Pause();followStuck.Reset();followRecovery.Reset();followStuckStopRequested=false;followReady.Reset();followRetryAt=now.AddSeconds(5);
                 // Keep the captured trip: a rejected follow command must not discard travel.
                 followStatus="WAITING — The game rejected movement. FollowThem remains armed and will retry when available.";
                 RefreshFollowBar(); return;
@@ -205,10 +205,15 @@ public sealed partial class Plugin
             if (action == FollowAction.Start && (followStopPending||followStopUnconfirmed)){followSession.Pause();return;}
             if (action == FollowAction.Start)
             {
-                var previous = Targets.Target;
-                try { Targets.Target = target; nativeFollowRequested=true; FollowCommand("/follow <t>"); }
+                // Keep the exact selected actor targeted while the game processes <t>.
+                // Restoring the old target immediately could invalidate the queued command.
+                if(Targets.Target?.GameObjectId!=target!.GameObjectId){
+                    Targets.Target=target;followSession.Pause();
+                    followStatus="WAITING — Selecting your character before following.";return;
+                }
+                if(!target.IsTargetable||!CanIssueFollowMovement()){followSession.Pause();return;}
+                try { nativeFollowRequested=true; FollowCommand("/follow <t>"); }
                 catch { nativeFollowRequested=false; throw; }
-                finally { Targets.Target = previous; }
             }
             followStatus = followSession.Phase switch
             {
@@ -329,3 +334,4 @@ public sealed partial class Plugin
         }
     }
 }
+

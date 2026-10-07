@@ -23,3 +23,13 @@ public static class FollowTransportPolicy
         return match.Success&&int.TryParse(match.Groups[1].Value.Replace(",",""),out var fee)&&fee<=Math.Max(0,limit);
     }
 }
+
+
+public static class FollowFriendEstateSelection
+{
+    public static string? Kind(IEnumerable<string> texts)
+    {
+        var matches=texts.Where(x=>x is "Private Estate" or "Free Company Estate").Distinct().Take(2).ToArray();
+        return matches.Length==1?matches[0]:null;
+    }
+}

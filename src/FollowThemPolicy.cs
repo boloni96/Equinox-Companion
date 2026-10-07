@@ -95,8 +95,10 @@ public sealed class FollowNoticeGate
 public static class FollowCommandFeedback
 {
     public static bool IsRejection(string text, string command) =>
+        command == "/follow <t>" && text.Length <= 512 && text.Contains("<t>", StringComparison.Ordinal) && text.Contains("is not a valid target name", StringComparison.OrdinalIgnoreCase) ||
         command is "/follow" or "/follow <t>" or "/automove off" or "/automove" && text.Length <= 512 &&
         text.Contains(command.StartsWith("/follow", StringComparison.Ordinal) ? "/follow" : command, StringComparison.Ordinal) &&
         (text.Contains("unavailable", StringComparison.OrdinalIgnoreCase) ||
          command.StartsWith("/follow", StringComparison.Ordinal) && text.Contains("requires a valid target name", StringComparison.OrdinalIgnoreCase));
 }
+

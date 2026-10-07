@@ -152,6 +152,7 @@ public sealed partial class Plugin : IDalamudPlugin
     {
         errorJournal = new ErrorJournal(Pi.GetPluginConfigDirectory());
         gardenMessageJournal = new GardenMessageJournal(Pi.GetPluginConfigDirectory());
+        FollowAddonLifecycle.RegisterListener(Dalamud.Game.Addon.Lifecycle.AddonEvent.PreReceiveEvent,"TeleportHousingFriend",ObserveFriendEstateRow);
         try
         {
             var logSheet = DataManager.GetExcelSheet<Lumina.Excel.Sheets.LogMessage>(Dalamud.Game.ClientLanguage.English);
@@ -1059,6 +1060,7 @@ public sealed partial class Plugin : IDalamudPlugin
         followWorldCommandHook?.Dispose();
         EndNativeFollowStop();followBackDownHook?.Dispose();followBackPressedHook?.Dispose();
         friendEstateHook?.Dispose();
+        FollowAddonLifecycle.UnregisterListener(ObserveFriendEstateRow);
         portalRelay.Dispose();
         quickLootBarEntry?.Remove();
         sync.Dispose();
@@ -1091,3 +1093,4 @@ public sealed partial class Plugin : IDalamudPlugin
         FlushConfiguration();
     }
 }
+

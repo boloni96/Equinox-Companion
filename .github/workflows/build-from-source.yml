@@ -1,0 +1,60 @@
+name: Build and verify Companion source
+on:
+  push:
+    branches: [main, fix/followthem-75]
+    paths: ['src/**', 'tests/**', '.github/workflows/build-from-source.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: equinox-source-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Download official build references
+        shell: pwsh
+        run: |
+          $refs = Join-Path $env:RUNNER_TEMP 'dalamud'
+          $zip = Join-Path $env:RUNNER_TEMP 'dalamud.zip'
+          Invoke-WebRequest https://goatcorp.github.io/dalamud-distrib/latest.zip -OutFile $zip
+          Expand-Archive $zip -DestinationPath $refs
+          "DALAMUD_HOME=$refs" >> $env:GITHUB_ENV
+      - name: Run transition and regression tests
+        run: dotnet run --project tests/GateTests.csproj -c Release
+      - name: Build plugin
+        run: dotnet build src/EquinoxCompanion.csproj -c Release -p:RestoreLockedMode=true
+      - name: Package verified build
+        shell: pwsh
+        run: |
+          [xml]$project = Get-Content src/EquinoxCompanion.csproj
+          $version = [string]$project.Project.PropertyGroup.Version
+          if ($version -notmatch '^\d+\.\d+\.\d+\.\d+$') { throw 'Invalid version' }
+          if (Test-Path "dist/v$version/EquinoxCompanion.zip") { throw 'Version already published' }
+          python scripts/package_release.py --repository $env:GITHUB_REPOSITORY --tag "v$version" --ref main --output "dist/v$version"
+          if ($LASTEXITCODE -ne 0) { throw 'Packaging failed' }
+          Copy-Item "dist/v$version/repo.json" repo.json
+          Get-FileHash "dist/v$version/EquinoxCompanion.zip" -Algorithm SHA256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: verified-companion
+          path: |
+            dist/v0.5.1.75/
+            repo.json
+      - name: Publish package and feed atomically
+        if: github.ref == 'refs/heads/main'
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add dist repo.json
+          git commit -m 'Publish source-verified Companion package and feed'
+          git push origin HEAD:main

@@ -70,8 +70,8 @@ public sealed partial class Plugin
     // Read the native town list; require bounded, typed entries and exact names.
     private unsafe List<(string Name,uint Callback)> AethernetChoices(AtkUnitBase* addon)
     {
-        var result=new List<(string,uint)>();if(addon==null||addon->AtkValues==null||addon->AtkValuesCount<282)return result;
-        for(var i=0;i<20;i++){
+        var result=new List<(string,uint)>();if(addon==null||addon->AtkValues==null)return result;
+        for(var i=0;i<FollowAethernetEntry.RowCount(addon->AtkValuesCount);i++){
             var n=addon->AtkValues[262+i];var c=addon->AtkValues[9+i*4];var kind=addon->AtkValues[6+i*4];
             if(((int)kind.Type&15) is not (3 or 5))continue;
             if(((int)n.Type&15) is not (8 or 10)||((int)c.Type&15) is not (3 or 5))continue;
@@ -82,9 +82,12 @@ public sealed partial class Plugin
     {
         if(!SharingTravel||usingSharedTravel||!Player.IsLoaded||count!=2||values==null||addon==null||addon!=(AtkUnitBase*)GardenGui.GetAddonByName("TelepotTown").Address)return;
         if(((int)values[0].Type&15) is not (3 or 5)||values[0].Int!=11||((int)values[1].Type&15) is not (3 or 5))return;
-        var matches=AethernetChoices(addon).Where(x=>x.Callback==values[1].UInt).ToArray();if(matches.Length!=1||Objects.LocalPlayer is not {} self)return;
+        var choices=AethernetChoices(addon);
+        var matches=choices.Where(x=>x.Callback==values[1].UInt).ToArray();
+        if(matches.Length!=1||Objects.LocalPlayer is not {} self){RecordFollowTravel("Aethernet capture rejected",new {reason="destination unresolved",valueCount=addon->AtkValuesCount,callback=values[1].UInt,matches=matches.Length,choices=choices.Count});return;}
         var crystal=Objects.Where(x=>x.ObjectKind==ObjectKind.Aetheryte&&Vector3.Distance(x.Position,self.Position)<=x.HitboxRadius+4).MinBy(x=>Vector3.DistanceSquared(x.Position,self.Position));
-        if(crystal==null)return;
+        if(crystal==null){RecordFollowTravel("Aethernet capture rejected",new {reason="source crystal unavailable",destination=matches[0].Name});return;}
+        RecordFollowTravel("Aethernet destination captured",new {destination=matches[0].Name,callback=values[1].UInt,valueCount=addon->AtkValuesCount});
         CaptureTravel(TravelSignal("aethernet",0,matches[0].Name,crystal.BaseId,crystal.Position),0);
     }
     private unsafe void UpdateFollowTravel(DateTimeOffset now)
@@ -178,3 +181,4 @@ public sealed partial class Plugin
         FollowChatNotice("TRAVEL — That Teleport destination or exact estate is not available on this character; FollowThem is waiting.");
     }
 }
+

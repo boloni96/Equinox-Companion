@@ -1,6 +1,6 @@
 <Project Sdk="Dalamud.NET.Sdk/15.0.0">
   <PropertyGroup>
-    <Version>0.5.1.74</Version>
+    <Version>0.5.1.75</Version>
     <Author>Boloni</Author>
     <Name>Equinox Companion</Name>
     <Punchline>Your shared characters, estates, collections and timers.</Punchline>
@@ -13,3 +13,4 @@
   <ItemGroup><Content Include="collection-ids.json" CopyToOutputDirectory="PreserveNewest" /><Content Include="icon.png" CopyToOutputDirectory="PreserveNewest" /><Content Include="garden-art/assets/icons/house-moogle.png" CopyToOutputDirectory="PreserveNewest" /><Content Include="garden-art/assets/icons/gardening-tools.png" CopyToOutputDirectory="PreserveNewest" /><Content Include="garden-art/assets/category-icons/*.png" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
 <Target Name="UnpackGardenArtwork" AfterTargets="Build"><Unzip SourceFiles="$(MSBuildProjectDirectory)/garden-art.zip" DestinationFolder="$(OutputPath)garden-art" SkipUnchangedFiles="true" /></Target>
 </Project>
+

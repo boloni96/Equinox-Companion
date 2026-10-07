@@ -69,6 +69,7 @@ public static class FollowEstatePrice
 
 public static class FollowAethernetEntry
 {
+    public static int RowCount(int valueCount)=>valueCount is >262 and <=1024?Math.Min(64,valueCount-262):0;
     public static bool IsDestination(uint kind,string? name)=>kind==0&&!string.IsNullOrWhiteSpace(name)&&name.Length<=100;
 }
 public static class FollowDeparturePolicy
@@ -103,3 +104,4 @@ public sealed class FollowApproachProgress
         return now-since>=TimeSpan.FromSeconds(Math.Clamp(seconds,5,600));
     }
 }
+

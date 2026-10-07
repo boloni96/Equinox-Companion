@@ -21,7 +21,7 @@ public sealed partial class Plugin
             if(type is 8 or 10){var text=TravelMenuText(v.String.Value);if(!string.IsNullOrEmpty(text))values.Add(new {index=i,text=text[..Math.Min(300,text.Length)]});}
             else if(type is 3 or 5)values.Add(new {index=i,number=v.UInt});
         }
-        return new {name=addon->NameString,values,textNodes=TravelNodeText(&addon->UldManager)};
+        return new {name=addon->NameString,valueCount=addon->AtkValuesCount,values,textNodes=TravelNodeText(&addon->UldManager)};
     }
     private unsafe void ObserveTravelMenuDiagnostics(DateTimeOffset now)
     {
@@ -46,3 +46,4 @@ public sealed partial class Plugin
         RecordFollowTravel("Menu callback",new {addon=addon->NameString,automatic=usingSharedTravel,arguments,menu=ReadTravelMenuDiagnostic(addon)});
     }
 }
+

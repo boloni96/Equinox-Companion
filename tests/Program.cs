@@ -1620,3 +1620,17 @@ var unknown74=trip72 with {CurrentWorld=2,SentAt=1001000};
 Check("74 observed unknown party arrival suppresses matching relay",FollowPartyDestination.UnknownArrivalMatches(unknown74,2,30,40,2,1000000,1005000,999000).ToString(),"True");
 Check("74 unknown arrival does not suppress different map",FollowPartyDestination.UnknownArrivalMatches(unknown74,2,30,41,2,1000000,1005000,999000).ToString(),"False");
 Check("74 unknown arrival does not suppress later trip",FollowPartyDestination.UnknownArrivalMatches(unknown74 with {SentAt=1030000},2,30,40,2,1000000,1031000,999000).ToString(),"False");
+
+
+Check("75 literal target rejection recognized",FollowCommandFeedback.IsRejection("\"<t>\" is not a valid target name.","/follow <t>").ToString(),"True");
+Check("75 other command target error ignored",FollowCommandFeedback.IsRejection("\"<t>\" is not a valid target name.","/automove").ToString(),"False");
+Check("75 malformed aethernet header",FollowAethernetEntry.RowCount(262).ToString(),"0");
+Check("75 compact Saucer list",FollowAethernetEntry.RowCount(273).ToString(),"11");
+Check("75 larger town list",FollowAethernetEntry.RowCount(294).ToString(),"32");
+Check("75 maximum town list",FollowAethernetEntry.RowCount(326).ToString(),"64");
+Check("75 excessive native values rejected",FollowAethernetEntry.RowCount(1025).ToString(),"0");
+
+Check("75 private friend row",FollowFriendEstateSelection.Kind(["Private Estate","123 gil"])??"none","Private Estate");
+Check("75 FC friend row",FollowFriendEstateSelection.Kind(["Free Company Estate","50 gil"])??"none","Free Company Estate");
+Check("75 ambiguous estate rejected",FollowFriendEstateSelection.Kind(["Private Estate","Free Company Estate"])??"none","none");
+Check("75 shared estate not mistaken for private",FollowFriendEstateSelection.Kind(["Shared Estate"])??"none","none");
