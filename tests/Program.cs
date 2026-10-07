@@ -1586,3 +1586,21 @@ Check("72 wrong instance cannot complete",Arrive72(instance:1).ToString(),"False
 Check("72 doors retain spatial validation",FollowArrivalPolicy.CompletedNativeTeleport(trip72 with {TravelKind="door"},true,true,false,true,2,30,40,2).ToString(),"False");
 var resumed72=new FollowThemSession();resumed72.Arm();resumed72.Observe(true,true,false,true,true);resumed72.Pause();
 Check("72 follow resumes after travel pause",resumed72.Observe(true,true,false,true,true).ToString(),"Start");
+
+var world73=trip72 with {TravelKind="world",CurrentWorld=73,DestinationWorld=57,Name="Leader Example",HomeWorld=410,SentAt=1000000,ExpiresAt=1120000};
+Check("73 announcement survives intent flag clearing",FollowWorldReplayPolicy.Announced(world73,"Leader Example",410,57,1001000).ToString(),"True");
+Check("73 unannounced menu trip retains fallback",FollowWorldReplayPolicy.Announced(null,"Leader Example",410,57,1001000).ToString(),"False");
+Check("73 different World retains fallback",FollowWorldReplayPolicy.Announced(world73,"Leader Example",410,73,1001000).ToString(),"False");
+Check("73 different leader retains fallback",FollowWorldReplayPolicy.Announced(world73,"Other Example",410,57,1001000).ToString(),"False");
+Check("73 expired announcement retains fallback",FollowWorldReplayPolicy.Announced(world73,"Leader Example",410,57,2800000).ToString(),"False");
+Check("73 already at Siren removes stale source trip",FollowWorldReplayPolicy.AlreadyArrived(world73,"Leader Example",410,57,999000,1001000).ToString(),"True");
+Check("73 not yet at Siren keeps pending trip",FollowWorldReplayPolicy.AlreadyArrived(world73,"Leader Example",410,73,999000,1001000).ToString(),"False");
+Check("73 old session not reconciled",FollowWorldReplayPolicy.AlreadyArrived(world73,"Leader Example",410,57,1001000,1001000).ToString(),"False");
+Check("73 wrong character not reconciled",FollowWorldReplayPolicy.AlreadyArrived(world73,"Other Example",410,57,999000,1001000).ToString(),"False");
+Check("73 expired trip not reconciled",FollowWorldReplayPolicy.AlreadyArrived(world73,"Leader Example",410,57,999000,1120000).ToString(),"False");
+Check("73 return to Adamantoise removes only completed return",FollowWorldReplayPolicy.AlreadyArrived(world73 with {CurrentWorld=57,DestinationWorld=73},"Leader Example",410,73,999000,1001000).ToString(),"True");
+Check("73 queued later different destination retained",FollowWorldReplayPolicy.AlreadyArrived(world73 with {CurrentWorld=57,DestinationWorld=73},"Leader Example",410,57,999000,1001000).ToString(),"False");
+
+Check("73 DC gateway not sent as separate World trip",FollowWorldReplayPolicy.SuppressFallback(world73,"Leader Example",410,35,1001000,true).ToString(),"True");
+Check("73 unrelated later menu destination not suppressed",FollowWorldReplayPolicy.SuppressFallback(world73,"Leader Example",410,35,1001000,false).ToString(),"False");
+Check("73 arrived destination suppressed after flag cleared",FollowWorldReplayPolicy.SuppressFallback(world73,"Leader Example",410,57,1001000,false).ToString(),"True");

@@ -54,18 +54,20 @@ public sealed partial class Plugin
                 TravelDiagnostic(Player.IsLoaded&&(lifestreamDestination==0||Player.CurrentWorld.RowId==lifestreamDestination)?"Lifestream travel finished; waiting for the selected character nearby.":"Lifestream stopped before arrival; waiting. Check its travel settings or queue message.");
             }}catch(Exception){lifestreamTravelOwned=false;TravelDiagnostic("Lifestream became unavailable; waiting.");}
         }
-        if(!SharingTravel){worldSource=null;sharedWorldIntent=0;return;}
-        var suppressWorldFallback=sharedWorldIntent!=0;
+        if(!SharingTravel){worldSource=null;sharedWorldIntent=0;announcedWorldTrip=null;return;}
         _=SharingWorldIntent; // Also clears arrival even when worldSource was lost.
-        if(suppressWorldFallback&&Player.IsLoaded&&now-sharedWorldIntentAt>TimeSpan.FromSeconds(15)){
+        if(sharedWorldIntent!=0&&Player.IsLoaded&&now-sharedWorldIntentAt>TimeSpan.FromSeconds(15)){
             try { if(!LifestreamBusy()){RecordFollowTravel("World intent cleared",new {destination=sharedWorldIntent,reason="Lifestream idle"});sharedWorldIntent=0;} } catch(Exception){sharedWorldIntent=0;}
         }
         if(!Player.IsLoaded||Objects.LocalPlayer is not {} self)return;
         if(worldSource is {} source&&source.Name==Player.CharacterName&&source.HomeWorld==Player.HomeWorld.RowId&&source.CurrentWorld!=Player.CurrentWorld.RowId&&now-worldSourceAt<TimeSpan.FromMinutes(30)&&config.PairingKey.Length==64){
             var signal=source with {DestinationWorld=Player.CurrentWorld.RowId,SentAt=now.ToUnixTimeMilliseconds()};
-            if(!suppressWorldFallback)EnqueueOutgoingTravel(config.PairingKey,signal,portalRelay.HasFollowers(config.PairingKey,source.Name,source.HomeWorld));
+            if(announcedWorldKey==config.PairingKey&&FollowWorldReplayPolicy.SuppressFallback(announcedWorldTrip,source.Name,source.HomeWorld,signal.DestinationWorld,now.ToUnixTimeMilliseconds(),SharingWorldIntent))
+                RecordFollowTravel("World arrival duplicate suppressed",new {destination=signal.DestinationWorld,announced=announcedWorldTrip!.Id});
+            else EnqueueOutgoingTravel(config.PairingKey,signal,portalRelay.HasFollowers(config.PairingKey,source.Name,source.HomeWorld));
             if(sharedWorldIntent==Player.CurrentWorld.RowId||!SharingWorldIntent)sharedWorldIntent=0;
         }
+        if(announcedWorldTrip is {} announced&&(announced.DestinationWorld==Player.CurrentWorld.RowId||announced.Name!=Player.CharacterName||announced.HomeWorld!=Player.HomeWorld.RowId||now.ToUnixTimeMilliseconds()-announced.SentAt>=1800000))announcedWorldTrip=null;
         worldSource=TravelSignal("world",0,"",0,self.Position);worldSourceAt=now;
     }
     private void TryFollowWorldTravel(FollowPortalSignal s,DateTimeOffset now)

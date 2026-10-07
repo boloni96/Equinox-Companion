@@ -77,6 +77,11 @@ public sealed partial class Plugin
         if(now<nextQueueAttempt)return;
         while(travelQueue.TryPeek(out var next)){
             if(next.ExpiresAt<=now.ToUnixTimeMilliseconds()||next.SentAt<followArmedAt){travelQueue.Dequeue();FailFollowTrip("Queued trip expired.");continue;}
+            if(FollowWorldReplayPolicy.AlreadyArrived(next,config.FollowThem.TargetName,config.FollowThem.HomeWorld,Player.CurrentWorld.RowId,followArmedAt,now.ToUnixTimeMilliseconds())){
+                travelQueue.Dequeue();routeArrivalConfirmed=true;ResumeAfterConfirmedTravel();
+                RecordFollowTravel("Completed World instruction skipped",new {next.Id,next.DestinationWorld});
+                TravelDiagnostic("Already at the selected World; completed instruction cleared.");continue;
+            }
             if(MatchesAcceptedPartyTrip(next,now)&&partyTripArrived){travelQueue.Dequeue();routeArrivalConfirmed=true;ResumeAfterConfirmedTravel();RecordFollowTravel("Party relay duplicate skipped",new {next.Id});continue;}
             if(Objects.LocalPlayer is {} located&&AgentMap.Instance()!=null&&
                 FollowThemSession.Matches(config.FollowThem.TargetName,config.FollowThem.HomeWorld,next.Name,next.HomeWorld)&&FollowInstancePolicy.Arrived(next.ArrivalInstance,CurrentFollowInstance())&&

@@ -8,6 +8,8 @@ public sealed partial class Plugin
     private Hook<FollowWorldCommandDelegate>? followWorldCommandHook;
     private bool worldCommandHookFailed;
     private uint sharedWorldIntent;
+    private FollowPortalSignal? announcedWorldTrip;
+    private string announcedWorldKey="";
     private bool SharingWorldIntent {
         get {
             if(sharedWorldIntent==0)return false;
@@ -39,7 +41,8 @@ public sealed partial class Plugin
         if(sharedWorldIntent==world&&now-sharedWorldIntentAt<TimeSpan.FromSeconds(10))return;
         var signal=TravelSignal("world",0,"",0,self.Position);if(signal==null)return;
         sharedWorldIntent=world;sharedWorldIntentAt=now;sharedWorldCharacter=Player.ContentId;outgoingTravel=null;transportCapture=null;boundaryDeparture=null;
-        EnqueueOutgoingTravel(config.PairingKey,signal with {DestinationWorld=world},portalRelay.HasFollowers(config.PairingKey,signal.Name,signal.HomeWorld));
+        announcedWorldTrip=signal with {DestinationWorld=world};announcedWorldKey=config.PairingKey;
+        EnqueueOutgoingTravel(config.PairingKey,announcedWorldTrip,portalRelay.HasFollowers(config.PairingKey,signal.Name,signal.HomeWorld));
         RecordFollowTravel("World travel intent",new {destinationWorld=world});
     }
     private unsafe void ObserveFollowWorldCommand(UIModule* module,Utf8String* text,nint extra,bool history)
