@@ -80,6 +80,7 @@ public sealed partial class Plugin
                 return;
             }
         }
+        if(HoldHelperTravel)return;
         if(travelAwaitingArrival==null&&travelQueue.TryPeek(out var instanceTrip)&&TrySelectFollowInstance(instanceTrip,now)){
             travelQueue.Dequeue();travelAwaitingArrival=instanceTrip;routeTeleportAccepted=false;routeSettledAt=default;nextArrivalDiagnostic=now.AddSeconds(5);travelDispatchedAt=now;routeExecutionStarted=true;routeSawLoading=loading;routeStartPosition=Objects.LocalPlayer?.Position??default;return;
         }

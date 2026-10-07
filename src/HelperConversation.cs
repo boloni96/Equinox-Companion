@@ -1,4 +1,5 @@
 using FFXIVClientStructs.FFXIV.Client.Game.Event;
+using Dalamud.Game.ClientState.Conditions;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
@@ -26,7 +27,7 @@ public sealed partial class Plugin
     {
         if(!helperRecording)return;
         if(!SharingQuest||helperCaptureNpc is not {} npc||now-helperCaptureAt>TimeSpan.FromMinutes(10)||helperRecordingFailed){ResetHelperRecording();return;}
-        if(QuestConversationVisible()||helperAcceptIntent){helperRecordQuiet=default;return;}
+        if(QuestConversationVisible()||helperAcceptIntent||Conditions[ConditionFlag.OccupiedInQuestEvent]){helperRecordQuiet=default;return;}
         // A brief window replacement is not the end of a conversation.
         var evt=EventFramework.Instance();
         if(evt!=null&&evt->EventState1.EventId.Id!=0&&helperRecorded.Count<2)return;

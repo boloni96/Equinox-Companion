@@ -103,7 +103,7 @@ public sealed partial class Plugin
             if(addon!=(AtkUnitBase*)GardenGui.GetAddonByName(name).Address)continue;
             var list=HelperChoices(addon,name);if(index>=list.Count||list[index].Length==0)return;
             // Travel retains its established queue. Never duplicate ferry/estate actions here.
-            if(SharingTravel&&FollowTransportPolicy.StepSupported(list[index],false))return;
+            if(SharingTravel&&FollowTransportPolicy.StepSupported(list[index],false)){ResetHelperRecording();helperCaptureNpc=null;return;}
             EmitHelper("choice",list[index],HelperPolicy.Signature(list.OrderBy(x=>x,StringComparer.Ordinal)),name,HelperScene(),questId:HelperQuestIdForName(list[index]));return;
         }
         // Quest rewards, purchases, and arbitrary Yes/No prompts remain manual.
