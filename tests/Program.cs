@@ -1646,3 +1646,15 @@ var raised76=source76 with {TravelKind="aethernet",SourceRadius=6.25f};
 Check("76 raised crystal from clicked ground point",FollowAethernetSource.InRange(raised76,new(0,0,0),new(0,8,0),1,3).ToString(),"True");
 Check("76 raised crystal not from distant ground point",FollowAethernetSource.InRange(raised76,new(5,0,0),new(0,8,0),1,3).ToString(),"False");
 Check("76 NPC range unchanged",FollowAethernetSource.InRange(raised76 with {TravelKind="transport"},new(0,0,0),new(0,8,0),1,3).ToString(),"False");
+
+var arrival77=trip72 with {TravelKind="aethernet",ArrivalWorld=410,ArrivalTerritory=144,ArrivalMap=196,ArrivalInstance=0};
+var crystal77=new System.Numerics.Vector3(-.01532f,3.49426f,-.01532f);
+foreach(var landing in new[]{new System.Numerics.Vector3(9.016339f,.27211f,-5.487076f),new System.Numerics.Vector3(-5.225811f,0,-11.097652f)})
+    Check("77 opposite-side Saucer landing "+landing,FollowAethernetArrival.Confirmed(arrival77,true,true,false,true,410,144,196,0,landing,crystal77).ToString(),"True");
+Check("77 no selection cannot complete",FollowAethernetArrival.Confirmed(arrival77,false,true,false,true,410,144,196,0,new(0,0,0),crystal77).ToString(),"False");
+Check("77 no loading cannot complete",FollowAethernetArrival.Confirmed(arrival77,true,false,false,true,410,144,196,0,new(0,0,0),crystal77).ToString(),"False");
+Check("77 still loading cannot complete",FollowAethernetArrival.Confirmed(arrival77,true,true,true,true,410,144,196,0,new(0,0,0),crystal77).ToString(),"False");
+Check("77 wrong world cannot complete",FollowAethernetArrival.Confirmed(arrival77,true,true,false,true,411,144,196,0,new(0,0,0),crystal77).ToString(),"False");
+Check("77 wrong map cannot complete",FollowAethernetArrival.Confirmed(arrival77,true,true,false,true,410,144,197,0,new(0,0,0),crystal77).ToString(),"False");
+Check("77 distant destination cannot complete",FollowAethernetArrival.Confirmed(arrival77,true,true,false,true,410,144,196,0,new(40,0,0),crystal77).ToString(),"False");
+Check("77 wrong floor cannot complete",FollowAethernetArrival.Confirmed(arrival77,true,true,false,true,410,144,196,0,new(0,18,0),crystal77).ToString(),"False");

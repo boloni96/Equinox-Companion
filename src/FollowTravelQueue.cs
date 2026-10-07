@@ -14,7 +14,7 @@ public sealed partial class Plugin
     private FollowPortalSignal? travelAwaitingArrival;
     private DateTimeOffset travelDispatchedAt,nextQueueAttempt;
     private void ResumeAfterConfirmedTravel(){followStuck.Reset();followRecovery.Reset();followStuckStopRequested=false;followReady.Reset();followSession.Pause();}
-    private void ResetTravelQueue(){routeTeleportAccepted=false;routeSettledAt=default;nextArrivalDiagnostic=default;travelQueue.Clear();queuedTravelIds.Clear();travelNeedsRecovery=false;travelAwaitingArrival=null;portalReadCursor=0;routeArrivalConfirmed=false;routeSawLoading=false;routeExecutionStarted=false;nextQueueAttempt=default;acceptedPartyTeleportAt=default;}
+    private void ResetTravelQueue(){aethernetArrivalTrip="";aethernetArrivalId=0;aethernetArrivalLoading=false;routeTeleportAccepted=false;routeSettledAt=default;nextArrivalDiagnostic=default;travelQueue.Clear();queuedTravelIds.Clear();travelNeedsRecovery=false;travelAwaitingArrival=null;portalReadCursor=0;routeArrivalConfirmed=false;routeSawLoading=false;routeExecutionStarted=false;nextQueueAttempt=default;acceptedPartyTeleportAt=default;}
     private void EnqueueTravel(FollowPortalSignal signal)
     {
         if(signal.SentAt<followArmedAt||signal.Id==lastPortalSignalId||queuedTravelIds.Contains(signal.Id))return;
@@ -52,9 +52,10 @@ public sealed partial class Plugin
             var departed=map!=null&&Objects.LocalPlayer is {} moved&&FollowArrivalPolicy.HasDeparted(active,!routeExecutionStarted||followApproach!=null,routeSawLoading,Player.CurrentWorld.RowId,Client.TerritoryType,map->CurrentMapId,routeStartPosition,moved.Position);
             var reconciled=MatchesAcceptedPartyTrip(active,now)&&partyTripArrived||map!=null&&Objects.LocalPlayer is {} arrivedPlayer&&FollowArrivalPolicy.AlreadyAtTravelArrival(active,Player.CurrentWorld.RowId,Client.TerritoryType,map->CurrentMapId,arrivedPlayer.Position,acceptedPartyTeleportAt.ToUnixTimeMilliseconds()>=followArmedAt&&now-acceptedPartyTeleportAt<TimeSpan.FromSeconds(90));
             var nativeArrived=Objects.LocalPlayer!=null&&map!=null&&FollowArrivalPolicy.CompletedNativeTeleport(active,routeTeleportAccepted,routeSawLoading,loading,Player.IsLoaded,Player.CurrentWorld.RowId,Client.TerritoryType,map->CurrentMapId,CurrentFollowInstance());
-            var arrived=nativeArrived||MatchesAcceptedPartyTrip(active,now)&&partyTripArrived&&!loading|| (followApproach==null&&departed||reconciled)&&!loading&&Player.IsLoaded&&Objects.LocalPlayer is {} self&&map!=null&&active.Arrival is {Valid:true} point&&Player.CurrentWorld.RowId==active.ArrivalWorld&&Client.TerritoryType==active.ArrivalTerritory&&map->CurrentMapId==active.ArrivalMap&&FollowInstancePolicy.Arrived(active.ArrivalInstance,CurrentFollowInstance())&&Vector3.DistanceSquared(self.Position,point.Point)<225;
+            var aethernetArrived=ConfirmAethernetArrival(active,loading);
+            var arrived=aethernetArrived||nativeArrived||MatchesAcceptedPartyTrip(active,now)&&partyTripArrived&&!loading|| (followApproach==null&&departed||reconciled)&&!loading&&Player.IsLoaded&&Objects.LocalPlayer is {} self&&map!=null&&active.Arrival is {Valid:true} point&&Player.CurrentWorld.RowId==active.ArrivalWorld&&Client.TerritoryType==active.ArrivalTerritory&&map->CurrentMapId==active.ArrivalMap&&FollowInstancePolicy.Arrived(active.ArrivalInstance,CurrentFollowInstance())&&Vector3.DistanceSquared(self.Position,point.Point)<225;
             if(arrived&&now-travelDispatchedAt>TimeSpan.FromSeconds(1)){
-                RecordFollowTravel("Travel arrival confirmed",new {active.Id,active.TravelKind,nativeTeleport=nativeArrived,routeSawLoading});
+                RecordFollowTravel("Travel arrival confirmed",new {active.Id,active.TravelKind,nativeTeleport=nativeArrived,aethernetDestination=aethernetArrived,routeSawLoading});
                 travelAwaitingArrival=null;routeArrivalConfirmed=true;routeTeleportAccepted=false;routeSettledAt=default;CancelFollowApproach();pendingTransport=null;pendingWard=null;pendingAethernet=null;receivedPortal=null;
                 ResumeAfterConfirmedTravel();
                 TravelDiagnostic("Arrival confirmed; checking the next queued trip.");
@@ -126,3 +127,4 @@ public sealed partial class Plugin
         }
     }
 }
+

@@ -136,6 +136,7 @@ public sealed partial class Plugin
             if(choices.Length!=1){TravelDiagnostic("Waiting for the selected destination in the aethernet menu.");return;}
             var args=stackalloc AtkValue[2];args[0].Type=AtkValueType.Int;args[0].Int=11;args[1].Type=AtkValueType.UInt;args[1].UInt=choices[0].Callback;
             aethernetNext=now.AddSeconds(2);aethernetSelections++;if(aethernetSelections>=2)pendingAethernet=null;
+            RecordAethernetSelection(pending,choices[0].Callback);
             usingSharedTravel=true;try{town->FireCallback(2,args,true);}finally{usingSharedTravel=false;}
             FollowChatNotice("TRAVEL — Requested aethernet: "+pending.Destination);return;
         }

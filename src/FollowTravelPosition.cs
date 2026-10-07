@@ -117,3 +117,12 @@ public static class FollowAethernetSource
         s.TravelKind=="aethernet"&&s.SourceRadius is >=0 and <=10&&s.Approach is {Valid:true} point&&
         Vector3.DistanceSquared(self,point.Point)<=2.25f&&Vector3.Distance(self,source)<=s.SourceRadius+margin;
 }
+
+public static class FollowAethernetArrival
+{
+    public static bool Confirmed(FollowPortalSignal trip,bool selected,bool sawLoading,bool loading,bool loaded,uint world,uint territory,uint map,uint instance,Vector3 self,Vector3 destination)=>
+        trip.TravelKind=="aethernet"&&selected&&sawLoading&&!loading&&loaded&&
+        trip.ArrivalWorld!=0&&trip.ArrivalTerritory!=0&&world==trip.ArrivalWorld&&territory==trip.ArrivalTerritory&&map==trip.ArrivalMap&&
+        FollowInstancePolicy.Arrived(trip.ArrivalInstance,instance)&&
+        Vector3.DistanceSquared(self,destination)<=400&&Math.Abs(self.Y-destination.Y)<=10;
+}
