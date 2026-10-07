@@ -33,7 +33,7 @@ public sealed partial class Plugin
     private void UpdateFollowLease(DateTimeOffset now)
     {
         var loading=Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51];
-        var desired=config.EnableFollowThem&&(config.FollowThem.UseSharedPortals||config.FollowThem.UseSharedTeleports)&&followSession.Armed&&(Player.IsLoaded||loading)&&config.PairingKey.Length==64;
+        var desired=config.EnableFollowThem&&(config.FollowThem.UseSharedPortals||config.FollowThem.UseSharedTeleports)&&followSession.Armed&&(Player.IsLoaded||loading||lifestreamTravelOwned)&&(!Player.IsLoaded||followLogin==0||Player.ContentId==followLogin)&&config.PairingKey.Length==64;
         var identity=desired?config.PairingKey+"/"+config.FollowThem.TargetName+"/"+config.FollowThem.HomeWorld+"/"+followArmedAt:"";
         if(followLeaseTask is not null){if(!followLeaseTask.IsCompleted)return;var ok=followLeaseTask.GetAwaiter().GetResult();followLeaseTask=null;if(followLeaseDeleting){followLeaseId="";followLeaseDeleting=false;}else if(!ok)portalRelayStatus="Follow session unavailable — deploy Journal V7.11.76 and check pairing.";}
         if(followLeaseId.Length>0&&identity!=followLeaseIdentity){followLeaseDeleting=true;followLeaseTask=portalRelay.Session(followLeaseKey,followLeaseId,followLeaseName,followLeaseWorld,false);return;}
@@ -169,8 +169,8 @@ public sealed partial class Plugin
     {
         signal=NormalizeDutyDeparture(signal);
         if(!await audience)return "No active follower; portal transition not sent.";
-        if(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()-signal.SentAt>10000)return "Portal transition expired; not sent.";
-        return await portalRelay.Send(key,signal with {SentAt=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()});
+        if(!FollowTravelRecovery.PendingFresh(signal,DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()))return "Portal transition expired; not sent.";
+        return await portalRelay.Send(key,signal);
     }
     private unsafe void TryUseSharedPortal(FollowPortalSignal signal,DateTimeOffset now)
     {
@@ -197,3 +197,4 @@ public sealed partial class Plugin
         finally {relayInteracting=false;}
     }
 }
+

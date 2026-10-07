@@ -124,6 +124,7 @@ public sealed partial class Plugin
     {
         if(!FollowTransportPolicy.Valid(signal)||Objects.LocalPlayer is not {} self)return;
         if(signal.TravelKind=="friendestate"){
+            if(TryOwnSharedEstate(signal,now))return;
             PauseFollowForTravel();
             if(!OpenSharedFriendEstate(signal)){TravelDiagnostic("Friend estate unavailable: open your Friends List to refresh it, and confirm this person is your friend with estate teleport enabled.");return;}
             lastPortalSignalId=signal.Id;pendingTransport=signal;transportStep=0;transportStarted=now;transportNext=now.AddMilliseconds(500);return;

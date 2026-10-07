@@ -28,6 +28,7 @@ public sealed partial class Plugin
         var failed=travelAwaitingArrival??followApproach??pendingTransport??pendingAethernet??pendingWard;
         if(failed!=null&&Targets.Target is {} selected&&selected.BaseId==failed.BaseId&&
             selected.ObjectKind.ToString()==failed.SourceKind&&Vector3.DistanceSquared(selected.Position,new(failed.X,failed.Y,failed.Z))<1)Targets.Target=null;
+        ResumeAfterConfirmedTravel();
         CancelFollowApproach();travelAwaitingArrival=null;pendingTransport=null;pendingWard=null;pendingAethernet=null;receivedPortal=null;
         routeExecutionStarted=false;routeArrivalConfirmed=false;nextQueueAttempt=default;
         var now=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
@@ -47,6 +48,7 @@ public sealed partial class Plugin
         ObservePartyTeleport(now,loading);
         if(travelAwaitingArrival is {} active){
             routeSawLoading|=loading;
+            if(RecoverReturnedDoorLeader(active,now,loading))return;
             if(TrySelectFollowInstance(active,now))return;
             var map=AgentMap.Instance();
             var departed=map!=null&&Objects.LocalPlayer is {} moved&&FollowArrivalPolicy.HasDeparted(active,!routeExecutionStarted||followApproach!=null,routeSawLoading,Player.CurrentWorld.RowId,Client.TerritoryType,map->CurrentMapId,routeStartPosition,moved.Position);
@@ -111,6 +113,7 @@ public sealed partial class Plugin
     {
         var now=DateTimeOffset.UtcNow;
         var captured=signal.TravelKind=="world"?signal:CaptureTravelArrival(signal);
+        captured=captured with {ExpiresAt=FollowTravelRecovery.Deadline(captured)};
         if(captured.TravelKind=="boundary"){
             if(lastBoundaryKey==key&&lastBoundarySent is {} previous&&now-lastBoundarySentAt<TimeSpan.FromSeconds(3)&&previous.Territory==captured.Territory&&previous.MapId==captured.MapId&&previous.ArrivalTerritory==captured.ArrivalTerritory&&previous.ArrivalInstance==captured.ArrivalInstance&&previous.Name==captured.Name&&previous.HomeWorld==captured.HomeWorld){RecordFollowTravel("Duplicate boundary capture skipped",new {captured.Id});return;}
             lastBoundarySent=captured;lastBoundarySentAt=now;lastBoundaryKey=key;
@@ -121,9 +124,23 @@ public sealed partial class Plugin
     private void FlushOutgoingTravel()
     {
         if(portalSendTask!=null||DateTimeOffset.UtcNow<nextOutgoingTripAt)return;
-        while(outgoingTrips.TryDequeue(out var item)){
-            if(item.Key!=config.PairingKey||!SharingTravel||DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()-item.Signal.SentAt>10000)continue;
-            nextOutgoingTripAt=DateTimeOffset.UtcNow.AddMilliseconds(2200);portalSendTask=SendPortalToAudience(item.Key,item.Signal,item.Audience);return;
+        while(outgoingTrips.TryPeek(out var item)){
+            var now=DateTimeOffset.UtcNow;
+            if(item.Key!=config.PairingKey||!SharingTravel||!FollowTravelRecovery.PendingFresh(item.Signal,now.ToUnixTimeMilliseconds())){
+                outgoingTrips.Dequeue();RecordFollowTravel("Outgoing travel discarded",new {item.Signal.Id,reason="expired or sharing changed"});continue;
+            }
+            if(!item.Audience.IsCompleted)return;
+            if(!item.Audience.IsCompletedSuccessfully||!item.Audience.Result){
+                // Retain original timestamps and FIFO order; never extend a trip's lifetime.
+                nextOutgoingTripAt=now.AddSeconds(5);
+                var remaining=outgoingTrips.Skip(1).ToArray();outgoingTrips.Clear();
+                outgoingTrips.Enqueue((item.Key,item.Signal,portalRelay.HasFollowers(item.Key,item.Signal.Name,item.Signal.HomeWorld)));
+                foreach(var later in remaining)outgoingTrips.Enqueue(later);
+                RecordFollowTravel("Outgoing travel awaiting active follower",new {item.Signal.Id,item.Signal.ExpiresAt});return;
+            }
+            outgoingTrips.Dequeue();nextOutgoingTripAt=now.AddMilliseconds(2200);
+            RecordFollowTravel("Outgoing travel submitting",new {item.Signal.Id,item.Signal.SentAt,item.Signal.ExpiresAt});
+            portalSendTask=SendPortalToAudience(item.Key,item.Signal,item.Audience);return;
         }
     }
 }
