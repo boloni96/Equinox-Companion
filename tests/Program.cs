@@ -1604,3 +1604,19 @@ Check("73 queued later different destination retained",FollowWorldReplayPolicy.A
 Check("73 DC gateway not sent as separate World trip",FollowWorldReplayPolicy.SuppressFallback(world73,"Leader Example",410,35,1001000,true).ToString(),"True");
 Check("73 unrelated later menu destination not suppressed",FollowWorldReplayPolicy.SuppressFallback(world73,"Leader Example",410,35,1001000,false).ToString(),"False");
 Check("73 arrived destination suppressed after flag cleared",FollowWorldReplayPolicy.SuppressFallback(world73,"Leader Example",410,57,1001000,false).ToString(),"True");
+
+var destinations74=new (uint Id,uint Territory,string Name)[]{(62,144,"The Gold Saucer"),(2,132,"New Gridania"),(9,130,"Ul'dah - Steps of Nald"),(183,963,"Radz-at-Han"),(72,401,"Camp Cloudtop")};
+foreach(var d in destinations74){
+    foreach(var variant in new[]{d.Name,d.Name.ToLowerInvariant(),d.Name.ToUpperInvariant(),"  "+d.Name+"  ","the "+FollowPartyDestination.Normalize(d.Name),d.Name.Replace(" ","  ")})
+        Check("74 game destination variant "+variant,FollowPartyDestination.Resolve(variant,destinations74)?.Id.ToString(),d.Id.ToString());
+}
+Check("74 ambiguous name never guesses",(FollowPartyDestination.Resolve("Gold Saucer",destinations74.Append((999u,144u,"Gold Saucer")))==null).ToString(),"True");
+Check("74 unknown name never guesses",(FollowPartyDestination.Resolve("Unmapped",destinations74)==null).ToString(),"True");
+Check("74 article alone never selects",(FollowPartyDestination.Resolve("the ",destinations74)==null).ToString(),"True");
+Check("74 unknown accepted trip held",FollowPartyDestination.Hold(1000000,1001000,999000,false).ToString(),"True");
+Check("74 unknown hold ends after arrival",FollowPartyDestination.Hold(1000000,1001000,999000,true).ToString(),"False");
+Check("74 failed party hold bounded",FollowPartyDestination.Hold(1000000,1045000,999000,false).ToString(),"False");
+var unknown74=trip72 with {CurrentWorld=2,SentAt=1001000};
+Check("74 observed unknown party arrival suppresses matching relay",FollowPartyDestination.UnknownArrivalMatches(unknown74,2,30,40,2,1000000,1005000,999000).ToString(),"True");
+Check("74 unknown arrival does not suppress different map",FollowPartyDestination.UnknownArrivalMatches(unknown74,2,30,41,2,1000000,1005000,999000).ToString(),"False");
+Check("74 unknown arrival does not suppress later trip",FollowPartyDestination.UnknownArrivalMatches(unknown74 with {SentAt=1030000},2,30,40,2,1000000,1031000,999000).ToString(),"False");

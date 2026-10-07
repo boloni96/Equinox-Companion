@@ -77,6 +77,7 @@ public sealed partial class Plugin
         if(followStopPending||followStopUnconfirmed)return;
         if(signal.TravelKind=="boundary"&&TrySelectFollowInstance(signal,now))return;
         if(now<nextApproachAttempt)return;
+        if(HoldAcceptedPartyTeleport(now)){TravelDiagnostic("Waiting for the accepted party teleport to finish.");return;}
         if(MatchesAcceptedPartyTrip(signal,now)){
             if(partyTripArrived){followApproach=null;travelAwaitingArrival=null;routeArrivalConfirmed=true;RecordFollowTravel("Party relay duplicate skipped",new {signal.Id});return;}
             if(now-acceptedPartyTeleportAt<TimeSpan.FromSeconds(45)){TravelDiagnostic("Waiting for the accepted party teleport to finish.");return;}

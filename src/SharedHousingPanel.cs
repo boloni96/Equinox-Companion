@@ -89,13 +89,26 @@ public sealed partial class Plugin
         var searching = !string.IsNullOrWhiteSpace(sharedSearch);
         var visibleCharacters = characters.Where(c => !searching || (c.Name+" "+c.World+" "+c.Dc+" "+c.Region+" "+c.Account).Contains(sharedSearch,StringComparison.OrdinalIgnoreCase)).ToArray();
         config.SharedAccountExpanded ??= [];
+        // Reuse one eligibility/status snapshot for both account and category bars.
+        var headerDetails=visibleCharacters.ToDictionary(c=>c.Id,c=>c.Houses
+            .Where(h=>CountsForCharacter(c,h))
+            .Select(h=>(Type:h.Type,Detail:EntryHover(h.Type,h.Ward,h.Plot,h.LastEntry,now,h.Paused)))
+            .ToArray());
+        bool GroupHeader(string label,IEnumerable<SharedCharacter> rows)
+        {
+            var entries=rows.SelectMany(c=>headerDetails[c.Id]).ToArray();
+            return DrawSplitHeader(label,
+                SummarizeBands(entries.Where(x=>x.Type=="Private house").Select(x=>x.Detail.Band)),
+                SummarizeBands(entries.Where(x=>x.Type=="Free Company house").Select(x=>x.Detail.Band)),
+                entries.Select(x=>x.Detail));
+        }
         foreach (var account in visibleCharacters.GroupBy(SharedCharacterGrouping.AccountKey))
         {
             ImGui.PushID("account-" + account.Key);
             var key = person.Id + ":" + account.Key;
             var expanded = searching || config.SharedAccountExpanded.GetValueOrDefault(key);
             ImGui.SetNextItemOpen(expanded, ImGuiCond.Always);
-            var open = ImGui.CollapsingHeader($"{account.First().Account} · {account.Count()} characters###account");
+            var open = GroupHeader($"{account.First().Account} · {account.Count()} characters###account",account);
             if (!searching && open != expanded)
             {
                 config.SharedAccountExpanded[key] = open;
@@ -109,7 +122,12 @@ public sealed partial class Plugin
                     var grouped = account.Where(c => SharedCharacterGrouping.Group(c) == group).ToArray();
                     if (grouped.Length == 0) continue;
                     ImGui.Spacing(); ImGui.Separator();
-                    ImGui.TextUnformatted($"{group} · {grouped.Length}");
+                    var groupKey=key+":group:"+group;
+                    var groupExpanded=searching||config.SharedAccountExpanded.GetValueOrDefault(groupKey,true);
+                    ImGui.SetNextItemOpen(groupExpanded,ImGuiCond.Always);
+                    var groupOpen=GroupHeader($"{group} · {grouped.Length}###group-{group}",grouped);
+                    if(!searching&&groupOpen!=groupExpanded){config.SharedAccountExpanded[groupKey]=groupOpen;SaveConfiguration();}
+                    if(!groupOpen)continue;
                     foreach (var c in grouped)
                     {
             ImGui.PushID(c.Id);

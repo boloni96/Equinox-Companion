@@ -143,7 +143,7 @@ public sealed partial class Plugin
             }
             if(followSession.Armed&&config.FollowThem.StopOnMovement&&FollowMovementKeysHeld()){StopFollowThem("Your movement input.");return;}
             if(followSession.Armed){TryFollowInvitations(now);TryFollowTeleport(now);}
-            if(followSession.Armed&&acceptedPartyAetheryte!=0&&acceptedPartyTeleportAt.ToUnixTimeMilliseconds()>=followArmedAt&&!partyTripArrived&&now-acceptedPartyTeleportAt<TimeSpan.FromSeconds(45)){
+            if(followSession.Armed&&HoldAcceptedPartyTeleport(now)){
                 followSession.Pause();followReady.Reset();followStuck.Pause();
                 followStatus="WAITING — Completing the accepted party teleport.";RefreshFollowBar();return;
             }

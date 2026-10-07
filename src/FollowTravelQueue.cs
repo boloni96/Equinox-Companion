@@ -73,7 +73,7 @@ public sealed partial class Plugin
         if(travelAwaitingArrival==null&&travelQueue.TryPeek(out var instanceTrip)&&TrySelectFollowInstance(instanceTrip,now)){
             travelQueue.Dequeue();travelAwaitingArrival=instanceTrip;routeTeleportAccepted=false;routeSettledAt=default;nextArrivalDiagnostic=now.AddSeconds(5);travelDispatchedAt=now;routeExecutionStarted=true;routeSawLoading=loading;routeStartPosition=Objects.LocalPlayer?.Position??default;return;
         }
-        if(loading||!Player.IsLoaded||followApproach!=null||pendingTransport!=null||pendingWard!=null||pendingAethernet!=null||receivedPortal!=null||pendingDutyLeave!=null||lifestreamTravelOwned)return;
+        if(loading||!Player.IsLoaded||HoldAcceptedPartyTeleport(now)||followApproach!=null||pendingTransport!=null||pendingWard!=null||pendingAethernet!=null||receivedPortal!=null||pendingDutyLeave!=null||lifestreamTravelOwned)return;
         if(now<nextQueueAttempt)return;
         while(travelQueue.TryPeek(out var next)){
             if(next.ExpiresAt<=now.ToUnixTimeMilliseconds()||next.SentAt<followArmedAt){travelQueue.Dequeue();FailFollowTrip("Queued trip expired.");continue;}
