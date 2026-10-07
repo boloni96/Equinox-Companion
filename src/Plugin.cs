@@ -188,6 +188,7 @@ public sealed partial class Plugin : IDalamudPlugin
         catch (Exception ex) { errorJournal.Record("plugin", "Fashion observer unavailable", exceptionType: ex.GetType().Name); }
         if (config.TrackGardens) { callbackHook?.Enable(); callbackIntHook?.Enable(); plantHook?.Enable(); }
         Commands.AddHandler("/equinox", new CommandInfo(OnCommand) { HelpMessage = "Open Equinox Companion, shared profiles, housing and settings." });
+        travelCommandRegistered = Commands.AddHandler("/eqtravel", new CommandInfo((command,args)=>StartSharedWorldTravel(args)) { HelpMessage = "Travel with FollowThem: /eqtravel WorldName or a unique World prefix." });
         gardeningCommandRegistered = Commands.AddHandler("/gardening", new CommandInfo(OnPlantingCommand) { HelpMessage = "Open this house’s Gardening guide; follows selected synced beds." });
         if (!gardeningCommandRegistered) Log.Warning("/gardening is already registered. Use /equinox gardening instead.");
         plantingCommandRegistered = Commands.AddHandler("/planting", new CommandInfo(OnPlantingCommand) { HelpMessage = "Alias for /gardening." });
@@ -212,6 +213,7 @@ public sealed partial class Plugin : IDalamudPlugin
     }
 
     private void Open() => visible = true;
+    private readonly bool travelCommandRegistered;
     private readonly bool fashionCommandRegistered;
     private readonly bool plantingCommandRegistered;
     private readonly bool gardeningCommandRegistered;
@@ -1077,6 +1079,7 @@ public sealed partial class Plugin : IDalamudPlugin
         Pi.UiBuilder.OpenMainUi -= Open;
         Pi.UiBuilder.OpenConfigUi -= Open;
         Commands.RemoveHandler("/equinox");
+        if(travelCommandRegistered)Commands.RemoveHandler("/eqtravel");
         if (fashionCommandRegistered) Commands.RemoveHandler("/fashionr");
         if (gardeningCommandRegistered) Commands.RemoveHandler("/gardening");
         if (plantingCommandRegistered) Commands.RemoveHandler("/planting");

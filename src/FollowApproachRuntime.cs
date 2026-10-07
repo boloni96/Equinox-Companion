@@ -34,6 +34,7 @@ public sealed partial class Plugin
             FollowThemSession.Matches(config.FollowThem.TargetName,config.FollowThem.HomeWorld,signal.Name,signal.HomeWorld)&&signal.CurrentWorld==Player.CurrentWorld.RowId&&signal.EntityId==lastLeaderEntity&&signal.SentAt>=followArmedAt&&signal.ExpiresAt>now.ToUnixTimeMilliseconds():
             signal.TravelKind=="portal"?config.FollowThem.UseSharedPortals&&FollowPortalPolicy.CanUse(signal,now.ToUnixTimeMilliseconds(),followArmedAt,config.FollowThem.TargetName,config.FollowThem.HomeWorld,Player.CurrentWorld.RowId,Client.TerritoryType,map->CurrentMapId,lastLeaderEntity,(now-lastLeaderSeen).TotalSeconds,point):
             config.FollowThem.UseSharedTeleports&&FollowTravelPolicy.CanUse(signal,now.ToUnixTimeMilliseconds(),followArmedAt,config.FollowThem.TargetName,config.FollowThem.HomeWorld,Player.CurrentWorld.RowId,Client.TerritoryType,map->CurrentMapId,lastLeaderEntity,(now-lastLeaderSeen).TotalSeconds,point,config.FollowThem.MeetAtTeleports);
+        if(signal.TravelKind=="boundary"&&signal.DutyId!=CurrentFollowDuty())valid=false;
         if(!valid){
             var reason=signal.SentAt<followArmedAt?"instruction belongs to an earlier follow session":signal.ExpiresAt<=now.ToUnixTimeMilliseconds()?"instruction expired":signal.CurrentWorld!=Player.CurrentWorld.RowId?"source world differs":signal.Territory!=Client.TerritoryType?"source territory differs":signal.MapId!=map->CurrentMapId?"source map differs":signal.EntityId!=lastLeaderEntity?"leader instance identity differs":(now-lastLeaderSeen).TotalSeconds>120?"leader observation expired":"source range, settings or instruction validation failed";
             if(lastApproachRejection!=signal.Id+reason){
@@ -63,6 +64,7 @@ public sealed partial class Plugin
         if(!config.EnableFollowThem||!followSession.Armed||followArmedAt!=approachSession||config.PairingKey!=approachKey||Player.IsLoaded&&Player.ContentId!=approachCharacter||Player.CurrentWorld.RowId!=signal.CurrentWorld||map==null||!remote&&(Client.TerritoryType!=signal.Territory||map->CurrentMapId!=signal.MapId)||!FollowThemSession.Matches(config.FollowThem.TargetName,config.FollowThem.HomeWorld,signal.Name,signal.HomeWorld)||signal.ExpiresAt<=now.ToUnixTimeMilliseconds()||Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.Unconscious]){
             CancelFollowApproach();TravelDiagnostic("Travel preparation cancelled or expired; no action performed.");return;
         }
+        if(signal.TravelKind=="boundary"&&signal.DutyId!=CurrentFollowDuty()){CancelFollowApproach();return;}
         if(signal.TravelKind=="portal"?!config.FollowThem.UseSharedPortals:signal.TravelKind!="world"&&!config.FollowThem.UseSharedTeleports){CancelFollowApproach();return;}
         if(approachOwnsMovement&&!config.FollowThem.UseLifestream){CancelFollowApproach();return;}
         if(FollowMovementKeysHeld()||followManualInputSeen){

@@ -1503,7 +1503,7 @@ Check("67 valid boundary replay",CanTravel59(boundary67).ToString(),"True");
 Check("67 boundary missing arrival rejected",CanTravel59(boundary67 with {Arrival=null}).ToString(),"False");
 Check("67 boundary cross world rejected",CanTravel59(boundary67 with {ArrivalWorld=3}).ToString(),"False");
 Check("67 boundary same territory rejected",CanTravel59(boundary67 with {ArrivalTerritory=3}).ToString(),"False");
-Check("67 boundary duty rejected",CanTravel59(boundary67 with {DutyId=1}).ToString(),"False");
+Check("71 boundary duty permitted with runtime duty identity guard",CanTravel59(boundary67 with {DutyId=1}).ToString(),"True");
 Check("67 invalid instance rejected",CanTravel59(boundary67 with {ArrivalInstance=10}).ToString(),"False");
 Check("67 instance JSON roundtrip",JsonSerializer.Deserialize<FollowPortalSignal>(JsonSerializer.Serialize(boundary67))!.ArrivalInstance.ToString(),"2");
 
@@ -1555,3 +1555,19 @@ var abi70=NativeInputAbi.Probe();
 Check("70 legacy ABI reproduces false-positive input",abi70.LegacyFalse.ToString(),"True");
 Check("70 native byte ABI preserves false despite upper bits",abi70.FixedFalse.ToString(),"0");
 Check("70 native byte ABI preserves true",abi70.FixedTrue.ToString(),"1");
+
+var worlds71=new (uint Id,string Name)[]{(1,"Siren"),(2,"Rafflesia"),(3,"Raiden"),(4,"Sir")};
+Check("71 exact World beats prefix",FollowWorldNames.Matches(worlds71,"sir")[0].Id.ToString(),"4");
+Check("71 unique case insensitive prefix",FollowWorldNames.Matches(worlds71," RAFF ")[0].Id.ToString(),"2");
+Check("71 ambiguous prefix returns choices",FollowWorldNames.Matches(worlds71,"ra").Length.ToString(),"2");
+Check("71 empty World never selects",FollowWorldNames.Matches(worlds71," ").Length.ToString(),"0");
+Check("71 unrelated li command not a World",FollowWorldNames.Matches(worlds71,"fc").Length.ToString(),"0");
+
+Check("71 same territory duty crossing with distant arrival",CanTravel59(boundary67 with {DutyId=1,ArrivalTerritory=3,Arrival=new(40,0,0)}).ToString(),"True");
+Check("71 same territory small movement not crossing",CanTravel59(boundary67 with {DutyId=1,ArrivalTerritory=3}).ToString(),"False");
+
+Check("71 arrival clears intent without prior world sample",FollowWorldIntentPolicy.Clear(410,TimeSpan.FromSeconds(60),true,1,1,410).ToString(),"True");
+Check("71 loading preserves world intent",FollowWorldIntentPolicy.Clear(410,TimeSpan.FromSeconds(60),false,1,0,0).ToString(),"False");
+Check("71 character switch clears world intent",FollowWorldIntentPolicy.Clear(410,TimeSpan.FromSeconds(60),true,1,2,35).ToString(),"True");
+Check("71 pending world stays captured",FollowWorldIntentPolicy.Clear(410,TimeSpan.FromSeconds(60),true,1,1,35).ToString(),"False");
+Check("71 world intent expires",FollowWorldIntentPolicy.Clear(410,TimeSpan.FromMinutes(30),false,1,0,0).ToString(),"True");

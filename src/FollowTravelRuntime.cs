@@ -10,7 +10,7 @@ using FFXIVClientStructs.FFXIV.Component.GUI;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
-    private unsafe delegate bool FollowTeleportDelegate(Telepo* telepo,uint id,byte subIndex);
+    private unsafe delegate byte FollowTeleportDelegate(Telepo* telepo,uint id,byte subIndex);
     private Hook<FollowTeleportDelegate>? followTeleportHook;
     private FollowPortalSignal? outgoingTravel,pendingAethernet;
     private Task<bool>? travelAudience;
@@ -35,11 +35,12 @@ public sealed partial class Plugin
         }
         portalRelayStatus="Observed "+signal.TravelKind+" destination; waiting for departure.";
         if(outgoingTravel is {} prior&&prior.TravelKind==signal.TravelKind&&prior.AetheryteId==signal.AetheryteId&&prior.Destination==signal.Destination&&DateTimeOffset.UtcNow-travelAt<TimeSpan.FromSeconds(1))return;
+        RecordFollowTravel("Travel captured",new {signal.Id,signal.TravelKind,destinationTerritory});
         outgoingTravel=signal;travelSawLoading=false;travelAt=DateTimeOffset.UtcNow;travelTerritory=destinationTerritory;
         travelPosition=Objects.LocalPlayer?.Position??new(signal.X,signal.Y,signal.Z);
         travelAudience=portalRelay.HasFollowers(config.PairingKey,signal.Name,signal.HomeWorld);
     }
-    private unsafe bool ObserveFollowTeleport(Telepo* telepo,uint id,byte subIndex)
+    private unsafe byte ObserveFollowTeleport(Telepo* telepo,uint id,byte subIndex)
     {
         FollowPortalSignal? signal=null;uint destination=0;
         try{
@@ -59,7 +60,8 @@ public sealed partial class Plugin
                 }
         }catch(Exception e){errorJournal.Record("follow-teleport","Could not observe teleport destination",exceptionType:e.GetType().Name);}
         var accepted=followTeleportHook!.Original(telepo,id,subIndex);
-        if(accepted&&signal!=null){
+        if(SharingTravel&&!usingSharedTravel)RecordFollowTravel("Teleport observation",new {aetheryte=id,subIndex,accepted=accepted!=0,captured=signal!=null,worldIntent=sharedWorldIntent,reason=signal!=null?"destination captured":SharingWorldIntent?"World travel in progress":"destination not found or unsupported estate"});
+        if(accepted!=0&&signal!=null){
             if(transportCapture is {TravelKind:"friendestate",Steps.Length:>0})outgoingTravel=null;
             else CaptureTravel(signal,destination);
         }

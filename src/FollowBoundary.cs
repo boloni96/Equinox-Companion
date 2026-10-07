@@ -38,12 +38,13 @@ public sealed partial class Plugin
         var signal=TravelSignal("boundary",0,"",0,self.Position);
         if(signal!=null){boundaryDeparture=null;CaptureTravel(signal with {SourceKind="boundary",Approach=FollowTravelPosition.From(self.Position+direction*3)},0);}
     }
-    private void UpdateFollowBoundary(DateTimeOffset now)
+    private static unsafe uint CurrentFollowDuty()=>(uint)(FFXIVClientStructs.FFXIV.Client.Game.GameMain.Instance()==null?0:FFXIVClientStructs.FFXIV.Client.Game.GameMain.Instance()->CurrentContentFinderConditionId);
+    private unsafe void UpdateFollowBoundary(DateTimeOffset now)
     {
         if(!SharingTravel||config.PairingKey.Length!=64){boundarySample=null;boundaryDeparture=null;boundaryLoading=false;return;}
         var loading=Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51];
         if(loading){
-            if(!boundaryLoading&&boundarySample is {} s&&now-boundarySampleAt<TimeSpan.FromSeconds(1)&&outgoingTravel==null&&transportCapture==null&&outgoingPortal==null&&s.DutyId==0&&!SharingWorldIntent&&boundaryDirection.LengthSquared()>.01f){
+            if(!boundaryLoading&&boundarySample is {} s&&now-boundarySampleAt<TimeSpan.FromSeconds(1)&&outgoingTravel==null&&transportCapture==null&&outgoingPortal==null&&!SharingWorldIntent&&boundaryDirection.LengthSquared()>.01f){
                 var goal=new Vector3(s.X,s.Y,s.Z)+Vector3.Normalize(boundaryDirection)*3;
                 boundaryDeparture=s with {Approach=FollowTravelPosition.From(goal),SourceKind="boundary"};boundaryDepartureAt=now;
             }
@@ -52,7 +53,8 @@ public sealed partial class Plugin
         if(!Player.IsLoaded||Objects.LocalPlayer is not {} self){boundarySample=null;boundaryDeparture=null;return;}
         if(boundaryLoading){
             boundaryLoading=false;
-            if(boundaryDeparture is {} s&&now-boundaryDepartureAt<TimeSpan.FromSeconds(120)&&s.Name==Player.CharacterName&&s.HomeWorld==Player.HomeWorld.RowId&&s.CurrentWorld==Player.CurrentWorld.RowId&&s.Territory!=Client.TerritoryType){
+            if(boundaryDeparture is {} s&&now-boundaryDepartureAt<TimeSpan.FromSeconds(120)&&s.Name==Player.CharacterName&&s.HomeWorld==Player.HomeWorld.RowId&&s.CurrentWorld==Player.CurrentWorld.RowId&&(s.Territory!=Client.TerritoryType||s.DutyId!=0&&Vector3.DistanceSquared(new(s.X,s.Y,s.Z),self.Position)>144)&&s.DutyId==CurrentFollowDuty()){
+                RecordFollowTravel("Boundary departure retained",new {s.Territory,s.DutyId,s.Approach});
                 EnqueueOutgoingTravel(config.PairingKey,s with {SentAt=now.ToUnixTimeMilliseconds()},portalRelay.HasFollowers(config.PairingKey,s.Name,s.HomeWorld));
             }
             boundaryDeparture=null;boundarySample=null;boundaryDirection=default;
@@ -66,6 +68,6 @@ public sealed partial class Plugin
             else if(delta.LengthSquared()<.0025f)boundaryDirection=default;
         }
         boundaryPrevious=self.Position;boundarySampleAt=now;
-        boundarySample=Conditions[ConditionFlag.InCombat]?null:TravelSignal("boundary",0,"",0,self.Position);
+        boundarySample=Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.Unconscious]?null:TravelSignal("boundary",0,"",0,self.Position);
     }
 }

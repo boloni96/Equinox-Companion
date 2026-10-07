@@ -15,7 +15,7 @@ public static class FollowTravelPolicy
         if(s.TravelKind=="door"&&(s.SourceKind!="EventObj"||s.BaseId==0))return false;
         if(s.TravelKind is "transport" or "friendestate"&&!FollowTransportPolicy.Valid(s))return false;
         if(s.ArrivalInstance>9)return false;
-        if(s.TravelKind=="boundary"&&(s.SourceKind!="boundary"||s.BaseId!=0||s.DutyId!=0||s.Approach is not {Valid:true}||s.Arrival is not {Valid:true}||s.ArrivalTerritory==s.Territory||s.ArrivalWorld!=s.CurrentWorld))return false;
+        if(s.TravelKind=="boundary"&&(s.SourceKind!="boundary"||s.BaseId!=0||s.Approach is not {Valid:true}||s.Arrival is not {Valid:true}||(s.ArrivalTerritory==s.Territory&&(s.DutyId==0||Vector3.DistanceSquared(new(s.X,s.Y,s.Z),s.Arrival.Point)<=144))||s.ArrivalWorld!=s.CurrentWorld))return false;
         if(!float.IsFinite(s.SourceRadius)||s.SourceRadius<0||s.SourceRadius>10)return false;
         return remote||Vector3.DistanceSquared(position,new(s.X,s.Y,s.Z))<=(s.TravelKind is "teleport" or "friendestate" or "estate" or "boundary"?900:MathF.Pow(3+s.SourceRadius,2));
     }

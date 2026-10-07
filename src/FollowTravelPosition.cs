@@ -37,7 +37,7 @@ public static class FollowArrivalPolicy
 
     public static bool AlreadyAtTravelArrival(FollowPortalSignal s,uint world,uint territory,uint map,Vector3 position,bool acceptedPartyOffer)=>
         s.TravelKind is "aethernet" or "teleport" or "estate" or "friendestate" or "boundary" or "door" or "transport" &&
-        (territory!=s.Territory||map!=s.MapId||acceptedPartyOffer&&s.TravelKind=="teleport") &&
+        (territory!=s.Territory||map!=s.MapId||acceptedPartyOffer&&s.TravelKind=="teleport"||s.TravelKind=="boundary"&&s.DutyId!=0&&Vector3.DistanceSquared(position,new(s.X,s.Y,s.Z))>144) &&
         s.Arrival is {Valid:true} a && world==s.ArrivalWorld && territory==s.ArrivalTerritory && map==s.ArrivalMap &&
         Vector3.DistanceSquared(position,a.Point)<225 && Math.Abs(position.Y-a.Y)<3;
 
