@@ -1,0 +1,12 @@
+# Equinox Helper references
+
+Inspected 2026-10-07. Equinox's code remains self-contained; TextAdvance, YesAlready and ECommons are not new dependencies.
+
+- TextAdvance, commit 9dee62760472b08a7c36c596c64e4dfbfdc5cf8b: Executors/ExecSkipTalk.cs and Executors/ExecConfirmCutsceneSkip.cs separate subtitle advancement from cutscene confirmation. https://github.com/NightmareXIV/TextAdvance
+- ECommons, commit 9ef3961c329fa99bd4c65769b39a56cbe2d2917a: Automation/AutoCutsceneSkipper.cs checks for a skippable callback and triggers the native cutscene input path. Equinox does not copy its instruction patch; it calls the exposed AgentCutscene.OpenSkipDialog only with the current non-null SkipCallback. https://github.com/NightmareXIV/ECommons
+- YesAlready Features/Talk.cs uses the Talk addon to advance dialogue. https://github.com/PunishXIV/YesAlready
+- Authoritative structures: aers/FFXIVClientStructs AgentCutscene (SkipCallback, SkipDialogAddonId, OpenSkipDialog, TalkName, TalkText), EventFramework (EventState1, Scene), AddonSelectString, AddonSelectIconString, AddonCutSceneSelectString, InfoProxyInterface.RequestData. https://github.com/aers/FFXIVClientStructs
+
+Equinox adds its own session permission, exact NPC and dialogue matching, expiry and source-area checks. A leader's skip is replayed only for the same event/scene. Normally unskippable scenes remain unskippable. An unavailable callback leaves the action waiting for the game's Skip prompt; it never sends global Esc input.
+
+Dialogue capture watches the Talk window's accepted text changes/closure, independently of whether the leader used mouse, keyboard, controller or another dialogue plugin. The recipient uses the existing bounded Talk event path. Distinct text may differ with quest progress or localization and deliberately blocks replay.

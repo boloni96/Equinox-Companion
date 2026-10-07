@@ -78,7 +78,11 @@ public sealed partial class Plugin
     {
         if(!SharingQuest||helperReplaying||usingSharedTravel||addon==null||index<0)return;
         var cut=AgentCutscene.Instance();
-        if(index==0&&cut!=null&&cut->SkipDialogAddonId!=0&&addon->Id==cut->SkipDialogAddonId){var scene=HelperScene();if(scene.Length>0)EmitHelper("skip",scene:scene);return;}
+        if(cut!=null&&cut->SkipDialogAddonId!=0&&addon->Id==cut->SkipDialogAddonId){
+            var yes=index==0;
+            if(addon==(AtkUnitBase*)GardenGui.GetAddonByName("SelectString").Address){var options=TransportChoices(addon);yes=index<options.Count&&new[]{"Yes.","Yes","Ja","Oui","はい","是","예"}.Contains(options[index]);}
+            var scene=HelperScene();if(yes&&scene.Length>0)EmitHelper("skip",scene:scene);return;
+        }
         foreach(var name in new[]{"SelectString","SelectIconString","CutSceneSelectString"}){
             if(addon!=(AtkUnitBase*)GardenGui.GetAddonByName(name).Address)continue;
             var list=HelperChoices(addon,name);if(index>=list.Count||list[index].Length==0)return;

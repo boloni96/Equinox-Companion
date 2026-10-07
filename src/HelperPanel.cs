@@ -19,6 +19,10 @@ public sealed partial class Plugin
                 if(followSession.Armed){ImGui.TextWrapped(helperPermission.Quest?"Quest assistance permitted for this session.":"This session allows FollowThem only.");DrawHelperFollowerControls();}
                 if(helperBlocked.Length>0)ImGui.TextWrapped("Blocked: "+helperBlocked);
                 if(ImGui.Button("Open Helper Controls"))helperWindowOpen=true;
+                if(ImGui.CollapsingHeader("About Quest Helper")){
+                    ImGui.TextWrapped("Thanks to TextAdvance/ECommons and YesAlready for their public dialogue and cutscene research, and FFXIVClientStructs for the game interfaces. Equinox adds session controls and matching leader actions.");
+                    if(ImGui.SmallButton("TextAdvance"))Dalamud.Utility.Util.OpenLink("https://github.com/NightmareXIV/TextAdvance");ImGui.SameLine();if(ImGui.SmallButton("YesAlready"))Dalamud.Utility.Util.OpenLink("https://github.com/PunishXIV/YesAlready");
+                }
                 ImGui.EndTabItem();
             }
             ImGui.EndTabBar();
