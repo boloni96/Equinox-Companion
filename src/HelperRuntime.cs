@@ -10,7 +10,7 @@ public sealed partial class Plugin
     private Task<(HelperReply? Reply,string Error)>? helperStatusTask,helperLeaderTask,helperControlTask,helperSendTask;
     private DateTimeOffset nextHelperStatus,nextHelperLeader;
     private string helperStatusSession="",helperLeaderIdentity="",helperError="";
-    private long helperCursor,helperStatusGeneration;
+    private long helperCursor,helperStatusGeneration,helperTravelAfter;
     private string helperStatusKey="";
     private DateTimeOffset nextHelperTick;
     private readonly Queue<HelperAction> helperOutgoing=new(),helperIncoming=new();
@@ -20,10 +20,11 @@ public sealed partial class Plugin
     private bool helperWindowOpen;
     private string helperBlocked="";
     private bool HelperPaused=>helperPermission.Active&&helperPermission.Paused;
-    private bool HelperQuestBusy=>helperPermission.Active&&helperPermission.Quest&&(helperIncoming.Count>0||helperBlocked.Length>0||helperNpcActive!=null&&QuestConversationVisible());
+    private bool HelperTravelBusy=>travelQueue.Count>0||travelAwaitingArrival!=null||followApproach!=null||pendingTransport!=null||pendingWard!=null||pendingAethernet!=null||receivedPortal!=null||pendingDutyLeave!=null||lifestreamTravelOwned;
+    private bool HelperQuestBusy=>!HelperTravelBusy&&helperPermission.Active&&helperPermission.Quest&&(helperIncoming.Count>0||helperBlocked.Length>0||helperNpcActive!=null&&QuestConversationVisible());
     private bool SharingQuest=>config.EnableFollowThem&&config.FollowThem.ShareQuestActions&&config.PairingKey.Length==64&&Player.IsLoaded&&helperFollowers.Any(x=>HelperPolicy.Audience(x,DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()));
     private void ClearHelperActions(){helperIncoming.Clear();helperBlocked="";helperNpcActive=null;CancelHelperApproach();}
-    private void EndHelperSession(){helperPermission.Stop();ClearHelperActions();helperCursor=0;helperSeen.Clear();nextHelperStatus=default;}
+    private void EndHelperSession(){helperPermission.Stop();ClearHelperActions();helperCursor=0;helperTravelAfter=0;helperSeen.Clear();nextHelperStatus=default;}
     private void ApplyHelperControl(string command)
     {
         if(command=="stop"){StopFollowThem("Ended by the followed character. Only you can start again.");return;}
@@ -44,7 +45,7 @@ public sealed partial class Plugin
                 helperError=r.Error;
                 if(r.Reply is {} reply){
                     ApplyHelperControl(reply.Control);
-                    foreach(var a in reply.Actions??[]){helperCursor=Math.Max(helperCursor,a.Sequence);if(!helperPermission.Allows(a.Kind)||!HelperPolicy.Fresh(a,now.ToUnixTimeMilliseconds(),followArmedAt)||!FollowThemSession.Matches(config.FollowThem.TargetName,config.FollowThem.HomeWorld,a.Name,a.World)||!helperSeen.Add(a.Id))continue;
+                    foreach(var a in reply.Actions??[]){helperCursor=Math.Max(helperCursor,a.Sequence);if(!helperPermission.Allows(a.Kind)||!HelperPolicy.Fresh(a,now.ToUnixTimeMilliseconds(),followArmedAt)||a.SentAt<=helperTravelAfter||!FollowThemSession.Matches(config.FollowThem.TargetName,config.FollowThem.HomeWorld,a.Name,a.World)||!helperSeen.Add(a.Id))continue;
                         if(helperIncoming.Count>=32){helperBlocked="Dialogue queue is full; pause and resume Quest Helper to clear it.";break;}
                         helperIncoming.Enqueue(a);
                     }

@@ -28,7 +28,7 @@ public sealed partial class Plugin
         if(!helperIncoming.TryPeek(out var a))return;
         if(!HelperPolicy.Fresh(a,now.ToUnixTimeMilliseconds(),followArmedAt)){BlockHelper("Recorded dialogue expired. Stop/start, then ask the leader to click the NPC again.");return;}
         if(a.Npc.World!=Player.CurrentWorld.RowId||a.Npc.Territory!=Client.TerritoryType){helperQuestStatus="Waiting to reach the NPC's area.";return;}
-        if(travelAwaitingArrival!=null||followApproach!=null||pendingTransport!=null||pendingAethernet!=null||pendingWard!=null||lifestreamTravelOwned){helperQuestStatus="Waiting for travel to finish.";return;}
+        if(HelperTravelBusy){helperQuestStatus="Waiting for travel to finish.";return;}
         if(helperWorkingId!=a.Id){helperWorkingId=a.Id;helperActionStarted=now;helperStopRequested=false;helperInteractAttempts=0;helperStationary.Reset();followSession.Pause();RequestFollowMovementStop();}
         if(FollowMovementKeysHeld()){if(helperApproaching)CancelHelperApproach();helperQuestStatus="Your movement paused NPC approach.";return;}
         if(a.Kind=="interact"){
