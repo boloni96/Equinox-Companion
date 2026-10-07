@@ -53,7 +53,7 @@ public sealed partial class Plugin
                 if(check==null){BlockHelper("The matching replay checkbox is unavailable.");return;}
                 var wanted=action.Scene=="checked";
                 if(check->IsChecked==wanted){CompleteHelperAction(now);return;}
-                var owner=check->AtkComponentBase.OwnerNode;if(owner==null)return;
+                var owner=check->AtkComponentButton.AtkComponentBase.OwnerNode;if(owner==null)return;
                 var evt=owner->AtkResNode.AtkEventManager.Event;var n=0;
                 while(evt!=null&&n++<32&&evt->State.EventType is not (AtkEventType.ButtonClick or AtkEventType.MouseClick))evt=evt->NextEvent;
                 if(evt==null||n>32){BlockHelper("Replay checkbox has no verified UI click event.");return;}

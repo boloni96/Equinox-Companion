@@ -25,6 +25,7 @@ public sealed partial class Plugin
             }
             helperNpcActive=null;
         }
+        if(helperReservedConversation==action.Npc.Conversation)ClearHelperReservation();
         CancelHelperApproach();helperBlocked="";helperError="Quest Helper: "+reason;helperQuestStatus=helperError;
         ResumeAfterConfirmedTravel();nextHelperStatus=default;
     }
@@ -77,7 +78,7 @@ public sealed partial class Plugin
             EmitHelper("acceptQuest",addon:"JournalAccept",scene:"decline",questId:offered);
         }
     }
-    private bool helperAcceptIntent;
+    private bool helperAcceptIntent,helperQuestMenuSelected;
     private unsafe void ObserveHelperQuestAcceptance(DateTimeOffset now)
     {
         if(!SharingQuest||helperCaptureNpc is not {} npc){helperOfferedQuest=0;helperAcceptIntent=false;return;}
@@ -108,7 +109,18 @@ public sealed partial class Plugin
 
 
         if(now-helperActionStarted>TimeSpan.FromSeconds(10)){BlockHelper("The matching quest could not be accepted. Check level, prerequisites and quest-log space.");return;}
-        if(offered==0)return;
+        if(offered==0){
+            if(helperQuestMenuSelected)return;
+            foreach(var name in new[]{"SelectString","SelectIconString"}){
+                var menu=(AtkUnitBase*)GardenGui.GetAddonByName(name).Address;
+                var choices=HelperChoices(menu,name);
+                var matches=choices.Select((text,index)=>(text,index)).Where(x=>HelperQuestIdForName(x.text)==action.QuestId).ToArray();
+                if(matches.Length!=1)continue;
+                helperReplaying=true;try{SelectTravelChoice(menu,matches[0].index);}finally{helperReplaying=false;}
+                helperQuestMenuSelected=true;helperNextAction=now.AddMilliseconds(450);return;
+            }
+            return;
+        }
         var addon=(AtkUnitBase*)GardenGui.GetAddonByName("JournalAccept").Address;
         if(!addon->IsReady)return;
         var button=action.Scene=="decline"?((AddonJournalAccept*)addon)->DeclineButton:((AddonJournalAccept*)addon)->AcceptButton;
