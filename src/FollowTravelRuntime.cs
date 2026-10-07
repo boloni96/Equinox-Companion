@@ -140,10 +140,10 @@ public sealed partial class Plugin
     {
         if(signal.TravelKind=="world"){TryFollowWorldTravel(signal,now);return;}
         if(!config.FollowThem.UseSharedTeleports||Objects.LocalPlayer is not {} self){TravelDiagnostic("Shared travel is disabled or your character is unavailable.");return;}
-        if(MatchesAcceptedPartyTrip(signal,now)&&partyTripArrived){travelAwaitingArrival=null;routeArrivalConfirmed=true;RecordFollowTravel("Party relay duplicate skipped",new {signal.Id});return;}
+        if(MatchesAcceptedPartyTrip(signal,now)&&partyTripArrived){travelAwaitingArrival=null;routeArrivalConfirmed=true;ResumeAfterConfirmedTravel();RecordFollowTravel("Party relay duplicate skipped",new {signal.Id});return;}
         var map=AgentMap.Instance();
         if(map!=null&&FollowArrivalPolicy.AlreadyAtTravelArrival(signal,Player.CurrentWorld.RowId,Client.TerritoryType,map->CurrentMapId,self.Position,acceptedPartyTeleportAt.ToUnixTimeMilliseconds()>=followArmedAt&&now-acceptedPartyTeleportAt<TimeSpan.FromSeconds(90))){
-            travelAwaitingArrival=null;routeArrivalConfirmed=true;TravelDiagnostic("Already at the shared destination; duplicate Teleport skipped.");return;
+            travelAwaitingArrival=null;routeArrivalConfirmed=true;ResumeAfterConfirmedTravel();TravelDiagnostic("Already at the shared destination; duplicate Teleport skipped.");return;
         }
         if(map==null||!FollowTravelPolicy.CanUse(signal,now.ToUnixTimeMilliseconds(),followArmedAt,config.FollowThem.TargetName,config.FollowThem.HomeWorld,Player.CurrentWorld.RowId,Client.TerritoryType,map->CurrentMapId,lastLeaderEntity,(now-lastLeaderSeen).TotalSeconds,self.Position,config.FollowThem.MeetAtTeleports)){RecordFollowTravel("Travel dispatch rejected",new {signal.Id,signal.TravelKind,distance=Vector3.Distance(self.Position,new(signal.X,signal.Y,signal.Z)),signal.SourceRadius,leaderAge=(now-lastLeaderSeen).TotalSeconds,expectedEntity=signal.EntityId,actualEntity=lastLeaderEntity,sourceTerritory=signal.Territory,currentTerritory=Client.TerritoryType});TravelDiagnostic("Travel instruction rejected: source, range or session validation failed.");return;}
         if(signal.TravelKind=="ward"&&signal.SourceKind=="boundary"){
@@ -170,7 +170,7 @@ public sealed partial class Plugin
         telepo->UpdateAetheryteList();
         foreach(var destination in telepo->TeleportList)if((signal.TravelKind=="estate"?destination.HouseId.Id.ToString("X16")==signal.EstateId:destination.AetheryteId==signal.AetheryteId&&destination.SubIndex==0&&destination.Ward==0&&destination.Plot==0)){
             if(destination.GilCost>Math.Max(0,config.FollowThem.TeleportGilLimit)||destination.GilCost>inventory->GetGil()){FollowChatNotice("TRAVEL — Teleport exceeds your gil limit or available gil; waiting.");return;}
-            usingSharedTravel=true;try{var ok=telepo->Teleport(destination.AetheryteId,destination.SubIndex);FollowChatNotice(ok?"TRAVEL — Requested the selected character's Teleport destination.":"TRAVEL — Game refused Teleport; FollowThem is waiting.");}finally{usingSharedTravel=false;}return;
+            usingSharedTravel=true;try{var ok=telepo->Teleport(destination.AetheryteId,destination.SubIndex);if(travelAwaitingArrival?.Id==signal.Id)routeTeleportAccepted=ok;RecordFollowTravel("Native teleport requested",new {signal.Id,accepted=ok,destination.AetheryteId,destination.SubIndex});FollowChatNotice(ok?"TRAVEL — Requested the selected character's Teleport destination.":"TRAVEL — Game refused Teleport; FollowThem is waiting.");}finally{usingSharedTravel=false;}return;
         }
         if(signal.TravelKind=="estate"&&signal.FriendContentId.Length>0&&signal.Destination is "Private Estate" or "Free Company Estate"){
             TryFollowTransport(signal with {TravelKind="friendestate",SourceKind="FriendEstate",Steps=[new(signal.Destination)]},now);return;

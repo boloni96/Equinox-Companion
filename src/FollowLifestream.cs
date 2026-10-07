@@ -23,7 +23,7 @@ public sealed partial class Plugin
         if(!config.FollowThem.UseLifestream)return;
         MessageToggle("Follow World Visits (requires Lifestream)",config.FollowThem.FollowWorldVisits,v=>config.FollowThem.FollowWorldVisits=v);
         MessageToggle("Follow Data Center travel (Lifestream; logs this character out and back in)",config.FollowThem.FollowDataCenters,v=>config.FollowThem.FollowDataCenters=v);
-        ImGui.TextWrapped("Optional Lifestream integration. Its own travel restrictions and service-account configuration apply. Companion requests no vnavmesh movement. Use /eqtravel WorldName (unique prefixes accepted, e.g. /eqtravel sir); /equinox travel WorldName also works to share the destination before World/DC departure. Observed /li WorldName commands also share when available; menu travel has an arrival fallback. Queues can take time; use Stop to cancel a request started here.");
+        ImGui.TextWrapped("Optional Lifestream integration. Its own travel restrictions and service-account configuration apply. Companion requests no vnavmesh movement. Use /et WorldName (unique prefixes accepted, e.g. /et sir); /eqtravel is also supported; /equinox travel WorldName also works to share the destination before World/DC departure. Observed /li WorldName commands also share when available; menu travel has an arrival fallback. Queues can take time; use Stop to cancel a request started here.");
     }
     private bool TryLifestreamAethernet(FollowPortalSignal signal)
     {
@@ -50,6 +50,7 @@ public sealed partial class Plugin
             if(!followSession.Armed||!config.EnableFollowThem||!config.FollowThem.UseLifestream||now-lifestreamTravelAt>TimeSpan.FromMinutes(30)||Player.IsLoaded&&Player.ContentId!=lifestreamCharacter){CancelLifestreamTravel();return;}
             try{if(Player.IsLoaded&&!Conditions[Dalamud.Game.ClientState.Conditions.ConditionFlag.BetweenAreas]&&!Conditions[Dalamud.Game.ClientState.Conditions.ConditionFlag.BetweenAreas51]&&now-lifestreamTravelAt>TimeSpan.FromSeconds(2)&&!LifestreamBusy()){
                 lifestreamTravelOwned=false;followReady.Reset();
+                if(lifestreamDestination==0||Player.CurrentWorld.RowId==lifestreamDestination)ResumeAfterConfirmedTravel();
                 TravelDiagnostic(Player.IsLoaded&&(lifestreamDestination==0||Player.CurrentWorld.RowId==lifestreamDestination)?"Lifestream travel finished; waiting for the selected character nearby.":"Lifestream stopped before arrival; waiting. Check its travel settings or queue message.");
             }}catch(Exception){lifestreamTravelOwned=false;TravelDiagnostic("Lifestream became unavailable; waiting.");}
         }

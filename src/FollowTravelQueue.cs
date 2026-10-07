@@ -7,11 +7,14 @@ public sealed partial class Plugin
     private bool travelNeedsRecovery;
     private bool routeArrivalConfirmed,routeSawLoading,routeExecutionStarted;
     private Vector3 routeStartPosition;
+    private bool routeTeleportAccepted;
+    private DateTimeOffset nextArrivalDiagnostic,routeSettledAt;
     private readonly Queue<FollowPortalSignal> travelQueue=new();
     private readonly HashSet<string> queuedTravelIds=new();
     private FollowPortalSignal? travelAwaitingArrival;
     private DateTimeOffset travelDispatchedAt,nextQueueAttempt;
-    private void ResetTravelQueue(){travelQueue.Clear();queuedTravelIds.Clear();travelNeedsRecovery=false;travelAwaitingArrival=null;portalReadCursor=0;routeArrivalConfirmed=false;routeSawLoading=false;routeExecutionStarted=false;nextQueueAttempt=default;acceptedPartyTeleportAt=default;}
+    private void ResumeAfterConfirmedTravel(){followStuck.Reset();followRecovery.Reset();followStuckStopRequested=false;followReady.Reset();followSession.Pause();}
+    private void ResetTravelQueue(){routeTeleportAccepted=false;routeSettledAt=default;nextArrivalDiagnostic=default;travelQueue.Clear();queuedTravelIds.Clear();travelNeedsRecovery=false;travelAwaitingArrival=null;portalReadCursor=0;routeArrivalConfirmed=false;routeSawLoading=false;routeExecutionStarted=false;nextQueueAttempt=default;acceptedPartyTeleportAt=default;}
     private void EnqueueTravel(FollowPortalSignal signal)
     {
         if(signal.SentAt<followArmedAt||signal.Id==lastPortalSignalId||queuedTravelIds.Contains(signal.Id))return;
@@ -21,7 +24,7 @@ public sealed partial class Plugin
     }
     private void FailFollowTrip(string reason)
     {
-        travelNeedsRecovery=true;
+        travelNeedsRecovery=true;routeTeleportAccepted=false;routeSettledAt=default;
         var failed=travelAwaitingArrival??followApproach??pendingTransport??pendingAethernet??pendingWard;
         if(failed!=null&&Targets.Target is {} selected&&selected.BaseId==failed.BaseId&&
             selected.ObjectKind.ToString()==failed.SourceKind&&Vector3.DistanceSquared(selected.Position,new(failed.X,failed.Y,failed.Z))<1)Targets.Target=null;
@@ -48,26 +51,37 @@ public sealed partial class Plugin
             var map=AgentMap.Instance();
             var departed=map!=null&&Objects.LocalPlayer is {} moved&&FollowArrivalPolicy.HasDeparted(active,!routeExecutionStarted||followApproach!=null,routeSawLoading,Player.CurrentWorld.RowId,Client.TerritoryType,map->CurrentMapId,routeStartPosition,moved.Position);
             var reconciled=MatchesAcceptedPartyTrip(active,now)&&partyTripArrived||map!=null&&Objects.LocalPlayer is {} arrivedPlayer&&FollowArrivalPolicy.AlreadyAtTravelArrival(active,Player.CurrentWorld.RowId,Client.TerritoryType,map->CurrentMapId,arrivedPlayer.Position,acceptedPartyTeleportAt.ToUnixTimeMilliseconds()>=followArmedAt&&now-acceptedPartyTeleportAt<TimeSpan.FromSeconds(90));
-            var arrived=MatchesAcceptedPartyTrip(active,now)&&partyTripArrived&&!loading|| (followApproach==null&&departed||reconciled)&&!loading&&Player.IsLoaded&&Objects.LocalPlayer is {} self&&map!=null&&active.Arrival is {Valid:true} point&&Player.CurrentWorld.RowId==active.ArrivalWorld&&Client.TerritoryType==active.ArrivalTerritory&&map->CurrentMapId==active.ArrivalMap&&FollowInstancePolicy.Arrived(active.ArrivalInstance,CurrentFollowInstance())&&Vector3.DistanceSquared(self.Position,point.Point)<225;
+            var nativeArrived=Objects.LocalPlayer!=null&&map!=null&&FollowArrivalPolicy.CompletedNativeTeleport(active,routeTeleportAccepted,routeSawLoading,loading,Player.IsLoaded,Player.CurrentWorld.RowId,Client.TerritoryType,map->CurrentMapId,CurrentFollowInstance());
+            var arrived=nativeArrived||MatchesAcceptedPartyTrip(active,now)&&partyTripArrived&&!loading|| (followApproach==null&&departed||reconciled)&&!loading&&Player.IsLoaded&&Objects.LocalPlayer is {} self&&map!=null&&active.Arrival is {Valid:true} point&&Player.CurrentWorld.RowId==active.ArrivalWorld&&Client.TerritoryType==active.ArrivalTerritory&&map->CurrentMapId==active.ArrivalMap&&FollowInstancePolicy.Arrived(active.ArrivalInstance,CurrentFollowInstance())&&Vector3.DistanceSquared(self.Position,point.Point)<225;
             if(arrived&&now-travelDispatchedAt>TimeSpan.FromSeconds(1)){
-                travelAwaitingArrival=null;routeArrivalConfirmed=true;CancelFollowApproach();pendingTransport=null;pendingWard=null;pendingAethernet=null;receivedPortal=null;
+                RecordFollowTravel("Travel arrival confirmed",new {active.Id,active.TravelKind,nativeTeleport=nativeArrived,routeSawLoading});
+                travelAwaitingArrival=null;routeArrivalConfirmed=true;routeTeleportAccepted=false;routeSettledAt=default;CancelFollowApproach();pendingTransport=null;pendingWard=null;pendingAethernet=null;receivedPortal=null;
+                ResumeAfterConfirmedTravel();
                 TravelDiagnostic("Arrival confirmed; checking the next queued trip.");
-            }else if(active.ExpiresAt<=now.ToUnixTimeMilliseconds()||!loading&&!routeSawLoading&&followApproach==null&&now-travelDispatchedAt>TimeSpan.FromSeconds(35)){
+            }else if(active.ExpiresAt<=now.ToUnixTimeMilliseconds()||(!loading&&!routeSawLoading&&followApproach==null&&now-travelDispatchedAt>TimeSpan.FromSeconds(35)||!loading&&Player.IsLoaded&&routeSettledAt!=default&&now-routeSettledAt>TimeSpan.FromSeconds(35))){
                 FailFollowTrip("Travel did not reach its destination before the timeout.");
-            }else return;
+            }else {
+                if(loading||!Player.IsLoaded)routeSettledAt=default;
+                else if(routeSawLoading&&routeSettledAt==default)routeSettledAt=now;
+                if(now>=nextArrivalDiagnostic){
+                    nextArrivalDiagnostic=now.AddSeconds(5);
+                    RecordFollowTravel("Arrival pending",new {active.Id,active.TravelKind,routeTeleportAccepted,routeSawLoading,loading,loaded=Player.IsLoaded,preparing=followApproach!=null,expected=new {active.ArrivalWorld,active.ArrivalTerritory,active.ArrivalMap,active.ArrivalInstance,active.Arrival},actual=new {world=Player.CurrentWorld.RowId,territory=Client.TerritoryType,map=map==null?0:map->CurrentMapId,instance=CurrentFollowInstance(),position=Objects.LocalPlayer is {} actor?FollowTravelPosition.From(actor.Position):null}});
+                }
+                return;
+            }
         }
         if(travelAwaitingArrival==null&&travelQueue.TryPeek(out var instanceTrip)&&TrySelectFollowInstance(instanceTrip,now)){
-            travelQueue.Dequeue();travelAwaitingArrival=instanceTrip;travelDispatchedAt=now;routeExecutionStarted=true;routeSawLoading=loading;routeStartPosition=Objects.LocalPlayer?.Position??default;return;
+            travelQueue.Dequeue();travelAwaitingArrival=instanceTrip;routeTeleportAccepted=false;routeSettledAt=default;nextArrivalDiagnostic=now.AddSeconds(5);travelDispatchedAt=now;routeExecutionStarted=true;routeSawLoading=loading;routeStartPosition=Objects.LocalPlayer?.Position??default;return;
         }
         if(loading||!Player.IsLoaded||followApproach!=null||pendingTransport!=null||pendingWard!=null||pendingAethernet!=null||receivedPortal!=null||pendingDutyLeave!=null||lifestreamTravelOwned)return;
         if(now<nextQueueAttempt)return;
         while(travelQueue.TryPeek(out var next)){
             if(next.ExpiresAt<=now.ToUnixTimeMilliseconds()||next.SentAt<followArmedAt){travelQueue.Dequeue();FailFollowTrip("Queued trip expired.");continue;}
-            if(MatchesAcceptedPartyTrip(next,now)&&partyTripArrived){travelQueue.Dequeue();routeArrivalConfirmed=true;RecordFollowTravel("Party relay duplicate skipped",new {next.Id});continue;}
+            if(MatchesAcceptedPartyTrip(next,now)&&partyTripArrived){travelQueue.Dequeue();routeArrivalConfirmed=true;ResumeAfterConfirmedTravel();RecordFollowTravel("Party relay duplicate skipped",new {next.Id});continue;}
             if(Objects.LocalPlayer is {} located&&AgentMap.Instance()!=null&&
                 FollowThemSession.Matches(config.FollowThem.TargetName,config.FollowThem.HomeWorld,next.Name,next.HomeWorld)&&FollowInstancePolicy.Arrived(next.ArrivalInstance,CurrentFollowInstance())&&
                 FollowArrivalPolicy.AlreadyAtTravelArrival(next,Player.CurrentWorld.RowId,Client.TerritoryType,AgentMap.Instance()->CurrentMapId,located.Position,acceptedPartyTeleportAt.ToUnixTimeMilliseconds()>=followArmedAt&&now-acceptedPartyTeleportAt<TimeSpan.FromSeconds(90))){
-                travelQueue.Dequeue();routeArrivalConfirmed=true;
+                travelQueue.Dequeue();routeArrivalConfirmed=true;ResumeAfterConfirmedTravel();
                 RecordFollowTravel("Queued arrival reconciled",new {next.Id,next.TravelKind});
                 TravelDiagnostic("Already at the queued destination; no second teleport needed.");continue;
             }
@@ -78,7 +92,7 @@ public sealed partial class Plugin
             if(routeArrivalConfirmed&&FollowThemSession.Matches(config.FollowThem.TargetName,config.FollowThem.HomeWorld,next.Name,next.HomeWorld)&&next.CurrentWorld==Player.CurrentWorld.RowId&&next.Territory==Client.TerritoryType&&AgentMap.Instance()!=null&&next.MapId==AgentMap.Instance()->CurrentMapId){lastLeaderEntity=next.EntityId;lastLeaderSeen=now;}
             QueueFollowApproach(next,now);
             if(followApproach!=null||pendingDutyLeave!=null){travelQueue.Dequeue();travelNeedsRecovery=false;}
-            if((followApproach!=null||pendingDutyLeave!=null)&&next.Arrival!=null){travelAwaitingArrival=next;travelDispatchedAt=now;routeExecutionStarted=pendingDutyLeave!=null;routeSawLoading=false;routeStartPosition=Objects.LocalPlayer?.Position??default;}
+            if((followApproach!=null||pendingDutyLeave!=null)&&next.Arrival!=null){travelAwaitingArrival=next;routeTeleportAccepted=false;routeSettledAt=default;nextArrivalDiagnostic=now.AddSeconds(5);travelDispatchedAt=now;routeExecutionStarted=pendingDutyLeave!=null;routeSawLoading=false;routeStartPosition=Objects.LocalPlayer?.Position??default;}
             if(followApproach==null&&pendingDutyLeave==null){nextQueueAttempt=now.AddSeconds(1);}
             return;
         }

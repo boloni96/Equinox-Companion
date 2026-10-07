@@ -28,6 +28,14 @@ public static class FollowApproachPolicy
 
 public static class FollowArrivalPolicy
 {
+    // Only a successful native request plus an observed loading cycle can replace
+    // position proximity. A rejected/cancelled cast or merely being in the same
+    // territory cannot complete the queued instruction.
+    public static bool CompletedNativeTeleport(FollowPortalSignal s,bool accepted,bool sawLoading,bool loading,bool loaded,uint world,uint territory,uint map,uint instance)=>
+        s.TravelKind is "teleport" or "estate" && accepted && sawLoading && !loading && loaded &&
+        s.ArrivalWorld!=0 && s.ArrivalTerritory!=0 && world==s.ArrivalWorld && territory==s.ArrivalTerritory && map==s.ArrivalMap &&
+        FollowInstancePolicy.Arrived(s.ArrivalInstance,instance);
+
     // Recover a queued aethernet leg already completed manually. Never treat
     // proximity in the source area as proof of travel.
     public static bool AlreadyAtAethernetArrival(FollowPortalSignal s,uint world,uint territory,uint map,Vector3 position)=>

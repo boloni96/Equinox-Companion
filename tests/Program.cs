@@ -1571,3 +1571,18 @@ Check("71 loading preserves world intent",FollowWorldIntentPolicy.Clear(410,Time
 Check("71 character switch clears world intent",FollowWorldIntentPolicy.Clear(410,TimeSpan.FromSeconds(60),true,1,2,35).ToString(),"True");
 Check("71 pending world stays captured",FollowWorldIntentPolicy.Clear(410,TimeSpan.FromSeconds(60),true,1,1,35).ToString(),"False");
 Check("71 world intent expires",FollowWorldIntentPolicy.Clear(410,TimeSpan.FromMinutes(30),false,1,0,0).ToString(),"True");
+
+var trip72=boundary67 with {TravelKind="teleport",ArrivalInstance=2};
+bool Arrive72(bool accepted=true,bool seen=true,bool loading=false,bool loaded=true,uint world=2,uint territory=30,uint map=40,uint instance=2)=>FollowArrivalPolicy.CompletedNativeTeleport(trip72,accepted,seen,loading,loaded,world,territory,map,instance);
+Check("72 accepted loaded destination completes without leader proximity",Arrive72().ToString(),"True");
+Check("72 rejected native teleport cannot complete",Arrive72(accepted:false).ToString(),"False");
+Check("72 cancelled cast without loading cannot complete",Arrive72(seen:false).ToString(),"False");
+Check("72 still loading cannot complete",Arrive72(loading:true).ToString(),"False");
+Check("72 missing player cannot complete",Arrive72(loaded:false).ToString(),"False");
+Check("72 wrong world cannot complete",Arrive72(world:3).ToString(),"False");
+Check("72 wrong territory cannot complete",Arrive72(territory:31).ToString(),"False");
+Check("72 wrong map cannot complete",Arrive72(map:41).ToString(),"False");
+Check("72 wrong instance cannot complete",Arrive72(instance:1).ToString(),"False");
+Check("72 doors retain spatial validation",FollowArrivalPolicy.CompletedNativeTeleport(trip72 with {TravelKind="door"},true,true,false,true,2,30,40,2).ToString(),"False");
+var resumed72=new FollowThemSession();resumed72.Arm();resumed72.Observe(true,true,false,true,true);resumed72.Pause();
+Check("72 follow resumes after travel pause",resumed72.Observe(true,true,false,true,true).ToString(),"Start");
