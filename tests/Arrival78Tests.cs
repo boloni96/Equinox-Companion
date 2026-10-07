@@ -12,7 +12,7 @@ internal static class Arrival78Tests
         Test("78 other territory rejected",FollowAethernetArrival.Resolve(rows,388,"Gold Saucer Aetheryte Plaza")==0);
         Test("78 blank destination rejected",FollowAethernetArrival.Resolve(rows,144,"")==0);
         Test("78 ambiguous destination rejected",FollowAethernetArrival.Resolve(rows.Append((99u,144u,"Gold Saucer Aetheryte Plaza")),144,"Gold Saucer Aetheryte Plaza")==0);
-        var trip=new FollowPortalSignal {TravelKind="aethernet",ArrivalWorld=410,ArrivalTerritory=144,ArrivalMap=196};
+        var trip=new FollowPortalSignal("test","Leader",1,410,"",144,196,65,0,0,0,0,0,"") {TravelKind="aethernet",ArrivalWorld=410,ArrivalTerritory=144,ArrivalMap=196};
         Test("78 reported Saucer return accepted",FollowAethernetArrival.Confirmed(trip,true,true,false,true,410,144,196,0,new(-7.69567f,1.0425029f,3.4210389f),new(-.01532f,3.49426f,-.01532f)));
     }
 }
