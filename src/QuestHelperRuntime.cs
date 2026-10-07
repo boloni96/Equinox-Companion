@@ -26,7 +26,7 @@ public sealed partial class Plugin
         if(!helperPermission.Active||!helperPermission.Quest||HelperPaused||helperBlocked.Length>0||!Player.IsLoaded||Objects.LocalPlayer is not {} self||now<helperNextAction)return;
         if(Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]||Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.Unconscious]){helperQuestStatus="Loading or occupied; waiting.";return;}
         if(!helperIncoming.TryPeek(out var a))return;
-        if(!HelperPolicy.Fresh(a,now.ToUnixTimeMilliseconds(),followArmedAt)){BlockHelper("Recorded dialogue expired. Pause/resume, then ask the leader to click the NPC again.");return;}
+        if(!HelperPolicy.Fresh(a,now.ToUnixTimeMilliseconds(),followArmedAt)){BlockHelper("Recorded dialogue expired. Stop/start, then ask the leader to click the NPC again.");return;}
         if(a.Npc.World!=Player.CurrentWorld.RowId||a.Npc.Territory!=Client.TerritoryType){helperQuestStatus="Waiting to reach the NPC's area.";return;}
         if(travelAwaitingArrival!=null||followApproach!=null||pendingTransport!=null||pendingAethernet!=null||pendingWard!=null||lifestreamTravelOwned){helperQuestStatus="Waiting for travel to finish.";return;}
         if(helperWorkingId!=a.Id){helperWorkingId=a.Id;helperActionStarted=now;helperStopRequested=false;helperInteractAttempts=0;helperStationary.Reset();followSession.Pause();RequestFollowMovementStop();}
@@ -34,7 +34,7 @@ public sealed partial class Plugin
         if(a.Kind=="interact"){
             if(QuestConversationVisible()){
                 if(helperNpcActive?.Conversation==a.Npc.Conversation){CompleteHelperAction(now);return;}
-                BlockHelper("Another conversation is already open. Close it, then pause/resume assistance.");return;
+                BlockHelper("Another conversation is already open. Close it, then stop/start assistance.");return;
             }
             var map=AgentMap.Instance();if(map==null||map->CurrentMapId!=a.Npc.Map){helperQuestStatus="Waiting for the NPC's map.";return;}
             var targets=Objects.Where(o=>o.ObjectKind.ToString()=="EventNpc"&&o.BaseId==a.Npc.BaseId&&o.Name.TextValue==a.Npc.Name&&o.IsTargetable&&Vector3.DistanceSquared(o.Position,a.Npc.Position.Point)<1).Take(2).ToArray();

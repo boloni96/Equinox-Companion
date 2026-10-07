@@ -12,7 +12,7 @@ public sealed partial class Plugin
                 ImGui.TextWrapped("Mirror the followed character's NPC conversations during an active session. Both characters need Journal V7.11.82 on Cloudflare and the same pairing key.");
                 MessageToggle("Share my NPC and dialogue actions with active followers",config.FollowThem.ShareQuestActions,v=>config.FollowThem.ShareQuestActions=v);
                 MessageToggle("Enable Quest Helper for my next follow session",config.FollowThem.QuestHelper,v=>config.FollowThem.QuestHelper=v);
-                if(ImGui.IsItemHovered())ImGui.SetTooltip("Only the follower grants permission when pressing Start. Stop revokes it. The leader can pause/resume their own pause, but cannot override the follower's Pause or restart a stopped session.");
+                if(ImGui.IsItemHovered())ImGui.SetTooltip("Only the follower grants permission when pressing Start. Stop revokes it. Only the leader can pause/resume. Follower Stop ends permission; the leader cannot restart it.");
                 if(config.FollowThem.QuestHelper)MessageToggle("Mirror the leader's cutscene skips (matching, skippable scenes only)",config.FollowThem.SkipLeaderCutscenes,v=>config.FollowThem.SkipLeaderCutscenes=v);
                 ImGui.TextWrapped("Quest Helper starts disabled. Changes apply to your next session. Match NPC and response text; differing quest progress blocks assistance. Rewards, purchases and general Yes/No prompts remain manual. No combat automation or obstacle navigation.");
                 ImGui.TextWrapped("If the game does not expose a verified skip callback, open its Skip prompt manually. Helper never sends Escape or other keyboard shortcuts to skip.");
@@ -27,8 +27,7 @@ public sealed partial class Plugin
     private void DrawHelperFollowerControls()
     {
         if(!followSession.Armed)return;
-        if(ImGui.Button(helperPermission.LocalPaused?"Resume my session":"Pause my session"))SetHelperLocalPause(!helperPermission.LocalPaused);
-        if(helperPermission.LeaderPaused)ImGui.TextWrapped("The leader has paused this session too.");
+        if(helperPermission.LeaderPaused)ImGui.TextWrapped("Paused by the leader. You can stop the session at any time.");
         if(helperBlocked.Length>0&&ImGui.Button("Clear blocked dialogue and wait for a new NPC click")){ClearHelperActions();ResumeAfterConfirmedTravel();nextHelperStatus=default;}
     }
     private void DrawHelperControls()
@@ -42,7 +41,7 @@ public sealed partial class Plugin
             foreach(var f in helperFollowers){
                 ImGui.PushID(f.Id);
                 var fresh=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()-f.Updated<15000;
-                ImGui.TextWrapped(f.Name+" — "+(!fresh?"Status unavailable":f.Control=="stop"?"Stopped":f.Paused?"Paused by follower":f.Control=="pause"?"Paused by leader":f.Status));
+                ImGui.TextWrapped(f.Name+" — "+(!fresh?"Status unavailable":f.Control=="stop"?"Stopped":f.Control=="pause"?"Paused by leader":f.Status));
                 ImGui.TextDisabled(f.Quest?"FollowThem + Quest Helper":"FollowThem");
                 ImGui.BeginDisabled(!fresh||f.Control=="stop"||helperControlTask!=null);
                 if(ImGui.Button(f.Control=="pause"?"Resume":"Pause"))SendHelperControl(f,f.Control=="pause"?"resume":"pause");
@@ -61,6 +60,7 @@ public sealed partial class Plugin
         if(helperCaptureNpc is not {} npc)return;
         var talk=HelperTalk();if(talk.Signature.Length==0)return;
         EmitHelper("talk",talk.Text,talk.Signature,"Talk",HelperScene());
+        helperTalkText="";helperTalkSignature="";
         helperReplaying=true;try{AdvanceTravelTalk(new("helper",Player.CharacterName,Player.HomeWorld.RowId,npc.World,"",npc.Territory,npc.Map,npc.BaseId,0,npc.Position.X,npc.Position.Y,npc.Position.Z,DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),"",SourceKind:"EventNpc"));}finally{helperReplaying=false;}
     }
 }

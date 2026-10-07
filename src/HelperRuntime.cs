@@ -21,13 +21,6 @@ public sealed partial class Plugin
     private bool SharingQuest=>config.EnableFollowThem&&config.FollowThem.ShareQuestActions&&config.PairingKey.Length==64&&Player.IsLoaded&&helperFollowers.Any(x=>HelperPolicy.Audience(x,DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()));
     private void ClearHelperActions(){helperIncoming.Clear();helperBlocked="";helperNpcActive=null;CancelHelperApproach();}
     private void EndHelperSession(){helperPermission.Stop();ClearHelperActions();helperCursor=0;helperSeen.Clear();nextHelperStatus=default;}
-    private void SetHelperLocalPause(bool paused)
-    {
-        helperPermission.PauseLocal(paused);nextHelperStatus=default;
-        if(paused){ClearHelperActions();CancelFollowApproach();CancelLifestreamTravel();RequestFollowMovementStop();followSession.Pause();}
-        else{ResumeAfterConfirmedTravel();}
-        RefreshFollowBar();
-    }
     private void ApplyHelperControl(string command)
     {
         if(command=="stop"){StopFollowThem("Ended by the followed character. Only you can start again.");return;}
@@ -64,8 +57,8 @@ public sealed partial class Plugin
         if(!config.EnableFollowThem||config.PairingKey.Length!=64){helperFollowers=[];RefreshHelperLeaderBar();return;}
         if(followSession.Armed&&helperPermission.Active&&followLeaseId.Length>0&&!followLeaseDeleting&&helperStatusTask==null&&now>=nextHelperStatus&&followLogin!=0){
             helperStatusSession=followLeaseId;nextHelperStatus=now.AddSeconds(2);
-            var status=HelperPaused?(helperPermission.LocalPaused?"Paused by follower":"Paused by leader"):helperBlocked.Length>0?"Blocked — "+helperBlocked:HelperQuestBusy?helperQuestStatus:followStatus;
-            helperStatusTask=helperRelay.Call(config.PairingKey,"op=status&session="+followLeaseId,new {name=helperFollowerName,world=helperFollowerWorld,status=status[..Math.Min(status.Length,500)],quest=helperPermission.Quest,skip=helperPermission.Skip,paused=helperPermission.LocalPaused,after=helperCursor});
+            var status=HelperPaused?("Paused by leader"):helperBlocked.Length>0?"Blocked — "+helperBlocked:HelperQuestBusy?helperQuestStatus:followStatus;
+            helperStatusTask=helperRelay.Call(config.PairingKey,"op=status&session="+followLeaseId,new {name=helperFollowerName,world=helperFollowerWorld,status=status[..Math.Min(status.Length,500)],quest=helperPermission.Quest,skip=helperPermission.Skip,paused=false,after=helperCursor});
         }
         if(Player.IsLoaded&&(config.FollowThem.SharePortalTransitions||config.FollowThem.ShareQuestActions)&&helperLeaderTask==null&&now>=nextHelperLeader){
             nextHelperLeader=now.AddSeconds(3);helperLeaderIdentity=config.PairingKey+"/"+Player.CharacterName+"/"+Player.HomeWorld.RowId;
@@ -90,7 +83,7 @@ public sealed partial class Plugin
         if(!config.EnableFollowThem||active.Length==0){helperLeaderBar?.Remove();helperLeaderBar=null;return;}
         helperLeaderBar??=QuickLootBar.Get("Equinox Helper Leader");helperLeaderBar.Shown=true;
         helperLeaderBar.Text=new SeStringBuilder().AddText("FOLLOWED by "+string.Join(", ",active.Select(x=>x.Name))+(active.All(x=>x.Control=="pause")?" · PAUSED":"")).Build();
-        helperLeaderBar.Tooltip=new SeStringBuilder().AddText("Left-click to pause/resume. Right-click for Helper Controls. A follower's own Pause or Stop cannot be overridden.").Build();
+        helperLeaderBar.Tooltip=new SeStringBuilder().AddText("Left-click to pause/resume. Right-click for Helper Controls. Follower Stop ends permission; only the follower can start again.").Build();
         helperLeaderBar.OnClick=e=>{if(e.ClickType==MouseClickType.Right)helperWindowOpen=true;else if(e.ClickType==MouseClickType.Left){helperWindowOpen=true;var f=active[0];SendHelperControl(f,f.Control=="pause"?"resume":"pause");}};
     }
 }

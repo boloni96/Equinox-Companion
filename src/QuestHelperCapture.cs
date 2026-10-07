@@ -19,7 +19,7 @@ public sealed partial class Plugin
         if(!SharingQuest||helperReplaying||relayInteracting||usingSharedTravel||clicked.ObjectKind!=ObjectKind.EventNpc||Objects.LocalPlayer is not {} self||Vector3.Distance(self.Position,clicked.Position)>clicked.HitboxRadius+4)return;
         var map=AgentMap.Instance();if(map==null)return;
         helperCaptureNpc=new(Guid.NewGuid().ToString("N"),clicked.BaseId,clicked.Name.TextValue,Client.TerritoryType,map->CurrentMapId,Player.CurrentWorld.RowId,FollowTravelPosition.From(clicked.Position),FollowTravelPosition.From(self.Position),self.Rotation);
-        helperCaptureAt=DateTimeOffset.UtcNow;
+        helperTalkText="";helperTalkSignature="";helperCaptureAt=DateTimeOffset.UtcNow;
         EmitHelper("interact");
     }
     private string HelperCanonical(string text)=>text.Replace(Player.CharacterName,"{player}",StringComparison.Ordinal).Replace(config.FollowThem.TargetName.Length>0?config.FollowThem.TargetName:"\0","{player}",StringComparison.Ordinal).Trim();
@@ -46,11 +46,20 @@ public sealed partial class Plugin
         if(helperOutgoing.Count>=32){helperError="Quest actions are arriving faster than the relay. Pause and let followers catch up.";return;}
         helperOutgoing.Enqueue(new(Guid.NewGuid().ToString("N"),Player.CharacterName,Player.HomeWorld.RowId,kind,now.ToUnixTimeMilliseconds(),npc,text,signature,addon,scene,sessions));
     }
+    private string helperTalkText="",helperTalkSignature="",helperTalkScene="";
     private unsafe void ObserveHelperTalk(AddonEvent type,AddonArgs args)
     {
-        if(!SharingQuest||helperReplaying||args is not AddonReceiveEventArgs e||(AtkEventType)e.AtkEventType!=AtkEventType.MouseClick)return;
-        try{var t=HelperTalk();if(t.Signature.Length>0)EmitHelper("talk",t.Text,t.Signature,"Talk",HelperScene());}
-        catch(Exception e2){Log.Debug(e2,"Helper dialogue capture unavailable");}
+        if(!SharingQuest||helperReplaying)return;
+        try{
+            if(type==AddonEvent.PreFinalize){
+                if(helperTalkSignature.Length>0)EmitHelper("talk",helperTalkText,helperTalkSignature,"Talk",helperTalkScene);
+                helperTalkText="";helperTalkSignature="";return;
+            }
+            var t=HelperTalk();
+            if(t.Signature.Length==0)return;
+            if(helperTalkSignature.Length>0&&helperTalkSignature!=t.Signature)EmitHelper("talk",helperTalkText,helperTalkSignature,"Talk",helperTalkScene);
+            helperTalkText=t.Text;helperTalkSignature=t.Signature;helperTalkScene=HelperScene();
+        }catch(Exception e){Log.Debug(e,"Helper dialogue capture unavailable");}
     }
     private unsafe List<string> HelperChoices(AtkUnitBase* addon,string name)
     {

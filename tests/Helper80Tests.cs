@@ -7,8 +7,7 @@ internal static class Helper80Tests
   static void Test(string n,bool ok){if(!ok)throw new Exception(n);Console.WriteLine("PASS 80 "+n);}
   var p=new HelperPermission();Test("disabled by default",!p.Active&&!p.Allows("talk"));
   p.Start(true,false);Test("session quest permitted",p.Allows("talk"));Test("skip separate opt in",!p.Allows("skip"));
-  p.PauseLocal(true);p.Control("resume");Test("leader cannot override follower pause",p.Paused&&!p.Allows("talk"));
-  p.Control("pause");p.PauseLocal(false);Test("local resume cannot override leader pause",p.Paused);p.Control("resume");Test("both pauses released",p.Allows("choice"));
+  p.Control("pause");Test("leader pause blocks actions",p.Paused&&!p.Allows("talk"));p.Control("resume");Test("leader resume restores actions",p.Allows("choice"));
   p.Stop();p.Control("resume");Test("leader cannot restart stopped follower",!p.Active);
   p.Start(true,true);p.Control("stop");p.Control("resume");Test("leader stop revokes until local start",!p.Active&&!p.Skip);
   p.Start(false,true);Test("skip requires quest permission",!p.Skip);p.Start(true,true);Test("fresh session skip",p.Allows("skip"));

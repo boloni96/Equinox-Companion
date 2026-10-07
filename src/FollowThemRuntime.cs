@@ -111,7 +111,7 @@ public sealed partial class Plugin
         };
         var text = "FollowThem: " + label;
         if (text != followBarText) { followBar.Text = new SeStringBuilder().AddText(text).Build(); followBarText = text; }
-        followBar.Tooltip = new SeStringBuilder().AddText(followStatus + (followSession.Armed ? " Left-click to stop." : followStopPending||followStopUnconfirmed ? " Tap and release a movement key to confirm stop." : " Left-click to start.") + " Right-click for Companion and Pause/Resume controls.").Build();
+        followBar.Tooltip = new SeStringBuilder().AddText(followStatus + (followSession.Armed ? " Left-click to stop." : followStopPending||followStopUnconfirmed ? " Tap and release a movement key to confirm stop." : " Left-click to start.") + " Right-click to open Companion and Helper status.").Build();
         followBar.OnClick = e => { if(e.ClickType==MouseClickType.Right){followThemSelectTab=true;helperWindowOpen=true;Open();} else if(e.ClickType==MouseClickType.Left) ToggleFollowThem(); };
     }
     private bool followManualInputSeen,followStuckStopRequested;
@@ -136,7 +136,7 @@ public sealed partial class Plugin
                 RefreshFollowBar(); return;
             }
             if (followFault||now<followRetryAt) return;
-            if(HelperPaused||HelperQuestBusy){followSession.Pause();followStuck.Pause();followStatus=HelperPaused?"PAUSED — "+(helperPermission.LocalPaused?"Your pause; only you can resume it.":"Paused by the followed character."):"QUEST — "+(helperBlocked.Length>0?helperBlocked:helperQuestStatus);RefreshFollowBar();return;}
+            if(HelperPaused||HelperQuestBusy){followSession.Pause();followStuck.Pause();followStatus=HelperPaused?"PAUSED — "+"Paused by the followed character.":"QUEST — "+(helperBlocked.Length>0?helperBlocked:helperQuestStatus);RefreshFollowBar();return;}
             RefreshFollowBar();
             // Menu/loading gates must not age out a leader who is still visible.
             if(followSession.Armed&&!Conditions[ConditionFlag.BetweenAreas]&&!Conditions[ConditionFlag.BetweenAreas51]){

@@ -153,7 +153,8 @@ public sealed partial class Plugin : IDalamudPlugin
         errorJournal = new ErrorJournal(Pi.GetPluginConfigDirectory());
         gardenMessageJournal = new GardenMessageJournal(Pi.GetPluginConfigDirectory());
         FollowAddonLifecycle.RegisterListener(Dalamud.Game.Addon.Lifecycle.AddonEvent.PreReceiveEvent,"TeleportHousingFriend",ObserveFriendEstateRow);
-        FollowAddonLifecycle.RegisterListener(Dalamud.Game.Addon.Lifecycle.AddonEvent.PreReceiveEvent,"Talk",ObserveHelperTalk);
+        FollowAddonLifecycle.RegisterListener(Dalamud.Game.Addon.Lifecycle.AddonEvent.PostRefresh,"Talk",ObserveHelperTalk);
+        FollowAddonLifecycle.RegisterListener(Dalamud.Game.Addon.Lifecycle.AddonEvent.PreFinalize,"Talk",ObserveHelperTalk);
         try
         {
             var logSheet = DataManager.GetExcelSheet<Lumina.Excel.Sheets.LogMessage>(Dalamud.Game.ClientLanguage.English);

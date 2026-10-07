@@ -11,12 +11,10 @@ public sealed class HelperPermission
     public bool Active {get;private set;}
     public bool Quest {get;private set;}
     public bool Skip {get;private set;}
-    public bool LocalPaused {get;private set;}
     public bool LeaderPaused {get;private set;}
-    public bool Paused=>LocalPaused||LeaderPaused;
-    public void Start(bool quest,bool skip){Active=true;Quest=quest;Skip=quest&&skip;LocalPaused=false;LeaderPaused=false;}
-    public void Stop(){Active=false;Quest=false;Skip=false;LocalPaused=false;LeaderPaused=false;}
-    public void PauseLocal(bool value){if(Active)LocalPaused=value;}
+    public bool Paused=>LeaderPaused;
+    public void Start(bool quest,bool skip){Active=true;Quest=quest;Skip=quest&&skip;LeaderPaused=false;}
+    public void Stop(){Active=false;Quest=false;Skip=false;LeaderPaused=false;}
     public void Control(string command){if(!Active)return;if(command=="stop")Stop();else if(command=="pause")LeaderPaused=true;else if(command=="resume")LeaderPaused=false;}
     public bool Allows(string kind)=>Active&&!Paused&&Quest&&(kind!="skip"||Skip);
 }
