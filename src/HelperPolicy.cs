@@ -3,7 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 namespace EquinoxCompanion;
 public sealed record HelperNpc(string Conversation,uint BaseId,string Name,uint Territory,uint Map,uint World,FollowTravelPosition Position,FollowTravelPosition Approach,float Facing);
-public sealed record HelperAction(string Id,string Name,uint World,string Kind,long SentAt,HelperNpc Npc,string Text="",string Signature="",string Addon="",string Scene="",string[]? Sessions=null,long Sequence=0,uint QuestId=0);
+public sealed record HelperAction(string Id,string Name,uint World,string Kind,long SentAt,HelperNpc Npc,string Text="",string Signature="",string Addon="",string Scene="",string[]? Sessions=null,long Sequence=0,uint QuestId=0,ushort FateId=0,int FateStart=0);
 public sealed record HelperFollower(string Id,string Name,uint World,string Status,bool Quest,bool Skip,bool Paused,string Control,long Updated,bool QuestPaused=false);
 public sealed record HelperReply(int Protocol=0,string Control="",HelperAction[]? Actions=null,HelperFollower[]? Followers=null,bool QuestPaused=false);
 public sealed class HelperPermission

@@ -22,6 +22,7 @@ internal static class Helper80Tests
   p.SetQuestPause(false);Test("quest resume permits acceptance",p.Allows("acceptQuest"));
   p.Stop();p.SetQuestPause(false);p.Control("resume");Test("quest controls cannot restart stopped session",!p.Active);
   Test("quest paused excluded from audience",!HelperPolicy.Audience(f with {QuestPaused=true},2000));
+  p.Start(false,false);Test("FATE sync requires Quest Helper",!p.Allows("fateSync"));p.Start(true,false);Test("FATE sync permitted",p.Allows("fateSync"));p.SetQuestPause(true);Test("quest pause blocks FATE",!p.Allows("fateSync")&&!p.Paused);p.SetQuestPause(false);p.Control("pause");Test("whole pause blocks FATE",!p.Allows("fateSync"));p.Stop();Test("stop blocks FATE",!p.Allows("fateSync"));
   Test("scene must match",!HelperPolicy.SceneMatches("1:2","1:3"));Test("unknown scene blocked",!HelperPolicy.SceneMatches("",""));
  }
 }

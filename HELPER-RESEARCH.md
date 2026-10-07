@@ -13,3 +13,7 @@ Dialogue capture watches the Talk window's accepted text changes/closure, indepe
 
 ## Quest acceptance (.82)
 TextAdvance ExecQuestAccept uses JournalAccept button 44; ReaderJournalAccept reads quest ID from AtkValue 266. FFXIVClientStructs QuestManager.IsQuestAccepted confirms the leader accepted and the follower completed acceptance. ECommons ClickHelper documents dispatch through the button registered event. Equinox watches offers without accepting them on the leader, sends only confirmed acceptance, then verifies exact quest and NPC conversation on the follower. No ECommons dependency or input injection.
+
+## Event replay and FATE sync (.82)
+User screenshot confirms Kipih Jakkya's English SelectYesno prompt: Do you wish to replay the event? Official event page https://eu.finalfantasyxiv.com/lodestone/special/ffxv/8ghatq7szp/ confirms completion remains set during seasonal replay. Equinox preserves Journal event history and maps this specific leader Yes to the same replay confirmation or first-time The Man in Black offer. No arbitrary Yes/No mirroring.
+FFXIVClientStructs FateManager exposes SyncedFateId, CurrentFate, IsInFateRadius, IsSyncedToFate and LevelSync; FateContext exposes FateId, StartTimeEpoch and running state. Equinox observes new confirmed sync, bounds it to a permitted Helper session and same live FATE, and uses existing direct Lifestream movement. No OS keyboard injection or combat logic.

@@ -23,18 +23,18 @@ public sealed partial class Plugin
     private bool HelperQuestBusy=>!HelperTravelBusy&&helperPermission.Active&&helperPermission.Quest&&!helperPermission.QuestPaused&&(helperIncoming.Count>0||helperBlocked.Length>0||helperNpcActive!=null&&QuestConversationVisible());
     private bool SharingQuest=>config.EnableFollowThem&&config.FollowThem.ShareQuestActions&&config.PairingKey.Length==64&&Player.IsLoaded&&helperFollowers.Any(x=>HelperPolicy.Audience(x,DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()));
     private void ClearHelperActions(){helperIncoming.Clear();helperBlocked="";helperNpcActive=null;CancelHelperApproach();}
-    private void EndHelperSession(){helperPermission.Stop();ClearHelperActions();helperCursor=0;helperTravelAfter=0;helperSeen.Clear();helperSkippedConversations.Clear();nextHelperStatus=default;}
+    private void EndHelperSession(){CancelHelperFateApproach();helperPendingFate=null;helperPermission.Stop();ClearHelperActions();helperCursor=0;helperTravelAfter=0;helperSeen.Clear();helperSkippedConversations.Clear();nextHelperStatus=default;}
     private void ApplyHelperControl(string command)
     {
         if(command=="stop"){StopFollowThem("Ended by the followed character. Only you can start again.");return;}
         var before=HelperPaused;helperPermission.Control(command);
-        if(HelperPaused&&!before){ClearHelperActions();CancelFollowApproach();CancelLifestreamTravel();RequestFollowMovementStop();followSession.Pause();}
+        if(HelperPaused&&!before){CancelHelperFateApproach();helperPendingFate=null;ClearHelperActions();CancelFollowApproach();CancelLifestreamTravel();RequestFollowMovementStop();followSession.Pause();}
         else if(before&&!HelperPaused)ResumeAfterConfirmedTravel();
     }
     private void UpdateHelper(DateTimeOffset now)
     {
         if(now<nextHelperTick)return;nextHelperTick=now.AddMilliseconds(100);
-        if(helperPairingIdentity!=config.PairingKey){helperPairingIdentity=config.PairingKey;helperFollowers=[];helperOutgoing.Clear();ClearHelperActions();helperOpened.Clear();nextHelperLeader=default;}
+        if(helperPairingIdentity!=config.PairingKey){helperPairingIdentity=config.PairingKey;helperFateObserved=false;CancelHelperFateApproach();helperPendingFate=null;helperFollowers=[];helperOutgoing.Clear();ClearHelperActions();helperOpened.Clear();nextHelperLeader=default;}
         if(helperPermission.Active&&Player.IsLoaded&&helperFollowerName.Length>0&&(Player.CharacterName!=helperFollowerName||Player.HomeWorld.RowId!=helperFollowerWorld)){StopFollowThem("Character changed; Helper permission ended.");}
         if(helperControlTask?.IsCompleted==true){var r=helperControlTask.GetAwaiter().GetResult();helperControlTask=null;helperError=r.Error;nextHelperLeader=default;}
         if(helperSendTask?.IsCompleted==true){var r=helperSendTask.GetAwaiter().GetResult();helperSendTask=null;if(r.Error.Length>0)helperError=r.Error;}
@@ -47,6 +47,7 @@ public sealed partial class Plugin
                     var questWasPaused=helperPermission.QuestPaused;helperPermission.SetQuestPause(reply.QuestPaused);
                     if(!questWasPaused&&helperPermission.QuestPaused){ClearHelperActions();RequestFollowMovementStop();ResumeAfterConfirmedTravel();}
                     foreach(var a in reply.Actions??[]){helperCursor=Math.Max(helperCursor,a.Sequence);if(helperSkippedConversations.Contains(a.Npc.Conversation)||!helperPermission.Allows(a.Kind)||!HelperPolicy.Fresh(a,now.ToUnixTimeMilliseconds(),followArmedAt)||a.SentAt<=helperTravelAfter||!FollowThemSession.Matches(config.FollowThem.TargetName,config.FollowThem.HomeWorld,a.Name,a.World)||!helperSeen.Add(a.Id))continue;
+                        if(a.Kind=="fateSync"){CancelHelperFateApproach();helperPendingFate=a;helperFateAttempts=0;helperNextFateAttempt=default;continue;}
                         if(helperIncoming.Count>=32){helperBlocked="Dialogue queue is full; pause and resume Quest Helper to clear it.";break;}
                         helperIncoming.Enqueue(a);
                     }
@@ -74,7 +75,7 @@ public sealed partial class Plugin
             helperSendTask=helperRelay.Call(config.PairingKey,"op=action",outgoing);
         if(helperControlTask==null&&helperControls.TryDequeue(out var control)&&Player.IsLoaded&&control.Identity==config.PairingKey+"/"+Player.CharacterName+"/"+Player.HomeWorld.RowId)
             helperControlTask=helperRelay.Call(config.PairingKey,"op=control&session="+control.Follower.Id,new {name=Player.CharacterName,world=Player.HomeWorld.RowId,command=control.Command});
-        ObserveHelperQuestAcceptance(now);UpdateQuestHelper(now);RefreshHelperLeaderBar();
+        UpdateHelperFateSync(now);ObserveHelperQuestAcceptance(now);UpdateQuestHelper(now);RefreshHelperLeaderBar();
     }
     private string helperPairingIdentity="";
     private string helperFollowerName="";

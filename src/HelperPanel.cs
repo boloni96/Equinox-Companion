@@ -14,7 +14,7 @@ public sealed partial class Plugin
                 MessageToggle("Enable Quest Helper for my next follow session",config.FollowThem.QuestHelper,v=>config.FollowThem.QuestHelper=v);
                 if(ImGui.IsItemHovered())ImGui.SetTooltip("Only the follower grants permission when pressing Start. Stop revokes it. Only the leader can pause/resume. Follower Stop ends permission; the leader cannot restart it.");
                 if(config.FollowThem.QuestHelper)MessageToggle("Mirror the leader's cutscene skips (matching, skippable scenes only)",config.FollowThem.SkipLeaderCutscenes,v=>config.FollowThem.SkipLeaderCutscenes=v);
-                ImGui.TextWrapped("Quest Helper starts disabled. Changes apply to your next session. Match NPC and response text; differing quest progress blocks assistance. Accepts the same quest only after the leader accepts it. Rewards, purchases and general Yes/No prompts remain manual. No combat automation or obstacle navigation.");
+                ImGui.TextWrapped("Quest Helper starts disabled. Changes apply to your next session. Match NPC and response text; differing quest progress blocks assistance. Accepts the same quest only after the leader accepts it. Rewards, purchases and general Yes/No prompts remain manual. Mirrors a new leader FATE Level Sync in the same FATE, with right-side direct approach when Lifestream is enabled. No combat automation or obstacle navigation.");
                 ImGui.TextWrapped("If the game does not expose a verified skip callback, open its Skip prompt manually. Helper never sends Escape or other keyboard shortcuts to skip.");
                 if(followSession.Armed){ImGui.TextWrapped(helperPermission.Quest?"Quest assistance permitted for this session.":"This session allows FollowThem only.");DrawHelperFollowerControls();}
                 if(helperBlocked.Length>0)ImGui.TextWrapped("Blocked: "+helperBlocked);
@@ -50,7 +50,7 @@ public sealed partial class Plugin
                 ImGui.TextDisabled(f.Quest?"FollowThem + Quest Helper":"FollowThem");
                 ImGui.BeginDisabled(!fresh||f.Control=="stop"||helperControlTask!=null);
                 if(ImGui.Button(f.Control=="pause"?"Resume FollowThem":"Pause FollowThem"))SendHelperControl(f,f.Control=="pause"?"resume":"pause");
-                if(f.Quest){if(ImGui.Button(f.QuestPaused?"Resume Quest Helper":"Pause Quest Helper"))SendHelperControl(f,f.QuestPaused?"questResume":"questPause");if(ImGui.IsItemHovered())ImGui.SetTooltip("Pauses NPC and dialogue assistance. FollowThem and travel continue. Resume with a fresh NPC interaction.");}
+                if(f.Quest){if(ImGui.Button(f.QuestPaused?"Resume Quest Helper":"Pause Quest Helper"))SendHelperControl(f,f.QuestPaused?"questResume":"questPause");if(ImGui.IsItemHovered())ImGui.SetTooltip("Pauses NPC, dialogue and FATE Level Sync assistance. FollowThem and travel continue. Resume with a fresh NPC interaction.");}
                 ImGui.SameLine();if(ImGui.Button("Stop…"))helperStopConfirm=f.Id;
                 ImGui.EndDisabled();
                 if(helperStopConfirm==f.Id){ImGui.TextWrapped("End this session? The follower will need to press Start again.");if(ImGui.Button("Yes, end session")){SendHelperControl(f,"stop");helperStopConfirm="";}ImGui.SameLine();if(ImGui.Button("Keep session"))helperStopConfirm="";}

@@ -151,6 +151,7 @@ public sealed partial class Plugin
                 RefreshFollowBar(); return;
             }
             if (followFault||now<followRetryAt) return;
+            if(helperPendingFate!=null&&(helperFateApproaching||helperFateStopRequested)){followSession.Pause();followStuck.Pause();followStatus="FATE — Approaching the leader’s sync position.";RefreshFollowBar();return;}
             if(HelperPaused||HelperQuestBusy){followSession.Pause();followStuck.Pause();followStatus=HelperPaused?"PAUSED — "+"Paused by the followed character.":"QUEST — "+(helperBlocked.Length>0?helperBlocked:helperQuestStatus);RefreshFollowBar();return;}
             RefreshFollowBar();
             // Menu/loading gates must not age out a leader who is still visible.
