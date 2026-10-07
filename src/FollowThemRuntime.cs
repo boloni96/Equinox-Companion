@@ -269,7 +269,7 @@ public sealed partial class Plugin
     private DateTimeOffset acceptedPartyTeleportAt;
     private unsafe void TryFollowTeleport(DateTimeOffset now)
     {
-        if (Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.Unconscious]||Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]||!config.FollowThem.AcceptPartyTeleports || FollowParty.Length < 2 || now < nextTeleportAttempt) return;
+        if (HoldHelperTravel||Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.Unconscious]||Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]||!config.FollowThem.AcceptPartyTeleports || FollowParty.Length < 2 || now < nextTeleportAttempt) return;
         var telepo = Telepo.Instance();
         if (telepo == null || !telepo->ActiveTeleportRequest) return;
         var addon = (AddonSelectYesno*)GardenGui.GetAddonByName("SelectYesno").Address;

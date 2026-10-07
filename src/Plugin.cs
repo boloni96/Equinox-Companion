@@ -523,6 +523,7 @@ public sealed partial class Plugin : IDalamudPlugin
         try
         {
             if(count==1&&values!=null&&((int)values[0].Type&15) is 3 or 5){CaptureFollowInstanceChoice(addon,values[0].Int);CaptureTransportChoice(addon,values[0].Int);CaptureHelperChoice(addon,values[0].Int);}
+            CaptureHelperQuestCallback(addon,count,values);
             ObserveTravelCallbackDiagnostic(addon,count,values);
             CaptureWardMenu(addon,count,values);
             CaptureFollowRoom(addon,count,values);
@@ -547,7 +548,7 @@ public sealed partial class Plugin : IDalamudPlugin
     {
         try
         {
-            var diagnosticValue=new AtkValue{Type=AtkValueType.Int,Int=value};ObserveTravelCallbackDiagnostic(addon,1,&diagnosticValue);
+            var diagnosticValue=new AtkValue{Type=AtkValueType.Int,Int=value};CaptureHelperQuestCallback(addon,1,&diagnosticValue);ObserveTravelCallbackDiagnostic(addon,1,&diagnosticValue);
             CaptureFollowInstanceChoice(addon,value);
             CaptureTransportChoice(addon,value);
             CaptureHelperChoice(addon,value);

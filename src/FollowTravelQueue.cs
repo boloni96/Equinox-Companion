@@ -21,7 +21,7 @@ public sealed partial class Plugin
         if(travelQueue.Count>=16){TravelDiagnostic("Travel queue is full; wait for the follower before the next trip.");return;}
         queuedTravelIds.Add(signal.Id);travelQueue.Enqueue(signal);
         if(helperPendingFate is {} pendingFate&&pendingFate.SentAt<=signal.SentAt){helperPendingFate=null;CancelHelperFateApproach();}
-        if(helperPermission.Active){
+        if(helperPermission.Active&&!HoldHelperTravel){
             helperTravelAfter=Math.Max(helperTravelAfter,signal.SentAt);
             var later=helperIncoming.Where(a=>a.SentAt>helperTravelAfter).ToArray();
             ClearHelperActions();foreach(var action in later)helperIncoming.Enqueue(action);
@@ -51,6 +51,7 @@ public sealed partial class Plugin
     private unsafe void UpdateTravelQueue(DateTimeOffset now,bool loading)
     {
         if(!followSession.Armed){ResetTravelQueue();return;}
+        if(HoldHelperTravel&&travelAwaitingArrival==null)return;
         ObservePartyTeleport(now,loading);
         if(travelAwaitingArrival is {} active){
             routeSawLoading|=loading;

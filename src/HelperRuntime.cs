@@ -19,10 +19,10 @@ public sealed partial class Plugin
     private bool helperWindowOpen;
     private string helperBlocked="";
     private bool HelperPaused=>helperPermission.Active&&helperPermission.Paused;
-    private bool HelperTravelBusy=>travelQueue.Count>0||travelAwaitingArrival!=null||followApproach!=null||pendingTransport!=null||pendingWard!=null||pendingAethernet!=null||receivedPortal!=null||pendingDutyLeave!=null||lifestreamTravelOwned;
-    private bool HelperQuestBusy=>!HelperTravelBusy&&helperPermission.Active&&helperPermission.Quest&&!helperPermission.QuestPaused&&(helperIncoming.Count>0||helperBlocked.Length>0||helperNpcActive!=null&&QuestConversationVisible());
+    private bool HelperTravelBusy=>travelQueue.Count>0&&!HoldHelperTravel||travelAwaitingArrival!=null||followApproach!=null||pendingTransport!=null||pendingWard!=null||pendingAethernet!=null||receivedPortal!=null||pendingDutyLeave!=null||lifestreamTravelOwned;
+    private bool HelperQuestBusy=>!HelperTravelBusy&&helperPermission.Active&&helperPermission.Quest&&!helperPermission.QuestPaused&&(helperReservedConversation.Length>0||helperIncoming.Count>0||helperBlocked.Length>0||helperNpcActive!=null&&QuestConversationVisible());
     private bool SharingQuest=>config.EnableFollowThem&&config.FollowThem.ShareQuestActions&&config.PairingKey.Length==64&&Player.IsLoaded&&helperFollowers.Any(x=>HelperPolicy.Audience(x,DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()));
-    private void ClearHelperActions(){helperIncoming.Clear();helperBlocked="";helperNpcActive=null;CancelHelperApproach();}
+    private void ClearHelperActions(){ClearHelperReservation();helperIncoming.Clear();helperBlocked="";helperNpcActive=null;CancelHelperApproach();}
     private void EndHelperSession(){CancelHelperFateApproach();helperPendingFate=null;helperPermission.Stop();ClearHelperActions();helperCursor=0;helperTravelAfter=0;helperSeen.Clear();helperSkippedConversations.Clear();nextHelperStatus=default;}
     private void ApplyHelperControl(string command)
     {
@@ -47,6 +47,7 @@ public sealed partial class Plugin
                     var questWasPaused=helperPermission.QuestPaused;helperPermission.SetQuestPause(reply.QuestPaused);
                     if(!questWasPaused&&helperPermission.QuestPaused){ClearHelperActions();RequestFollowMovementStop();ResumeAfterConfirmedTravel();}
                     foreach(var a in reply.Actions??[]){helperCursor=Math.Max(helperCursor,a.Sequence);if(helperSkippedConversations.Contains(a.Npc.Conversation)||!helperPermission.Allows(a.Kind)||!HelperPolicy.Fresh(a,now.ToUnixTimeMilliseconds(),followArmedAt)||a.SentAt<=helperTravelAfter||!FollowThemSession.Matches(config.FollowThem.TargetName,config.FollowThem.HomeWorld,a.Name,a.World)||!helperSeen.Add(a.Id))continue;
+                        if(ReceiveHelperConversation(a,now))continue;
                         if(a.Kind=="fateSync"){CancelHelperFateApproach();helperPendingFate=a;helperFateAttempts=0;helperFateFallback=false;helperNextFateAttempt=default;continue;}
                         if(helperIncoming.Count>=32){helperBlocked="Dialogue queue is full; pause and resume Quest Helper to clear it.";break;}
                         helperIncoming.Enqueue(a);
@@ -81,7 +82,9 @@ public sealed partial class Plugin
             ClearHelperActions();ResumeAfterConfirmedTravel();nextHelperStatus=default;
             RecordFollowTravel("Helper recovered",new {reason="NPC window closed; normal following resumed."});
         }
-        UpdateHelperFateSync(now);ObserveHelperQuestAcceptance(now);UpdateQuestHelper(now);RefreshHelperLeaderBar();
+        UpdateHelperFateSync(now);ObserveHelperQuestAcceptance(now);ObserveHelperReplayCheck();ObserveHelperRecording(now);
+        if(helperReservedConversation.Length>0&&now>=helperReservationUntil)FinishHelperConversation("NPC recording or playback timed out; waiting for a new interaction.");
+        UpdateQuestHelper(now);RefreshHelperLeaderBar();
     }
     private string helperPairingIdentity="";
     private string helperFollowerName="";

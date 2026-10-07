@@ -49,23 +49,42 @@ public sealed partial class Plugin
     private unsafe uint VisibleHelperQuest()
     {
         var addon=(AtkUnitBase*)GardenGui.GetAddonByName("JournalAccept").Address;
-        if(addon==null||!addon->IsVisible||addon->AtkValues==null||addon->AtkValuesCount<=266)return 0;
-        var value=addon->AtkValues[266];
-        return value.Type==AtkValueType.UInt?HelperPolicy.QuestRowId(value.UInt):0;
+        if(addon==null||!addon->IsVisible||addon->AtkValues==null||addon->AtkValuesCount<=5)return 0;
+        var titleValue=addon->AtkValues[5];
+        if(((int)titleValue.Type&15) is not (8 or 10))return 0;
+        var title=(TravelMenuText(titleValue.String.Value)??"").Trim();
+        foreach(var slot in new[]{261,266}){
+            if(slot>=addon->AtkValuesCount)continue;
+            var value=addon->AtkValues[slot];if(value.Type is not (AtkValueType.UInt or AtkValueType.Int))continue;
+            var id=HelperPolicy.QuestRowId(value.UInt);if(id==0)continue;
+            var row=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Quest>().GetRowOrDefault(id);
+            var name=row?.Name.ToString()??"";
+            if(name.Length>0&&(title==name||title.EndsWith(" "+name,StringComparison.Ordinal)))return id;
+        }
+        return 0;
     }
+    private unsafe void CaptureHelperQuestCallback(AtkUnitBase* addon,uint count,AtkValue* values)
+    {
+        if(!SharingQuest||helperReplaying||addon==null||addon!=(AtkUnitBase*)GardenGui.GetAddonByName("JournalAccept").Address||values==null||count==0)return;
+        if(((int)values[0].Type&15) is not (3 or 5))return;
+        var offered=VisibleHelperQuest();if(offered==0)return;
+        var code=values[0].Int;
+        if(count==2&&code==3&&((int)values[1].Type&15) is 3 or 5&&HelperPolicy.QuestRowId(values[1].UInt)==offered){
+            helperOfferedQuest=offered;helperOfferedConversation=helperCaptureNpc?.Conversation??"";helperOfferedAt=DateTimeOffset.UtcNow;helperAcceptIntent=true;
+            EmitHelper("acceptQuest",addon:"JournalAccept",scene:"offer",questId:offered);
+        }else if(count==1&&code==1){
+            helperAcceptIntent=false;helperOfferedQuest=0;
+            EmitHelper("acceptQuest",addon:"JournalAccept",scene:"decline",questId:offered);
+        }
+    }
+    private bool helperAcceptIntent;
     private unsafe void ObserveHelperQuestAcceptance(DateTimeOffset now)
     {
-        if(!SharingQuest||helperCaptureNpc is not {} npc){helperOfferedQuest=0;return;}
-        var offered=VisibleHelperQuest();var manager=QuestManager.Instance();if(manager==null)return;
-        if(offered!=0){
-            // Only watch quests not already accepted when their offer is visible.
-            if(!manager->IsQuestAccepted(offered)){helperOfferedQuest=offered;helperOfferedConversation=npc.Conversation;helperOfferedAt=now;}
-            return;
-        }
-        if(helperOfferedQuest==0)return;
-        if(npc.Conversation!=helperOfferedConversation||now-helperOfferedAt>TimeSpan.FromSeconds(10)){helperOfferedQuest=0;return;}
-        if(manager->IsQuestAccepted(helperOfferedQuest)){
-            EmitHelper("acceptQuest",addon:"JournalAccept",questId:helperOfferedQuest);helperOfferedQuest=0;
+        if(!SharingQuest||helperCaptureNpc is not {} npc){helperOfferedQuest=0;helperAcceptIntent=false;return;}
+        var manager=QuestManager.Instance();if(manager==null||!helperAcceptIntent)return;
+        if(npc.Conversation!=helperOfferedConversation||now-helperOfferedAt>TimeSpan.FromMinutes(10)){helperOfferedQuest=0;helperAcceptIntent=false;return;}
+        if(!VisibleFollowAddon("JournalAccept")&&manager->IsQuestAccepted(helperOfferedQuest)){
+            FlushHelperTalk();EmitHelper("acceptQuest",addon:"JournalAccept",scene:"confirmed",questId:helperOfferedQuest);helperOfferedQuest=0;helperAcceptIntent=false;
         }
     }
     private unsafe void UpdateHelperQuestAccept(HelperAction action,DateTimeOffset now,bool completeAction=true)
@@ -74,18 +93,26 @@ public sealed partial class Plugin
         if(action.QuestId==0){BlockHelper("Quest identity is missing; accept manually.");return;}
         var offered=VisibleHelperQuest();
         if(offered!=0&&offered!=action.QuestId){SkipHelperConversation(action,"The offered quest differs from the leader's; nothing accepted.");return;}
-        if(manager->IsQuestAccepted(action.QuestId)){
-            if(VisibleFollowAddon("JournalAccept")){if(now-helperActionStarted>TimeSpan.FromSeconds(10))BlockHelper("Quest acceptance is not closing its offer window; close it manually before continuing.");else helperNextAction=now.AddMilliseconds(250);return;}
-            RecordFollowTravel("Helper quest acceptance confirmed",new {action.QuestId});
-            if(completeAction)CompleteHelperAction(now);else{helperActionStarted=now;helperNextAction=now.AddMilliseconds(450);}return;
+        if(action.Scene=="confirmed"){
+            if(manager->IsQuestAccepted(action.QuestId)){RecordFollowTravel("Helper quest acceptance confirmed",new {action.QuestId});CompleteHelperAction(now);return;}
+            if(now-helperActionStarted>TimeSpan.FromSeconds(15))BlockHelper("The final quest acceptance was not confirmed by the game.");return;
         }
+        if(helperActionSubmitted&&!VisibleFollowAddon("JournalAccept")){
+            if(action.Scene=="decline"){FinishHelperConversation("Matching quest declined.");return;}
+            if(completeAction)CompleteHelperAction(now);else{helperActionSubmitted=false;helperNextAction=now.AddMilliseconds(450);}return;
+        }
+        if(action.Scene!="decline"&&manager->IsQuestAccepted(action.QuestId)&&!VisibleFollowAddon("JournalAccept")){
+            if(completeAction)CompleteHelperAction(now);return;
+        }
+        if(helperActionSubmitted){if(now-helperActionStarted>TimeSpan.FromSeconds(15))BlockHelper("The quest offer did not change after the selected button was pressed.");return;}
+
 
         if(now-helperActionStarted>TimeSpan.FromSeconds(10)){BlockHelper("The matching quest could not be accepted. Check level, prerequisites and quest-log space.");return;}
         if(offered==0)return;
         var addon=(AtkUnitBase*)GardenGui.GetAddonByName("JournalAccept").Address;
         if(!addon->IsReady)return;
-        var button=((AddonJournalAccept*)addon)->AcceptButton;
-        if(button==null)button=addon->GetComponentButtonById(44);
+        var button=action.Scene=="decline"?((AddonJournalAccept*)addon)->DeclineButton:((AddonJournalAccept*)addon)->AcceptButton;
+        if(button==null)button=addon->GetComponentButtonById(action.Scene=="decline"?45u:44u);
         if(button==null||!button->IsEnabled||button->AtkComponentBase.OwnerNode==null)return;
         var evt=button->AtkComponentBase.OwnerNode->AtkResNode.AtkEventManager.Event;
         var eventCount=0;
@@ -97,6 +124,6 @@ public sealed partial class Plugin
         helperReplaying=true;
         try{addon->ReceiveEvent(click.State.EventType,(int)click.Param,&click,&input);}
         finally{helperReplaying=false;}
-        helperNextAction=now.AddSeconds(1);helperQuestStatus="Accepting the matching quest; waiting for game confirmation.";
+        helperActionSubmitted=true;helperNextAction=now.AddMilliseconds(450);helperQuestStatus="Accepting the matching quest; waiting for game confirmation.";
     }
 }

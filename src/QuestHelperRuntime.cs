@@ -8,6 +8,7 @@ namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
     private HelperNpc? helperNpcActive;
+    private string helperSubmittedMenu="";
     private string helperQuestStatus="Waiting for the leader's NPC interaction.",helperWorkingId="";
     private bool helperApproaching,helperStopRequested;
     private DateTimeOffset helperNextAction,helperActionStarted;
@@ -26,10 +27,10 @@ public sealed partial class Plugin
         if(!helperPermission.Active||!helperPermission.Quest||HelperPaused||helperPermission.QuestPaused||helperBlocked.Length>0||!Player.IsLoaded||Objects.LocalPlayer is not {} self||now<helperNextAction)return;
         if(Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]||Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.Unconscious]){helperQuestStatus="Loading or occupied; waiting.";return;}
         if(!helperIncoming.TryPeek(out var a))return;
-        if(!HelperPolicy.Fresh(a,now.ToUnixTimeMilliseconds(),followArmedAt)){BlockHelper("Recorded dialogue expired. Stop/start, then ask the leader to click the NPC again.");return;}
+        if(!(helperReservedConversation==a.Npc.Conversation&&now<helperPlaybackUntil)&&!HelperPolicy.Fresh(a,now.ToUnixTimeMilliseconds(),followArmedAt)){BlockHelper("Recorded dialogue expired. Stop/start, then ask the leader to click the NPC again.");return;}
         if(a.Npc.World!=Player.CurrentWorld.RowId||a.Npc.Territory!=Client.TerritoryType){helperQuestStatus="Waiting to reach the NPC's area.";return;}
         if(HelperTravelBusy){helperQuestStatus="Waiting for travel to finish.";return;}
-        if(helperWorkingId!=a.Id){helperWorkingId=a.Id;helperActionStarted=now;helperStopRequested=false;helperInteractAttempts=0;helperStationary.Reset();followSession.Pause();RequestFollowMovementStop();}
+        if(helperWorkingId!=a.Id){helperWorkingId=a.Id;helperActionSubmitted=false;helperActionStarted=now;helperStopRequested=false;helperInteractAttempts=0;helperStationary.Reset();followSession.Pause();RequestFollowMovementStop();}
         if(FollowMovementKeysHeld()){if(helperApproaching)CancelHelperApproach();helperQuestStatus="Your movement paused NPC approach.";return;}
         if(a.Kind=="interact"){
             if(QuestConversationVisible()){
@@ -83,20 +84,34 @@ public sealed partial class Plugin
         }
         if(a.Kind=="talk"){
             var talk=HelperTalk();
-            if(talk.Signature==a.Signature&&talk.Text==a.Text){helperReplaying=true;try{if(AdvanceTravelTalk(HelperTargetSignal(a)))CompleteHelperAction(now);}finally{helperReplaying=false;}return;}
+            if(helperActionSubmitted){
+                if(talk.Signature!=a.Signature||talk.Text!=a.Text){CompleteHelperAction(now);return;}
+                if(now-helperActionStarted>TimeSpan.FromSeconds(15))BlockHelper("The dialogue did not advance after the click.");return;
+            }
+            if(talk.Signature==a.Signature&&talk.Text==a.Text){helperReplaying=true;try{if(AdvanceTravelTalk(HelperTargetSignal(a))){helperActionSubmitted=true;helperNextAction=now.AddMilliseconds(450);}}finally{helperReplaying=false;}return;}
             if(now-helperActionStarted>TimeSpan.FromSeconds(5))BlockHelper("Dialogue differs from the leader's recorded line; no response selected.");return;
         }
         if(a.Kind=="choice"){
             var menu=(AtkUnitBase*)GardenGui.GetAddonByName(a.Addon).Address;var choices=HelperChoices(menu,a.Addon);
+            if(helperActionSubmitted){
+                if(choices.Count==0||HelperPolicy.Signature(choices.OrderBy(x=>x,StringComparer.Ordinal))!=helperSubmittedMenu){CompleteHelperAction(now);return;}
+                if(now-helperActionStarted>TimeSpan.FromSeconds(15))BlockHelper("The response menu did not change after the selection.");return;
+            }
             if(choices.Count==0){if(now-helperActionStarted>TimeSpan.FromSeconds(8))BlockHelper("The recorded response menu did not appear.");return;}
             RecordFollowTravel("Helper response menu",new {npc=a.Npc.Name,expected=a.Text,a.QuestId,choices});
             var index=HelperPolicy.Match(choices,a.Text);
             var isQuest=a.QuestId!=0&&HelperQuestIdForName(a.Text)==a.QuestId;
             if(isQuest&&index<0){SkipHelperConversation(a,"The same quest is unavailable in your NPC menu; waiting for the next interaction.");return;}
             if(index<0||!isQuest&&HelperPolicy.Signature(choices.OrderBy(x=>x,StringComparer.Ordinal))!=a.Signature){BlockHelper("The NPC's responses differ from the leader's; choose manually.");return;}
-            helperReplaying=true;try{SelectTravelChoice(menu,index);}finally{helperReplaying=false;}CompleteHelperAction(now);
+            helperSubmittedMenu=HelperPolicy.Signature(choices.OrderBy(x=>x,StringComparer.Ordinal));helperReplaying=true;try{SelectTravelChoice(menu,index);}finally{helperReplaying=false;}helperActionSubmitted=true;helperNextAction=now.AddMilliseconds(450);
         }
     }
     private FollowPortalSignal HelperTargetSignal(HelperAction a)=>new(a.Id,a.Name,a.World,a.Npc.World,"",a.Npc.Territory,a.Npc.Map,a.Npc.BaseId,0,a.Npc.Position.X,a.Npc.Position.Y,a.Npc.Position.Z,a.SentAt,"",SourceKind:"EventNpc");
-    private void CompleteHelperAction(DateTimeOffset now){helperIncoming.Dequeue();helperWorkingId="";helperNextAction=now.AddMilliseconds(450);helperQuestStatus="In dialogue — following the leader's choices.";nextHelperStatus=default;}
+    private void CompleteHelperAction(DateTimeOffset now){
+        var done=helperIncoming.Dequeue();helperStepDelays.Remove(done.Id);helperWorkingId="";helperActionSubmitted=false;
+        if(helperIncoming.TryPeek(out var next))helperNextAction=now.AddMilliseconds(helperStepDelays.GetValueOrDefault(next.Id,450));
+        else if(helperReservedConversation.Length>0){FinishHelperConversation("Recorded conversation completed; following resumed.");return;}
+        else helperNextAction=now.AddMilliseconds(450);
+        helperQuestStatus="In dialogue — following the leader's choices.";nextHelperStatus=default;
+    }
 }
