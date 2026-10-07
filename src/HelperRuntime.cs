@@ -47,7 +47,7 @@ public sealed partial class Plugin
                     var questWasPaused=helperPermission.QuestPaused;helperPermission.SetQuestPause(reply.QuestPaused);
                     if(!questWasPaused&&helperPermission.QuestPaused){ClearHelperActions();RequestFollowMovementStop();ResumeAfterConfirmedTravel();}
                     foreach(var a in reply.Actions??[]){helperCursor=Math.Max(helperCursor,a.Sequence);if(helperSkippedConversations.Contains(a.Npc.Conversation)||!helperPermission.Allows(a.Kind)||!HelperPolicy.Fresh(a,now.ToUnixTimeMilliseconds(),followArmedAt)||a.SentAt<=helperTravelAfter||!FollowThemSession.Matches(config.FollowThem.TargetName,config.FollowThem.HomeWorld,a.Name,a.World)||!helperSeen.Add(a.Id))continue;
-                        if(a.Kind=="fateSync"){CancelHelperFateApproach();helperPendingFate=a;helperFateAttempts=0;helperNextFateAttempt=default;continue;}
+                        if(a.Kind=="fateSync"){CancelHelperFateApproach();helperPendingFate=a;helperFateAttempts=0;helperFateFallback=false;helperNextFateAttempt=default;continue;}
                         if(helperIncoming.Count>=32){helperBlocked="Dialogue queue is full; pause and resume Quest Helper to clear it.";break;}
                         helperIncoming.Enqueue(a);
                     }
@@ -71,7 +71,7 @@ public sealed partial class Plugin
             nextHelperLeader=now.AddSeconds(helperFollowers.Length>0?3:5);helperLeaderIdentity=config.PairingKey+"/"+Player.CharacterName+"/"+Player.HomeWorld.RowId;
             helperLeaderTask=helperRelay.Call(config.PairingKey,"op=leader&name="+Uri.EscapeDataString(Player.CharacterName)+"&world="+Player.HomeWorld.RowId);
         }
-        if(helperSendTask==null&&helperOutgoing.TryDequeue(out var outgoing)&&now.ToUnixTimeMilliseconds()-outgoing.SentAt<10000&&SharingQuest)
+        if(helperControlTask==null&&helperControls.Count==0&&helperSendTask==null&&helperOutgoing.TryDequeue(out var outgoing)&&now.ToUnixTimeMilliseconds()-outgoing.SentAt<10000&&SharingQuest)
             helperSendTask=helperRelay.Call(config.PairingKey,"op=action",outgoing);
         if(helperControlTask==null&&helperControls.TryDequeue(out var control)&&Player.IsLoaded&&control.Identity==config.PairingKey+"/"+Player.CharacterName+"/"+Player.HomeWorld.RowId)
             helperControlTask=helperRelay.Call(config.PairingKey,"op=control&session="+control.Follower.Id,new {name=Player.CharacterName,world=Player.HomeWorld.RowId,command=control.Command});

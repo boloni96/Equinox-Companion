@@ -11,7 +11,7 @@ public sealed partial class Plugin
     private HelperAction? helperPendingFate;
     private DateTimeOffset helperNextFateAttempt;
     private int helperFateAttempts;
-    private bool helperFateApproaching,helperFateStopRequested;
+    private bool helperFateApproaching,helperFateStopRequested,helperFateFallback;
     private readonly FollowApproachProgress helperFateProgress=new();
     private void CancelHelperFateApproach()
     {
@@ -50,8 +50,8 @@ public sealed partial class Plugin
         var goal=HelperPolicy.Right(action.Npc.Approach.Point,action.Npc.Facing);
         if(Vector3.Distance(goal,destination->Location)>destination->Radius-.5f)goal=action.Npc.Approach.Point;
         if(FollowMovementKeysHeld()){CancelHelperFateApproach();return;}
-        if(!inside){
-            if(helperFateApproaching){if(helperFateProgress.Stuck(now,position,goal,config.FollowThem.StuckSeconds)){CancelHelperFateApproach();helperPendingFate=null;helperError="FATE approach obstructed; following remains active.";}return;}
+        if(!inside||config.FollowThem.UseLifestream&&!helperFateFallback&&Vector3.DistanceSquared(position,goal)>1){
+            if(helperFateApproaching){if(helperFateProgress.Stuck(now,position,goal,config.FollowThem.StuckSeconds)){CancelHelperFateApproach();if(inside)helperFateFallback=true;else{helperPendingFate=null;helperError="FATE approach obstructed; following remains active.";}}return;}
             if(!config.FollowThem.UseLifestream||Vector3.DistanceSquared(position,goal)>3600||Math.Abs(position.Y-goal.Y)>5)return;
             if(!helperFateStopRequested){followSession.Pause();RequestFollowMovementStop();helperFateStopRequested=true;return;}
             if(FollowTransitionBusy()||followStopPending||followStopUnconfirmed)return;
