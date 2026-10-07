@@ -57,8 +57,8 @@ public sealed partial class Plugin
         if(helperLeaderTask?.IsCompleted==true){
             var r=helperLeaderTask.GetAwaiter().GetResult();helperLeaderTask=null;
             if(helperLeaderIdentity==config.PairingKey+"/"+Player.CharacterName+"/"+Player.HomeWorld.RowId){
-                if(r.Reply is {} reply){helperFollowers=reply.Followers??[];foreach(var f in helperFollowers)if(f.Quest&&f.Control!="stop"&&helperOpened.Add(f.Id))helperWindowOpen=true;}
-                else{helperError=r.Error;helperFollowers=[];nextHelperLeader=now.AddSeconds(15);}
+                if(r.Reply is {} reply){helperFollowers=reply.Followers??[];if(HelperPolicy.HasLeaderRole(helperFollowers)&&followSession.Armed)StopFollowThem("You are being followed; your own follower session ended.");foreach(var f in helperFollowers)if(f.Quest&&f.Control!="stop"&&helperOpened.Add(f.Id))helperWindowOpen=true;}
+                else{helperError=r.Error;nextHelperLeader=now.AddSeconds(15);}
             }
         }
         if(!config.EnableFollowThem||config.PairingKey.Length!=64){helperFollowers=[];RefreshHelperLeaderBar();return;}
@@ -92,6 +92,6 @@ public sealed partial class Plugin
         if(!Player.IsLoaded||helperControls.Count>=32)return;
         helperControls.Enqueue((f,command,config.PairingKey+"/"+Player.CharacterName+"/"+Player.HomeWorld.RowId));
     }
-    private HelperFollower[] ActiveHelperFollowers()=>helperFollowers.Where(x=>x.Control!="stop"&&DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()-x.Updated<15000).ToArray();
+    private HelperFollower[] ActiveHelperFollowers()=>helperFollowers.Where(x=>x.Control!="stop").ToArray();
     private void RefreshHelperLeaderBar()=>RefreshFollowBar();
 }

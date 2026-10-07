@@ -41,6 +41,7 @@ public sealed partial class Plugin
     {
         var now=DateTimeOffset.UtcNow;
         if(!SharingQuest||helperReplaying||helperCaptureNpc is not {} npc||now-helperCaptureAt>TimeSpan.FromMinutes(10)||npc.World!=Player.CurrentWorld.RowId||npc.Territory!=Client.TerritoryType)return;
+        if(questId==0&&kind is "talk" or "choice")questId=AcceptedHelperQuestForScene(scene);
         var key=kind+"/"+npc.Conversation+"/"+signature+"/"+text+"/"+scene+"/"+questId;
         if(key==lastHelperCapture&&now-lastHelperCaptureAt<TimeSpan.FromMilliseconds(300))return;
         lastHelperCapture=key;lastHelperCaptureAt=now;

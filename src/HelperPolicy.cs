@@ -22,6 +22,8 @@ public sealed class HelperPermission
 }
 public static class HelperPolicy
 {
+    public static uint QuestRowId(uint id)=>id==0?0:id<65536?id+65536:id;
+    public static bool HasLeaderRole(IEnumerable<HelperFollower> followers)=>followers.Any(f=>f.Control!="stop");
     public static Vector3 Right(Vector3 position,float facing)=>position+new Vector3(MathF.Cos(facing),0,-MathF.Sin(facing))*.9f;
     public static string Signature(IEnumerable<string> lines)=>Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join("\n",lines))));
     public static int Match(IEnumerable<string> options,string text){var all=options.ToArray();return all.Count(x=>x==text)==1?Array.IndexOf(all,text):-1;}

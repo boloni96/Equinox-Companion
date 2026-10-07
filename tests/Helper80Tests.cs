@@ -28,6 +28,11 @@ internal static class Helper80Tests
   Test("next line emits preceding line",dialogue.Observe("Second","two","1")?.Text=="First");
   Test("closing talk before menu flushes last line",dialogue.Finish()?.Text=="Second");Test("finalize after flush cannot duplicate",dialogue.Finish()==null);
   dialogue.Observe("Old","old","1");dialogue.Reset();Test("pause resets dialogue capture",dialogue.Finish()==null);
+  Test("leader role retained for stale status",HelperPolicy.HasLeaderRole([f with {Updated=0}]));
+  Test("paused followers still reserve leader role",HelperPolicy.HasLeaderRole([f with {Control="pause"}]));
+  Test("ended followers release leader role",!HelperPolicy.HasLeaderRole([f with {Control="stop"}]));
+  Test("no followers releases leader role",!HelperPolicy.HasLeaderRole([]));
+  Test("quest short ID normalized",HelperPolicy.QuestRowId(42)==65578);Test("quest row ID retained",HelperPolicy.QuestRowId(65578)==65578);Test("unknown quest remains unknown",HelperPolicy.QuestRowId(0)==0);
   Test("scene must match",!HelperPolicy.SceneMatches("1:2","1:3"));Test("unknown scene blocked",!HelperPolicy.SceneMatches("",""));
  }
 }

@@ -61,6 +61,7 @@ public sealed partial class Plugin
             return;
         }
         if(helperNpcActive?.Conversation!=a.Npc.Conversation){BlockHelper("This dialogue belongs to a different NPC interaction.");return;}
+        if(!NocturneNpc(a.Npc)&&EnsureHelperQuestPrerequisite(a,now))return;
         if(a.Kind=="talk"&&NocturneNpc(a.Npc)&&NocturneFirstQuest!=0&&VisibleHelperQuest()==NocturneFirstQuest){
             // Replay introduction differs from the first-time quest offer. Wait for explicit Replay Yes or exact acceptance.
             CompleteHelperAction(now);return;

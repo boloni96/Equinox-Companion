@@ -90,6 +90,7 @@ public sealed partial class Plugin
     private void ToggleFollowThem()
     {
         if (followSession.Armed) { StopFollowThem(); return; }
+        if(HelperPolicy.HasLeaderRole(helperFollowers)){helperWindowOpen=true;FollowChatNotice("You are being followed. Use Helper Controls to pause or end those sessions before starting as a follower.");return;}
         if(followStopPending||followStopUnconfirmed){FollowChatNotice("Stop is awaiting confirmation. Tap and release a movement key before restarting.");return;}
         if (string.IsNullOrWhiteSpace(config.FollowThem.TargetName) || config.FollowThem.HomeWorld == 0)
         { followStatus = "Choose a party member or friend first."; return; }
@@ -109,7 +110,7 @@ public sealed partial class Plugin
             var leaderText="FollowThem: Followed by "+string.Join(", ",followers.Select(x=>x.Name));
             if(leaderText!=followBarText){followBar.Text=new SeStringBuilder().AddText(leaderText).Build();followBarText=leaderText;}
             var paused=followers.All(x=>x.Control=="pause");
-            followBar.Tooltip=new SeStringBuilder().AddText((paused?"Paused. Left-click to resume.":"Left-click to pause.")+" Right-click for Helper Controls."+(followSession.Armed?" You are also following "+config.FollowThem.TargetName+"; your Stop control is in Helper Controls.":"")).Build();
+            followBar.Tooltip=new SeStringBuilder().AddText((paused?"Paused. Left-click to resume.":"Left-click to pause.")+" Right-click for Helper Controls.").Build();
             followBar.OnClick=e=>{
                 if(e.ClickType==MouseClickType.Right){helperWindowOpen=true;return;}
                 if(e.ClickType!=MouseClickType.Left)return;
