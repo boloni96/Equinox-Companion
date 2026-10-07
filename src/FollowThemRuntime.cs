@@ -126,7 +126,7 @@ public sealed partial class Plugin
             if (Interlocked.Exchange(ref followCommandRejected, 0) != 0)
             {
                 // Do not respond to a rejected command with another movement command.
-                nativeFollowRequested=false;followStopUnconfirmed=false;ReleaseFollowStopKey();followStopStationary.Reset();
+                nativeFollowRequested=false;followStopUnconfirmed=false;followStopStationary.Reset();
                 RecordFollowTravel("Follow command rejected",new {command=lastFollowCommand});
                 if(!followSession.Armed){RequestFollowMovementStop();return;}
                 followSession.Pause();followStuck.Pause();followReady.Reset();followRetryAt=now.AddSeconds(5);
@@ -143,6 +143,10 @@ public sealed partial class Plugin
             }
             if(followSession.Armed&&config.FollowThem.StopOnMovement&&FollowMovementKeysHeld()){StopFollowThem("Your movement input.");return;}
             if(followSession.Armed){TryFollowInvitations(now);TryFollowTeleport(now);}
+            if(followSession.Armed&&acceptedPartyAetheryte!=0&&acceptedPartyTeleportAt.ToUnixTimeMilliseconds()>=followArmedAt&&!partyTripArrived&&now-acceptedPartyTeleportAt<TimeSpan.FromSeconds(45)){
+                followSession.Pause();followReady.Reset();followStuck.Pause();
+                followStatus="WAITING — Completing the accepted party teleport.";RefreshFollowBar();return;
+            }
             if(travelQueue.Count>0||pendingTransport!=null||pendingWard!=null||pendingAethernet!=null||receivedPortal!=null||travelAwaitingArrival!=null){if(nativeFollowRequested&&!followStopPending&&!followStopUnconfirmed)RequestFollowMovementStop();followSession.Pause();followStatus="WAITING — Completing the selected travel action.";return;}
             if(pendingDutyLeave!=null){followSession.Pause();followStatus="WAITING — "+portalRelayStatus;RefreshFollowBar();return;}
             if(followApproach!=null){followSession.Pause();followStatus="WAITING — "+portalRelayStatus;RefreshFollowBar();return;}

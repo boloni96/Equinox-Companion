@@ -1550,3 +1550,8 @@ Check("69 wrong world party offer excluded",FollowPartyTeleportPolicy.Matches(pa
 Check("69 expired party offer excluded",FollowPartyTeleportPolicy.Matches(partySignal69,5,2,recoverNow68,recoverNow68+120001,recoverNow68-1000).ToString(),"False");
 Check("69 completed boundary reconciles",FollowArrivalPolicy.AlreadyAtTravelArrival(arrival66 with {TravelKind="boundary"},2,30,40,new(10,0,10),false).ToString(),"True");
 Check("69 boundary still at source not completed",FollowArrivalPolicy.AlreadyAtTravelArrival(arrival66 with {TravelKind="boundary",ArrivalTerritory=3,ArrivalMap=4},2,3,4,new(10,0,10),false).ToString(),"False");
+
+var abi70=NativeInputAbi.Probe();
+Check("70 legacy ABI reproduces false-positive input",abi70.LegacyFalse.ToString(),"True");
+Check("70 native byte ABI preserves false despite upper bits",abi70.FixedFalse.ToString(),"0");
+Check("70 native byte ABI preserves true",abi70.FixedTrue.ToString(),"1");
