@@ -2,7 +2,7 @@ name: Build and verify Companion source
 on:
   push:
     branches: [main, fix/followthem-75]
-    paths: ['src/**', 'tests/**', '.github/workflows/build-from-source.yml']
+    paths: ['src/**', 'tests/**', 'scripts/publish_source.py', '.github/workflows/build-from-source.yml']
   workflow_dispatch:
 permissions:
   contents: write
@@ -41,20 +41,17 @@ jobs:
           if (Test-Path "dist/v$version/EquinoxCompanion.zip") { throw 'Version already published' }
           python scripts/package_release.py --repository $env:GITHUB_REPOSITORY --tag "v$version" --ref main --output "dist/v$version"
           if ($LASTEXITCODE -ne 0) { throw 'Packaging failed' }
+          "PACKAGE_DIRECTORY=dist/v$version" >> $env:GITHUB_ENV
           Copy-Item "dist/v$version/repo.json" repo.json
           Get-FileHash "dist/v$version/EquinoxCompanion.zip" -Algorithm SHA256
       - uses: actions/upload-artifact@v4
         with:
           name: verified-companion
           path: |
-            dist/v0.5.1.75/
+            ${{ env.PACKAGE_DIRECTORY }}/
             repo.json
       - name: Publish package and feed atomically
         if: github.ref == 'refs/heads/main'
-        shell: bash
-        run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add dist repo.json
-          git commit -m 'Publish source-verified Companion package and feed'
-          git push origin HEAD:main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/publish_source.py
