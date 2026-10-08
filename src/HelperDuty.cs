@@ -12,16 +12,16 @@ public sealed partial class Plugin
     private DateTimeOffset helperDutyUntil;
     private bool helperDutyLoading;
     private unsafe bool HelperSoloDutyVisible()=>ReadHelperDutyPrompt("SelectYesno",out _,out _);
-    private unsafe bool ReadHelperDutyPrompt(string name,out string prompt,out AtkComponentButton* proceed)
+    private unsafe bool ReadHelperDutyPrompt(string name,out string prompt,out AtkComponentButton* proceed,bool leave=false)
     {
         prompt="";proceed=null;var addon=(AtkUnitBase*)GardenGui.GetAddonByName(name).Address;var cut=AgentCutscene.Instance();
         if(addon==null||!addon->IsVisible||!addon->IsReady||cut!=null&&cut->SkipDialogAddonId==addon->Id)return false;
         if(name=="DifficultySelectYesNo"){
             var duty=(AddonDifficultySelectYesNo*)addon;if(duty->PromptText==null)return false;
-            prompt=TravelMenuText(duty->PromptText->NodeText.StringPtr)??"";proceed=duty->ProceedButton;
+            prompt=TravelMenuText(duty->PromptText->NodeText.StringPtr)??"";proceed=leave?duty->LeaveButton:duty->ProceedButton;
         }else if(name=="SelectYesno"){
             var duty=(AddonSelectYesno*)addon;if(duty->PromptText==null)return false;
-            prompt=TravelMenuText(duty->PromptText->NodeText.StringPtr)??"";proceed=duty->YesButton;
+            prompt=TravelMenuText(duty->PromptText->NodeText.StringPtr)??"";proceed=leave?duty->NoButton:duty->YesButton;
         }else return false;
         prompt=HelperConversationPolicy.NormalizePrompt(prompt);
         return HelperDutyPolicy.QuestTitle(prompt).Length>0&&proceed!=null&&proceed->IsEnabled&&proceed->AtkComponentBase.OwnerNode!=null;
@@ -30,13 +30,15 @@ public sealed partial class Plugin
     {
         if(!RecordingQuest||helperReplaying||!helperRecording||helperCaptureNpc==null||args is not AddonReceiveEventArgs ev||(AtkEventType)ev.AtkEventType is not (AtkEventType.ButtonClick or AtkEventType.MouseClick))return;
         try{
-            if(!ReadHelperDutyPrompt(args.AddonName,out var prompt,out var button))return;
-            var evt=button->AtkComponentBase.OwnerNode->AtkResNode.AtkEventManager.Event;var count=0;var matching=false;
-            while(evt!=null&&count++<32){if(evt->State.EventType==(AtkEventType)ev.AtkEventType&&evt->Param==ev.EventParam){matching=true;break;}evt=evt->NextEvent;}
-            if(!matching)return;
+            var leave=false;
+            if(!ReadHelperDutyPrompt(args.AddonName,out var prompt,out var button)||!HelperDutyButtonMatches(button,ev)){
+                if(!ReadHelperDutyPrompt(args.AddonName,out prompt,out button,true)||!HelperDutyButtonMatches(button,ev))return;
+                leave=true;
+            }
             var quest=HelperQuestIdForName(HelperDutyPolicy.QuestTitle(prompt));var manager=QuestManager.Instance();
             if(quest==0||manager==null||!manager->IsQuestAccepted(quest))return;
-            FlushHelperTalk();EmitHelper("soloDuty",prompt,HelperPolicy.Signature([prompt]),args.AddonName,HelperQuestScenePolicy.Step(true,QuestManager.GetQuestSequence(quest)),quest);
+            FlushHelperTalk();EmitHelper(leave?"choice":"soloDuty",prompt,leave?HelperDutyPolicy.LeaveSignature(prompt):HelperPolicy.Signature([prompt]),args.AddonName,HelperQuestScenePolicy.Step(true,QuestManager.GetQuestSequence(quest)),quest);
+            RecordFollowTravel("Helper duty decision captured",new {questId=quest,decision=leave?"leave":"proceed",addon=args.AddonName});
             // Commit before the leader's loading transition changes the source territory.
             if(helperCaptureNpc is {} npc)CommitHelperRecording(npc);
         }catch(Exception e){Log.Debug(e,"Solo duty choice capture unavailable");}

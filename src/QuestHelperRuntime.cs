@@ -91,6 +91,7 @@ public sealed partial class Plugin
         if(a.Kind=="eventReplay"){UpdateHelperEventReplay(a,now);return;}
         if(a.Kind=="completeQuest"){UpdateHelperQuestResult(a,now);return;}
         if(a.Kind=="soloDuty"){UpdateHelperSoloDuty(a,now);return;}
+        if(HelperDutyPolicy.IsLeave(a)){UpdateHelperSoloDutyLeave(a,now);return;}
         if(a.Kind=="acceptQuest"){UpdateHelperQuestAccept(a,now);return;}
         if(a.Kind=="skip"){UpdateHelperCutsceneSkip(a,now);return;}
         if(a.Kind=="talk"){

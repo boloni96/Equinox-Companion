@@ -103,8 +103,12 @@ public sealed partial class Plugin
                 RecordFollowTravel("Helper queued action expired",new {outgoing.Kind,npc=outgoing.Npc.Name,ageMs=age});
             }else if(SharingQuest&&outgoing.Name==Player.CharacterName&&outgoing.World==Player.HomeWorld.RowId&&
                 HelperPolicy.ReadyAudience(outgoing.Sessions??[],helperFollowers,now.ToUnixTimeMilliseconds())){
-                helperOutgoing.Dequeue();helperSendingAction=outgoing;helperSendIdentity=helperActorIdentity;
-                helperSendTask=helperRelay.Call(config.PairingKey,"op=action",outgoing);
+                helperOutgoing.Dequeue();
+                // The relay accepts envelope timestamps within ten seconds; preserve recorded step times.
+                var sending=outgoing.Kind is "recording" or "conversation" or "cancelConversation"
+                    ?outgoing with {SentAt=now.ToUnixTimeMilliseconds()}:outgoing;
+                helperSendingAction=sending;helperSendIdentity=helperActorIdentity;
+                helperSendTask=helperRelay.Call(config.PairingKey,"op=action",sending);
             }
         }
         if(helperControlTask==null&&helperControls.TryDequeue(out var control)&&Player.IsLoaded&&control.Identity==config.PairingKey+"/"+Player.CharacterName+"/"+Player.HomeWorld.RowId)
