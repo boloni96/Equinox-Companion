@@ -17,7 +17,8 @@ public sealed partial class Plugin
     private void ResetTravelQueue(){aethernetArrivalTrip="";aethernetArrivalId=0;aethernetArrivalLoading=false;routeTeleportAccepted=false;routeSettledAt=default;nextArrivalDiagnostic=default;travelQueue.Clear();queuedTravelIds.Clear();travelNeedsRecovery=false;travelAwaitingArrival=null;portalReadCursor=0;routeArrivalConfirmed=false;routeSawLoading=false;routeExecutionStarted=false;nextQueueAttempt=default;acceptedPartyTeleportAt=default;}
     private void EnqueueTravel(FollowPortalSignal signal)
     {
-        if(!HelperSessionPolicy.AcceptTravel(HelperPaused,signal.SentAt,followArmedAt,helperTravelCutoff)||signal.Id==lastPortalSignalId||queuedTravelIds.Contains(signal.Id))return;
+        if(!HelperSessionPolicy.AcceptTravel(HelperPaused,signal.SentAt,followArmedAt,helperTravelCutoff)){RecordFollowTravel("Travel discarded by session",new {signal.Id,signal.SentAt,cutoff=helperTravelCutoff,paused=HelperPaused,started=followArmedAt});return;}
+        if(signal.Id==lastPortalSignalId||queuedTravelIds.Contains(signal.Id))return;
         if(travelQueue.Count>=16){TravelDiagnostic("Travel queue is full; wait for the follower before the next trip.");return;}
         queuedTravelIds.Add(signal.Id);travelQueue.Enqueue(signal);
         if(helperPendingFate is {} pendingFate&&pendingFate.SentAt<=signal.SentAt){helperPendingFate=null;CancelHelperFateApproach();}
@@ -149,7 +150,7 @@ public sealed partial class Plugin
             }
             outgoingTrips.Dequeue();nextOutgoingTripAt=now.AddMilliseconds(2200);
             RecordFollowTravel("Outgoing travel submitting",new {item.Signal.Id,item.Signal.SentAt,item.Signal.ExpiresAt});
-            portalSendTask=SendPortalToAudience(item.Key,item.Signal,item.Audience);return;
+            portalSendingId=item.Signal.Id;portalSendingMeeting=item.Signal.ResumeAfter>0;portalSendTask=SendPortalToAudience(item.Key,item.Signal,item.Audience);return;
         }
     }
 }

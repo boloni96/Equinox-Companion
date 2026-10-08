@@ -48,13 +48,15 @@ public sealed partial class Plugin
         }
         helperBring=(follower.Id,travel);SendHelperControl(follower,"resume");
     }
-    private void CompleteHelperBring(bool success)
+    private void CompleteHelperBring(HelperReply? reply,string error)
     {
         if(helperBring is not {} request)return;helperBring=null;
-        if(!success||!HelperBringAvailable(request.Travel))return;
+        if(reply==null||error.Length>0||!HelperBringAvailable(request.Travel))return;
+        if(reply.TravelAfter<=0){helperError="Bring follower back requires Journal V7.11.86. No meeting request sent.";return;}
         var now=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        var fresh=request.Travel with {Id=Guid.NewGuid().ToString("N"),SentAt=now,ExpiresAt=now+120000,Sessions=[request.Session]};
+        var fresh=request.Travel with {Id=Guid.NewGuid().ToString("N"),SentAt=now,ExpiresAt=now+120000,Sessions=[request.Session],ResumeAfter=reply.TravelAfter};
         outgoingTrips.Enqueue((config.PairingKey,fresh,Task.FromResult(true)));
-        helperError="Meeting teleport requested for this follower; their travel permissions still apply.";
+        RecordFollowTravel("Meeting request created",new {fresh.Id,cutoff=reply.TravelAfter,localSentAt=now});
+        helperError="Meeting request prepared; waiting for the relay response.";
     }
 }

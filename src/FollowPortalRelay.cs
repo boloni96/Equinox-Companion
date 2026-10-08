@@ -3,7 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 namespace EquinoxCompanion;
 
-public sealed record FollowPortalSignal(string Id,string Name,uint HomeWorld,uint CurrentWorld,string EntityId,uint Territory,uint MapId,uint BaseId,int HandlerType,float X,float Y,float Z,long SentAt,string Confirmation,long ExpiresAt=0,string TravelKind="portal",uint AetheryteId=0,string Destination="",int Ward=0,uint DestinationTerritory=0,float SourceRadius=0,FollowMenuStep[]? Steps=null,string SourceKind="",uint DestinationWorld=0,string FriendContentId="",string EstateId="",FollowTravelPosition? Approach=null,uint DutyId=0,FollowTravelPosition? Arrival=null,uint ArrivalMap=0,uint ArrivalTerritory=0,uint ArrivalWorld=0,long Sequence=0,uint ArrivalInstance=0,float? Facing=null,string[]? Sessions=null);
+public sealed record FollowPortalSignal(string Id,string Name,uint HomeWorld,uint CurrentWorld,string EntityId,uint Territory,uint MapId,uint BaseId,int HandlerType,float X,float Y,float Z,long SentAt,string Confirmation,long ExpiresAt=0,string TravelKind="portal",uint AetheryteId=0,string Destination="",int Ward=0,uint DestinationTerritory=0,float SourceRadius=0,FollowMenuStep[]? Steps=null,string SourceKind="",uint DestinationWorld=0,string FriendContentId="",string EstateId="",FollowTravelPosition? Approach=null,uint DutyId=0,FollowTravelPosition? Arrival=null,uint ArrivalMap=0,uint ArrivalTerritory=0,uint ArrivalWorld=0,long Sequence=0,uint ArrivalInstance=0,float? Facing=null,string[]? Sessions=null,long ResumeAfter=0);
 public sealed record FollowMenuStep(string Text,bool Confirmation=false,string Addon="",int[]? Arguments=null,string MenuSignature="");
 public sealed record FollowPortalEnvelope(FollowPortalSignal? Signal,FollowPortalSignal[]? Signals=null);
 public sealed class FollowPortalRelay : IDisposable
@@ -66,7 +66,14 @@ public sealed class FollowPortalRelay : IDisposable
                 using var request=new HttpRequestMessage(HttpMethod.Post,Endpoint){Content=JsonContent.Create(signal,options:json)};
                 request.Headers.Authorization=new AuthenticationHeaderValue("Bearer",key);
                 using var response=await client.SendAsync(request,HttpCompletionOption.ResponseHeadersRead,cancel.Token);
-                if(response.IsSuccessStatusCode)return "Portal transition submitted for active followers (two-minute expiry).";
+                if(response.IsSuccessStatusCode){
+                    using var acceptedBody=await response.Content.ReadAsStreamAsync(cancel.Token);
+                    var acceptedBytes=new byte[4097];var acceptedCount=0;
+                    while(acceptedCount<acceptedBytes.Length){var read=await acceptedBody.ReadAsync(acceptedBytes.AsMemory(acceptedCount),cancel.Token);if(read==0)break;acceptedCount+=read;}
+                    if(acceptedCount==acceptedBytes.Length)return "Travel relay acknowledgement too large; delivery unconfirmed.";
+                    var acknowledgement=JsonSerializer.Deserialize<FollowTravelReceipt>(acceptedBytes.AsSpan(0,acceptedCount),json);
+                    return FollowTravelReceipt.Describe(acknowledgement);
+                }
                 if((int)response.StatusCode!=429)return Failure((int)response.StatusCode);
                 using var body=await response.Content.ReadAsStreamAsync(cancel.Token);
                 var bytes=new byte[1024];var count=await body.ReadAsync(bytes,cancel.Token);
@@ -77,9 +84,17 @@ public sealed class FollowPortalRelay : IDisposable
             }
             return Failure(429);
         }
-        catch(Exception e) when(e is HttpRequestException or TaskCanceledException){return "Portal relay unavailable; this transition was not queued for later replay.";}
+        catch(Exception e) when(e is HttpRequestException or TaskCanceledException or JsonException){return "Travel relay response unavailable; delivery unconfirmed. Export diagnostics before retrying.";}
     }
     private static string Failure(int code)=>code switch{404=>"Deploy Journal V7.11.77 to enable portal relay.",403=>"Portal relay refused; check pairing and deploy Journal V7.11.77.",401=>"Portal relay needs a valid pairing key and Journal V7.11.77.",_=>"Portal relay unavailable (HTTP "+code+"). No portal action taken."};
     public void Dispose(){cancel.Cancel();client.Dispose();cancel.Dispose();}
 }
 
+
+public sealed record FollowTravelReceipt(bool Accepted,int? Recipients=null,string? Reason=null)
+{
+    public static string Describe(FollowTravelReceipt? reply)=>reply==null?"Travel relay returned no valid acknowledgement; delivery unconfirmed.":
+        !reply.Accepted||reply.Recipients==0?"Travel not queued — "+(reply.Reason??"no eligible active follower."):
+        reply.Recipients is {} count?$"Travel queued for {count} follower(s); waiting for follower pickup, not yet confirmed arrived.":
+        "Relay accepted the request but did not confirm a recipient. Deploy Journal V7.11.86.";
+}

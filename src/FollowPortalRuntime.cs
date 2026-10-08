@@ -20,6 +20,8 @@ public sealed partial class Plugin
     private Vector3 portalPreviousPosition;
     private string relayPairingKey="";
     private Task<string>? portalSendTask;
+    private string portalSendingId="";
+    private bool portalSendingMeeting;
     private Task<(FollowPortalSignal[] Signals,string Status)>? portalReadTask;
     private string portalRelayStatus="Portal relay options are off.",lastLeaderEntity="",lastPortalSignalId="";
     private int relayGeneration,portalReadGeneration;
@@ -99,7 +101,7 @@ public sealed partial class Plugin
             if(!sharing)outgoingPortal=null;
             if(portalSendTask?.IsCompleted==true)
             {
-                portalRelayStatus=portalSendTask.GetAwaiter().GetResult();portalSendTask=null;nextOutgoingTripAt=now.AddMilliseconds(2200);
+                portalRelayStatus=portalSendTask.GetAwaiter().GetResult();RecordFollowTravel("Travel relay response",new {id=portalSendingId,status=portalRelayStatus});if(portalSendingMeeting)helperError=portalRelayStatus;portalSendTask=null;nextOutgoingTripAt=now.AddMilliseconds(2200);
                 if(portalNotices.Changed(portalRelayStatus))FollowChatNotice("PORTAL — "+portalRelayStatus);
             }
             FlushOutgoingTravel();
@@ -136,7 +138,7 @@ public sealed partial class Plugin
                     if(result.Status!="Portal relay ready.")portalRelayStatus=result.Status;
                     if(portalNotices.Changed(result.Status) && result.Status!="Portal relay ready.")
                         FollowChatNotice("ERROR — "+result.Status);
-                    foreach(var signal in result.Signals){EnqueueTravel(signal);portalReadCursor=Math.Max(portalReadCursor,signal.Sequence);}
+                    foreach(var signal in result.Signals){RecordFollowTravel("Travel relay received",new {signal.Id,signal.SentAt,cutoff=helperTravelCutoff,paused=HelperPaused,started=followArmedAt});EnqueueTravel(signal);portalReadCursor=Math.Max(portalReadCursor,signal.Sequence);}
                     if(result.Status!="Portal relay ready.")nextPortalPoll=now.AddSeconds(10);
                 }
             }
