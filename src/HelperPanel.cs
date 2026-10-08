@@ -9,7 +9,7 @@ public sealed partial class Plugin
         if(ImGui.BeginTabBar("helper-sections")){
             if(ImGui.BeginTabItem("FollowThem")){DrawFollowThem();ImGui.EndTabItem();}
             if(ImGui.BeginTabItem("Quest Helper")){
-                ImGui.TextWrapped("Mirror the followed character's NPC conversations during an active session. Both characters need Journal V7.11.83 on Cloudflare and the same pairing key.");
+                ImGui.TextWrapped("Mirror only the followed character's quest conversations during an active session. Vendor/shop interactions and ordinary NPC chatter are ignored. Both characters need Journal V7.11.83 on Cloudflare and the same pairing key.");
                 MessageToggle("Share my NPC and dialogue actions with active followers",config.FollowThem.ShareQuestActions,v=>config.FollowThem.ShareQuestActions=v);
                 MessageToggle("Enable Quest Helper for my next follow session",config.FollowThem.QuestHelper,v=>config.FollowThem.QuestHelper=v);
                 if(ImGui.IsItemHovered())ImGui.SetTooltip("Only the follower grants permission when pressing Start. Stop revokes it. Only the leader can pause/resume. Follower Stop ends permission; the leader cannot restart it.");

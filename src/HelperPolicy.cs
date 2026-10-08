@@ -62,3 +62,22 @@ public static class HelperSessionPolicy
 {
     public static bool AcceptTravel(bool paused,long sentAt,long started,long discardedThrough)=>!paused&&sentAt>=started&&sentAt>discardedThrough;
 }
+
+// NPC identity alone is not quest evidence: vendors are EventNpc objects too.
+public static class HelperQuestScope
+{
+    public static uint Evidence(IEnumerable<HelperAction> actions)
+    {
+        foreach(var a in actions){
+            if(a.Kind=="acceptQuest"&&a.Addon=="JournalAccept"&&a.Scene is "offer" or "confirmed" or "decline"&&a.QuestId>=65536)return a.QuestId;
+            if(a.Kind=="eventReplay"&&a.Addon=="SelectYesno"&&a.Npc.Name=="Kipih Jakkya"&&a.Npc.Territory==130&&a.QuestId>=65536&&
+                a.Scene is "yes" or "no" or "checked" or "unchecked"&&
+                (a.Text=="Do you wish to replay the event?"||a.Text.StartsWith("If you proceed, the following quest(s) will be rendered incomplete:",StringComparison.Ordinal)&&
+                 new[]{"The Man in Black","In the Dark of Night","Messenger of the Winds","The Ironworks Vendor","The Recompense Officer"}.All(a.Text.Contains)))return a.QuestId;
+            // Native quest handlers have event type 1; this also covers in-progress quest dialogue and turn-ins.
+            var colon=a.Scene.IndexOf(':');
+            if(a.Kind is "talk" or "choice" or "skip"&&colon>0&&uint.TryParse(a.Scene[..colon],out var eventId)&&(eventId>>16)==1&&(eventId&65535)!=0)return eventId;
+        }
+        return 0;
+    }
+}

@@ -23,7 +23,7 @@ public sealed partial class Plugin
         helperCaptureNpc=new(Guid.NewGuid().ToString("N"),clicked.BaseId,clicked.Name.TextValue,Client.TerritoryType,map->CurrentMapId,Player.CurrentWorld.RowId,FollowTravelPosition.From(clicked.Position),FollowTravelPosition.From(self.Position),self.Rotation);
         helperDialogue.Reset();helperCaptureAt=DateTimeOffset.UtcNow;
         helperRecording=true;helperRecordAudience=helperFollowers.Where(f=>HelperPolicy.Audience(f,helperCaptureAt.ToUnixTimeMilliseconds())).Select(f=>f.Id).ToArray();
-        QueueHelperEnvelope("recording",helperCaptureNpc);
+        // Observe locally until a verified quest or supported event-replay step appears.
         EmitHelper("interact");
     }
     private string HelperCanonical(string text)=>text.Replace(Player.CharacterName,"{player}",StringComparison.Ordinal).Replace(config.FollowThem.TargetName.Length>0?config.FollowThem.TargetName:"\0","{player}",StringComparison.Ordinal).Trim();
@@ -54,7 +54,7 @@ public sealed partial class Plugin
         if(helperRecorded.Count>=128||helperOutgoing.Count>=32){helperRecordingFailed=true;helperError="NPC recording is full; this conversation will not be replayed partially.";return;}
         if(kind is "talk" or "choice" or "acceptQuest" or "eventReplay")RecordFollowTravel("Helper captured choice",new {kind,npc=npc.Name,text,addon,scene,questId});
         var action=new HelperAction(Guid.NewGuid().ToString("N"),Player.CharacterName,Player.HomeWorld.RowId,kind,now.ToUnixTimeMilliseconds(),npc,text,signature,addon,scene,sessions,QuestId:questId);
-        if(helperRecording){helperRecorded.Add(action);helperRecordQuiet=default;}else helperOutgoing.Enqueue(action);
+        if(helperRecording){helperRecorded.Add(action);helperRecordQuiet=default;AnnounceHelperQuestRecording();}
     }
     private readonly HelperDialogueCapture helperDialogue=new();
     private void FlushHelperTalk()

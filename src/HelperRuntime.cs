@@ -52,8 +52,7 @@ public sealed partial class Plugin
                     foreach(var a in reply.Actions??[]){helperCursor=Math.Max(helperCursor,a.Sequence);if(helperSkippedConversations.Contains(a.Npc.Conversation)||!helperPermission.Allows(a.Kind)||!HelperPolicy.Fresh(a,now.ToUnixTimeMilliseconds(),followArmedAt)||a.SentAt<=helperTravelAfter||!FollowThemSession.Matches(config.FollowThem.TargetName,config.FollowThem.HomeWorld,a.Name,a.World)||!helperSeen.Add(a.Id))continue;
                         if(ReceiveHelperConversation(a,now))continue;
                         if(a.Kind=="fateSync"){CancelHelperFateApproach();helperPendingFate=a;helperFateAttempts=0;helperFateFallback=false;helperNextFateAttempt=default;continue;}
-                        if(helperIncoming.Count>=32){helperBlocked="Dialogue queue is full; pause and resume Quest Helper to clear it.";break;}
-                        helperIncoming.Enqueue(a);
+                        RecordFollowTravel("Helper standalone NPC action ignored",new {a.Kind,reason="A complete verified quest conversation is required."});
                     }
                 }else nextHelperStatus=now.AddSeconds(10);
             }

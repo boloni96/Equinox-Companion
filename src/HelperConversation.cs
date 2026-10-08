@@ -5,7 +5,14 @@ public sealed partial class Plugin
 {
     private readonly List<HelperAction> helperRecorded=new();
     private readonly Queue<HelperAction> helperConversations=new();
-    private bool helperRecording,helperRecordingFailed;
+    private bool helperRecording,helperRecordingFailed,helperRecordingAnnounced;
+    private bool HelperShopVisible()=>new[]{"Shop","ShopExchangeItem","ShopExchangeCurrency","InclusionShop","FreeCompanyCreditShop","CollectablesShop"}.Any(VisibleFollowAddon);
+    private void AnnounceHelperQuestRecording()
+    {
+        if(helperRecordingAnnounced||helperCaptureNpc is not {} npc||HelperShopVisible())return;
+        var quest=HelperQuestScope.Evidence(helperRecorded);if(quest==0)return;
+        helperRecordingAnnounced=true;QueueHelperEnvelope("recording",npc,questId:quest);
+    }
     private string[] helperRecordAudience=[];
     private DateTimeOffset helperRecordQuiet;
     private string helperReservedConversation="";
@@ -15,18 +22,19 @@ public sealed partial class Plugin
     private bool HoldHelperTravel=>helperPermission.Active&&!HelperPaused&&!helperPermission.QuestPaused&&helperBlocked.Length==0&&helperReservedConversation.Length>0&&DateTimeOffset.UtcNow<helperReservationUntil;
     private void ResetHelperRecording()
     {
-        if(helperRecording&&helperCaptureNpc is {} npc)QueueHelperEnvelope("cancelConversation",npc);
-        helperCaptureNpc=null;helperDialogue.Reset();helperRecording=false;helperRecordingFailed=false;helperRecorded.Clear();helperRecordAudience=[];helperRecordQuiet=default;helperAcceptIntent=false;helperOfferedQuest=0;
+        if(helperRecordingAnnounced&&helperCaptureNpc is {} npc)QueueHelperEnvelope("cancelConversation",npc);
+        helperCaptureNpc=null;helperDialogue.Reset();helperRecording=false;helperRecordingFailed=false;helperRecordingAnnounced=false;helperRecorded.Clear();helperRecordAudience=[];helperRecordQuiet=default;helperAcceptIntent=false;helperOfferedQuest=0;
     }
-    private void QueueHelperEnvelope(string kind,HelperNpc npc,HelperAction[]? steps=null)
+    private void QueueHelperEnvelope(string kind,HelperNpc npc,HelperAction[]? steps=null,uint questId=0)
     {
         var now=DateTimeOffset.UtcNow;
         if(helperRecordAudience.Length==0||helperOutgoing.Count>=32)return;
-        helperOutgoing.Enqueue(new(Guid.NewGuid().ToString("N"),Player.CharacterName,Player.HomeWorld.RowId,kind,now.ToUnixTimeMilliseconds(),npc,Sessions:helperRecordAudience,Steps:steps));
+        helperOutgoing.Enqueue(new(Guid.NewGuid().ToString("N"),Player.CharacterName,Player.HomeWorld.RowId,kind,now.ToUnixTimeMilliseconds(),npc,Sessions:helperRecordAudience,Steps:steps,QuestId:questId));
     }
     private unsafe void ObserveHelperRecording(DateTimeOffset now)
     {
         if(!helperRecording)return;
+        if(HelperShopVisible()){ResetHelperRecording();return;}
         if(!SharingQuest||helperCaptureNpc is not {} npc||now-helperCaptureAt>TimeSpan.FromMinutes(10)||helperRecordingFailed){ResetHelperRecording();return;}
         helperRecordAudience=helperRecordAudience.Where(id=>helperFollowers.Any(f=>f.Id==id&&HelperPolicy.Audience(f,now.ToUnixTimeMilliseconds()))).ToArray();
         if(helperRecordAudience.Length==0){ResetHelperRecording();return;}
@@ -41,10 +49,11 @@ public sealed partial class Plugin
     private void CommitHelperRecording(HelperNpc npc)
     {
         FlushHelperTalk();
+        if(HelperShopVisible()||HelperQuestScope.Evidence(helperRecorded)==0){ResetHelperRecording();return;}
         if(System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(helperRecorded).Length>230000){helperError="NPC recording is too large; nothing replayed.";ResetHelperRecording();return;}
         if(helperRecorded.Count>1){QueueHelperEnvelope("conversation",npc,helperRecorded.ToArray());RecordFollowTravel("Helper conversation committed",new {npc=npc.Name,steps=helperRecorded.Count});}
         else QueueHelperEnvelope("cancelConversation",npc);
-        helperRecording=false;helperRecorded.Clear();helperRecordAudience=[];helperCaptureNpc=null;helperDialogue.Reset();
+        helperRecording=false;helperRecordingAnnounced=false;helperRecorded.Clear();helperRecordAudience=[];helperCaptureNpc=null;helperDialogue.Reset();
     }
     private void CompleteHelperRecordingBeforeNextNpc()
     {
@@ -54,6 +63,7 @@ public sealed partial class Plugin
     private bool ReceiveHelperConversation(HelperAction a,DateTimeOffset now)
     {
         if(a.Kind=="recording"){
+            if(a.QuestId==0)return true;
             // Preserve an already playing conversation rather than replacing it silently.
             if(helperIncoming.Count>0||helperBlocked.Length>0)return true;
             helperReservedConversation=a.Npc.Conversation;helperReservationUntil=now.AddMinutes(10);followSession.Pause();RequestFollowMovementStop();helperQuestStatus="Waiting for the leader to finish the NPC conversation.";return true;
@@ -62,6 +72,10 @@ public sealed partial class Plugin
             if(helperReservedConversation==a.Npc.Conversation)FinishHelperConversation("Leader cancelled the recorded conversation.");return true;
         }
         if(a.Kind!="conversation")return false;
+        if(HelperQuestScope.Evidence(a.Steps??[])==0){
+            if(helperReservedConversation==a.Npc.Conversation)FinishHelperConversation("Non-quest NPC interaction ignored.");
+            RecordFollowTravel("Helper non-quest ignored",new {npc=a.Npc.Name});return true;
+        }
         if(!HelperConversationPolicy.ValidSteps(a)){helperError="Incomplete NPC recording was rejected.";return true;}
         if(helperIncoming.Count>0||helperBlocked.Length>0){
             if(helperConversations.Count>=4){helperError="Four NPC conversations are queued; wait for the follower.";return true;}
