@@ -38,6 +38,7 @@ public sealed partial class Plugin
         if(helperPairingIdentity!=config.PairingKey){helperPairingIdentity=config.PairingKey;helperFateObserved=false;CancelHelperFateApproach();helperPendingFate=null;helperFollowers=[];helperOutgoing.Clear();ClearHelperActions();helperOpened.Clear();nextHelperLeader=default;}
         if(helperPermission.Active&&Player.IsLoaded&&helperFollowerName.Length>0&&(Player.CharacterName!=helperFollowerName||Player.HomeWorld.RowId!=helperFollowerWorld)){StopFollowThem("Character changed; Helper permission ended.");}
         UpdateHelperActor();
+        UpdateHelperSceneHook();
         if(helperControlTask?.IsCompleted==true){var r=helperControlTask.GetAwaiter().GetResult();helperControlTask=null;if(helperControlIdentity==helperActorIdentity){helperError=r.Error;CompleteHelperBring(r.Reply,r.Error);}nextHelperLeader=default;}
         if(helperSendTask?.IsCompleted==true){var r=helperSendTask.GetAwaiter().GetResult();helperSendTask=null;if(helperSendIdentity==helperActorIdentity&&r.Error.Length>0)helperError=r.Error;}
         if(helperStatusTask?.IsCompleted==true){

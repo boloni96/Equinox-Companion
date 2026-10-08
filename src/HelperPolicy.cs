@@ -76,8 +76,25 @@ public static class HelperQuestScope
                  new[]{"The Man in Black","In the Dark of Night","Messenger of the Winds","The Ironworks Vendor","The Recompense Officer"}.All(a.Text.Contains)))return a.QuestId;
             // Native quest handlers have event type 1; this also covers in-progress quest dialogue and turn-ins.
             var colon=a.Scene.IndexOf(':');
-            if(a.Kind is "talk" or "choice" or "skip"&&colon>0&&uint.TryParse(a.Scene[..colon],out var eventId)&&(eventId>>16)==1&&(eventId&65535)!=0)return eventId;
+            if(a.Kind is "interact" or "talk" or "choice" or "skip"&&colon>0&&uint.TryParse(a.Scene[..colon],out var eventId)&&(eventId>>16)==1&&(eventId&65535)!=0)return eventId;
         }
         return 0;
     }
+}
+
+public static class HelperQuestScenePolicy
+{
+    public static string Canonical(string text,params string[] names)
+    {
+        foreach(var name in names.Where(n=>!string.IsNullOrWhiteSpace(n)).Distinct().OrderByDescending(n=>n.Length)){
+            foreach(var token in new[]{name,name.Split(' ')[0]}.Distinct())
+                text=System.Text.RegularExpressions.Regex.Replace(text,@"(?<![\p{L}\p{N}_])"+System.Text.RegularExpressions.Regex.Escape(token)+@"(?![\p{L}\p{N}_])","{player}");
+        }
+        return HelperConversationPolicy.NormalizePrompt(text);
+    }
+    public static bool Quest(uint id)=>(id>>16)==1&&(id&65535)!=0;
+    public static string ObjectKind(string recorded)=>recorded=="EventObj"?"EventObj":"EventNpc";
+    public static bool Confirmation(HelperAction a)=>a.Kind=="interact"&&a.Text=="confirmQuestScene"&&Quest(a.QuestId)&&a.Scene.StartsWith(a.QuestId+":",StringComparison.Ordinal);
+    public static string Step(bool accepted,byte sequence)=>accepted?"quest-step:"+sequence:"";
+    public static bool SameStep(string signature,bool accepted,byte sequence)=>signature.Length==0||accepted&&signature==Step(true,sequence);
 }

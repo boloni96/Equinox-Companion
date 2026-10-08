@@ -16,21 +16,22 @@ public sealed partial class Plugin
     private bool helperReplaying;
     private unsafe void CaptureHelperNpc(IGameObject clicked)
     {
-        if(!SharingQuest||helperReplaying||relayInteracting||usingSharedTravel||clicked.ObjectKind!=ObjectKind.EventNpc||Objects.LocalPlayer is not {} self||Vector3.Distance(self.Position,clicked.Position)>clicked.HitboxRadius+4)return;
+        if(!SharingQuest||helperReplaying||relayInteracting||usingSharedTravel||clicked.ObjectKind is not (ObjectKind.EventNpc or ObjectKind.EventObj)||Objects.LocalPlayer is not {} self||Vector3.Distance(self.Position,clicked.Position)>clicked.HitboxRadius+4)return;
         var map=AgentMap.Instance();if(map==null)return;
         CompleteHelperRecordingBeforeNextNpc();
         ResetHelperRecording();
         helperCaptureNpc=new(Guid.NewGuid().ToString("N"),clicked.BaseId,clicked.Name.TextValue,Client.TerritoryType,map->CurrentMapId,Player.CurrentWorld.RowId,FollowTravelPosition.From(clicked.Position),FollowTravelPosition.From(self.Position),self.Rotation);
-        helperDialogue.Reset();helperCaptureAt=DateTimeOffset.UtcNow;
+        helperDialogue.Reset();ResetHelperNativeScene();helperCaptureAt=DateTimeOffset.UtcNow;
         helperRecording=true;helperRecordAudience=helperFollowers.Where(f=>HelperPolicy.Audience(f,helperCaptureAt.ToUnixTimeMilliseconds())).Select(f=>f.Id).ToArray();
         // Observe locally until a verified quest or supported event-replay step appears.
-        EmitHelper("interact");
+        EmitHelper("interact",text:clicked.ObjectKind.ToString());
+        RecordFollowTravel("Helper interaction observed",new {npc=clicked.Name.TextValue,kind=clicked.ObjectKind.ToString(),clicked.BaseId});
     }
-    private string HelperCanonical(string text)=>text.Replace(Player.CharacterName,"{player}",StringComparison.Ordinal).Replace(config.FollowThem.TargetName.Length>0?config.FollowThem.TargetName:"\0","{player}",StringComparison.Ordinal).Trim();
+    private string HelperCanonical(string text)=>HelperQuestScenePolicy.Canonical(text,Player.CharacterName,config.FollowThem.TargetName);
+
     private unsafe string HelperScene()
     {
-        var f=EventFramework.Instance();if(f==null||f->EventState1.EventId.Id==0)return "";
-        return f->EventState1.EventId.Id+":"+f->Scene;
+        return helperNativeScene;
     }
     private unsafe (string Text,string Signature) HelperTalk()
     {
@@ -52,7 +53,7 @@ public sealed partial class Plugin
         var sessions=helperFollowers.Where(f=>HelperPolicy.Audience(f,now.ToUnixTimeMilliseconds(),kind=="skip")).Select(f=>f.Id).ToArray();
         if(sessions.Length==0)return;
         if(helperRecorded.Count>=128||helperOutgoing.Count>=32){helperRecordingFailed=true;helperError="NPC recording is full; this conversation will not be replayed partially.";return;}
-        if(kind is "talk" or "choice" or "acceptQuest" or "eventReplay")RecordFollowTravel("Helper captured choice",new {kind,npc=npc.Name,text,addon,scene,questId});
+        if(kind is "talk" or "choice" or "acceptQuest" or "eventReplay" or "skip")RecordFollowTravel("Helper captured choice",new {kind,npc=npc.Name,text,addon,scene,questId});
         var action=new HelperAction(Guid.NewGuid().ToString("N"),Player.CharacterName,Player.HomeWorld.RowId,kind,now.ToUnixTimeMilliseconds(),npc,text,signature,addon,scene,sessions,QuestId:questId);
         if(helperRecording){helperRecorded.Add(action);helperRecordQuiet=default;AnnounceHelperQuestRecording();}
     }
@@ -98,7 +99,8 @@ public sealed partial class Plugin
         if(cut!=null&&cut->SkipDialogAddonId!=0&&addon->Id==cut->SkipDialogAddonId){
             var yes=index==0;
             if(addon==(AtkUnitBase*)GardenGui.GetAddonByName("SelectString").Address){var options=TransportChoices(addon);yes=index<options.Count&&new[]{"Yes.","Yes","Ja","Oui","はい","是","예"}.Contains(options[index]);}
-            var scene=HelperScene();if(yes&&scene.Length>0)EmitHelper("skip",scene:scene);return;
+            var scene=HelperScene();if(yes&&scene.Length>0)EmitHelper("skip",scene:scene);
+            else if(yes)RecordFollowTravel("Helper skip not recorded",new {reason="No observed quest scene for this cutscene."});return;
         }
         foreach(var name in new[]{"SelectString","SelectIconString","CutSceneSelectString"}){
             if(addon!=(AtkUnitBase*)GardenGui.GetAddonByName(name).Address)continue;

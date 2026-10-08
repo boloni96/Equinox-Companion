@@ -8,6 +8,7 @@ namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
     private HelperNpc? helperNpcActive;
+    private string helperTargetKind="EventNpc";
     private string helperSubmittedMenu="";
     private string helperQuestStatus="Waiting for the leader's NPC interaction.",helperWorkingId="";
     private bool helperApproaching,helperStopRequested;
@@ -40,13 +41,21 @@ public sealed partial class Plugin
         if(HelperShopVisible()){BlockHelper("A shop is open; Quest Helper does not mirror vendors.");return;}
         if(helperWorkingId!=a.Id){helperWorkingId=a.Id;helperActionSubmitted=false;helperTalkAttempts=0;helperQuestMenuSelected=false;helperActionStarted=now;helperStopRequested=false;helperInteractAttempts=0;helperStationary.Reset();followSession.Pause();RequestFollowMovementStop();}
         if(FollowMovementKeysHeld()){if(helperApproaching)CancelHelperApproach();helperQuestStatus="Your movement paused NPC approach.";return;}
+        if(HelperQuestScenePolicy.Confirmation(a)){
+            if(helperNpcActive?.Conversation!=a.Npc.Conversation){BlockHelper("Quest scene belongs to another interaction.");return;}
+            if(helperNativeScenes.Contains(a.Scene)){RecordFollowTravel("Helper quest scene confirmed",new {a.QuestId,a.Scene});CompleteHelperAction(now);return;}
+            if(now-helperActionStarted>TimeSpan.FromSeconds(8))BlockHelper("The recorded quest scene did not start; quest progress may differ.");return;
+        }
         if(a.Kind=="interact"){
+            helperTargetKind=HelperQuestScenePolicy.ObjectKind(a.Text);
+            if(a.QuestId!=0&&!HelperQuestScenePolicy.SameStep(a.Signature,FFXIVClientStructs.FFXIV.Client.Game.QuestManager.Instance()!=null&&FFXIVClientStructs.FFXIV.Client.Game.QuestManager.Instance()->IsQuestAccepted(a.QuestId),FFXIVClientStructs.FFXIV.Client.Game.QuestManager.GetQuestSequence(a.QuestId))){BlockHelper("Your quest step differs from the recorded interaction.");return;}
+            if(helperNpcActive?.Conversation==a.Npc.Conversation&&a.QuestId!=0&&helperNativeScenes.Any(scene=>scene.StartsWith(a.QuestId+":",StringComparison.Ordinal))){CompleteHelperAction(now);return;}
             if(QuestConversationVisible()){
                 if(helperNpcActive?.Conversation==a.Npc.Conversation){CompleteHelperAction(now);return;}
                 BlockHelper("Another conversation is already open. Close it, then stop/start assistance.");return;
             }
             var map=AgentMap.Instance();if(map==null||map->CurrentMapId!=a.Npc.Map){helperQuestStatus="Waiting for the NPC's map.";return;}
-            var targets=Objects.Where(o=>o.ObjectKind.ToString()=="EventNpc"&&o.BaseId==a.Npc.BaseId&&o.Name.TextValue==a.Npc.Name&&o.IsTargetable&&Vector3.DistanceSquared(o.Position,a.Npc.Position.Point)<1).Take(2).ToArray();
+            var targets=Objects.Where(o=>o.ObjectKind.ToString()==helperTargetKind&&o.BaseId==a.Npc.BaseId&&o.Name.TextValue==a.Npc.Name&&o.IsTargetable&&Vector3.DistanceSquared(o.Position,a.Npc.Position.Point)<1).Take(2).ToArray();
             if(targets.Length!=1){if(now-helperActionStarted>TimeSpan.FromSeconds(8))BlockHelper("The exact recorded NPC is not available here.");return;}
             var target=targets[0];var inRange=Vector3.Distance(self.Position,target.Position)<=target.HitboxRadius+2.5f;
             var goal=FollowCrystalApproach.Point(target.Position,config.FollowThem.PreferRightSide?HelperPolicy.Right(a.Npc.Approach.Point,a.Npc.Facing):a.Npc.Approach.Point,target.HitboxRadius);
@@ -65,7 +74,7 @@ public sealed partial class Plugin
             if(!FaceTravelTarget(signal,target,now))return;
             if(helperInteractAttempts>=3){BlockHelper("The NPC did not open a conversation after three attempts.");return;}
             helperReplaying=true;relayInteracting=true;
-            try{Targets.Target=target;TargetSystem.Instance()->InteractWithObject((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)target.Address,false);helperNpcActive=a.Npc;helperInteractAttempts++;helperNextAction=now.AddSeconds(1);helperQuestStatus="Waiting for NPC dialogue — "+a.Npc.Name;}
+            try{ResetHelperNativeScene();Targets.Target=target;TargetSystem.Instance()->InteractWithObject((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)target.Address,false);helperNpcActive=a.Npc;helperInteractAttempts++;helperNextAction=now.AddSeconds(1);helperQuestStatus="Waiting for NPC dialogue — "+a.Npc.Name;}
             finally{helperReplaying=false;relayInteracting=false;}
             return;
         }
@@ -79,6 +88,11 @@ public sealed partial class Plugin
         if(a.Kind=="acceptQuest"){UpdateHelperQuestAccept(a,now);return;}
         if(a.Kind=="skip"){
             if(!helperPermission.Skip){CompleteHelperAction(now);return;}
+            if(helperActionSubmitted){
+                var skipping=AgentCutscene.Instance();
+                if((skipping==null||skipping->SkipDialogAddonId==0)&&(!HelperPolicy.SceneMatches(a.Scene,HelperScene())||!Conditions[ConditionFlag.WatchingCutscene]&&!Conditions[ConditionFlag.WatchingCutscene78]&&!Conditions[ConditionFlag.OccupiedInCutSceneEvent])){RecordFollowTravel("Helper skip confirmed",new {a.Scene});CompleteHelperAction(now);return;}
+                if(now-helperActionStarted>TimeSpan.FromSeconds(15))BlockHelper("Cutscene skip was requested but not confirmed.");return;
+            }
             if(!HelperPolicy.SceneMatches(a.Scene,HelperScene())){if(now-helperActionStarted>TimeSpan.FromSeconds(8))BlockHelper("Cutscene differs; skip was not applied.");return;}
             var agent=AgentCutscene.Instance();if(agent==null)return;
             
@@ -87,7 +101,7 @@ public sealed partial class Plugin
                 helperQuestStatus="Open the cutscene Skip prompt to continue; no verified skip callback is available yet.";return;
             }
             // Require the game-owned skip dialog, not an unrelated Yes/No window.
-            foreach(var name in new[]{"SelectString","SelectYesno"}){var dialog=(AtkUnitBase*)GardenGui.GetAddonByName(name).Address;if(dialog==null||!dialog->IsVisible||dialog->Id!=agent->SkipDialogAddonId)continue;var choice=0;if(name=="SelectString"){var labels=TransportChoices(dialog);var yesLabels=new[]{"Yes.","Yes","Ja","Oui","はい","是","예"};var found=labels.Select((text,index)=>(text,index)).Where(x=>yesLabels.Contains(x.text)).ToArray();if(found.Length!=1){BlockHelper("Skip confirmation differs; choose manually.");return;}choice=found[0].index;}helperReplaying=true;try{dialog->FireCallbackInt(choice);}finally{helperReplaying=false;}CompleteHelperAction(now);return;}
+            foreach(var name in new[]{"SelectString","SelectYesno"}){var dialog=(AtkUnitBase*)GardenGui.GetAddonByName(name).Address;if(dialog==null||!dialog->IsVisible||dialog->Id!=agent->SkipDialogAddonId)continue;var choice=0;if(name=="SelectString"){var labels=TransportChoices(dialog);var yesLabels=new[]{"Yes.","Yes","Ja","Oui","はい","是","예"};var found=labels.Select((text,index)=>(text,index)).Where(x=>yesLabels.Contains(x.text)).ToArray();if(found.Length!=1){BlockHelper("Skip confirmation differs; choose manually.");return;}choice=found[0].index;}helperReplaying=true;try{RecordFollowTravel("Helper skip submitted",new {a.Scene,npc=a.Npc.Name});dialog->FireCallbackInt(choice);}finally{helperReplaying=false;}helperActionSubmitted=true;helperActionStarted=now;helperNextAction=now.AddMilliseconds(450);return;}
             return;
         }
         if(a.Kind=="talk"){
@@ -115,7 +129,7 @@ public sealed partial class Plugin
             helperSubmittedMenu=HelperPolicy.Signature(choices.OrderBy(x=>x,StringComparer.Ordinal));helperReplaying=true;try{SelectTravelChoice(menu,index);}finally{helperReplaying=false;}helperActionSubmitted=true;helperNextAction=now.AddMilliseconds(450);
         }
     }
-    private FollowPortalSignal HelperTargetSignal(HelperAction a)=>new(a.Id,a.Name,a.World,a.Npc.World,"",a.Npc.Territory,a.Npc.Map,a.Npc.BaseId,0,a.Npc.Position.X,a.Npc.Position.Y,a.Npc.Position.Z,a.SentAt,"",SourceKind:"EventNpc");
+    private FollowPortalSignal HelperTargetSignal(HelperAction a)=>new(a.Id,a.Name,a.World,a.Npc.World,"",a.Npc.Territory,a.Npc.Map,a.Npc.BaseId,0,a.Npc.Position.X,a.Npc.Position.Y,a.Npc.Position.Z,a.SentAt,"",SourceKind:helperTargetKind);
     private void CompleteHelperAction(DateTimeOffset now){
         var done=helperIncoming.Dequeue();helperStepDelays.Remove(done.Id);helperWorkingId="";helperActionSubmitted=false;
         if(helperIncoming.TryPeek(out var next))helperNextAction=now.AddMilliseconds(helperStepDelays.GetValueOrDefault(next.Id,450));

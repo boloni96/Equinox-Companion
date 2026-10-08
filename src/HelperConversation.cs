@@ -38,7 +38,7 @@ public sealed partial class Plugin
         if(!SharingQuest||helperCaptureNpc is not {} npc||now-helperCaptureAt>TimeSpan.FromMinutes(10)||helperRecordingFailed){ResetHelperRecording();return;}
         helperRecordAudience=helperRecordAudience.Where(id=>helperFollowers.Any(f=>f.Id==id&&HelperPolicy.Audience(f,now.ToUnixTimeMilliseconds()))).ToArray();
         if(helperRecordAudience.Length==0){ResetHelperRecording();return;}
-        if(QuestConversationVisible()||helperAcceptIntent||Conditions[ConditionFlag.OccupiedInQuestEvent]){helperRecordQuiet=default;return;}
+        if(QuestConversationVisible()||helperAcceptIntent||Conditions[ConditionFlag.OccupiedInQuestEvent]||Conditions[ConditionFlag.WatchingCutscene]||Conditions[ConditionFlag.WatchingCutscene78]||Conditions[ConditionFlag.OccupiedInCutSceneEvent]){helperRecordQuiet=default;return;}
         // A brief window replacement is not the end of a conversation.
         var evt=EventFramework.Instance();
         if(evt!=null&&evt->EventState1.EventId.Id!=0&&helperRecorded.Count<2)return;
@@ -49,7 +49,7 @@ public sealed partial class Plugin
     private void CommitHelperRecording(HelperNpc npc)
     {
         FlushHelperTalk();
-        if(HelperShopVisible()||HelperQuestScope.Evidence(helperRecorded)==0){ResetHelperRecording();return;}
+        if(HelperShopVisible()||HelperQuestScope.Evidence(helperRecorded)==0){RecordFollowTravel("Helper interaction excluded",new {npc=npc.Name,reason=HelperShopVisible()?"Shop":"No verified quest scene or offer"});ResetHelperRecording();return;}
         if(System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(helperRecorded).Length>230000){helperError="NPC recording is too large; nothing replayed.";ResetHelperRecording();return;}
         if(helperRecorded.Count>1){QueueHelperEnvelope("conversation",npc,helperRecorded.ToArray());RecordFollowTravel("Helper conversation committed",new {npc=npc.Name,steps=helperRecorded.Count});}
         else QueueHelperEnvelope("cancelConversation",npc);
