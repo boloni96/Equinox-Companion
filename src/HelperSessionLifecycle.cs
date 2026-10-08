@@ -11,6 +11,7 @@ public sealed partial class Plugin
     }
     private void ClearHelperLeaderSession()
     {
+        helperSceneRecovery.NewInteraction();
         helperRecordAudience=[];ResetHelperRecording();helperOutgoing.Clear();helperControls.Clear();helperOpened.Clear();helperFollowers=[];
         helperWindowOpen=false;helperStopConfirm="";helperError="";helperFateObserved=false;helperBring=null;helperMeetTravel=null;
         ClearPurchaseMirroring();helperVendorPurchases=false;purchaseQuote=null;purchaseVendor=null;purchaseSent.Clear();

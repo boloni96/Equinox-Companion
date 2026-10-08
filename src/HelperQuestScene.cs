@@ -8,6 +8,7 @@ public sealed partial class Plugin
     private unsafe delegate void HelperSceneDelegate(EventFramework* framework,NativeObject* obj,EventId eventId,short scene,ulong flags,uint* data,byte count);
     private Hook<HelperSceneDelegate>? helperSceneHook;
     private bool helperSceneHookFailed;
+    private readonly HelperSceneRecoveryGate helperSceneRecovery=new();
     private string helperNativeScene="";
     private readonly HashSet<string> helperNativeScenes=new();
     private void ResetHelperNativeScene(){helperNativeScene="";helperNativeScenes.Clear();}
@@ -25,7 +26,7 @@ public sealed partial class Plugin
         try{
             // Recover a missed interaction callback only at a verified native quest-scene start.
             // The native source must resolve to the exact nearby NPC/event object; never guess from current target.
-            if(SharingQuest&&!helperRecording&&!helperReplaying&&!relayInteracting&&HelperQuestScenePolicy.Quest(eventId.Id)&&obj!=null){
+            if(helperSceneRecovery.Allowed&&SharingQuest&&!helperRecording&&!helperReplaying&&!relayInteracting&&HelperQuestScenePolicy.Quest(eventId.Id)&&obj!=null){
                 var source=Objects.FirstOrDefault(o=>o.Address==(nint)obj);
                 if(source!=null){CaptureHelperNpc(source);if(helperRecording)RecordFollowTravel("Helper interaction recovered at quest scene",new {npc=source.Name.TextValue,eventId=eventId.Id,scene});}
             }

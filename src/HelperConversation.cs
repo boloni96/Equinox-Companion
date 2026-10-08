@@ -52,7 +52,7 @@ public sealed partial class Plugin
         FlushHelperTalk();
         if(HelperShopVisible()||HelperQuestScope.Evidence(helperRecorded)==0){RecordFollowTravel("Helper interaction excluded",new {npc=npc.Name,reason=HelperShopVisible()?"Shop":"No verified quest scene or offer"});ResetHelperRecording();return;}
         if(System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(helperRecorded).Length>230000){helperError="NPC recording is too large; nothing replayed.";ResetHelperRecording();return;}
-        if(helperRecorded.Count>1){QueueHelperEnvelope("conversation",npc,helperRecorded.ToArray());RecordFollowTravel("Helper conversation committed",new {npc=npc.Name,steps=helperRecorded.Count});}
+        if(helperRecorded.Count>1){helperSceneRecovery.Committed();QueueHelperEnvelope("conversation",npc,helperRecorded.ToArray());RecordFollowTravel("Helper conversation committed",new {npc=npc.Name,steps=helperRecorded.Count});}
         else QueueHelperEnvelope("cancelConversation",npc);
         helperRecording=false;helperRecordingAnnounced=false;helperRecorded.Clear();helperRecordAudience=[];helperCaptureNpc=null;helperDialogue.Reset();
     }

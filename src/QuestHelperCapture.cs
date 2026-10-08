@@ -25,6 +25,7 @@ public sealed partial class Plugin
         var map=AgentMap.Instance();if(map==null)return;
         CompleteHelperRecordingBeforeNextNpc();
         ResetHelperRecording();
+        helperSceneRecovery.NewInteraction();
         helperCaptureNpc=new(Guid.NewGuid().ToString("N"),clicked.BaseId,clicked.Name.TextValue,Client.TerritoryType,map->CurrentMapId,Player.CurrentWorld.RowId,FollowTravelPosition.From(clicked.Position),FollowTravelPosition.From(self.Position),self.Rotation);
         helperDialogue.Reset();ResetHelperNativeScene();helperCaptureAt=DateTimeOffset.UtcNow;
         helperRecording=true;helperRecordAudience=helperFollowers.Where(f=>HelperPolicy.Audience(f,helperCaptureAt.ToUnixTimeMilliseconds())).Select(f=>f.Id).ToArray();

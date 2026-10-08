@@ -1,6 +1,6 @@
 <Project Sdk="Dalamud.NET.Sdk/15.0.0">
   <PropertyGroup>
-    <Version>0.5.1.104</Version>
+    <Version>0.5.1.105</Version>
     <Author>Boloni</Author>
     <Name>Equinox Companion</Name>
     <Punchline>Your shared characters, estates, collections and timers.</Punchline>

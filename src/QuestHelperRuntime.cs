@@ -12,7 +12,7 @@ public sealed partial class Plugin
     private string helperSubmittedMenu="";
     private string helperQuestStatus="Waiting for the leader's NPC interaction.",helperWorkingId="";
     private bool helperApproaching,helperStopRequested;
-    private DateTimeOffset helperNextAction,helperActionStarted;
+    private DateTimeOffset helperNextAction,helperActionStarted,helperInteractRetryAt;
     private readonly FollowApproachProgress helperProgress=new();
     private readonly FollowStationaryGate helperStationary=new();
     private int helperInteractAttempts;
@@ -40,7 +40,7 @@ public sealed partial class Plugin
         if(a.Npc.World!=Player.CurrentWorld.RowId||a.Npc.Territory!=Client.TerritoryType){helperQuestStatus="Waiting to reach the NPC's area.";return;}
         if(HelperTravelBusy){helperQuestStatus="Waiting for travel to finish.";return;}
         if(HelperShopVisible()){BlockHelper("A shop is open; Quest Helper does not mirror vendors.");return;}
-        if(helperWorkingId!=a.Id){helperWorkingId=a.Id;helperActionSubmitted=false;helperTalkAttempts=0;helperQuestMenuSelected=false;helperActionStarted=now;helperStopRequested=false;helperInteractAttempts=0;helperStationary.Reset();followSession.Pause();RequestFollowMovementStop();}
+        if(helperWorkingId!=a.Id){helperWorkingId=a.Id;helperActionSubmitted=false;helperTalkAttempts=0;helperQuestMenuSelected=false;helperActionStarted=now;helperStopRequested=false;helperInteractAttempts=0;helperInteractRetryAt=default;helperStationary.Reset();followSession.Pause();RequestFollowMovementStop();}
         if(FollowMovementKeysHeld()){if(helperApproaching)CancelHelperApproach();helperQuestStatus="Your movement paused NPC approach.";return;}
         if(HelperQuestScenePolicy.Confirmation(a)){
             if(helperNpcActive?.Conversation!=a.Npc.Conversation){BlockHelper("Quest scene belongs to another interaction.");return;}
@@ -55,6 +55,9 @@ public sealed partial class Plugin
                 if(helperNpcActive?.Conversation==a.Npc.Conversation){CompleteHelperAction(now);return;}
                 BlockHelper("Another conversation is already open. Close it, then stop/start assistance.");return;
             }
+            // Keep observing scenes and windows while a native interaction opens its delayed prompt.
+            if(HelperInteractionPolicy.Waiting(now,helperInteractRetryAt)){helperQuestStatus="Waiting for NPC dialogue — "+a.Npc.Name;return;}
+            if(helperInteractAttempts>=3){BlockHelper("The NPC did not open a conversation after three spaced attempts.");return;}
             var map=AgentMap.Instance();if(map==null||map->CurrentMapId!=a.Npc.Map){helperQuestStatus="Waiting for the NPC's map.";return;}
             var targets=Objects.Where(o=>o.ObjectKind.ToString()==helperTargetKind&&o.BaseId==a.Npc.BaseId&&o.Name.TextValue==a.Npc.Name&&o.IsTargetable&&Vector3.DistanceSquared(o.Position,a.Npc.Position.Point)<1).Take(2).ToArray();
             if(targets.Length!=1){if(now-helperActionStarted>TimeSpan.FromSeconds(8))BlockHelper("The exact recorded NPC is not available here.");return;}
@@ -73,9 +76,8 @@ public sealed partial class Plugin
             if(followStopPending||followStopUnconfirmed||!helperStationary.Observe(now,self.Position,!FollowTransitionBusy()))return;
             var signal=HelperTargetSignal(a);
             if(!FaceTravelTarget(signal,target,now))return;
-            if(helperInteractAttempts>=3){BlockHelper("The NPC did not open a conversation after three attempts.");return;}
             helperReplaying=true;relayInteracting=true;
-            try{ResetHelperNativeScene();Targets.Target=target;TargetSystem.Instance()->InteractWithObject((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)target.Address,false);helperNpcActive=a.Npc;helperInteractAttempts++;helperNextAction=now.AddSeconds(1);helperQuestStatus="Waiting for NPC dialogue — "+a.Npc.Name;}
+            try{ResetHelperNativeScene();Targets.Target=target;TargetSystem.Instance()->InteractWithObject((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)target.Address,false);helperNpcActive=a.Npc;helperInteractAttempts++;helperInteractRetryAt=HelperInteractionPolicy.Deadline(now);helperNextAction=now.AddMilliseconds(450);RecordFollowTravel("Helper NPC interaction submitted",new {npc=a.Npc.Name,attempt=helperInteractAttempts,retryAt=helperInteractRetryAt});helperQuestStatus="Waiting for NPC dialogue — "+a.Npc.Name;}
             finally{helperReplaying=false;relayInteracting=false;}
             return;
         }
