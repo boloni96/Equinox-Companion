@@ -23,6 +23,12 @@ public sealed partial class Plugin
     private unsafe void ObserveHelperScene(EventFramework* framework,NativeObject* obj,EventId eventId,short scene,ulong flags,uint* data,byte count)
     {
         try{
+            // Recover a missed interaction callback only at a verified native quest-scene start.
+            // The native source must resolve to the exact nearby NPC/event object; never guess from current target.
+            if(SharingQuest&&!helperRecording&&!helperReplaying&&!relayInteracting&&HelperQuestScenePolicy.Quest(eventId.Id)&&obj!=null){
+                var source=Objects.FirstOrDefault(o=>o.Address==(nint)obj);
+                if(source!=null){CaptureHelperNpc(source);if(helperRecording)RecordFollowTravel("Helper interaction recovered at quest scene",new {npc=source.Name.TextValue,eventId=eventId.Id,scene});}
+            }
             // Observe the event being played, not EventState1, which can be empty during quest scenes.
             if(SharingQuest&&helperRecording)FlushHelperTalk();
             helperNativeScene=eventId.Id==0?"":eventId.Id+":"+scene;

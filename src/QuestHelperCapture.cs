@@ -16,7 +16,12 @@ public sealed partial class Plugin
     private bool helperReplaying;
     private unsafe void CaptureHelperNpc(IGameObject clicked)
     {
-        if(!SharingQuest||helperReplaying||relayInteracting||usingSharedTravel||clicked.ObjectKind is not (ObjectKind.EventNpc or ObjectKind.EventObj)||Objects.LocalPlayer is not {} self||Vector3.Distance(self.Position,clicked.Position)>clicked.HitboxRadius+4)return;
+        if(helperReplaying||relayInteracting||usingSharedTravel||clicked.ObjectKind is not (ObjectKind.EventNpc or ObjectKind.EventObj)||Objects.LocalPlayer is not {} self)return;
+        if(!SharingQuest){
+            if(config.EnableFollowThem&&config.FollowThem.ShareQuestActions)RecordFollowTravel("Helper interaction not shared",new {npc=clicked.Name.TextValue,reason="No fresh active follower with quest permission, or pairing/player unavailable",followers=helperFollowers.Length,loaded=Player.IsLoaded});
+            return;
+        }
+        if(Vector3.Distance(self.Position,clicked.Position)>clicked.HitboxRadius+4){RecordFollowTravel("Helper interaction not shared",new {npc=clicked.Name.TextValue,reason="Outside recorded interaction range"});return;}
         var map=AgentMap.Instance();if(map==null)return;
         CompleteHelperRecordingBeforeNextNpc();
         ResetHelperRecording();

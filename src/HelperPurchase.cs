@@ -114,7 +114,7 @@ public sealed partial class Plugin
     {
         if(!HelperPurchasePolicy.Valid(action.Purchase)){helperLastIssue="Invalid vendor purchase rejected.";return;}
         if(purchasePending!=null||helperExchangePending!=null||helperIncoming.Count>0||helperReservedConversation.Length>0){helperLastIssue="Finish the current helper action before requesting a purchase.";return;}
-        purchasePending=action;purchaseOpenedVendor=false;purchaseGreetingClicks=0;purchaseGreetingNext=default;purchaseStage=0;purchaseNext=default;purchaseUntil=DateTimeOffset.UtcNow.AddSeconds(60);helperExchangeReport="";
+        purchasePending=action;purchaseRequestId=0;purchaseRequestSlot=0;purchaseRequestOptionPending=false;purchaseOpenedVendor=false;purchaseGreetingClicks=0;purchaseGreetingNext=default;purchaseStage=0;purchaseNext=default;purchaseUntil=DateTimeOffset.UtcNow.AddSeconds(60);helperExchangeReport="";
         helperQuestStatus="Purchase requested; checking vendor and exact costs.";followSession.Pause();RequestFollowMovementStop();nextHelperStatus=default;
     }
     private void FinishHelperPurchase(string reason,bool success=false)
@@ -131,7 +131,7 @@ public sealed partial class Plugin
         purchaseNext=now.AddMilliseconds(300);
         var p=action.Purchase!;var inventory=InventoryManager.Instance();var map=AgentMap.Instance();var self=Objects.LocalPlayer;if(inventory==null||map==null||self==null)return;
         if(purchaseStage>=2&&HelperPurchasePolicy.Confirmed(p,purchaseBeforeItem,inventory->GetInventoryItemCount(p.ItemId),purchaseBeforeCosts,p.Costs.Select(c=>inventory->GetInventoryItemCount(c.ItemId)).ToArray())){FinishHelperPurchase($"Purchased {p.Quantity} × {p.ItemName}.",true);return;}
-        if(purchaseStage==3)return;
+        if(purchaseStage==4)return;
         if(Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.Unconscious]||FollowMovementKeysHeld()){FinishHelperPurchase("Purchase cancelled while moving, in combat or incapacitated.");return;}
         if(action.Npc.World!=Player.CurrentWorld.RowId||action.Npc.Territory!=Client.TerritoryType||action.Npc.Map!=map->CurrentMapId||HelperTravelBusy){helperQuestStatus="Purchase waiting for the vendor's area.";return;}
         var target=Objects.FirstOrDefault(o=>o.ObjectKind==ObjectKind.EventNpc&&o.BaseId==action.Npc.BaseId&&o.Name.TextValue==action.Npc.Name&&o.IsTargetable&&Vector3.DistanceSquared(o.Position,action.Npc.Position.Point)<1);
@@ -158,9 +158,10 @@ public sealed partial class Plugin
             try{if(ClickVisibleTalk()){purchaseGreetingClicks++;RecordFollowTravel("Vendor greeting advanced",new {npc=action.Npc.Name,purchaseGreetingClicks});}}finally{helperReplaying=false;}
             helperQuestStatus="Opening shop: advancing "+action.Npc.Name+"'s greeting.";return;
         }
+        if(purchaseStage==3){UpdatePurchaseItemRequest(action,now);return;}
         if(FindPurchase(p,out var index)==null){helperQuestStatus="Open the matching vendor category: "+p.ItemName+". Exact item and cost must match.";return;}
         if(purchaseStage==1){
-            if(VisibleFollowAddon("SelectYesno")||VisibleFollowAddon("ShopExchangeItemDialog")||VisibleFollowAddon("ShopExchangeCurrencyDialog")){FinishHelperPurchase("Close the existing purchase confirmation, then request again.");return;}
+            if(VisibleFollowAddon("Request")||VisibleFollowAddon("SelectYesno")||VisibleFollowAddon("ShopExchangeItemDialog")||VisibleFollowAddon("ShopExchangeCurrencyDialog")){FinishHelperPurchase("Close the existing purchase confirmation, then request again.");return;}
             if(p.Costs.Any(c=>inventory->GetInventoryItemCount(c.ItemId)<c.Amount)){FinishHelperPurchase("Purchase blocked: insufficient currency or exchange items.");return;}
             var stack=Math.Max(1u,DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>().GetRowOrDefault(p.ItemId)?.StackSize??1);
             if(!EventExchangeHasSpace((int)(((uint)p.Quantity+stack-1)/stack))){FinishHelperPurchase("Purchase blocked: insufficient free inventory slots.");return;}
@@ -193,6 +194,6 @@ public sealed partial class Plugin
         if(evt==null||n>32)return;
         var click=*evt;var data=new AtkEventData();purchaseStage=3;helperReplaying=true;
         try{confirmation->ReceiveEvent(click.State.EventType,(int)click.Param,&click,&data);}finally{helperReplaying=false;}
-        helperQuestStatus="Purchase confirmed once; checking item and currency changes.";
+        helperQuestStatus="Purchase confirmation submitted; checking for an item hand-in and inventory changes.";
     }
 }
