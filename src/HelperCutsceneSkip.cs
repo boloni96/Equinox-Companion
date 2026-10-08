@@ -50,7 +50,8 @@ public sealed partial class Plugin
             helperNextAction=now.AddMilliseconds(450);return;
         }
         if(helperEscapeAction!=a.Id){
-            if(QuestConversationVisible()||VisibleFollowAddon("SelectYesno")||FollowStopTextEntryActive()){
+            // Talk belongs to this cutscene and must not prevent Escape. Choices remain protected.
+            if(HelperCutsceneReplayPolicy.BlockingAddons.Any(VisibleFollowAddon)||FollowStopTextEntryActive()){
                 if(now-helperActionStarted>TimeSpan.FromSeconds(15))BlockHelper("Another window prevents requesting the cutscene skip.");
                 return;
             }

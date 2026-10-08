@@ -92,6 +92,14 @@ public sealed partial class Plugin
         if(a.Kind=="skip"){UpdateHelperCutsceneSkip(a,now);return;}
         if(a.Kind=="talk"){
             var talk=HelperTalk();
+            if(!helperActionSubmitted&&(talk.Signature!=a.Signature||talk.Text!=a.Text)){
+                var advance=HelperCutsceneReplayPolicy.MatchingLaterTalk(helperIncoming.ToArray(),HelperScene(),talk.Text,talk.Signature);
+                if(advance>0){
+                    RecordFollowTravel("Helper dialogue already advanced",new {a.Scene,omitted=advance,text=talk.Text});
+                    for(var i=0;i<advance;i++)CompleteHelperAction(now);
+                    return;
+                }
+            }
             if(helperActionSubmitted){
                 if(talk.Signature!=a.Signature||talk.Text!=a.Text){CompleteHelperAction(now);return;}
                 if(HelperConversationPolicy.RetryTalk(helperTalkAttempts,(now-helperTalkSentAt).TotalMilliseconds)){helperActionSubmitted=false;return;}
@@ -107,7 +115,10 @@ public sealed partial class Plugin
                     if(now-helperActionStarted>TimeSpan.FromSeconds(15))BlockHelper("Matching dialogue could not be advanced; its scene or another open window requires manual attention.");
                 }}finally{helperReplaying=false;}return;
             }
-            if(now-helperActionStarted>TimeSpan.FromSeconds(5))BlockHelper("Dialogue differs from the leader's recorded line; no response selected.");return;
+            if(now-helperActionStarted>TimeSpan.FromSeconds(5)){
+                RecordFollowTravel("Helper dialogue mismatch",new {expected=a.Text,actual=talk.Text,expectedScene=a.Scene,actualScene=HelperScene(),expectedSignature=a.Signature,actualSignature=talk.Signature});
+                BlockHelper("Dialogue differs from the leader's recorded line; no response selected.");
+            }return;
         }
         if(a.Kind=="choice"){
             var menu=(AtkUnitBase*)GardenGui.GetAddonByName(a.Addon).Address;var choices=HelperChoices(menu,a.Addon);

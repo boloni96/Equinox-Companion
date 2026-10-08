@@ -41,9 +41,9 @@ public sealed partial class Plugin
         if(QuestConversationVisible()||helperAcceptIntent||HelperResultPending||Conditions[ConditionFlag.OccupiedInQuestEvent]||Conditions[ConditionFlag.WatchingCutscene]||Conditions[ConditionFlag.WatchingCutscene78]||Conditions[ConditionFlag.OccupiedInCutSceneEvent]){helperRecordQuiet=default;return;}
         // A brief window replacement is not the end of a conversation.
         var evt=EventFramework.Instance();
-        if(evt!=null&&evt->EventState1.EventId.Id!=0&&helperRecorded.Count<2)return;
+        if(evt!=null&&evt->EventState1.EventId.Id!=0){helperRecordQuiet=default;return;}
         if(helperRecordQuiet==default){helperRecordQuiet=now;return;}
-        if(now-helperRecordQuiet<TimeSpan.FromSeconds(2))return;
+        if((now-helperRecordQuiet).TotalMilliseconds<HelperCutsceneReplayPolicy.QuietMilliseconds(helperRecorded))return;
         CommitHelperRecording(npc);
     }
     private void CommitHelperRecording(HelperNpc npc)
@@ -86,10 +86,12 @@ public sealed partial class Plugin
             helperConversations.Enqueue(a);RecordFollowTravel("Helper conversation queued",new {npc=a.Npc.Name,steps=a.Steps!.Length});return true;
         }
         helperReservedConversation=a.Npc.Conversation;helperReservationUntil=now.AddMinutes(10);helperPlaybackUntil=helperReservationUntil;
-        helperBlocked="";helperLastIssue="";helperStepDelays.Clear();long previous=a.Steps![0].SentAt;
-        foreach(var step in a.Steps){
+        var playback=HelperCutsceneReplayPolicy.Playback(a.Steps!,helperPermission.Skip);
+        if(playback.Length!=a.Steps!.Length)RecordFollowTravel("Helper cutscene dialogue superseded",new {npc=a.Npc.Name,omitted=a.Steps.Length-playback.Length});
+        helperBlocked="";helperLastIssue="";helperStepDelays.Clear();long previous=playback[0].SentAt;
+        foreach(var step in playback){
             if(step.Kind=="skip"&&!helperPermission.Skip){FinishHelperConversation("This conversation includes a cutscene skip you have not enabled.");return true;}
-            helperStepDelays[step.Id]=step.Kind=="interact"?0:HelperConversationPolicy.Delay(previous,step.SentAt);previous=step.SentAt;
+            helperStepDelays[step.Id]=step.Kind is "interact" or "skip"?0:HelperConversationPolicy.Delay(previous,step.SentAt);previous=step.SentAt;
             helperIncoming.Enqueue(step with {SentAt=a.SentAt});
         }
         helperNextAction=now;RecordFollowTravel("Helper conversation received",new {npc=a.Npc.Name,steps=a.Steps.Length});return true;
