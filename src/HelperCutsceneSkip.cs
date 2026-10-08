@@ -15,7 +15,7 @@ public sealed partial class Plugin
     {
         menu=(AtkUnitBase*)GardenGui.GetAddonByName("SelectString").Address;prompt="";choices=[];
         var agent=AgentCutscene.Instance();
-        if(agent==null||agent->SkipCallback==null||agent->SkipDialogAddonId==0||menu==null||!menu->IsVisible||menu->Id!=agent->SkipDialogAddonId)return false;
+        if(agent==null||agent->SkipCallback==null||agent->SkipDialogAddonId==0||menu==null||!menu->IsVisible||!menu->IsReady||menu->Id!=agent->SkipDialogAddonId)return false;
         var node=menu->GetTextNodeById(2);if(node==null)return false;
         prompt=(TravelMenuText(node->NodeText.StringPtr)??"").Trim();
         choices=TransportChoices(menu);
@@ -42,7 +42,7 @@ public sealed partial class Plugin
             if(prompt!=a.Text||HelperPolicy.Signature(choices)!=a.Signature){BlockHelper("Cutscene skip prompt differs; no response selected.");return;}
             // Use the full, typed SelectString callback like TextAdvance/ECommons.
             // Never OpenSkipDialog(null), call AgentCutscene.ReceiveEvent, or FireCallbackInt.
-            var value=new AtkValue();value.Type=FFXIVClientStructs.FFXIV.Component.GUI.ValueType.Int;value.Int=0;
+            var value=new AtkValue();value.Type=AtkValueType.Int;value.Int=0;
             helperActionSubmitted=true;helperReplaying=true;
             try{menu->FireCallback(1,&value,true);}
             finally{helperReplaying=false;}
