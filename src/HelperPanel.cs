@@ -63,7 +63,7 @@ public sealed partial class Plugin
                 var status=!fresh?"Status unavailable":f.Control=="stop"?"Stopped":f.Control=="pause"?"Paused by leader":f.Status;
                 DrawHelperStatusText(f.Name+" — "+status,!fresh,f.Control=="stop",status);
                 if(f.QuestPaused)DrawHelperStatusText("Quest Helper paused; FollowThem remains active.");
-                DrawHelperExchangeButton(f);
+                DrawHelperPurchaseButton(f);
                 ImGui.TextDisabled(f.Quest?"FollowThem + Quest Helper":"FollowThem");
                 ImGui.BeginDisabled(!fresh||f.Control=="stop"||helperControlTask!=null||helperControls.Count>0);
                 if(ImGui.Button(f.Control=="pause"?"Resume FollowThem":"Pause FollowThem"))SendHelperControl(f,f.Control=="pause"?"resume":"pause");

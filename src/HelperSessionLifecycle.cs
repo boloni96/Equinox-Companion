@@ -13,6 +13,7 @@ public sealed partial class Plugin
     {
         helperRecordAudience=[];ResetHelperRecording();helperOutgoing.Clear();helperControls.Clear();helperOpened.Clear();helperFollowers=[];
         helperWindowOpen=false;helperStopConfirm="";helperError="";helperFateObserved=false;helperBring=null;helperMeetTravel=null;
+        helperVendorPurchases=false;purchaseQuote=null;purchaseVendor=null;purchaseSent.Clear();
         helperEventExchanges=false;helperExchangeSent.Clear();helperExchangeReport="";
         outgoingTrips.Clear();outgoingTravel=null;outgoingPortal=null;transportCapture=null;boundaryDeparture=null;worldSource=null;
         helperLeaderIdentity="";helperSendIdentity="";helperControlIdentity="";nextHelperLeader=default;

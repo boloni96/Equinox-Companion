@@ -538,6 +538,7 @@ public sealed partial class Plugin : IDalamudPlugin
         try
         {
             if(count==1&&values!=null&&((int)values[0].Type&15) is 3 or 5){CaptureFollowInstanceChoice(addon,values[0].Int);CaptureTransportChoice(addon,values[0].Int);CaptureHelperChoice(addon,values[0].Int);}
+            CaptureHelperPurchase(addon,count,values);
             CaptureHelperQuestCallback(addon,count,values);
             CaptureHelperResultCallback(addon,count,values);
             ObserveTravelCallbackDiagnostic(addon,count,values);

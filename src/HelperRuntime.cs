@@ -24,9 +24,9 @@ public sealed partial class Plugin
     private uint helperObservedQuest;
     private bool HelperPaused=>helperPermission.Active&&helperPermission.Paused;
     private bool HelperTravelBusy=>travelQueue.Count>0&&!HoldHelperTravel||travelAwaitingArrival!=null||followApproach!=null||pendingTransport!=null||pendingWard!=null||pendingAethernet!=null||receivedPortal!=null||pendingDutyLeave!=null||lifestreamTravelOwned;
-    private bool HelperQuestBusy=>!HelperTravelBusy&&helperPermission.Active&&helperPermission.Quest&&!helperPermission.QuestPaused&&(helperExchangePending!=null||helperDutyPending!=0||helperReservedConversation.Length>0||helperIncoming.Count>0||helperBlocked.Length>0||helperNpcActive!=null&&QuestConversationVisible());
+    private bool HelperQuestBusy=>!HelperTravelBusy&&helperPermission.Active&&helperPermission.Quest&&!helperPermission.QuestPaused&&(purchasePending!=null||helperExchangePending!=null||helperDutyPending!=0||helperReservedConversation.Length>0||helperIncoming.Count>0||helperBlocked.Length>0||helperNpcActive!=null&&QuestConversationVisible());
     private bool SharingQuest=>config.EnableFollowThem&&config.FollowThem.ShareQuestActions&&config.PairingKey.Length==64&&Player.IsLoaded&&helperFollowers.Any(x=>HelperPolicy.Audience(x,DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()));
-    private void ClearHelperActions(){helperExchangePending=null;helperDutyPending=0;helperConversations.Clear();ClearHelperReservation();helperIncoming.Clear();helperBlocked="";helperNpcActive=null;CancelHelperApproach();}
+    private void ClearHelperActions(){purchasePending=null;helperExchangePending=null;helperDutyPending=0;helperConversations.Clear();ClearHelperReservation();helperIncoming.Clear();helperBlocked="";helperNpcActive=null;CancelHelperApproach();}
     private void EndHelperSession(){helperExchangeReport="";helperObservedQuest=0;CancelHelperFateApproach();helperPendingFate=null;helperPermission.Stop();helperLastIssue="";ClearHelperActions();helperCursor=0;helperTravelAfter=0;helperTravelCutoff=0;helperSeen.Clear();helperSkippedConversations.Clear();nextHelperStatus=default;}
     private void ApplyHelperControl(string command)
     {
@@ -63,6 +63,7 @@ public sealed partial class Plugin
                     var questWasPaused=helperPermission.QuestPaused;helperPermission.SetQuestPause(reply.QuestPaused);
                     if(!questWasPaused&&helperPermission.QuestPaused){ClearHelperActions();RequestFollowMovementStop();ResumeAfterConfirmedTravel();}
                     foreach(var a in reply.Actions??[]){helperCursor=Math.Max(helperCursor,a.Sequence);if(helperSkippedConversations.Contains(a.Npc.Conversation)||!helperPermission.Allows(a.Kind)||!HelperPolicy.Fresh(a,now.ToUnixTimeMilliseconds(),followArmedAt)||a.SentAt<=helperTravelAfter||!FollowThemSession.Matches(config.FollowThem.TargetName,config.FollowThem.HomeWorld,a.Name,a.World)||!helperSeen.Add(a.Id))continue;
+                        if(a.Kind=="vendorPurchase"){ReceiveHelperPurchase(a);continue;}
                         if(a.Kind=="vendorExchange"){ReceiveHelperExchange(a);continue;}
                         if(ReceiveHelperConversation(a,now))continue;
                         if(a.Kind=="fateSync"){CancelHelperFateApproach();helperPendingFate=a;helperFateAttempts=0;helperFateFallback=false;helperNextFateAttempt=default;continue;}
@@ -74,7 +75,7 @@ public sealed partial class Plugin
         if(helperLeaderTask?.IsCompleted==true){
             var r=helperLeaderTask.GetAwaiter().GetResult();helperLeaderTask=null;
             if(helperLeaderIdentity==config.PairingKey+"/"+Player.CharacterName+"/"+Player.HomeWorld.RowId){
-                if(r.Reply is {} reply){helperEventExchanges=reply.EventExchanges;SetHelperFollowers(reply.Followers??[]);if(HelperPolicy.HasLeaderRole(helperFollowers)&&followSession.Armed)StopFollowThem("You are being followed; your own follower session ended.");foreach(var f in helperFollowers)if(f.Quest&&f.Control!="stop"&&helperOpened.Add(f.Id))helperWindowOpen=true;}
+                if(r.Reply is {} reply){helperVendorPurchases=reply.VendorPurchases;helperEventExchanges=reply.EventExchanges;SetHelperFollowers(reply.Followers??[]);if(HelperPolicy.HasLeaderRole(helperFollowers)&&followSession.Armed)StopFollowThem("You are being followed; your own follower session ended.");foreach(var f in helperFollowers)if(f.Quest&&f.Control!="stop"&&helperOpened.Add(f.Id))helperWindowOpen=true;}
                 else{helperError=r.Error;nextHelperLeader=now.AddSeconds(15);}
             }
         }
@@ -85,7 +86,7 @@ public sealed partial class Plugin
             if(helperLastIssue.Length>0)status+=" · Quest Helper blocked: "+helperLastIssue;
             status=HelperObservedQuestStatus()+status;
             if(helperExchangeReport.Length>0)status=helperExchangeReport+" · "+status;
-            helperStatusTask=helperRelay.Call(config.PairingKey,"op=status&session="+followLeaseId,new {name=helperFollowerName,world=helperFollowerWorld,status=(helperPermission.QuestPaused?"Quest Helper paused; ":"")+status[..Math.Min(status.Length,460)],quest=helperPermission.Quest,skip=helperPermission.Skip,paused=false,after=helperCursor,eventExchanges=true});
+            helperStatusTask=helperRelay.Call(config.PairingKey,"op=status&session="+followLeaseId,new {name=helperFollowerName,world=helperFollowerWorld,status=(helperPermission.QuestPaused?"Quest Helper paused; ":"")+status[..Math.Min(status.Length,460)],quest=helperPermission.Quest,skip=helperPermission.Skip,paused=false,after=helperCursor,eventExchanges=true,vendorPurchases=true});
         }
         if(Player.IsLoaded&&Player.HomeWorld.RowId>0&&!string.IsNullOrWhiteSpace(Player.CharacterName)&&helperLeaderTask==null&&now>=nextHelperLeader){
             nextHelperLeader=now.AddSeconds(helperFollowers.Length>0?3:5);helperLeaderIdentity=config.PairingKey+"/"+Player.CharacterName+"/"+Player.HomeWorld.RowId;
@@ -103,7 +104,7 @@ public sealed partial class Plugin
         }
         UpdateHelperFateSync(now);ObserveHelperQuestAcceptance(now);ObserveHelperQuestResult(now);ObserveHelperReplayCheck();ObserveHelperRecording(now);
         if(helperReservedConversation.Length>0&&now>=helperReservationUntil)FinishHelperConversation("NPC recording or playback timed out; waiting for a new interaction.");
-        UpdateHelperExchange(now);UpdateHelperDutyEntry(now);UpdateQuestHelper(now);RefreshHelperLeaderBar();
+        UpdateHelperPurchase(now);UpdateHelperExchange(now);UpdateHelperDutyEntry(now);UpdateQuestHelper(now);RefreshHelperLeaderBar();
     }
     private string helperPairingIdentity="";
     private string helperFollowerName="";

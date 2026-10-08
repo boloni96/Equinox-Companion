@@ -85,7 +85,7 @@ public sealed partial class Plugin
         var agent=AgentShop.Instance();var shop=(AtkUnitBase*)GardenGui.GetAddonByName("ShopExchangeItem").Address;
         var rows=new List<object>();
         if(ShopUInt(shop,3,out var count)&&count is >0 and <=122)for(var row=0;row<Math.Min(count,12);row++)rows.Add(new {row,exchange=ReadEventExchangeRow(shop,row,1,out var index),index});
-        return new {shopVisible=shop!=null&&shop->IsVisible,valueCount=shop==null?0:shop->AtkValuesCount,dialogVisible=VisibleFollowAddon("ShopExchangeItemDialog"),selected=SelectedEventExchange(),selectedIndex=agent==null?-1:agent->SelectedItemIndex,selectedQuantity=agent==null?0:agent->SelectedItemStackSize,receiveCount=agent==null?0:agent->ItemReceiveCount,rows,pending=helperExchangePending?.Exchange,stage=helperExchangeStage,report=helperExchangeReport};
+        return new {purchaseQuote,purchasePending=purchasePending?.Purchase,purchaseStage,shopVisible=shop!=null&&shop->IsVisible,valueCount=shop==null?0:shop->AtkValuesCount,dialogVisible=VisibleFollowAddon("ShopExchangeItemDialog"),selected=SelectedEventExchange(),selectedIndex=agent==null?-1:agent->SelectedItemIndex,selectedQuantity=agent==null?0:agent->SelectedItemStackSize,receiveCount=agent==null?0:agent->ItemReceiveCount,rows,pending=helperExchangePending?.Exchange,stage=helperExchangeStage,report=helperExchangeReport};
     }
     private void FinishHelperExchange(string message,bool success=false)
     {
