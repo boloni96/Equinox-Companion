@@ -53,7 +53,8 @@ public sealed partial class Plugin
             if(helperNpcActive?.Conversation==a.Npc.Conversation&&a.QuestId!=0&&helperNativeScenes.Any(scene=>scene.StartsWith(a.QuestId+":",StringComparison.Ordinal))){CompleteHelperAction(now);return;}
             if(QuestConversationVisible()){
                 if(helperNpcActive?.Conversation==a.Npc.Conversation){CompleteHelperAction(now);return;}
-                BlockHelper("Another conversation is already open. Close it, then stop/start assistance.");return;
+                if(TryAdoptHelperConversation(a,now))return;
+                BlockHelper("Another conversation is already open and could not be verified against the recording. Close it, then stop/start assistance.");return;
             }
             // Keep observing scenes and windows while a native interaction opens its delayed prompt.
             if(HelperInteractionPolicy.Waiting(now,helperInteractRetryAt)){helperQuestStatus="Waiting for NPC dialogue — "+a.Npc.Name;return;}

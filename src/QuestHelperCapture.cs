@@ -17,6 +17,7 @@ public sealed partial class Plugin
     private unsafe void CaptureHelperNpc(IGameObject clicked)
     {
         if(helperReplaying||relayInteracting||usingSharedTravel||clicked.ObjectKind is not (ObjectKind.EventNpc or ObjectKind.EventObj)||Objects.LocalPlayer is not {} self)return;
+        ObserveHelperLocalInteraction(clicked);
         if(!SharingQuest){
             if(config.EnableFollowThem&&config.FollowThem.ShareQuestActions)RecordFollowTravel("Helper interaction not shared",new {npc=clicked.Name.TextValue,reason="No fresh active follower with quest permission, or pairing/player unavailable",followers=helperFollowers.Length,loaded=Player.IsLoaded});
             return;
