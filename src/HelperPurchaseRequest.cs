@@ -16,6 +16,10 @@ public sealed partial class Plugin
         var request=(AddonRequest*)GardenGui.GetAddonByName("Request").Address;
         var agent=AgentNpcTrade.Instance();var ui=UIState.Instance();var inventory=InventoryManager.Instance();
         if(request==null||!request->IsReady||agent==null||!agent->IsAgentActive()||agent->GetAddonId()!=request->Id||ui==null||inventory==null)return;
+        var shop=AgentShop.Instance();
+        if(FindPurchase(p,out var row)==null||shop==null||!shop->IsAgentActive()||shop->SelectedItemIndex!=row||shop->SelectedItemStackSize!=p.Quantity){
+            FinishHelperPurchase("The selected vendor item changed before hand-in; nothing traded.");return;
+        }
         var trade=&ui->NpcTrade;
         if(trade->Requests.Count is <1 or >3||request->EntryCount!=trade->Requests.Count){FinishHelperPurchase("Unsupported item request; nothing handed over.");return;}
         var required=new List<(uint ItemId,int Amount)>();
