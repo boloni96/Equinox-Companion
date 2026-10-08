@@ -1092,7 +1092,7 @@ public sealed partial class Plugin : IDalamudPlugin
         FollowAddonLifecycle.UnregisterListener(ObserveFriendEstateRow);
         FollowAddonLifecycle.UnregisterListener(ObserveHelperTalk);
         FollowAddonLifecycle.UnregisterListener(ObserveHelperDutyChoice);
-        ReleaseHelperEscape();helperSceneHook?.Dispose();
+        ReleaseHelperTextAdvance();helperSceneHook?.Dispose();
         helperRelay.Dispose();
         portalRelay.Dispose();
         quickLootBarEntry?.Remove();

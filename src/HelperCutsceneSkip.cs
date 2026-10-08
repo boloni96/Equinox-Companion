@@ -4,12 +4,6 @@ using FFXIVClientStructs.FFXIV.Component.GUI;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
-    private nint helperEscapeWindow;
-    private string helperEscapeAction="";
-    private void ReleaseHelperEscape()
-    {
-        if(helperEscapeWindow!=0){FollowWindowInput.Release(helperEscapeWindow,0x1B);helperEscapeWindow=0;}
-    }
     private bool HelperInCutscene()=>Conditions[ConditionFlag.OccupiedInCutSceneEvent]||Conditions[ConditionFlag.WatchingCutscene]||Conditions[ConditionFlag.WatchingCutscene78];
     private unsafe bool TryHelperSkipMenu(out AtkUnitBase* menu,out string prompt,out List<string> choices)
     {
@@ -24,43 +18,29 @@ public sealed partial class Plugin
     private unsafe void UpdateHelperCutsceneSkip(HelperAction a,DateTimeOffset now)
     {
         if(!helperPermission.Skip){BlockHelper("Cutscene skipping is not enabled for this session.");return;}
-        // A changed scene alone is not proof: require the matching scene to have been observed.
-        if(helperActionSubmitted){
-            if(!HelperInCutscene()||HelperScene()!=a.Scene){CompleteHelperAction(now);return;}
-            if(now-helperActionStarted>TimeSpan.FromSeconds(15))BlockHelper("Cutscene did not finish after one confirmation; no retry.");
-            return;
+        if(helperTextAdvanceAction==a.Id&&(!HelperInCutscene()||HelperScene()!=a.Scene)){
+            ReleaseHelperTextAdvance();CompleteHelperAction(now);return;
         }
-        if(a.Scene.Length==0||HelperScene()!=a.Scene){
-            if(now-helperActionStarted>TimeSpan.FromSeconds(15))BlockHelper("The recorded cutscene did not match; no skip requested.");
-            return;
+        if(now-helperActionStarted>TimeSpan.FromSeconds(15)){
+            ReleaseHelperTextAdvance();BlockHelper("TextAdvance did not finish the matching cutscene within 15 seconds; no retry.");return;
         }
-        if(!HelperInCutscene()){
-            if(now-helperActionStarted>TimeSpan.FromSeconds(15))BlockHelper("The matching cutscene is not skippable now.");
-            return;
+        if(a.Scene.Length==0||HelperScene()!=a.Scene||!HelperInCutscene())return;
+        if(helperTextAdvanceAction!=a.Id){
+            if(HelperCutsceneReplayPolicy.BlockingAddons.Any(VisibleFollowAddon)&&!TryHelperSkipMenu(out _,out _,out _)||FollowStopTextEntryActive())return;
+            if(!StartHelperTextAdvance(a,now))return;
         }
-        if(TryHelperSkipMenu(out var menu,out var prompt,out var choices)){
-            if(prompt!=a.Text||HelperPolicy.Signature(choices)!=a.Signature){BlockHelper("Cutscene skip prompt differs; no response selected.");return;}
-            // Use the full, typed SelectString callback like TextAdvance/ECommons.
-            // Never OpenSkipDialog(null), call AgentCutscene.ReceiveEvent, or FireCallbackInt.
-            var value=new AtkValue();value.Type=AtkValueType.Int;value.Int=0;
-            helperActionSubmitted=true;helperReplaying=true;
-            try{menu->FireCallback(1,&value,true);}
-            finally{helperReplaying=false;}
-            RecordFollowTravel("Helper cutscene Yes submitted",new {a.Scene,a.QuestId});
-            helperNextAction=now.AddMilliseconds(450);return;
+        if(!helperTextAdvanceOwned)return;
+        if(!helperActionSubmitted&&TryHelperSkipMenu(out _,out var prompt,out var choices)){
+            if(prompt!=a.Text||HelperPolicy.Signature(choices)!=a.Signature){ReleaseHelperTextAdvance();BlockHelper("Cutscene skip prompt differs; no response selected.");return;}
+            try{
+                // TextAdvance owns the native skip operation. Companion never calls the menu callback.
+                if(!Pi.GetIpcSubscriber<string,HelperTextAdvanceOptions,bool>("TextAdvance.EnableExternalControl")
+                    .InvokeFunc(HelperTextAdvanceOwner,new HelperTextAdvanceOptions(true))){
+                    ReleaseHelperTextAdvance();BlockHelper("TextAdvance control was lost; no confirmation requested.");return;
+                }
+                helperActionSubmitted=true;
+                RecordFollowTravel("Helper TextAdvance confirmation enabled",new {a.Scene,a.QuestId});
+            }catch(Exception ex){ReleaseHelperTextAdvance();BlockHelper("TextAdvance confirmation unavailable: "+ex.GetType().Name);}
         }
-        if(helperEscapeAction!=a.Id){
-            // Talk belongs to this cutscene and must not prevent Escape. Choices remain protected.
-            if(HelperCutsceneReplayPolicy.BlockingAddons.Any(VisibleFollowAddon)||FollowStopTextEntryActive()){
-                if(now-helperActionStarted>TimeSpan.FromSeconds(15))BlockHelper("Another window prevents requesting the cutscene skip.");
-                return;
-            }
-            helperEscapeAction=a.Id;
-            if(!FollowWindowInput.PressCutsceneEscape(out helperEscapeWindow)){BlockHelper("Could not request Escape in this game window.");return;}
-            RecordFollowTravel("Helper cutscene Escape requested",new {a.Scene,a.QuestId});
-            helperQuestStatus="Waiting for the game's cutscene skip prompt.";
-            return;
-        }
-        if(now-helperActionStarted>TimeSpan.FromSeconds(15))BlockHelper("The game did not open a valid cutscene skip prompt; no retry.");
     }
 }
