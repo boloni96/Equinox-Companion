@@ -102,6 +102,8 @@ public static class HelperQuestScenePolicy
 public static class HelperQuestResultPolicy
 {
     public static bool Valid(HelperAction a)=>a.Kind=="completeQuest"&&a.Addon=="JournalResult"&&HelperQuestScenePolicy.Quest(a.QuestId)&&a.Scene is "complete" or "decline";
+    public static int FollowupTalkCount(HelperAction result,IEnumerable<HelperAction> following)=>Valid(result)&&result.Scene=="complete"
+        ?following.TakeWhile(a=>a.Kind=="talk"&&a.Npc==result.Npc&&a.Name==result.Name&&a.World==result.World&&a.Scene.StartsWith(result.QuestId+":",StringComparison.Ordinal)&&a.Signature.Length>0).Count():0;
 }
 
 public static class HelperStatusPolicy
@@ -120,3 +122,4 @@ public static class HelperStatusPolicy
         return "working";
     }
 }
+

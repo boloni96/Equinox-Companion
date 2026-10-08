@@ -8,6 +8,7 @@ public sealed partial class Plugin
     private uint helperResultQuest;
     private bool helperResultCompleteIntent;
     private DateTimeOffset helperResultClosedAt;
+    private string helperResultConfirmationId="";
     private bool HelperResultPending=>helperResultQuest!=0;
     private unsafe uint VisibleHelperResultQuest()
     {
@@ -63,8 +64,30 @@ public sealed partial class Plugin
     {
         if(!HelperQuestResultPolicy.Valid(a)){BlockHelper("Quest result is not verified.");return;}
         var manager=QuestManager.Instance();if(manager==null)return;
+        if(a.Id==helperResultConfirmationId){
+            if(!VisibleFollowAddon("JournalResult")&&!manager->IsQuestAccepted(a.QuestId)&&QuestManager.IsQuestComplete(a.QuestId)){
+                helperResultConfirmationId="";RecordFollowTravel("Helper quest result confirmed",new {a.QuestId,a.Scene,afterDialogue=true});CompleteHelperAction(now);return;
+            }
+            helperQuestStatus="Follow-up dialogue finished; waiting for quest completion confirmation.";
+            if(now-helperActionStarted>TimeSpan.FromSeconds(20))BlockHelper("Follow-up dialogue finished but the game has not confirmed quest completion.");return;
+        }
         if(helperActionSubmitted){
             if(!VisibleFollowAddon("JournalResult")&&(a.Scene=="decline"||!manager->IsQuestAccepted(a.QuestId)&&QuestManager.IsQuestComplete(a.QuestId))){RecordFollowTravel("Helper quest result confirmed",new {a.QuestId,a.Scene});CompleteHelperAction(now);return;}
+            if(!VisibleFollowAddon("JournalResult")&&a.Scene=="complete"){
+                var remaining=helperIncoming.Skip(1).ToArray();
+                var count=HelperQuestResultPolicy.FollowupTalkCount(a,remaining);
+                // Some quests commit completion only after their informational Talk pages close.
+                // Keep verification before the next non-Talk action; never assume button submission is completion.
+                if(count>0){
+                    var verify=a with {Id=Guid.NewGuid().ToString("N")};helperResultConfirmationId=verify.Id;
+                    helperIncoming.Clear();helperIncoming.Enqueue(a);
+                    foreach(var talk in remaining.Take(count))helperIncoming.Enqueue(talk);
+                    helperIncoming.Enqueue(verify);helperStepDelays[verify.Id]=0;
+                    foreach(var later in remaining.Skip(count))helperIncoming.Enqueue(later);
+                    RecordFollowTravel("Helper quest result awaiting follow-up dialogue",new {a.QuestId,lines=count});
+                    CompleteHelperAction(now);return;
+                }
+            }
             if(now-helperActionStarted>TimeSpan.FromSeconds(20))BlockHelper("Quest completion was requested but the game has not confirmed it.");return;
         }
         if(VisibleHelperResultQuest()!=a.QuestId){if(now-helperActionStarted>TimeSpan.FromSeconds(10))BlockHelper("The matching quest completion window did not appear.");return;}
@@ -82,3 +105,4 @@ public sealed partial class Plugin
         RecordFollowTravel("Helper quest result submitted",new {a.QuestId,a.Scene});
     }
 }
+

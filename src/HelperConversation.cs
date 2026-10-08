@@ -105,5 +105,6 @@ public sealed partial class Plugin
         var pending=helperOutgoing.Select(a=>a with {Sessions=(a.Sessions??[]).Where(x=>x!=id).ToArray()}).Where(a=>a.Sessions!.Length>0).ToArray();
         helperOutgoing.Clear();foreach(var a in pending)helperOutgoing.Enqueue(a);
     }
-    private void ClearHelperReservation(){helperReservedConversation="";helperReservationUntil=default;helperPlaybackUntil=default;helperStepDelays.Clear();helperActionSubmitted=false;}
+    private void ClearHelperReservation(){helperReservedConversation="";helperReservationUntil=default;helperPlaybackUntil=default;helperStepDelays.Clear();helperActionSubmitted=false;helperResultConfirmationId="";}
 }
+

@@ -45,6 +45,19 @@ public sealed partial class Plugin
     private unsafe bool AdvanceTravelTalk(FollowPortalSignal signal)
     {
         if(signal.SourceKind!="EventNpc"||Targets.Target is not {} target||target.BaseId!=signal.BaseId||Vector3.DistanceSquared(target.Position,new(signal.X,signal.Y,signal.Z))>=1)return false;
+        return ClickVisibleTalk();
+    }
+    private unsafe bool AdvanceQuestTalk(HelperAction action)
+    {
+        var line=HelperTalk();
+        if(helperNpcActive?.Conversation!=action.Npc.Conversation||!HelperPolicy.SceneMatches(action.Scene,HelperScene())||line.Signature.Length==0||line.Signature!=action.Signature||line.Text!=action.Text)return false;
+        // A quest can clear/change the target during its scene or after Complete.
+        // The recorded conversation, native scene, speaker and line are the identity checks here.
+        return ClickVisibleTalk();
+    }
+    private unsafe bool ClickVisibleTalk()
+    {
+        if(VisibleFollowAddon("SelectString")||VisibleFollowAddon("SelectYesno")||VisibleFollowAddon("SelectIconString")||VisibleFollowAddon("CutSceneSelectString")||VisibleFollowAddon("JournalAccept")||VisibleFollowAddon("JournalResult"))return false;
         var talk=(AtkUnitBase*)GardenGui.GetAddonByName("Talk").Address;
         if(talk==null||!talk->IsVisible||!talk->IsReady||AtkStage.Instance()==null)return false;
         var evt=new AtkEvent{Listener=(AtkEventListener*)talk,Target=&AtkStage.Instance()->AtkEventTarget,State=new(){StateFlags=(AtkEventStateFlags)132}};
@@ -55,4 +68,5 @@ public sealed partial class Plugin
         return true;
     }
 }
+
 

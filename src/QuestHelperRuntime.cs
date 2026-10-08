@@ -100,7 +100,16 @@ public sealed partial class Plugin
                 if(HelperConversationPolicy.RetryTalk(helperTalkAttempts,(now-helperTalkSentAt).TotalMilliseconds)){helperActionSubmitted=false;return;}
                 if(now-helperTalkSentAt>=TimeSpan.FromSeconds(2))BlockHelper("The matching dialogue did not advance after three spaced clicks.");return;
             }
-            if(talk.Signature==a.Signature&&talk.Text==a.Text){helperReplaying=true;try{if(AdvanceTravelTalk(HelperTargetSignal(a))){helperActionSubmitted=true;helperTalkAttempts++;helperTalkSentAt=now;helperNextAction=now.AddMilliseconds(450);}}finally{helperReplaying=false;}return;}
+            if(talk.Signature==a.Signature&&talk.Text==a.Text){
+                helperReplaying=true;
+                try{if(AdvanceQuestTalk(a)){
+                    helperActionSubmitted=true;helperTalkAttempts++;helperTalkSentAt=now;helperNextAction=now.AddMilliseconds(450);
+                    RecordFollowTravel("Helper dialogue submitted",new {a.Scene,a.QuestId,attempt=helperTalkAttempts,text=a.Text});
+                }else{
+                    helperQuestStatus="Waiting for the matching quest dialogue to become ready; close any manual prompt.";
+                    if(now-helperActionStarted>TimeSpan.FromSeconds(15))BlockHelper("Matching dialogue could not be advanced; its scene or another open window requires manual attention.");
+                }}finally{helperReplaying=false;}return;
+            }
             if(now-helperActionStarted>TimeSpan.FromSeconds(5))BlockHelper("Dialogue differs from the leader's recorded line; no response selected.");return;
         }
         if(a.Kind=="choice"){
