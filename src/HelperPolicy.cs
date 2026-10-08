@@ -11,9 +11,9 @@ public static class HelperQuestStatusPolicy
     public static string State(bool available,bool accepted,bool completed,int step)=>!available?"checking after loading":accepted?$"accepted on follower, step {step}":completed?"completed on follower":"not accepted on follower";
 }
 public sealed record HelperNpc(string Conversation,uint BaseId,string Name,uint Territory,uint Map,uint World,FollowTravelPosition Position,FollowTravelPosition Approach,float Facing);
-public sealed record HelperAction(string Id,string Name,uint World,string Kind,long SentAt,HelperNpc Npc,string Text="",string Signature="",string Addon="",string Scene="",string[]? Sessions=null,long Sequence=0,uint QuestId=0,ushort FateId=0,int FateStart=0,HelperAction[]? Steps=null);
-public sealed record HelperFollower(string Id,string Name,uint World,string Status,bool Quest,bool Skip,bool Paused,string Control,long Updated,bool QuestPaused=false);
-public sealed record HelperReply(int Protocol=0,string Control="",HelperAction[]? Actions=null,HelperFollower[]? Followers=null,bool QuestPaused=false,long TravelAfter=0);
+public sealed record HelperAction(string Id,string Name,uint World,string Kind,long SentAt,HelperNpc Npc,string Text="",string Signature="",string Addon="",string Scene="",string[]? Sessions=null,long Sequence=0,uint QuestId=0,ushort FateId=0,int FateStart=0,HelperAction[]? Steps=null,HelperExchange? Exchange=null);
+public sealed record HelperFollower(string Id,string Name,uint World,string Status,bool Quest,bool Skip,bool Paused,string Control,long Updated,bool QuestPaused=false,bool EventExchanges=false);
+public sealed record HelperReply(int Protocol=0,string Control="",HelperAction[]? Actions=null,HelperFollower[]? Followers=null,bool QuestPaused=false,long TravelAfter=0,bool EventExchanges=false);
 public sealed class HelperPermission
 {
     public bool Active {get;private set;}
@@ -63,7 +63,7 @@ public static class HelperConversationPolicy
     public static string NormalizePrompt(string text)=>System.Text.RegularExpressions.Regex.Replace(text,@"\s+"," ").Trim();
     public static int Delay(long previous,long current)=>(int)Math.Clamp(current-previous,450,600000);
     public static bool Cancellation(HelperAction a)=>a.Kind=="acceptQuest"&&a.Scene=="decline"||a.Kind=="eventReplay"&&a.Scene=="no";
-    public static bool ValidSteps(HelperAction batch)=>batch.Steps is {Length:>0 and <=128} steps&&steps[0].Kind=="interact"&&steps.All(a=>a.Steps==null&&a.Npc==batch.Npc&&a.Name==batch.Name&&a.World==batch.World&&a.Kind is "interact" or "talk" or "choice" or "skip" or "acceptQuest" or "eventReplay" or "completeQuest")&&steps.Select(a=>a.Id).Distinct().Count()==steps.Length&&steps.Zip(steps.Skip(1)).All(p=>p.First.SentAt<=p.Second.SentAt);
+    public static bool ValidSteps(HelperAction batch)=>batch.Steps is {Length:>0 and <=128} steps&&steps[0].Kind=="interact"&&steps.All(a=>a.Steps==null&&a.Npc==batch.Npc&&a.Name==batch.Name&&a.World==batch.World&&a.Kind is "interact" or "talk" or "choice" or "skip" or "acceptQuest" or "eventReplay" or "completeQuest" or "soloDuty")&&steps.Select(a=>a.Id).Distinct().Count()==steps.Length&&steps.Zip(steps.Skip(1)).All(p=>p.First.SentAt<=p.Second.SentAt);
 }
 
 public static class HelperSessionPolicy
@@ -77,6 +77,7 @@ public static class HelperQuestScope
     public static uint Evidence(IEnumerable<HelperAction> actions)
     {
         foreach(var a in actions){
+            if(a.Kind=="soloDuty"&&a.QuestId>=65536&&a.Addon is "SelectYesno" or "DifficultySelectYesNo"&&HelperDutyPolicy.QuestTitle(a.Text).Length>0&&a.Signature==HelperPolicy.Signature([a.Text]))return a.QuestId;
             if(a.Kind=="acceptQuest"&&a.Addon=="JournalAccept"&&a.Scene is "offer" or "confirmed" or "decline"&&a.QuestId>=65536)return a.QuestId;
             if(a.Kind=="eventReplay"&&a.Addon=="SelectYesno"&&a.Npc.Name=="Kipih Jakkya"&&a.Npc.Territory==130&&a.QuestId>=65536&&
                 a.Scene is "yes" or "no" or "checked" or "unchecked"&&

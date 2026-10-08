@@ -318,7 +318,7 @@ public sealed partial class Plugin
         if(ImGui.IsItemHovered())ImGui.SetTooltip("Prefer a small right-side offset. If already in interaction range, stop and use the exact target without forcing the offset.");
         MessageToggle("FollowThem chat messages", config.FollowThem.ChatMessages, v => config.FollowThem.ChatMessages = v);
         MessageToggle("Accept party invitations from the selected character",config.FollowThem.AcceptPartyInvites,v=>config.FollowThem.AcceptPartyInvites=v);
-        MessageToggle("Accept duty-ready prompts when queued with the selected character",config.FollowThem.AcceptDutyReady,v=>config.FollowThem.AcceptDutyReady=v);
+        MessageToggle("Accept duty-ready prompts and matching leader solo quest battles",config.FollowThem.AcceptDutyReady,v=>config.FollowThem.AcceptDutyReady=v);
         MessageToggle("Dismount when the selected character dismounts",config.FollowThem.FollowDismount,v=>config.FollowThem.FollowDismount=v);
         MessageToggle("Mount when the selected character mounts",config.FollowThem.FollowMount,v=>config.FollowThem.FollowMount=v);
         MessageToggle("Leave duty when the followed character leaves (waits for loot)",config.FollowThem.LeaveDuties,v=>config.FollowThem.LeaveDuties=v);

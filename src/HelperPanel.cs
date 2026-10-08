@@ -22,12 +22,12 @@ public sealed partial class Plugin
         if(ImGui.BeginTabBar("helper-sections")){
             if(ImGui.BeginTabItem("FollowThem")){DrawFollowThem();ImGui.EndTabItem();}
             if(ImGui.BeginTabItem("Quest Helper")){
-                ImGui.TextWrapped("Mirror only the followed character's quest conversations during an active session. Vendor/shop interactions and ordinary NPC chatter are ignored. Both characters need Journal V7.11.87 on Cloudflare and the same pairing key.");
+                ImGui.TextWrapped("Mirror only the followed character's quest conversations during an active session. Ordinary vendor dialogue and NPC chatter are ignored. Event purchases require the explicit Follower will buy the same button. Both characters need Journal V7.11.87 on Cloudflare and the same pairing key.");
                 MessageToggle("Share my NPC and dialogue actions with active followers",config.FollowThem.ShareQuestActions,v=>config.FollowThem.ShareQuestActions=v);
                 MessageToggle("Enable Quest Helper for my next follow session",config.FollowThem.QuestHelper,v=>config.FollowThem.QuestHelper=v);
                 if(ImGui.IsItemHovered())ImGui.SetTooltip("Only the follower grants permission when pressing Start. Stop revokes it. Only the leader can pause/resume. Follower Stop ends permission; the leader cannot restart it.");
                 ImGui.TextWrapped("Automatic cutscene skipping is temporarily disabled after a crash. Skip manually on each client.");
-                ImGui.TextWrapped("Quest Helper starts disabled. Changes apply to your next session. Match NPC and response text; differing quest progress blocks assistance. Accepts the same quest only after the leader accepts it. Mirrors verified quest completion; optional reward choices, purchases and general Yes/No prompts remain manual. Mirrors a new leader FATE Level Sync in the same FATE, with right-side direct approach when Lifestream is enabled. No combat automation or obstacle navigation.");
+                ImGui.TextWrapped("Quest Helper starts disabled. Changes apply to your next session. Match NPC and response text; differing quest progress blocks assistance. Accepts the same quest only after the leader accepts it. Mirrors verified quest completion; optional reward choices and general Yes/No prompts remain manual. Journal V7.11.91 enables explicit Ironworks hand token exchanges and matching solo quest battle Proceed actions. Mirrors a new leader FATE Level Sync in the same FATE, with right-side direct approach when Lifestream is enabled. No combat automation or obstacle navigation.");
                 ImGui.TextWrapped("Helper does not open or confirm cutscene skip prompts in this version.");
                 if(followSession.Armed){ImGui.TextWrapped(helperPermission.Quest?"Quest assistance permitted for this session.":"This session allows FollowThem only.");DrawHelperFollowerControls();}
                 if(helperBlocked.Length>0)DrawHelperStatusText("Blocked: "+helperBlocked);
@@ -63,6 +63,7 @@ public sealed partial class Plugin
                 var status=!fresh?"Status unavailable":f.Control=="stop"?"Stopped":f.Control=="pause"?"Paused by leader":f.Status;
                 DrawHelperStatusText(f.Name+" — "+status,!fresh,f.Control=="stop",status);
                 if(f.QuestPaused)DrawHelperStatusText("Quest Helper paused; FollowThem remains active.");
+                DrawHelperExchangeButton(f);
                 ImGui.TextDisabled(f.Quest?"FollowThem + Quest Helper":"FollowThem");
                 ImGui.BeginDisabled(!fresh||f.Control=="stop"||helperControlTask!=null||helperControls.Count>0);
                 if(ImGui.Button(f.Control=="pause"?"Resume FollowThem":"Pause FollowThem"))SendHelperControl(f,f.Control=="pause"?"resume":"pause");

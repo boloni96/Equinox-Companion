@@ -18,7 +18,7 @@ public sealed partial class Plugin
     private int helperInteractAttempts;
     private int helperTalkAttempts;
     private DateTimeOffset helperTalkSentAt;
-    private bool QuestConversationVisible()=>VisibleFollowAddon("Talk")||VisibleFollowAddon("SelectString")||VisibleFollowAddon("SelectIconString")||VisibleFollowAddon("CutSceneSelectString")||VisibleFollowAddon("JournalAccept")||VisibleFollowAddon("JournalResult")||HelperReplayPromptVisible();
+    private bool QuestConversationVisible()=>VisibleFollowAddon("Talk")||VisibleFollowAddon("SelectString")||VisibleFollowAddon("SelectIconString")||VisibleFollowAddon("CutSceneSelectString")||VisibleFollowAddon("JournalAccept")||VisibleFollowAddon("JournalResult")||VisibleFollowAddon("DifficultySelectYesNo")||HelperSoloDutyVisible()||HelperReplayPromptVisible();
     private void CancelHelperApproach()
     {
         if(helperApproaching){try{if(LifestreamBusy())Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch(Exception){}}
@@ -87,6 +87,7 @@ public sealed partial class Plugin
         }
         if(a.Kind=="eventReplay"){UpdateHelperEventReplay(a,now);return;}
         if(a.Kind=="completeQuest"){UpdateHelperQuestResult(a,now);return;}
+        if(a.Kind=="soloDuty"){UpdateHelperSoloDuty(a,now);return;}
         if(a.Kind=="acceptQuest"){UpdateHelperQuestAccept(a,now);return;}
         if(a.Kind=="skip"){
             // Safety hotfix: never open or submit a native cutscene skip dialog.
