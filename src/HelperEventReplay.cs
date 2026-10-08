@@ -27,7 +27,7 @@ public sealed partial class Plugin
     private bool helperReplayChecked;
     private unsafe void ObserveHelperReplayCheck()
     {
-        if(!SharingQuest||helperReplaying||!helperRecording||helperCaptureNpc is not {} npc||!NocturneNpc(npc)){helperReplayCheckedPrompt="";return;}
+        if(!RecordingQuest||helperReplaying||!helperRecording||helperCaptureNpc is not {} npc||!NocturneNpc(npc)){helperReplayCheckedPrompt="";return;}
         var prompt=HelperReplayPrompt();var yes=HelperReplayDialog();
         if(!NocturneWarning(prompt)||yes==null||yes->ConfirmCheckBox==null){helperReplayCheckedPrompt="";return;}
         var check=yes->ConfirmCheckBox->IsChecked;

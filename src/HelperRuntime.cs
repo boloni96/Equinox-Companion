@@ -26,6 +26,7 @@ public sealed partial class Plugin
     private bool HelperTravelBusy=>travelQueue.Count>0&&!HoldHelperTravel||travelAwaitingArrival!=null||followApproach!=null||pendingTransport!=null||pendingWard!=null||pendingAethernet!=null||receivedPortal!=null||pendingDutyLeave!=null||lifestreamTravelOwned;
     private bool HelperQuestBusy=>!HelperTravelBusy&&helperPermission.Active&&helperPermission.Quest&&!helperPermission.QuestPaused&&(purchasePending!=null||helperExchangePending!=null||helperDutyPending!=0||helperReservedConversation.Length>0||helperIncoming.Count>0||helperBlocked.Length>0||helperNpcActive!=null&&QuestConversationVisible());
     private bool SharingQuest=>config.EnableFollowThem&&config.FollowThem.ShareQuestActions&&config.PairingKey.Length==64&&Player.IsLoaded&&helperFollowers.Any(x=>HelperPolicy.Audience(x,DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()));
+    private bool RecordingQuest=>config.EnableFollowThem&&config.FollowThem.ShareQuestActions&&config.PairingKey.Length==64&&Player.IsLoaded&&helperFollowers.Any(x=>HelperPolicy.RecordingAudience(x,DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()));
     private void ClearHelperActions(){helperLocalNpc=null;ReleaseHelperEscape();purchaseQueue.Clear();purchasePending=null;helperExchangePending=null;helperDutyPending=0;helperConversations.Clear();ClearHelperReservation();helperIncoming.Clear();helperBlocked="";helperNpcActive=null;CancelHelperApproach();}
     private void EndHelperSession(){helperExchangeReport="";helperObservedQuest=0;CancelHelperFateApproach();helperPendingFate=null;helperPermission.Stop();helperLastIssue="";ClearHelperActions();helperCursor=0;helperTravelAfter=0;helperTravelCutoff=0;helperSeen.Clear();helperSkippedConversations.Clear();nextHelperStatus=default;}
     private void ApplyHelperControl(string command)
@@ -94,8 +95,18 @@ public sealed partial class Plugin
             nextHelperLeader=now.AddSeconds(helperFollowers.Length>0?3:5);helperLeaderIdentity=config.PairingKey+"/"+Player.CharacterName+"/"+Player.HomeWorld.RowId;
             helperLeaderTask=helperRelay.Call(config.PairingKey,"op=leader&name="+Uri.EscapeDataString(Player.CharacterName)+"&world="+Player.HomeWorld.RowId);
         }
-        if(helperControlTask==null&&helperControls.Count==0&&helperSendTask==null&&helperOutgoing.TryDequeue(out var outgoing)&&now.ToUnixTimeMilliseconds()-outgoing.SentAt<10000&&SharingQuest&&outgoing.Name==Player.CharacterName&&outgoing.World==Player.HomeWorld.RowId){
-            helperSendingAction=outgoing;helperSendIdentity=helperActorIdentity;helperSendTask=helperRelay.Call(config.PairingKey,"op=action",outgoing);}
+        if(helperControlTask==null&&helperControls.Count==0&&helperSendTask==null&&helperOutgoing.TryPeek(out var outgoing)){
+            var age=now.ToUnixTimeMilliseconds()-outgoing.SentAt;
+            var limit=outgoing.Kind is "recording" or "conversation" or "cancelConversation"?60000:10000;
+            if(age>=limit){
+                helperOutgoing.Dequeue();helperError="A queued Helper action expired while waiting for follower readiness.";
+                RecordFollowTravel("Helper queued action expired",new {outgoing.Kind,npc=outgoing.Npc.Name,ageMs=age});
+            }else if(SharingQuest&&outgoing.Name==Player.CharacterName&&outgoing.World==Player.HomeWorld.RowId&&
+                HelperPolicy.ReadyAudience(outgoing.Sessions??[],helperFollowers,now.ToUnixTimeMilliseconds())){
+                helperOutgoing.Dequeue();helperSendingAction=outgoing;helperSendIdentity=helperActorIdentity;
+                helperSendTask=helperRelay.Call(config.PairingKey,"op=action",outgoing);
+            }
+        }
         if(helperControlTask==null&&helperControls.TryDequeue(out var control)&&Player.IsLoaded&&control.Identity==config.PairingKey+"/"+Player.CharacterName+"/"+Player.HomeWorld.RowId)
             {helperControlIdentity=helperActorIdentity;helperControlTask=helperRelay.Call(config.PairingKey,"op=control&session="+control.Follower.Id,new {name=Player.CharacterName,world=Player.HomeWorld.RowId,command=control.Command});}
         ObserveHelperDialogue();

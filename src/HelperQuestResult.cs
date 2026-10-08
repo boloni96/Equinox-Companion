@@ -27,7 +27,7 @@ public sealed partial class Plugin
     }
     private unsafe void ObserveHelperQuestResult(DateTimeOffset now)
     {
-        if(!helperRecording||!SharingQuest||helperCaptureNpc==null){helperResultQuest=0;helperResultClosedAt=default;return;}
+        if(!helperRecording||!RecordingQuest||helperCaptureNpc==null){helperResultQuest=0;helperResultClosedAt=default;return;}
         var manager=QuestManager.Instance();if(manager==null)return;
         var visible=VisibleHelperResultQuest();
         if(helperResultQuest==0){
@@ -52,7 +52,7 @@ public sealed partial class Plugin
     }
     private unsafe void CaptureHelperResultCallback(AtkUnitBase* addon,uint count,AtkValue* values)
     {
-        if(!SharingQuest||helperReplaying||addon==null||addon!=(AtkUnitBase*)GardenGui.GetAddonByName("JournalResult").Address)return;
+        if(!RecordingQuest||helperReplaying||addon==null||addon!=(AtkUnitBase*)GardenGui.GetAddonByName("JournalResult").Address)return;
         ObserveHelperQuestResult(DateTimeOffset.UtcNow);
         // Reported native Complete callback is [0, selected reward]; -2 is only window close.
         if(helperResultQuest!=0&&values!=null&&count==2&&((int)values[0].Type&15) is 3 or 5&&((int)values[1].Type&15) is 3 or 5&&values[0].Int==0){

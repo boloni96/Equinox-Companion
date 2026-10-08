@@ -37,6 +37,11 @@ public static class HelperPolicy
     public static int Match(IEnumerable<string> options,string text){var all=options.ToArray();return all.Count(x=>x==text)==1?Array.IndexOf(all,text):-1;}
     public static bool Fresh(HelperAction a,long now,long started)=>a.SentAt>=started&&a.SentAt<=now+5000&&now-a.SentAt<120000;
     public static bool Audience(HelperFollower f,long now,bool skip=false)=>f.Quest&&!f.QuestPaused&&(!skip||f.Skip)&&!f.Paused&&f.Control=="resume"&&now-f.Updated<15000;
+    // Local recording may bridge a short status gap; sending still requires the normal fresh audience.
+    public static bool RecordingAudience(HelperFollower f,long now,bool skip=false)=>
+        f.Quest&&!f.QuestPaused&&(!skip||f.Skip)&&!f.Paused&&f.Control=="resume"&&now-f.Updated>=-5000&&now-f.Updated<60000;
+    public static bool ReadyAudience(string[] sessions,HelperFollower[] followers,long now)=>
+        sessions.Length>0&&sessions.All(id=>followers.Any(f=>f.Id==id&&Audience(f,now)));
     public static bool SceneMatches(string expected,string actual)=>expected.Length>0&&expected==actual;
 }
 

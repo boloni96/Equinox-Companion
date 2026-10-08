@@ -28,7 +28,7 @@ public sealed partial class Plugin
     }
     private unsafe void ObserveHelperDutyChoice(AddonEvent type,AddonArgs args)
     {
-        if(!SharingQuest||helperReplaying||!helperRecording||helperCaptureNpc==null||args is not AddonReceiveEventArgs ev||(AtkEventType)ev.AtkEventType is not (AtkEventType.ButtonClick or AtkEventType.MouseClick))return;
+        if(!RecordingQuest||helperReplaying||!helperRecording||helperCaptureNpc==null||args is not AddonReceiveEventArgs ev||(AtkEventType)ev.AtkEventType is not (AtkEventType.ButtonClick or AtkEventType.MouseClick))return;
         try{
             if(!ReadHelperDutyPrompt(args.AddonName,out var prompt,out var button))return;
             var evt=button->AtkComponentBase.OwnerNode->AtkResNode.AtkEventManager.Event;var count=0;var matching=false;

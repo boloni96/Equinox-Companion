@@ -1,10 +1,13 @@
-# Companion 0.5.1.106
+# Companion 0.5.1.107
 
-- Resume an already-open dialogue only when a recent local NPC click, exact NPC identity/location, current native quest scene, quest step, and the recording's first dialogue line/signature all match.
-- Fix the observed race where the follower clicked Noctis as the completed recording arrived, causing the recording to be discarded as an unrelated conversation.
-- Keep unrelated, stale, advanced, or unverified windows blocked. Never adopt a choice, purchase, duty prompt, or cutscene skip through this path.
-- Add regression coverage for matching dialogue and identity/scene/session mismatches.
+Includes 0.5.1.106's exact-match recovery for a follower who opens the recorded NPC dialogue as the recording arrives.
 
-Questionable reference reviewed: PunishXIV/Questionable, In the Dark of Night (3159) quest path and interaction state handling. Its per-objective quest variables are useful for future sub-objective reconciliation; no quest database or autonomous routing was imported in this release.
+- Capture quest dialogue locally across a brief follower-status gap (up to 60 seconds since the last authorized status).
+- Send only when the original recipient sessions are freshly authorized. Pause, stop and revoked quest permission remain blocking.
+- Keep queued quest recordings while waiting for readiness instead of dequeuing and silently dropping them. Expiry is bounded to 60 seconds and logged.
+- Log per-follower readiness details when a click cannot be shared, without logging the pairing key.
+- Regression coverage for stale/fresh status, session replacement, pause/stop and permission boundaries.
 
-Build/test success is not in-game verification. Cutscene skipping remains unresolved and should stay disabled. No Journal deployment required.
+Questionable's In the Dark of Night quest path and interaction handling were reviewed. Per-sub-objective completion flags remain a future integration; no external quest database was imported.
+
+Build/test success does not establish in-game success. Cutscene skipping remains unresolved; keep it disabled. No Journal deployment required.

@@ -14,7 +14,7 @@ public sealed partial class Plugin
     private void ResetHelperNativeScene(){helperNativeScene="";helperNativeScenes.Clear();}
     private unsafe void UpdateHelperSceneHook()
     {
-        var enabled=SharingQuest||helperPermission.Active&&helperPermission.Quest&&!HelperPaused&&!helperPermission.QuestPaused;
+        var enabled=RecordingQuest||helperPermission.Active&&helperPermission.Quest&&!HelperPaused&&!helperPermission.QuestPaused;
         if(enabled&&helperSceneHook==null&&!helperSceneHookFailed){
             try{helperSceneHook=Interop.HookFromAddress<HelperSceneDelegate>(EventFramework.MemberFunctionPointers.ProcessEventPlay,ObserveHelperScene);}
             catch(Exception e){helperSceneHookFailed=true;helperError="Quest scene observer unavailable; quest replay cannot be verified.";Log.Error(e,helperError);}
@@ -26,15 +26,15 @@ public sealed partial class Plugin
         try{
             // Recover a missed interaction callback only at a verified native quest-scene start.
             // The native source must resolve to the exact nearby NPC/event object; never guess from current target.
-            if(helperSceneRecovery.Allowed&&SharingQuest&&!helperRecording&&!helperReplaying&&!relayInteracting&&HelperQuestScenePolicy.Quest(eventId.Id)&&obj!=null){
+            if(helperSceneRecovery.Allowed&&RecordingQuest&&!helperRecording&&!helperReplaying&&!relayInteracting&&HelperQuestScenePolicy.Quest(eventId.Id)&&obj!=null){
                 var source=Objects.FirstOrDefault(o=>o.Address==(nint)obj);
                 if(source!=null){CaptureHelperNpc(source);if(helperRecording)RecordFollowTravel("Helper interaction recovered at quest scene",new {npc=source.Name.TextValue,eventId=eventId.Id,scene});}
             }
             // Observe the event being played, not EventState1, which can be empty during quest scenes.
-            if(SharingQuest&&helperRecording)FlushHelperTalk();
+            if(RecordingQuest&&helperRecording)FlushHelperTalk();
             helperNativeScene=eventId.Id==0?"":eventId.Id+":"+scene;
             if(helperNativeScene.Length>0&&helperNativeScenes.Count<128)helperNativeScenes.Add(helperNativeScene);
-            if(SharingQuest&&helperRecording&&helperCaptureNpc is {} npc&&HelperQuestScenePolicy.Quest(eventId.Id)&&helperRecorded.Count>0){
+            if(RecordingQuest&&helperRecording&&helperCaptureNpc is {} npc&&HelperQuestScenePolicy.Quest(eventId.Id)&&helperRecorded.Count>0){
                 var first=helperRecorded[0];
                 if(first.QuestId==0){
                     var manager=QuestManager.Instance();var accepted=manager!=null&&manager->IsQuestAccepted(eventId.Id);

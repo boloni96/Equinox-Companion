@@ -18,8 +18,8 @@ public sealed partial class Plugin
     {
         if(helperReplaying||relayInteracting||usingSharedTravel||clicked.ObjectKind is not (ObjectKind.EventNpc or ObjectKind.EventObj)||Objects.LocalPlayer is not {} self)return;
         ObserveHelperLocalInteraction(clicked);
-        if(!SharingQuest){
-            if(config.EnableFollowThem&&config.FollowThem.ShareQuestActions)RecordFollowTravel("Helper interaction not shared",new {npc=clicked.Name.TextValue,reason="No fresh active follower with quest permission, or pairing/player unavailable",followers=helperFollowers.Length,loaded=Player.IsLoaded});
+        if(!RecordingQuest){
+            if(config.EnableFollowThem&&config.FollowThem.ShareQuestActions)RecordFollowTravel("Helper interaction not shared",new {npc=clicked.Name.TextValue,reason="No authorized follower within recording grace, or pairing/player unavailable",followers=helperFollowers.Select(f=>new {f.Name,f.Quest,f.QuestPaused,f.Paused,f.Control,ageMs=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()-f.Updated}),loaded=Player.IsLoaded,pairingConfigured=config.PairingKey.Length==64});
             return;
         }
         if(Vector3.Distance(self.Position,clicked.Position)>clicked.HitboxRadius+4){RecordFollowTravel("Helper interaction not shared",new {npc=clicked.Name.TextValue,reason="Outside recorded interaction range"});return;}
@@ -29,7 +29,7 @@ public sealed partial class Plugin
         helperSceneRecovery.NewInteraction();
         helperCaptureNpc=new(Guid.NewGuid().ToString("N"),clicked.BaseId,clicked.Name.TextValue,Client.TerritoryType,map->CurrentMapId,Player.CurrentWorld.RowId,FollowTravelPosition.From(clicked.Position),FollowTravelPosition.From(self.Position),self.Rotation);
         helperDialogue.Reset();ResetHelperNativeScene();helperCaptureAt=DateTimeOffset.UtcNow;
-        helperRecording=true;helperRecordAudience=helperFollowers.Where(f=>HelperPolicy.Audience(f,helperCaptureAt.ToUnixTimeMilliseconds())).Select(f=>f.Id).ToArray();
+        helperRecording=true;helperRecordAudience=helperFollowers.Where(f=>HelperPolicy.RecordingAudience(f,helperCaptureAt.ToUnixTimeMilliseconds())).Select(f=>f.Id).ToArray();
         // Observe locally until a verified quest or supported event-replay step appears.
         EmitHelper("interact",text:clicked.ObjectKind.ToString());
         RecordFollowTravel("Helper interaction observed",new {npc=clicked.Name.TextValue,kind=clicked.ObjectKind.ToString(),clicked.BaseId});
@@ -53,12 +53,12 @@ public sealed partial class Plugin
     private void EmitHelper(string kind,string text="",string signature="",string addon="",string scene="",uint questId=0)
     {
         var now=DateTimeOffset.UtcNow;
-        if(!HelperConversationPolicy.MayRecord(helperRecording,SharingQuest)||helperReplaying||helperCaptureNpc is not {} npc||now-helperCaptureAt>TimeSpan.FromMinutes(10)||npc.World!=Player.CurrentWorld.RowId||npc.Territory!=Client.TerritoryType)return;
+        if(!HelperConversationPolicy.MayRecord(helperRecording,RecordingQuest)||helperReplaying||helperCaptureNpc is not {} npc||now-helperCaptureAt>TimeSpan.FromMinutes(10)||npc.World!=Player.CurrentWorld.RowId||npc.Territory!=Client.TerritoryType)return;
         if(questId==0&&kind is "talk" or "choice")questId=AcceptedHelperQuestForScene(scene);
         var key=kind+"/"+npc.Conversation+"/"+signature+"/"+text+"/"+scene+"/"+questId;
         if(key==lastHelperCapture&&now-lastHelperCaptureAt<TimeSpan.FromMilliseconds(300))return;
         lastHelperCapture=key;lastHelperCaptureAt=now;
-        var sessions=helperFollowers.Where(f=>HelperPolicy.Audience(f,now.ToUnixTimeMilliseconds(),kind=="skip")).Select(f=>f.Id).ToArray();
+        var sessions=helperFollowers.Where(f=>HelperPolicy.RecordingAudience(f,now.ToUnixTimeMilliseconds(),kind=="skip")).Select(f=>f.Id).ToArray();
         if(sessions.Length==0)return;
         if(helperRecorded.Count>=128||helperOutgoing.Count>=32){helperRecordingFailed=true;helperError="NPC recording is full; this conversation will not be replayed partially.";return;}
         if(kind is "talk" or "choice" or "acceptQuest" or "eventReplay" or "skip" or "completeQuest" or "soloDuty")RecordFollowTravel("Helper captured choice",new {kind,npc=npc.Name,text,addon,scene,questId});
@@ -72,7 +72,7 @@ public sealed partial class Plugin
     }
     private void ObserveHelperDialogue()
     {
-        if(!SharingQuest||!helperRecording){helperDialogue.Reset();return;}
+        if(!RecordingQuest||!helperRecording){helperDialogue.Reset();return;}
         if(helperReplaying)return;
         if(!VisibleFollowAddon("Talk")){FlushHelperTalk();return;}
         var talk=HelperTalk();
@@ -81,7 +81,7 @@ public sealed partial class Plugin
     }
     private void ObserveHelperTalk(AddonEvent type,AddonArgs args)
     {
-        if(!SharingQuest||helperReplaying)return;
+        if(!RecordingQuest||helperReplaying)return;
         try{if(type==AddonEvent.PreFinalize)FlushHelperTalk();else ObserveHelperDialogue();}
         catch(Exception e){Log.Debug(e,"Helper dialogue capture unavailable");}
     }
@@ -100,7 +100,7 @@ public sealed partial class Plugin
     }
     private unsafe void CaptureHelperChoice(AtkUnitBase* addon,int index)
     {
-        if(!SharingQuest||helperReplaying||usingSharedTravel||addon==null||index<0)return;
+        if(!RecordingQuest||helperReplaying||usingSharedTravel||addon==null||index<0)return;
         if(!VisibleFollowAddon("Talk"))FlushHelperTalk();
         if(CaptureHelperEventReplay(addon,index))return;
         var cut=AgentCutscene.Instance();

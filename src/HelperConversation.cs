@@ -35,8 +35,8 @@ public sealed partial class Plugin
     {
         if(!helperRecording)return;
         if(HelperShopVisible()){ResetHelperRecording();return;}
-        if(!SharingQuest||helperCaptureNpc is not {} npc||now-helperCaptureAt>TimeSpan.FromMinutes(10)||helperRecordingFailed){ResetHelperRecording();return;}
-        helperRecordAudience=helperRecordAudience.Where(id=>helperFollowers.Any(f=>f.Id==id&&HelperPolicy.Audience(f,now.ToUnixTimeMilliseconds()))).ToArray();
+        if(!RecordingQuest||helperCaptureNpc is not {} npc||now-helperCaptureAt>TimeSpan.FromMinutes(10)||helperRecordingFailed){ResetHelperRecording();return;}
+        helperRecordAudience=helperRecordAudience.Where(id=>helperFollowers.Any(f=>f.Id==id&&HelperPolicy.RecordingAudience(f,now.ToUnixTimeMilliseconds()))).ToArray();
         if(helperRecordAudience.Length==0){ResetHelperRecording();return;}
         if(QuestConversationVisible()||helperAcceptIntent||HelperResultPending||Conditions[ConditionFlag.OccupiedInQuestEvent]||Conditions[ConditionFlag.WatchingCutscene]||Conditions[ConditionFlag.WatchingCutscene78]||Conditions[ConditionFlag.OccupiedInCutSceneEvent]){helperRecordQuiet=default;return;}
         // A brief window replacement is not the end of a conversation.

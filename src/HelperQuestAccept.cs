@@ -72,7 +72,7 @@ public sealed partial class Plugin
     }
     private unsafe void CaptureHelperQuestCallback(AtkUnitBase* addon,uint count,AtkValue* values)
     {
-        if(!SharingQuest||helperReplaying||addon==null||addon!=(AtkUnitBase*)GardenGui.GetAddonByName("JournalAccept").Address||values==null||count==0)return;
+        if(!RecordingQuest||helperReplaying||addon==null||addon!=(AtkUnitBase*)GardenGui.GetAddonByName("JournalAccept").Address||values==null||count==0)return;
         if(((int)values[0].Type&15) is not (3 or 5))return;
         var offered=VisibleHelperQuest();if(offered==0)return;
         var code=values[0].Int;
@@ -87,7 +87,7 @@ public sealed partial class Plugin
     private bool helperAcceptIntent,helperQuestMenuSelected;
     private unsafe void ObserveHelperQuestAcceptance(DateTimeOffset now)
     {
-        if(!SharingQuest||helperCaptureNpc is not {} npc){helperOfferedQuest=0;helperAcceptIntent=false;return;}
+        if(!RecordingQuest||helperCaptureNpc is not {} npc){helperOfferedQuest=0;helperAcceptIntent=false;return;}
         var manager=QuestManager.Instance();if(manager==null||!helperAcceptIntent)return;
         if(npc.Conversation!=helperOfferedConversation||now-helperOfferedAt>TimeSpan.FromMinutes(10)){helperOfferedQuest=0;helperAcceptIntent=false;return;}
         if(!VisibleFollowAddon("JournalAccept")&&manager->IsQuestAccepted(helperOfferedQuest)){
