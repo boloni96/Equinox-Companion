@@ -101,6 +101,10 @@ public sealed partial class Plugin : IDalamudPlugin
     private string pairingInput = "";
     private int syncFailures;
     private int heldSyncRecords;
+    private bool syncHistoryFirst;
+    private int pendingSyncRecords, readySyncRecords, lastSyncBatchSize;
+    private DateTimeOffset? lastSyncReceiptAt, lastSyncBatchOldest, lastSyncBatchNewest;
+    private string SyncQueueStatus => $"Queue: {pendingSyncRecords} pending · {readySyncRecords} eligible · {heldSyncRecords} held. Last receipt: {lastSyncReceiptAt?.ToLocalTime().ToString("HH:mm:ss") ?? "none this session"}.";
     private ErrorJournal errorJournal = null!;
     private GardenMessageJournal gardenMessageJournal = null!;
 
@@ -118,9 +122,12 @@ public sealed partial class Plugin : IDalamudPlugin
                 config.SentEvents.RemoveAll(id => !retained.Contains(id));
                 SaveConfiguration();
                 syncStatus = result.Status;
+                if (!result.Retry) lastSyncReceiptAt = now;
+                pendingSyncRecords = Math.Max(0, pendingSyncRecords - result.Accepted.Length);
+                readySyncRecords = Math.Max(0, readySyncRecords - result.Accepted.Length);
                 if (result.Retry) errorJournal.Record("upload", result.Status);
                 syncFailures = result.Retry ? Math.Min(syncFailures + 1, 5) : 0;
-                nextSync = now.AddSeconds(result.Retry ? Math.Min(600, 30 * (1 << syncFailures)) : FastGardenSync ? 1 : 30);
+                nextSync = now.AddSeconds(result.Retry ? Math.Min(600, 30 * (1 << syncFailures)) : FastGardenSync ? 2 : 5);
             }
             else { errorJournal.Record("upload", "Upload task failed; records kept.", exceptionType: syncTask.Exception?.GetBaseException().GetType().Name); syncStatus = "Sync paused after a connection error; local records are kept."; nextSync = now.AddMinutes(2); }
             syncTask = null;
@@ -134,17 +141,23 @@ public sealed partial class Plugin : IDalamudPlugin
             .Concat(config.Discoveries.Where(e => !sent.Contains(e.Id) && (e.Kind is "garden.ready" or "garden.observed" or "garden.unmapped" or "garden.empty.unmapped" or "garden.status" or "garden.status.unmapped" or "garden.mapped" or "garden.empty" or "garden.dead" or "garden.fertilized" ? config.TrackGardens : e.Kind == "character.registered" ? config.SyncCharacterDetails && e.Registration?.PairingScope == RegistrationScope : e.Kind == "character.updated" ? config.SyncCharacterDetails : e.Kind is "collection.observed" or "storage.observed" ? config.SyncCollections : e.Kind == "submarines.cached" ? config.SyncAutoRetainer : e.Kind is "fashion.observed" or "submarines.observed" or "submarines.supplies" ? config.SyncActivities : config.SyncHouseDetails)))
             .Where(e => !SyncValidation.SupersededIncompleteCharacter(e, config.Discoveries, now))
             .OrderBy(e => e.Kind == "character.registered" ? 0 : 1).ThenBy(e => e.At).ToArray();
+        pendingSyncRecords = pending.Length;
         var held = pending.Where(e => !SyncValidation.CanSend(e, now)).ToArray();
         heldSyncRecords = held.Length;
         foreach (var e in held) if(reportedHeldRecords.Add(e.Id)) errorJournal.Record("held-record", SyncValidation.HoldReason(e, now), e.Id, e.Kind);
-        var events = pending.Where(e => SyncValidation.CanSend(e, now) && SyncValidation.SupportedByWebsite(e.Kind, config.SharedRoster?.ProtocolVersion ?? 1)).Take(50).ToArray();
-        while (events.Length > 1 && JsonSerializer.SerializeToUtf8Bytes(new { events }, json).Length > 60000) events = events[..^1];
+        var eligible = pending.Where(e => SyncValidation.CanSend(e, now) && SyncValidation.SupportedByWebsite(e.Kind, config.SharedRoster?.ProtocolVersion ?? 1)).ToArray();
+        readySyncRecords = eligible.Length;
+        var events = SyncQueue.Select(eligible, batch => JsonSerializer.SerializeToUtf8Bytes(new { events = batch }, json).Length, syncHistoryFirst);
         if (events.Length == 0) {
-            if (pending.Any(e => !SyncValidation.SupportedByWebsite(e.Kind, config.SharedRoster?.ProtocolVersion ?? 1)))
+            if (eligible.Length > 0) syncStatus = "Eligible records exceed the upload size limit; kept locally. Export diagnostics.";
+            else if (pending.Any(e => !SyncValidation.SupportedByWebsite(e.Kind, config.SharedRoster?.ProtocolVersion ?? 1)))
                 syncStatus = "New observations kept locally. Deploy Journal V7.11.57, save once, then refresh shared profiles.";
             nextSync = now.AddSeconds(FastGardenSync ? 1 : 30); return;
         }
-        syncStatus = $"Sending {events.Length} events…";
+        syncHistoryFirst = !syncHistoryFirst;
+        lastSyncBatchSize = events.Length;
+        lastSyncBatchOldest = events.Min(e => e.At); lastSyncBatchNewest = events.Max(e => e.At);
+        syncStatus = $"Sending {events.Length} events · recent actions and history recovery…";
         syncTask = sync.Send(config.PairingKey, events);
     }
 
@@ -912,7 +925,8 @@ public sealed partial class Plugin : IDalamudPlugin
             Directory.CreateDirectory(dir);
             exportPath = Path.Combine(dir, $"equinox-test-{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.json");
             File.WriteAllText(exportPath, JsonSerializer.Serialize(new {
-                schemaVersion = 6, followTravel = followTravelDiagnostics.ToArray(), pluginVersion = typeof(Plugin).Assembly.GetName().Version?.ToString(), errorLog = errorJournal.Snapshot(), recentGardenMessages=gardenMessageJournal.Snapshot(), exportedAt = DateTimeOffset.UtcNow,
+                schemaVersion = 7, followTravel = followTravelDiagnostics.ToArray(), pluginVersion = typeof(Plugin).Assembly.GetName().Version?.ToString(), errorLog = errorJournal.Snapshot(), recentGardenMessages=gardenMessageJournal.Snapshot(), exportedAt = DateTimeOffset.UtcNow,
+                syncDiagnostics = new { enabled = config.SyncEnabled, paired = config.PairingKey.Length == 64, endpoint = "https://equinoxjournal.pages.dev", status = syncStatus, pending = pendingSyncRecords, eligible = readySyncRecords, held = heldSyncRecords, acknowledgedLocal = config.SentEvents.Count, lastSyncReceiptAt, lastSyncBatchSize, lastSyncBatchOldest, lastSyncBatchNewest, nextAttemptAt = nextSync, inFlight = syncTask is not null },
                 mode = "local-diagnostics", gardeningConfirmed = false, performance = new { maxDrawMs,maxUpdateMs,maxSnapshotMs, configurationError },
                 houseObservations = config.Houses, confirmedTending = config.Tending, confirmedPlanting = config.Planting, observedDetails = config.Discoveries, diagnostics
             }, json));
@@ -981,6 +995,7 @@ public sealed partial class Plugin : IDalamudPlugin
                     else syncStatus = "Paste the 64-character key from Game connection.";
                 }
                 ImGui.TextWrapped(syncStatus);
+                ImGui.TextWrapped(SyncQueueStatus);
                 if (heldSyncRecords > 0) ImGui.TextWrapped($"{heldSyncRecords} incomplete observation(s) in Diagnostics. They are not sent and do not block valid actions.");
                 ImGui.TextWrapped("Sends character and job details, confirmed owned-estate and FC details, property addresses, planting and tending records, and entry times. Pairing key is saved on this PC and is never included in test exports. Characters match automatically by name and home server. Unmatched houses and patches need linking once.");
     }
@@ -989,6 +1004,7 @@ public sealed partial class Plugin : IDalamudPlugin
     {
             ImGui.TextWrapped($"Tracking diagnostics · Companion {typeof(Plugin).Assembly.GetName().Version}");
             ImGui.TextWrapped(syncStatus);
+            ImGui.TextWrapped(SyncQueueStatus);
             ImGui.TextWrapped(status);
             ImGui.TextWrapped(discoveryStatus);
             ImGui.TextWrapped(cropChatStatus);
@@ -1104,4 +1120,5 @@ public sealed partial class Plugin : IDalamudPlugin
         FlushConfiguration();
     }
 }
+
 

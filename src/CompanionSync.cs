@@ -34,11 +34,7 @@ public sealed class CompanionSync : IDisposable
                     _ => $"Website returned HTTP {(int)response.StatusCode}; local records are kept."
                 }, true);
             await response.Content.LoadIntoBufferAsync(65536);
-            var result = JsonSerializer.Deserialize<Receipt>(await response.Content.ReadAsStringAsync(cancel.Token), Json);
-            var sent = events.Select(x => x.Id).ToHashSet();
-            if (result?.Accepted is null || result.Accepted.Any(x => !sent.Contains(x)))
-                return new([], "Unexpected website response; local records are kept.", true);
-            return new(result.Accepted, $"Sent {result.Accepted.Length} events. Check Game connection on the website for matching.", false);
+            return SyncReceipt.Parse(await response.Content.ReadAsStringAsync(cancel.Token), events.Select(x => x.Id));
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
         { return new([], "Connection unavailable; local records are kept for retry.", true); }
@@ -81,7 +77,6 @@ public sealed class CompanionSync : IDisposable
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException or InvalidOperationException)
         { return new(null, "Shared profiles unavailable; showing saved copy."); }
     }
-    private sealed record Receipt(string[] Accepted);
     public void Dispose() { cancel.Cancel(); client.Dispose(); cancel.Dispose(); }
 }
 
@@ -99,3 +94,4 @@ public sealed class SubmarineRouteJson : System.Text.Json.Serialization.JsonConv
     public override void Write(Utf8JsonWriter writer, byte[] value, JsonSerializerOptions options)
     {writer.WriteStartArray();foreach(var sector in value)writer.WriteNumberValue(sector);writer.WriteEndArray();}
 }
+

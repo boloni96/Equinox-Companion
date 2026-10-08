@@ -26,9 +26,9 @@ public sealed partial class Plugin
                 MessageToggle("Share my NPC and dialogue actions with active followers",config.FollowThem.ShareQuestActions,v=>config.FollowThem.ShareQuestActions=v);
                 MessageToggle("Enable Quest Helper for my next follow session",config.FollowThem.QuestHelper,v=>config.FollowThem.QuestHelper=v);
                 if(ImGui.IsItemHovered())ImGui.SetTooltip("Only the follower grants permission when pressing Start. Stop revokes it. Only the leader can pause/resume. Follower Stop ends permission; the leader cannot restart it.");
-                if(config.FollowThem.QuestHelper)MessageToggle("Mirror the leader's cutscene skips (matching, skippable scenes only)",config.FollowThem.SkipLeaderCutscenes,v=>config.FollowThem.SkipLeaderCutscenes=v);
+                ImGui.TextWrapped("Automatic cutscene skipping is temporarily disabled after a crash. Skip manually on each client.");
                 ImGui.TextWrapped("Quest Helper starts disabled. Changes apply to your next session. Match NPC and response text; differing quest progress blocks assistance. Accepts the same quest only after the leader accepts it. Mirrors verified quest completion; optional reward choices, purchases and general Yes/No prompts remain manual. Mirrors a new leader FATE Level Sync in the same FATE, with right-side direct approach when Lifestream is enabled. No combat automation or obstacle navigation.");
-                ImGui.TextWrapped("If the game does not expose a verified skip callback, open its Skip prompt manually. Helper never sends Escape or other keyboard shortcuts to skip.");
+                ImGui.TextWrapped("Helper does not open or confirm cutscene skip prompts in this version.");
                 if(followSession.Armed){ImGui.TextWrapped(helperPermission.Quest?"Quest assistance permitted for this session.":"This session allows FollowThem only.");DrawHelperFollowerControls();}
                 if(helperBlocked.Length>0)DrawHelperStatusText("Blocked: "+helperBlocked);
                 if(ImGui.Button("Open Helper Controls"))helperWindowOpen=true;
@@ -80,3 +80,4 @@ public sealed partial class Plugin
         ImGui.End();
     }
 }
+

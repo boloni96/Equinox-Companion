@@ -97,10 +97,8 @@ public sealed partial class Plugin
         if(CaptureHelperEventReplay(addon,index))return;
         var cut=AgentCutscene.Instance();
         if(cut!=null&&cut->SkipDialogAddonId!=0&&addon->Id==cut->SkipDialogAddonId){
-            var yes=index==0;
-            if(addon==(AtkUnitBase*)GardenGui.GetAddonByName("SelectString").Address){var options=TransportChoices(addon);yes=index<options.Count&&new[]{"Yes.","Yes","Ja","Oui","はい","是","예"}.Contains(options[index]);}
-            var scene=HelperScene();if(yes&&scene.Length>0)EmitHelper("skip",scene:scene);
-            else if(yes)RecordFollowTravel("Helper skip not recorded",new {reason="No observed quest scene for this cutscene."});return;
+            // Manual skip stays entirely game-owned. Do not relay it as a generic choice.
+            return;
         }
         foreach(var name in new[]{"SelectString","SelectIconString","CutSceneSelectString"}){
             if(addon!=(AtkUnitBase*)GardenGui.GetAddonByName(name).Address)continue;
@@ -112,3 +110,4 @@ public sealed partial class Plugin
         // Quest rewards, purchases, and arbitrary Yes/No prompts remain manual.
     }
 }
+

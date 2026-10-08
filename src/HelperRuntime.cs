@@ -94,7 +94,7 @@ public sealed partial class Plugin
     private string helperPairingIdentity="";
     private string helperFollowerName="";
     private uint helperFollowerWorld;
-    private void StartHelperSession(){EndHelperSession();helperPermission.Start(config.FollowThem.QuestHelper,config.FollowThem.SkipLeaderCutscenes);helperFollowerName=Player.CharacterName;helperFollowerWorld=Player.HomeWorld.RowId;}
+    private void StartHelperSession(){EndHelperSession();helperPermission.Start(config.FollowThem.QuestHelper,false);helperFollowerName=Player.CharacterName;helperFollowerWorld=Player.HomeWorld.RowId;}
     private void SendHelperControl(HelperFollower f,string command)
     {
         if(!Player.IsLoaded||helperControls.Count>=32)return;
@@ -104,3 +104,4 @@ public sealed partial class Plugin
     private HelperFollower[] ActiveHelperFollowers()=>helperFollowers.Where(x=>x.Control!="stop").ToArray();
     private void RefreshHelperLeaderBar()=>RefreshFollowBar();
 }
+

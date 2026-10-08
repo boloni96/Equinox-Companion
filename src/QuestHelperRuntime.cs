@@ -89,22 +89,9 @@ public sealed partial class Plugin
         if(a.Kind=="completeQuest"){UpdateHelperQuestResult(a,now);return;}
         if(a.Kind=="acceptQuest"){UpdateHelperQuestAccept(a,now);return;}
         if(a.Kind=="skip"){
-            if(!helperPermission.Skip){CompleteHelperAction(now);return;}
-            if(helperActionSubmitted){
-                var skipping=AgentCutscene.Instance();
-                if((skipping==null||skipping->SkipDialogAddonId==0)&&(!HelperPolicy.SceneMatches(a.Scene,HelperScene())||!Conditions[ConditionFlag.WatchingCutscene]&&!Conditions[ConditionFlag.WatchingCutscene78]&&!Conditions[ConditionFlag.OccupiedInCutSceneEvent])){RecordFollowTravel("Helper skip confirmed",new {a.Scene});CompleteHelperAction(now);return;}
-                if(now-helperActionStarted>TimeSpan.FromSeconds(15))BlockHelper("Cutscene skip was requested but not confirmed.");return;
-            }
-            if(!HelperPolicy.SceneMatches(a.Scene,HelperScene())){if(now-helperActionStarted>TimeSpan.FromSeconds(8))BlockHelper("Cutscene differs; skip was not applied.");return;}
-            var agent=AgentCutscene.Instance();if(agent==null)return;
-            
-            if(agent->SkipDialogAddonId==0){
-                if(agent->SkipCallback!=null){helperReplaying=true;try{agent->OpenSkipDialog(agent->SkipCallback);}finally{helperReplaying=false;}helperNextAction=now.AddSeconds(1);return;}
-                helperQuestStatus="Open the cutscene Skip prompt to continue; no verified skip callback is available yet.";return;
-            }
-            // Require the game-owned skip dialog, not an unrelated Yes/No window.
-            foreach(var name in new[]{"SelectString","SelectYesno"}){var dialog=(AtkUnitBase*)GardenGui.GetAddonByName(name).Address;if(dialog==null||!dialog->IsVisible||dialog->Id!=agent->SkipDialogAddonId)continue;var choice=0;if(name=="SelectString"){var labels=TransportChoices(dialog);var yesLabels=new[]{"Yes.","Yes","Ja","Oui","はい","是","예"};var found=labels.Select((text,index)=>(text,index)).Where(x=>yesLabels.Contains(x.text)).ToArray();if(found.Length!=1){BlockHelper("Skip confirmation differs; choose manually.");return;}choice=found[0].index;}helperReplaying=true;try{RecordFollowTravel("Helper skip submitted",new {a.Scene,npc=a.Npc.Name});dialog->FireCallbackInt(choice);}finally{helperReplaying=false;}helperActionSubmitted=true;helperActionStarted=now;helperNextAction=now.AddMilliseconds(450);return;}
-            return;
+            // Safety hotfix: never open or submit a native cutscene skip dialog.
+            helperQuestStatus="Automatic cutscene skipping is disabled; skip manually.";
+            CompleteHelperAction(now);return;
         }
         if(a.Kind=="talk"){
             var talk=HelperTalk();
@@ -140,3 +127,4 @@ public sealed partial class Plugin
         helperQuestStatus="In dialogue — following the leader's choices.";nextHelperStatus=default;
     }
 }
+
