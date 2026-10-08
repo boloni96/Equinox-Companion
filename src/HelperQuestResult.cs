@@ -75,16 +75,16 @@ public sealed partial class Plugin
             if(!VisibleFollowAddon("JournalResult")&&(a.Scene=="decline"||!manager->IsQuestAccepted(a.QuestId)&&QuestManager.IsQuestComplete(a.QuestId))){RecordFollowTravel("Helper quest result confirmed",new {a.QuestId,a.Scene});CompleteHelperAction(now);return;}
             if(!VisibleFollowAddon("JournalResult")&&a.Scene=="complete"){
                 var remaining=helperIncoming.Skip(1).ToArray();
-                var count=HelperQuestResultPolicy.FollowupTalkCount(a,remaining);
+                var followupCount=HelperQuestResultPolicy.FollowupTalkCount(a,remaining);
                 // Some quests commit completion only after their informational Talk pages close.
                 // Keep verification before the next non-Talk action; never assume button submission is completion.
-                if(count>0){
+                if(followupCount>0){
                     var verify=a with {Id=Guid.NewGuid().ToString("N")};helperResultConfirmationId=verify.Id;
                     helperIncoming.Clear();helperIncoming.Enqueue(a);
-                    foreach(var talk in remaining.Take(count))helperIncoming.Enqueue(talk);
+                    foreach(var talk in remaining.Take(followupCount))helperIncoming.Enqueue(talk);
                     helperIncoming.Enqueue(verify);helperStepDelays[verify.Id]=0;
-                    foreach(var later in remaining.Skip(count))helperIncoming.Enqueue(later);
-                    RecordFollowTravel("Helper quest result awaiting follow-up dialogue",new {a.QuestId,lines=count});
+                    foreach(var later in remaining.Skip(followupCount))helperIncoming.Enqueue(later);
+                    RecordFollowTravel("Helper quest result awaiting follow-up dialogue",new {a.QuestId,lines=followupCount});
                     CompleteHelperAction(now);return;
                 }
             }
