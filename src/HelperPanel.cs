@@ -68,7 +68,7 @@ public sealed partial class Plugin
                 if(ImGui.Button(f.Control=="pause"?"Resume FollowThem":"Pause FollowThem"))SendHelperControl(f,f.Control=="pause"?"resume":"pause");
                 if(ImGui.IsItemHovered())ImGui.SetTooltip("Pause discards travel. Resume only resumes following; it does not replay trips made while paused.");
                 if(ImGui.Button("Bring follower back"))RequestHelperBring(f);
-                if(ImGui.IsItemHovered())ImGui.SetTooltip("Resume this active session and request your latest supported teleport destination, only if you are still in that destination area. Requires Journal V7.11.86. The follower keeps their own travel settings and can Stop.");
+                if(ImGui.IsItemHovered())ImGui.SetTooltip("Resume this active session and meet at your recent teleport destination, or a public aetheryte on your actual current map. The follower uses their own unlocked destinations and gil limit. Maps without a public teleport require another route. Requires Journal V7.11.86.");
                 if(f.Quest){if(ImGui.Button(f.QuestPaused?"Resume Quest Helper":"Pause Quest Helper"))SendHelperControl(f,f.QuestPaused?"questResume":"questPause");if(ImGui.IsItemHovered())ImGui.SetTooltip("Pauses NPC, dialogue and FATE Level Sync assistance. FollowThem and travel continue. Resume with a fresh NPC interaction.");}
                 ImGui.SameLine();if(ImGui.Button("Stop…"))helperStopConfirm=f.Id;
                 ImGui.EndDisabled();

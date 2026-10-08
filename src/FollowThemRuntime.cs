@@ -72,6 +72,7 @@ public sealed partial class Plugin
     private void StopFollowThem(string reason = "Stopped.")
     {
         var wasArmed = followSession.Armed;
+        if(wasArmed)RecordFollowTravel("Follower session stopped",new {reason,target=config.FollowThem.TargetName,quest=helperPermission.Quest});
         EndHelperSession();
         followSession.Stop();
         UpdateFollowLease(DateTimeOffset.UtcNow);
@@ -182,7 +183,7 @@ public sealed partial class Plugin
             var transitioning = FollowTransitionBusy();
             // A transient missing local actor while zoning is not a character logout.
             var loading = Conditions[ConditionFlag.BetweenAreas] || Conditions[ConditionFlag.BetweenAreas51];
-            var login = Player.IsLoaded ? Player.ContentId : (loading ? followLogin : 0);
+            var login = Player.IsLoaded&&Player.ContentId!=0 ? Player.ContentId : (KeepFollowSessionDuringLoading(now) ? followLogin : 0);
             if(lifestreamTravelOwned&&!Player.IsLoaded)login=followLogin;
             if (followLogin != login)
             {
@@ -369,4 +370,5 @@ public sealed partial class Plugin
         }
     }
 }
+
 

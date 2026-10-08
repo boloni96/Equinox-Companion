@@ -35,7 +35,7 @@ public sealed partial class Plugin
     private void UpdateFollowLease(DateTimeOffset now)
     {
         var loading=Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51];
-        var desired=config.EnableFollowThem&&(config.FollowThem.UseSharedPortals||config.FollowThem.UseSharedTeleports||helperPermission.Active)&&followSession.Armed&&(Player.IsLoaded||loading||lifestreamTravelOwned)&&(!Player.IsLoaded||followLogin==0||Player.ContentId==followLogin)&&config.PairingKey.Length==64;
+        var desired=config.EnableFollowThem&&(config.FollowThem.UseSharedPortals||config.FollowThem.UseSharedTeleports||helperPermission.Active)&&followSession.Armed&&KeepFollowSessionDuringLoading(now)&&(!Player.IsLoaded||followLogin==0||Player.ContentId==followLogin)&&config.PairingKey.Length==64;
         var identity=desired?config.PairingKey+"/"+config.FollowThem.TargetName+"/"+config.FollowThem.HomeWorld+"/"+followArmedAt:"";
         if(followLeaseTask is not null){if(!followLeaseTask.IsCompleted)return;var ok=followLeaseTask.GetAwaiter().GetResult();followLeaseTask=null;if(followLeaseDeleting){if(!ok){nextFollowLease=now.AddSeconds(2);portalRelayStatus="Ending previous follow session; retrying.";return;}followLeaseId="";followLeaseDeleting=false;}else if(!ok)portalRelayStatus="Follow session unavailable — deploy Journal V7.11.76 and check pairing.";}
         if(followLeaseId.Length>0&&identity!=followLeaseIdentity){if(followLeaseDeleting&&now<nextFollowLease)return;followLeaseDeleting=true;followLeaseTask=portalRelay.Session(followLeaseKey,followLeaseId,followLeaseName,followLeaseWorld,false);return;}
@@ -201,4 +201,5 @@ public sealed partial class Plugin
         finally {relayInteracting=false;}
     }
 }
+
 

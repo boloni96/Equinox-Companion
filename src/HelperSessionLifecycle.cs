@@ -31,6 +31,8 @@ public sealed partial class Plugin
         foreach(var old in helperFollowers)if(!active.Any(f=>f.Id==old.Id))RemoveHelperRecordingAudience(old.Id);
         if(helperFollowers.Length>0&&!helperFollowers.Any(old=>active.Any(f=>f.Id==old.Id))){
             ClearHelperLeaderSession();
+            helperError="Quest sharing stopped: the previous follower session ended or disappeared from the relay. The follower must check their session and press Start if stopped; then interact with the NPC again.";
+            helperWindowOpen=true;
             RecordFollowTravel("Helper leader session ended",new {reason="No active followers remain."});
         }
         helperFollowers=active;
@@ -43,8 +45,10 @@ public sealed partial class Plugin
     }
     private void RequestHelperBring(HelperFollower follower)
     {
+        if(!SharingTravel){helperError="Enable Share my travel before requesting a meeting.";return;}
         if(helperMeetTravel is not {} travel||!HelperBringAvailable(travel)){
-            helperError="No supported recent teleport to your current area. Teleport to the meeting destination first, then use Bring follower back.";return;
+            travel=CreateCurrentMapMeeting();
+            if(travel==null){helperError="No public Teleport destination was found on your current map. This area needs manual travel or a supported recorded route.";return;}
         }
         helperBring=(follower.Id,travel);SendHelperControl(follower,"resume");
     }
@@ -60,3 +64,4 @@ public sealed partial class Plugin
         helperError="Meeting request prepared; waiting for the relay response.";
     }
 }
+

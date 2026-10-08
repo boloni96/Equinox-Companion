@@ -20,12 +20,13 @@ public sealed partial class Plugin
     private bool helperWindowOpen;
     private string helperBlocked="";
     private string helperLastIssue="";
+    private uint helperObservedQuest;
     private bool HelperPaused=>helperPermission.Active&&helperPermission.Paused;
     private bool HelperTravelBusy=>travelQueue.Count>0&&!HoldHelperTravel||travelAwaitingArrival!=null||followApproach!=null||pendingTransport!=null||pendingWard!=null||pendingAethernet!=null||receivedPortal!=null||pendingDutyLeave!=null||lifestreamTravelOwned;
     private bool HelperQuestBusy=>!HelperTravelBusy&&helperPermission.Active&&helperPermission.Quest&&!helperPermission.QuestPaused&&(helperReservedConversation.Length>0||helperIncoming.Count>0||helperBlocked.Length>0||helperNpcActive!=null&&QuestConversationVisible());
     private bool SharingQuest=>config.EnableFollowThem&&config.FollowThem.ShareQuestActions&&config.PairingKey.Length==64&&Player.IsLoaded&&helperFollowers.Any(x=>HelperPolicy.Audience(x,DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()));
     private void ClearHelperActions(){helperConversations.Clear();ClearHelperReservation();helperIncoming.Clear();helperBlocked="";helperNpcActive=null;CancelHelperApproach();}
-    private void EndHelperSession(){CancelHelperFateApproach();helperPendingFate=null;helperPermission.Stop();helperLastIssue="";ClearHelperActions();helperCursor=0;helperTravelAfter=0;helperTravelCutoff=0;helperSeen.Clear();helperSkippedConversations.Clear();nextHelperStatus=default;}
+    private void EndHelperSession(){helperObservedQuest=0;CancelHelperFateApproach();helperPendingFate=null;helperPermission.Stop();helperLastIssue="";ClearHelperActions();helperCursor=0;helperTravelAfter=0;helperTravelCutoff=0;helperSeen.Clear();helperSkippedConversations.Clear();nextHelperStatus=default;}
     private void ApplyHelperControl(string command)
     {
         if(command=="stop"){StopFollowThem("Ended by the followed character. Only you can start again.");return;}
@@ -71,6 +72,7 @@ public sealed partial class Plugin
             helperStatusSession=followLeaseId;helperStatusGeneration=followArmedAt;helperStatusKey=config.PairingKey;nextHelperStatus=now.AddSeconds(2);
             var status=HelperPaused?("Paused by leader"):helperBlocked.Length>0?"Blocked — "+helperBlocked:HelperQuestBusy?helperQuestStatus:followStatus;
             if(helperLastIssue.Length>0)status+=" · Quest Helper blocked: "+helperLastIssue;
+            status=HelperObservedQuestStatus()+status;
             helperStatusTask=helperRelay.Call(config.PairingKey,"op=status&session="+followLeaseId,new {name=helperFollowerName,world=helperFollowerWorld,status=(helperPermission.QuestPaused?"Quest Helper paused; ":"")+status[..Math.Min(status.Length,460)],quest=helperPermission.Quest,skip=helperPermission.Skip,paused=false,after=helperCursor});
         }
         if(Player.IsLoaded&&Player.HomeWorld.RowId>0&&!string.IsNullOrWhiteSpace(Player.CharacterName)&&helperLeaderTask==null&&now>=nextHelperLeader){

@@ -177,6 +177,13 @@ public sealed partial class Plugin
         if(signal.TravelKind=="teleport"&&config.FollowThem.AcceptPartyTeleports&&Telepo.Instance()!=null&&Telepo.Instance()->ActiveTeleportRequest&&VisibleFollowAddon("SelectYesno")&&FollowParty.Any(x=>FollowThemSession.Matches(config.FollowThem.TargetName,config.FollowThem.HomeWorld,x.Name.TextValue,x.World.RowId))){FollowChatNotice("TRAVEL — Waiting for the party teleport offer.");return;}
         var telepo=Telepo.Instance();var inventory=InventoryManager.Instance();if(telepo==null||inventory==null)return;
         telepo->UpdateAetheryteList();
+        if(signal.TravelKind=="teleport"&&signal.SourceKind=="CurrentMapMeeting"){
+            var usable=new HashSet<uint>();
+            foreach(var entry in telepo->TeleportList)if(entry.SubIndex==0&&entry.Ward==0&&entry.Plot==0&&entry.GilCost<=Math.Max(0,config.FollowThem.TeleportGilLimit)&&entry.GilCost<=inventory->GetGil())usable.Add(entry.AetheryteId);
+            var best=HelperMeetingPolicy.Select(CurrentMapDestinations(signal.ArrivalTerritory,signal.ArrivalMap).Where(c=>usable.Contains(c.Id)),signal.ArrivalTerritory,signal.ArrivalMap,signal.Arrival?.Point??new(signal.X,signal.Y,signal.Z));
+            if(best==null){FailFollowTrip("No unlocked public aetheryte on the leader's current map is within your gil limit.");return;}
+            signal=signal with {AetheryteId=best.Id};
+        }
         foreach(var destination in telepo->TeleportList)if((signal.TravelKind=="estate"?destination.HouseId.Id.ToString("X16")==signal.EstateId:destination.AetheryteId==signal.AetheryteId&&destination.SubIndex==0&&destination.Ward==0&&destination.Plot==0)){
             if(destination.GilCost>Math.Max(0,config.FollowThem.TeleportGilLimit)||destination.GilCost>inventory->GetGil()){FollowChatNotice("TRAVEL — Teleport exceeds your gil limit or available gil; waiting.");return;}
             usingSharedTravel=true;try{var ok=telepo->Teleport(destination.AetheryteId,destination.SubIndex);if(travelAwaitingArrival?.Id==signal.Id)routeTeleportAccepted=ok;RecordFollowTravel("Native teleport requested",new {signal.Id,accepted=ok,destination.AetheryteId,destination.SubIndex});FollowChatNotice(ok?"TRAVEL — Requested the selected character's Teleport destination.":"TRAVEL — Game refused Teleport; FollowThem is waiting.");}finally{usingSharedTravel=false;}return;
@@ -187,4 +194,5 @@ public sealed partial class Plugin
         FollowChatNotice("TRAVEL — That Teleport destination or exact estate is not available on this character; FollowThem is waiting.");
     }
 }
+
 

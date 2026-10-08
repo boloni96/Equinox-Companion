@@ -66,6 +66,7 @@ public sealed partial class Plugin
     {
         if(a.Kind=="recording"){
             if(a.QuestId==0)return true;
+            helperObservedQuest=a.QuestId;nextHelperStatus=default;
             // Preserve an already playing conversation rather than replacing it silently.
             if(helperIncoming.Count>0||helperBlocked.Length>0)return true;
             helperReservedConversation=a.Npc.Conversation;helperReservationUntil=now.AddMinutes(10);followSession.Pause();RequestFollowMovementStop();helperQuestStatus="Waiting for the leader to finish the NPC conversation.";return true;
@@ -79,6 +80,7 @@ public sealed partial class Plugin
             RecordFollowTravel("Helper non-quest ignored",new {npc=a.Npc.Name});return true;
         }
         if(!HelperConversationPolicy.ValidSteps(a)){helperError="Incomplete NPC recording was rejected.";return true;}
+        helperObservedQuest=HelperQuestScope.Evidence(a.Steps!);nextHelperStatus=default;
         if(helperIncoming.Count>0||helperBlocked.Length>0){
             if(helperConversations.Count>=4){helperError="Four NPC conversations are queued; wait for the follower.";return true;}
             helperConversations.Enqueue(a);RecordFollowTravel("Helper conversation queued",new {npc=a.Npc.Name,steps=a.Steps!.Length});return true;

@@ -1,5 +1,11 @@
 using System.Numerics;
 namespace EquinoxCompanion;
+public sealed record HelperMeetingDestination(uint Id,uint Territory,uint Map,float X,float Z);
+public static class HelperMeetingPolicy
+{
+    public static HelperMeetingDestination? Select(IEnumerable<HelperMeetingDestination> candidates,uint territory,uint map,Vector3 leader)=>
+        territory==0||map==0||!float.IsFinite(leader.X)||!float.IsFinite(leader.Z)?null:candidates.Where(c=>c.Id!=0&&c.Territory==territory&&c.Map==map&&float.IsFinite(c.X)&&float.IsFinite(c.Z)).OrderBy(c=>Vector2.DistanceSquared(new(c.X,c.Z),new(leader.X,leader.Z))).ThenBy(c=>c.Id).FirstOrDefault();
+}
 public sealed record FollowTravelPosition(float X,float Y,float Z)
 {
     [System.Text.Json.Serialization.JsonIgnore]
@@ -45,7 +51,7 @@ public static class FollowArrivalPolicy
 
     public static bool AlreadyAtTravelArrival(FollowPortalSignal s,uint world,uint territory,uint map,Vector3 position,bool acceptedPartyOffer)=>
         s.TravelKind is "aethernet" or "teleport" or "estate" or "friendestate" or "boundary" or "door" or "transport" &&
-        (territory!=s.Territory||map!=s.MapId||acceptedPartyOffer&&s.TravelKind=="teleport"||s.TravelKind=="boundary"&&s.DutyId!=0&&Vector3.DistanceSquared(position,new(s.X,s.Y,s.Z))>144) &&
+        (territory!=s.Territory||map!=s.MapId||s.TravelKind=="teleport"&&s.SourceKind=="CurrentMapMeeting"||acceptedPartyOffer&&s.TravelKind=="teleport"||s.TravelKind=="boundary"&&s.DutyId!=0&&Vector3.DistanceSquared(position,new(s.X,s.Y,s.Z))>144) &&
         s.Arrival is {Valid:true} a && world==s.ArrivalWorld && territory==s.ArrivalTerritory && map==s.ArrivalMap &&
         Vector3.DistanceSquared(position,a.Point)<225 && Math.Abs(position.Y-a.Y)<3;
 
@@ -133,3 +139,4 @@ public static class FollowAethernetArrival
         FollowInstancePolicy.Arrived(trip.ArrivalInstance,instance)&&
         Vector3.DistanceSquared(self,destination)<=400&&Math.Abs(self.Y-destination.Y)<=10;
 }
+

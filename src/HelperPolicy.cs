@@ -2,6 +2,14 @@ using System.Numerics;
 using System.Security.Cryptography;
 using System.Text;
 namespace EquinoxCompanion;
+public static class FollowLoadingPolicy
+{
+    public static bool Grace(DateTimeOffset now,DateTimeOffset lastLoaded)=>lastLoaded!=default&&now>=lastLoaded&&now-lastLoaded<TimeSpan.FromSeconds(10);
+}
+public static class HelperQuestStatusPolicy
+{
+    public static string State(bool available,bool accepted,bool completed,int step)=>!available?"checking after loading":accepted?$"accepted on follower, step {step}":completed?"completed on follower":"not accepted on follower";
+}
 public sealed record HelperNpc(string Conversation,uint BaseId,string Name,uint Territory,uint Map,uint World,FollowTravelPosition Position,FollowTravelPosition Approach,float Facing);
 public sealed record HelperAction(string Id,string Name,uint World,string Kind,long SentAt,HelperNpc Npc,string Text="",string Signature="",string Addon="",string Scene="",string[]? Sessions=null,long Sequence=0,uint QuestId=0,ushort FateId=0,int FateStart=0,HelperAction[]? Steps=null);
 public sealed record HelperFollower(string Id,string Name,uint World,string Status,bool Quest,bool Skip,bool Paused,string Control,long Updated,bool QuestPaused=false);
