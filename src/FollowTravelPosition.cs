@@ -1,5 +1,16 @@
 using System.Numerics;
 namespace EquinoxCompanion;
+public static class FollowDutyLeavePolicy
+{
+    public static string ObsoleteReason(FollowPortalSignal s,bool enabled,bool loaded,bool loading,uint world,uint territory,uint duty)
+    {
+        if(s.TravelKind!="leaveDuty")return "";
+        if(!enabled)return "Duty exit assistance is disabled; request discarded.";
+        if(!loaded||loading||world==0||territory==0)return "";
+        if(s.CurrentWorld!=world||duty!=0&&duty!=s.DutyId)return "Duty exit request belongs to a different World or duty; discarded.";
+        return duty==0&&territory!=s.Territory?"Already outside the recorded duty; no exit is needed.":"";
+    }
+}
 public sealed record HelperMeetingDestination(uint Id,uint Territory,uint Map,float X,float Z);
 public static class HelperMeetingPolicy
 {

@@ -11,6 +11,17 @@ public sealed partial class Plugin
     private string dutyLeaveKey="";
     private long dutyLeaveSession;
     private DateTimeOffset dutyLeaveAccepted,dutyLootClearAt;
+    private unsafe bool DiscardObsoleteDutyLeave(FollowPortalSignal signal)
+    {
+        if(signal.TravelKind!="leaveDuty")return false;
+        var game=GameMain.Instance();
+        var reason=FollowDutyLeavePolicy.ObsoleteReason(signal,config.FollowThem.LeaveDuties,Player.IsLoaded&&game!=null,
+            Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51],Player.CurrentWorld.RowId,Client.TerritoryType,
+            game==null?0u:(uint)game->CurrentContentFinderConditionId);
+        if(reason.Length==0)return false;
+        RecordFollowTravel("Obsolete duty exit discarded",new {signal.Id,signal.DutyId,reason});
+        TravelDiagnostic(reason);return true;
+    }
     private unsafe bool DutyLootPending()
     {
         var loot=Loot.Instance();if(loot==null)return true;
@@ -53,3 +64,4 @@ public sealed partial class Plugin
         TravelDiagnostic("Requested duty exit after loot finished.");
     }
 }
+

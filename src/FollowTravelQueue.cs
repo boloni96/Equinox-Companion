@@ -19,6 +19,9 @@ public sealed partial class Plugin
     {
         if(!HelperSessionPolicy.AcceptTravel(HelperPaused,signal.SentAt,followArmedAt,helperTravelCutoff)){RecordFollowTravel("Travel discarded by session",new {signal.Id,signal.SentAt,cutoff=helperTravelCutoff,paused=HelperPaused,started=followArmedAt});return;}
         if(signal.Id==lastPortalSignalId||queuedTravelIds.Contains(signal.Id))return;
+        // An automatically completed solo duty can finish before its exit relay arrives.
+        // Discard that instruction before it clears or blocks a fresh NPC conversation.
+        if(DiscardObsoleteDutyLeave(signal)){queuedTravelIds.Add(signal.Id);return;}
         if(travelQueue.Count>=16){TravelDiagnostic("Travel queue is full; wait for the follower before the next trip.");return;}
         queuedTravelIds.Add(signal.Id);travelQueue.Enqueue(signal);
         if(helperPendingFate is {} pendingFate&&pendingFate.SentAt<=signal.SentAt){helperPendingFate=null;CancelHelperFateApproach();}
@@ -88,6 +91,9 @@ public sealed partial class Plugin
         if(loading||!Player.IsLoaded||HoldAcceptedPartyTeleport(now)||followApproach!=null||pendingTransport!=null||pendingWard!=null||pendingAethernet!=null||receivedPortal!=null||pendingDutyLeave!=null||lifestreamTravelOwned)return;
         if(now<nextQueueAttempt)return;
         while(travelQueue.TryPeek(out var next)){
+            if(DiscardObsoleteDutyLeave(next)){
+                travelQueue.Dequeue();ResumeAfterConfirmedTravel();continue;
+            }
             if(next.ExpiresAt<=now.ToUnixTimeMilliseconds()||next.SentAt<followArmedAt){travelQueue.Dequeue();FailFollowTrip("Queued trip expired.");continue;}
             if(FollowWorldReplayPolicy.AlreadyArrived(next,config.FollowThem.TargetName,config.FollowThem.HomeWorld,Player.CurrentWorld.RowId,followArmedAt,now.ToUnixTimeMilliseconds())){
                 travelQueue.Dequeue();routeArrivalConfirmed=true;ResumeAfterConfirmedTravel();
@@ -154,4 +160,5 @@ public sealed partial class Plugin
         }
     }
 }
+
 
