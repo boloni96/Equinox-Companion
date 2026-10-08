@@ -89,11 +89,7 @@ public sealed partial class Plugin
         if(a.Kind=="completeQuest"){UpdateHelperQuestResult(a,now);return;}
         if(a.Kind=="soloDuty"){UpdateHelperSoloDuty(a,now);return;}
         if(a.Kind=="acceptQuest"){UpdateHelperQuestAccept(a,now);return;}
-        if(a.Kind=="skip"){
-            // Safety hotfix: never open or submit a native cutscene skip dialog.
-            helperQuestStatus="Automatic cutscene skipping is disabled; skip manually.";
-            CompleteHelperAction(now);return;
-        }
+        if(a.Kind=="skip"){UpdateHelperCutsceneSkip(a,now);return;}
         if(a.Kind=="talk"){
             var talk=HelperTalk();
             if(helperActionSubmitted){

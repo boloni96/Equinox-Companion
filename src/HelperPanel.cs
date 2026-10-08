@@ -26,9 +26,9 @@ public sealed partial class Plugin
                 MessageToggle("Share my NPC and dialogue actions with active followers",config.FollowThem.ShareQuestActions,v=>config.FollowThem.ShareQuestActions=v);
                 MessageToggle("Enable Quest Helper for my next follow session",config.FollowThem.QuestHelper,v=>config.FollowThem.QuestHelper=v);
                 if(ImGui.IsItemHovered())ImGui.SetTooltip("Only the follower grants permission when pressing Start. Stop revokes it. Only the leader can pause/resume. Follower Stop ends permission; the leader cannot restart it.");
-                ImGui.TextWrapped("Automatic cutscene skipping is temporarily disabled after a crash. Skip manually on each client.");
+                MessageToggle("Mirror the leader's cutscene skips (next session; opt-in)",config.FollowThem.VerifiedCutsceneSkip,v=>config.FollowThem.VerifiedCutsceneSkip=v);
                 ImGui.TextWrapped("Quest Helper starts disabled. Changes apply to your next session. Match NPC and response text; differing quest progress blocks assistance. Accepts the same quest only after the leader accepts it. Mirrors verified quest completion; optional reward choices and general Yes/No prompts remain manual. Journal V7.11.91 enables explicit Ironworks hand token exchanges and matching solo quest battle Proceed actions. Mirrors a new leader FATE Level Sync in the same FATE, with right-side direct approach when Lifestream is enabled. No combat automation or obstacle navigation.");
-                ImGui.TextWrapped("Helper does not open or confirm cutscene skip prompts in this version.");
+                ImGui.TextWrapped("Cutscene skipping is off by default. When enabled, Helper requests Escape only in the matching recorded scene, then confirms the game-owned Skip cutscene menu once. Unavailable or different prompts stop assistance.");
                 if(followSession.Armed){ImGui.TextWrapped(helperPermission.Quest?"Quest assistance permitted for this session.":"This session allows FollowThem only.");DrawHelperFollowerControls();}
                 if(helperBlocked.Length>0)DrawHelperStatusText("Blocked: "+helperBlocked);
                 if(ImGui.Button("Open Helper Controls"))helperWindowOpen=true;

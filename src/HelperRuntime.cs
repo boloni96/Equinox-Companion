@@ -26,7 +26,7 @@ public sealed partial class Plugin
     private bool HelperTravelBusy=>travelQueue.Count>0&&!HoldHelperTravel||travelAwaitingArrival!=null||followApproach!=null||pendingTransport!=null||pendingWard!=null||pendingAethernet!=null||receivedPortal!=null||pendingDutyLeave!=null||lifestreamTravelOwned;
     private bool HelperQuestBusy=>!HelperTravelBusy&&helperPermission.Active&&helperPermission.Quest&&!helperPermission.QuestPaused&&(purchasePending!=null||helperExchangePending!=null||helperDutyPending!=0||helperReservedConversation.Length>0||helperIncoming.Count>0||helperBlocked.Length>0||helperNpcActive!=null&&QuestConversationVisible());
     private bool SharingQuest=>config.EnableFollowThem&&config.FollowThem.ShareQuestActions&&config.PairingKey.Length==64&&Player.IsLoaded&&helperFollowers.Any(x=>HelperPolicy.Audience(x,DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()));
-    private void ClearHelperActions(){purchasePending=null;helperExchangePending=null;helperDutyPending=0;helperConversations.Clear();ClearHelperReservation();helperIncoming.Clear();helperBlocked="";helperNpcActive=null;CancelHelperApproach();}
+    private void ClearHelperActions(){ReleaseHelperEscape();purchasePending=null;helperExchangePending=null;helperDutyPending=0;helperConversations.Clear();ClearHelperReservation();helperIncoming.Clear();helperBlocked="";helperNpcActive=null;CancelHelperApproach();}
     private void EndHelperSession(){helperExchangeReport="";helperObservedQuest=0;CancelHelperFateApproach();helperPendingFate=null;helperPermission.Stop();helperLastIssue="";ClearHelperActions();helperCursor=0;helperTravelAfter=0;helperTravelCutoff=0;helperSeen.Clear();helperSkippedConversations.Clear();nextHelperStatus=default;}
     private void ApplyHelperControl(string command)
     {
@@ -37,6 +37,7 @@ public sealed partial class Plugin
     }
     private void UpdateHelper(DateTimeOffset now)
     {
+        ReleaseHelperEscape();
         if(now<nextHelperTick)return;nextHelperTick=now.AddMilliseconds(100);
         if(!VisibleFollowAddon("ShopExchangeItemDialog"))helperExchangeSent.Clear();
         if(helperPairingIdentity!=config.PairingKey){helperPairingIdentity=config.PairingKey;helperFateObserved=false;CancelHelperFateApproach();helperPendingFate=null;helperFollowers=[];helperOutgoing.Clear();ClearHelperActions();helperOpened.Clear();nextHelperLeader=default;}
@@ -109,7 +110,7 @@ public sealed partial class Plugin
     private string helperPairingIdentity="";
     private string helperFollowerName="";
     private uint helperFollowerWorld;
-    private void StartHelperSession(){EndHelperSession();helperPermission.Start(config.FollowThem.QuestHelper,false);helperFollowerName=Player.CharacterName;helperFollowerWorld=Player.HomeWorld.RowId;}
+    private void StartHelperSession(){EndHelperSession();helperPermission.Start(config.FollowThem.QuestHelper,config.FollowThem.VerifiedCutsceneSkip);helperFollowerName=Player.CharacterName;helperFollowerWorld=Player.HomeWorld.RowId;}
     private void SendHelperControl(HelperFollower f,string command)
     {
         if(!Player.IsLoaded||helperControls.Count>=32)return;

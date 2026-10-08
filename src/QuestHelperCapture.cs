@@ -40,6 +40,7 @@ public sealed partial class Plugin
         var line=a->AtkValues[0];var who=a->AtkValues[1];
         if(((int)line.Type&15) is not (8 or 10)||((int)who.Type&15) is not (8 or 10))return("","");
         var speaker=HelperCanonical(TravelMenuText(who.String.Value)??"");var text=HelperCanonical(TravelMenuText(line.String.Value)??"");
+        text=HelperQuestTextPolicy.Canonical(HelperScene(),speaker,text);
         return(text,text.Length is >0 and <=4000?HelperPolicy.Signature([speaker,text]):"");
     }
     private void EmitHelper(string kind,string text="",string signature="",string addon="",string scene="",uint questId=0)
@@ -97,7 +98,9 @@ public sealed partial class Plugin
         if(CaptureHelperEventReplay(addon,index))return;
         var cut=AgentCutscene.Instance();
         if(cut!=null&&cut->SkipDialogAddonId!=0&&addon->Id==cut->SkipDialogAddonId){
-            // Manual skip stays entirely game-owned. Do not relay it as a generic choice.
+            // Record only the genuine game-owned Yes choice, never another Yes/No menu.
+            if(TryHelperSkipMenu(out var menu,out var prompt,out var choices)&&menu==addon&&index==0&&HelperScene().Length>0)
+                EmitHelper("skip",prompt,HelperPolicy.Signature(choices),"SelectString",HelperScene(),AcceptedHelperQuestForScene(HelperScene()));
             return;
         }
         foreach(var name in new[]{"SelectString","SelectIconString","CutSceneSelectString"}){

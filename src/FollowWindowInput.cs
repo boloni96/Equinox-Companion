@@ -13,7 +13,13 @@ internal static class FollowWindowInput
     private static bool OwnWindow(nint hwnd){GetWindowThreadProcessId(hwnd,out var pid);return pid==(uint)Environment.ProcessId;}
     public static bool Press(int key,out nint window)
     {
-        window=0;if(!OperatingSystem.IsWindows()||!FollowStopKeyPolicy.Allowed(key,0))return false;
+        window=0;if(!FollowStopKeyPolicy.Allowed(key,0))return false;
+        return PressOwnWindow(key,out window);
+    }
+    internal static bool PressCutsceneEscape(out nint window)=>PressOwnWindow(0x1B,out window);
+    private static bool PressOwnWindow(int key,out nint window)
+    {
+        window=0;if(!OperatingSystem.IsWindows())return false;
         nint found=0;
         EnumWindows((hwnd,_)=>{if(!OwnWindow(hwnd))return true;var name=new StringBuilder(128);GetClassName(hwnd,name,name.Capacity);if(name.ToString()!="FFXIVGAME")return true;found=hwnd;return false;},0);
         if(found==0||!OwnWindow(found))return false;
