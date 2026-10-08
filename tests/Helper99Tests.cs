@@ -4,6 +4,10 @@ public static class Helper99Tests
 {
  [ModuleInitializer] public static void Run(){
   void Check(bool result,string name){if(!result)throw new Exception("Helper99: "+name);}
+  Check(HelperPurchasePolicy.Greeting(true,0,"Vendor","Vendor","Welcome"),"own vendor greeting");
+  Check(!HelperPurchasePolicy.Greeting(false,0,"Vendor","Vendor","Welcome"),"unowned dialogue rejected");
+  Check(!HelperPurchasePolicy.Greeting(true,0,"Other","Vendor","Welcome"),"other speaker rejected");
+  Check(!HelperPurchasePolicy.Greeting(true,20,"Vendor","Vendor","Welcome"),"greeting bounded");
   var mgp=new HelperPurchase("ShopExchangeCurrency",100,"Reward",1,[new(29,"MGP",200000)]);
   Check(HelperPurchasePolicy.Valid(mgp),"MGP valid");
   Check(HelperPurchasePolicy.Valid(mgp with {Shop="Shop",Costs=[new(1,"Gil",100)]}),"gil valid");

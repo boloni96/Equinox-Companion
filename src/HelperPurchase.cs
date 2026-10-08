@@ -18,6 +18,9 @@ public sealed partial class Plugin
     private readonly HashSet<string> purchaseSent=new();
     private HelperAction? purchasePending;
     private int purchaseStage,purchaseBeforeItem;
+    private bool purchaseOpenedVendor;
+    private int purchaseGreetingClicks;
+    private DateTimeOffset purchaseGreetingNext;
     private int[] purchaseBeforeCosts=[];
     private string PurchaseShop()=>PurchaseShops.FirstOrDefault(VisibleFollowAddon)??"";
     private unsafe HelperPurchase? ReadPurchaseRow(string name,int row,int quantity,out uint index)
@@ -111,7 +114,7 @@ public sealed partial class Plugin
     {
         if(!HelperPurchasePolicy.Valid(action.Purchase)){helperLastIssue="Invalid vendor purchase rejected.";return;}
         if(purchasePending!=null||helperExchangePending!=null||helperIncoming.Count>0||helperReservedConversation.Length>0){helperLastIssue="Finish the current helper action before requesting a purchase.";return;}
-        purchasePending=action;purchaseStage=0;purchaseNext=default;purchaseUntil=DateTimeOffset.UtcNow.AddSeconds(60);helperExchangeReport="";
+        purchasePending=action;purchaseOpenedVendor=false;purchaseGreetingClicks=0;purchaseGreetingNext=default;purchaseStage=0;purchaseNext=default;purchaseUntil=DateTimeOffset.UtcNow.AddSeconds(60);helperExchangeReport="";
         helperQuestStatus="Purchase requested; checking vendor and exact costs.";followSession.Pause();RequestFollowMovementStop();nextHelperStatus=default;
     }
     private void FinishHelperPurchase(string reason,bool success=false)
@@ -137,11 +140,24 @@ public sealed partial class Plugin
             if(PurchaseShop().Length>0){if(Targets.Target?.GameObjectId!=target.GameObjectId){FinishHelperPurchase("Another vendor is selected; purchase cancelled.");return;}purchaseStage=1;}
             else{
                 if(QuestConversationVisible()||HelperShopVisible()||FollowTransitionBusy()||followStopPending||followStopUnconfirmed)return;
-                Targets.Target=target;purchaseStage=1;purchaseNext=now.AddSeconds(1);helperReplaying=true;relayInteracting=true;
+                Targets.Target=target;purchaseOpenedVendor=true;purchaseStage=1;purchaseNext=now.AddSeconds(1);helperReplaying=true;relayInteracting=true;
                 try{TargetSystem.Instance()->InteractWithObject((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)target.Address,false);}finally{helperReplaying=false;relayInteracting=false;}return;
             }
         }
         if(Targets.Target?.GameObjectId!=target.GameObjectId){FinishHelperPurchase("Vendor target changed; purchase cancelled.");return;}
+        if(purchaseStage==1&&purchaseOpenedVendor&&VisibleFollowAddon("Talk")&&PurchaseShop().Length==0){
+            if(Conditions[ConditionFlag.WatchingCutscene]||Conditions[ConditionFlag.WatchingCutscene78]||Conditions[ConditionFlag.OccupiedInCutSceneEvent]){helperQuestStatus="Waiting for the vendor cutscene to finish.";return;}
+            var talk=(AtkUnitBase*)GardenGui.GetAddonByName("Talk").Address;
+            if(talk==null||!talk->IsReady||talk->AtkValues==null||talk->AtkValuesCount<2)return;
+            var who=talk->AtkValues[1];var line=talk->AtkValues[0];
+            if(((int)who.Type&15) is not (8 or 10)||((int)line.Type&15) is not (8 or 10))return;
+            var speaker=TravelMenuText(who.String.Value)??"";var text=TravelMenuText(line.String.Value)??"";
+            if(!HelperPurchasePolicy.Greeting(purchaseOpenedVendor,purchaseGreetingClicks,speaker,action.Npc.Name,text)){FinishHelperPurchase("Vendor greeting could not be verified or exceeded the dialogue limit; continue manually.");return;}
+            if(now<purchaseGreetingNext)return;
+            purchaseGreetingNext=now.AddSeconds(1);helperReplaying=true;
+            try{if(ClickVisibleTalk()){purchaseGreetingClicks++;RecordFollowTravel("Vendor greeting advanced",new {npc=action.Npc.Name,purchaseGreetingClicks});}}finally{helperReplaying=false;}
+            helperQuestStatus="Opening shop: advancing "+action.Npc.Name+"'s greeting.";return;
+        }
         if(FindPurchase(p,out var index)==null){helperQuestStatus="Open the matching vendor category: "+p.ItemName+". Exact item and cost must match.";return;}
         if(purchaseStage==1){
             if(VisibleFollowAddon("SelectYesno")||VisibleFollowAddon("ShopExchangeItemDialog")||VisibleFollowAddon("ShopExchangeCurrencyDialog")){FinishHelperPurchase("Close the existing purchase confirmation, then request again.");return;}
