@@ -3,7 +3,7 @@ public static class HelperCutscenePolicy
 {
     // English menus only, consistent with the existing quest/menu matching.
     public static bool Menu(string prompt,IReadOnlyList<string> choices)=>
-        prompt=="Skip cutscene?"&&choices.Count==2&&choices[0]=="Yes"&&choices[1]=="No";
+        prompt=="Skip cutscene?"&&choices.Count==2&&choices[0]=="Yes."&&choices[1]=="No.";
 }
 
 public static class HelperQuestTextPolicy
