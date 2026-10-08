@@ -33,6 +33,14 @@ public sealed partial class Plugin
                     ?"TextAdvance must be installed and loaded. Companion requests only matching cutscene skips and releases control afterward. Stop other plugins controlling TextAdvance first."
                     :"Companion built-in: no other plugin required. Requests the game's Escape input for the recorded scene, then selects Yes only in its verified skip menu. One attempt; stops on mismatch or timeout. In-game validation pending.");
                 ImGui.TextWrapped("Skipping remains opt-in. Provider changes apply after Stop/Start.");
+                ImGui.TextWrapped("Recorded dialogue advances quickly once its text and scene match; the leader's reading pauses are not replayed.");
+                if(ImGui.CollapsingHeader("Install optional TextAdvance")){
+                    ImGui.TextWrapped("On the follower: /xlsettings > Experimental > Custom Plugin Repositories. Add the repository below and Save. If you already use the NightmareXIV repository for Lifestream, skip this step.");
+                    if(ImGui.Button("Copy TextAdvance repository URL"))ImGui.SetClipboardText("https://github.com/NightmareXIV/MyDalamudPlugins/raw/main/pluginmaster.json");
+                    ImGui.SameLine();
+                    if(ImGui.Button("Open TextAdvance installation guide"))Dalamud.Utility.Util.OpenLink("https://github.com/NightmareXIV/TextAdvance#installation");
+                    ImGui.TextWrapped("Open /xlplugins, search TextAdvance, and install/load it. Global automation can stay off. Select Use TextAdvance instead of Companion above, then Stop/Start the follower session. Companion built-in mode does not require TextAdvance.");
+                }
                 if(followSession.Armed){ImGui.TextWrapped(helperPermission.Quest?"Quest assistance permitted for this session.":"This session allows FollowThem only.");DrawHelperFollowerControls();}
                 if(helperBlocked.Length>0)DrawHelperStatusText("Blocked: "+helperBlocked);
                 if(ImGui.Button("Open Helper Controls"))helperWindowOpen=true;

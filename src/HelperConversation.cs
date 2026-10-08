@@ -93,7 +93,7 @@ public sealed partial class Plugin
         helperBlocked="";helperLastIssue="";helperStepDelays.Clear();long previous=playback[0].SentAt;
         foreach(var step in playback){
             if(step.Kind=="skip"&&!helperPermission.Skip){FinishHelperConversation("This conversation includes a cutscene skip you have not enabled.");return true;}
-            helperStepDelays[step.Id]=step.Kind is "interact" or "skip"?0:HelperConversationPolicy.Delay(previous,step.SentAt);previous=step.SentAt;
+            helperStepDelays[step.Id]=HelperConversationPolicy.PlaybackDelay(step.Kind,previous,step.SentAt);previous=step.SentAt;
             helperIncoming.Enqueue(step with {SentAt=a.SentAt});
         }
         helperNextAction=now;RecordFollowTravel("Helper conversation received",new {npc=a.Npc.Name,steps=a.Steps.Length});return true;

@@ -112,14 +112,14 @@ public sealed partial class Plugin
             if(talk.Signature==a.Signature&&talk.Text==a.Text){
                 helperReplaying=true;
                 try{if(AdvanceQuestTalk(a)){
-                    helperActionSubmitted=true;helperTalkAttempts++;helperTalkSentAt=now;helperNextAction=now.AddMilliseconds(450);
+                    helperActionSubmitted=true;helperTalkAttempts++;helperTalkSentAt=now;helperNextAction=now.AddMilliseconds(100);
                     RecordFollowTravel("Helper dialogue submitted",new {a.Scene,a.QuestId,attempt=helperTalkAttempts,text=a.Text});
                 }else{
                     helperQuestStatus="Waiting for the matching quest dialogue to become ready; close any manual prompt.";
                     if(now-helperActionStarted>TimeSpan.FromSeconds(15))BlockHelper("Matching dialogue could not be advanced; its scene or another open window requires manual attention.");
                 }}finally{helperReplaying=false;}return;
             }
-            if(now-helperActionStarted>TimeSpan.FromSeconds(5)){
+            if(now-helperActionStarted>TimeSpan.FromSeconds(HelperConversationPolicy.TalkAppearanceTimeoutSeconds(talk.Text))){
                 RecordFollowTravel("Helper dialogue mismatch",new {expected=a.Text,actual=talk.Text,expectedScene=a.Scene,actualScene=HelperScene(),expectedSignature=a.Signature,actualSignature=talk.Signature});
                 BlockHelper("Dialogue differs from the leader's recorded line; no response selected.");
             }return;

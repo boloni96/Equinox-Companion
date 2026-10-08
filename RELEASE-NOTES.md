@@ -1,12 +1,8 @@
-# Companion 0.5.1.110
+# Companion 0.5.1.111
 
-- Add a built-in Companion cutscene-skip provider with no TextAdvance dependency.
-- Keep TextAdvance as an optional provider; provider changes apply at the next follower session.
-- Built-in requests InputId.ESC for a bounded 100 ms pulse only in the exact recorded quest scene, with active skip permission and no blocking menu/text entry.
-- Select Yes through the verified game-owned skip list's ListItemClick event once. No direct cutscene agent call, OpenSkipDialog, FireCallbackInt, or constructed confirmation callback.
-- Stop input on completion, timeout, pause/stop and disposal. Never automatically switch providers after failure.
-- Regression coverage checks input identity, scene/permission boundaries, pulse expiry and defaults.
+- Advance matching recorded Talk lines quickly: use a 150 ms next-line delay and check progress after 100 ms, instead of replaying the leader's reading pauses.
+- Preserve exact text, speaker signature and scene matching, plus the existing retry limit. Quest choices, rewards and duty confirmations keep their existing checks and timing.
+- Allow up to 20 seconds for a temporarily absent Talk window during scene animation; different visible dialogue retains its five-second mismatch limit.
+- Add TextAdvance installation instructions, Copy repository URL and installation-guide buttons beside the optional provider setting. Mention the shared Lifestream repository.
 
-Skipping remains opt-in. Build/tests do not establish in-game operation or crash-free behavior. Post-Proceed continuation recording remains unsupported. No crash reproduction requested and no Journal deployment needed.
-
-References: FFXIVClientStructs InputData/InputId, AddonSelectString, PopupMenu and AtkComponentList APIs; Questionable/TextAdvance integration remains available. Built-in implementation does not copy ECommons' cutscene code patch.
+Build/regression verification does not establish in-game behavior. No Journal deployment needed.
