@@ -1,0 +1,6 @@
+# Companion 0.5.1.104
+Adds a per-follower "Mirror all my purchases at this vendor" checkbox to Helper Controls. Enable before selecting purchases. Mirrors each supported purchase only after observing the leader receive the exact item/quantity and spend the exact costs; cancelled selections are not sent. Uses the existing explicit vendor-purchase protocol and three supported shop adapters, including MGP and Item Request exchanges.
+Off by default and limited to the current vendor visit. Closing the shop disables new selections; a captured final transaction can still settle. Turning the checkbox off cancels unsent capture for that follower; already sent purchases finish unless the follower session is stopped.
+Follower queues up to 16 additional purchases from the same vendor, handles each once, waits for the prior prompt to close, and clears remaining queued purchases on failure, expiry, pause or Stop. Both clients should update. No Journal deployment.
+Clears the previous purchase-result banner when a new quest recording/conversation begins, preserving the actual quest waiting state.
+Automated guards cover confirmed purchases and same-vendor queue identity. In-game verification pending.

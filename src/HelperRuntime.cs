@@ -26,7 +26,7 @@ public sealed partial class Plugin
     private bool HelperTravelBusy=>travelQueue.Count>0&&!HoldHelperTravel||travelAwaitingArrival!=null||followApproach!=null||pendingTransport!=null||pendingWard!=null||pendingAethernet!=null||receivedPortal!=null||pendingDutyLeave!=null||lifestreamTravelOwned;
     private bool HelperQuestBusy=>!HelperTravelBusy&&helperPermission.Active&&helperPermission.Quest&&!helperPermission.QuestPaused&&(purchasePending!=null||helperExchangePending!=null||helperDutyPending!=0||helperReservedConversation.Length>0||helperIncoming.Count>0||helperBlocked.Length>0||helperNpcActive!=null&&QuestConversationVisible());
     private bool SharingQuest=>config.EnableFollowThem&&config.FollowThem.ShareQuestActions&&config.PairingKey.Length==64&&Player.IsLoaded&&helperFollowers.Any(x=>HelperPolicy.Audience(x,DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()));
-    private void ClearHelperActions(){ReleaseHelperEscape();purchasePending=null;helperExchangePending=null;helperDutyPending=0;helperConversations.Clear();ClearHelperReservation();helperIncoming.Clear();helperBlocked="";helperNpcActive=null;CancelHelperApproach();}
+    private void ClearHelperActions(){ReleaseHelperEscape();purchaseQueue.Clear();purchasePending=null;helperExchangePending=null;helperDutyPending=0;helperConversations.Clear();ClearHelperReservation();helperIncoming.Clear();helperBlocked="";helperNpcActive=null;CancelHelperApproach();}
     private void EndHelperSession(){helperExchangeReport="";helperObservedQuest=0;CancelHelperFateApproach();helperPendingFate=null;helperPermission.Stop();helperLastIssue="";ClearHelperActions();helperCursor=0;helperTravelAfter=0;helperTravelCutoff=0;helperSeen.Clear();helperSkippedConversations.Clear();nextHelperStatus=default;}
     private void ApplyHelperControl(string command)
     {
@@ -44,6 +44,7 @@ public sealed partial class Plugin
         if(helperPermission.Active&&Player.IsLoaded&&helperFollowerName.Length>0&&(Player.CharacterName!=helperFollowerName||Player.HomeWorld.RowId!=helperFollowerWorld)){StopFollowThem("Character changed; Helper permission ended.");}
         UpdateHelperActor();
         UpdateHelperSceneHook();
+        ObservePurchaseMirroring(now);
         if(helperControlTask?.IsCompleted==true){var r=helperControlTask.GetAwaiter().GetResult();helperControlTask=null;if(helperControlIdentity==helperActorIdentity){helperError=r.Error;CompleteHelperBring(r.Reply,r.Error);}nextHelperLeader=default;}
         if(helperSendTask?.IsCompleted==true){var r=helperSendTask.GetAwaiter().GetResult();helperSendTask=null;if(helperSendIdentity==helperActorIdentity&&r.Error.Length>0){
                 helperError=r.Error;
@@ -114,7 +115,7 @@ public sealed partial class Plugin
     private void SendHelperControl(HelperFollower f,string command)
     {
         if(!Player.IsLoaded||helperControls.Count>=32)return;
-        if(command is "pause" or "questPause" or "stop")RemoveHelperRecordingAudience(f.Id);
+        if(command is "pause" or "questPause" or "stop"){RemoveHelperRecordingAudience(f.Id);DisablePurchaseMirror(f.Id);}
         helperControls.Enqueue((f,command,config.PairingKey+"/"+Player.CharacterName+"/"+Player.HomeWorld.RowId));
     }
     private HelperFollower[] ActiveHelperFollowers()=>helperFollowers.Where(x=>x.Control!="stop").ToArray();

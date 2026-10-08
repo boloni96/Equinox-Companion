@@ -3,6 +3,7 @@ public sealed record HelperPurchaseCost(uint ItemId,string Name,int Amount);
 public sealed record HelperPurchase(string Shop,uint ItemId,string ItemName,int Quantity,HelperPurchaseCost[] Costs,string Prompt="");
 public static class HelperPurchasePolicy
 {
+    public static bool SameVendor(HelperNpc a,HelperNpc b)=>a.BaseId==b.BaseId&&a.Name==b.Name&&a.World==b.World&&a.Territory==b.Territory&&a.Map==b.Map&&a.Position==b.Position;
     public static bool RequestMatches(HelperPurchase p,IReadOnlyList<(uint ItemId,int Amount)> requested)=>
         Valid(p)&&p.Shop=="ShopExchangeItem"&&requested.Count==p.Costs.Length&&
         requested.Select(x=>x.ItemId).Distinct().Count()==requested.Count&&

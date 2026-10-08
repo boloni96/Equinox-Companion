@@ -13,7 +13,7 @@ public sealed partial class Plugin
     {
         helperRecordAudience=[];ResetHelperRecording();helperOutgoing.Clear();helperControls.Clear();helperOpened.Clear();helperFollowers=[];
         helperWindowOpen=false;helperStopConfirm="";helperError="";helperFateObserved=false;helperBring=null;helperMeetTravel=null;
-        helperVendorPurchases=false;purchaseQuote=null;purchaseVendor=null;purchaseSent.Clear();
+        ClearPurchaseMirroring();helperVendorPurchases=false;purchaseQuote=null;purchaseVendor=null;purchaseSent.Clear();
         helperEventExchanges=false;helperExchangeSent.Clear();helperExchangeReport="";
         outgoingTrips.Clear();outgoingTravel=null;outgoingPortal=null;transportCapture=null;boundaryDeparture=null;worldSource=null;
         helperLeaderIdentity="";helperSendIdentity="";helperControlIdentity="";nextHelperLeader=default;
@@ -37,6 +37,7 @@ public sealed partial class Plugin
             helperWindowOpen=true;
             RecordFollowTravel("Helper leader session ended",new {reason="No active followers remain."});
         }
+        foreach(var id in purchaseMirrorFollowers.ToArray())if(!active.Any(f=>f.Id==id))DisablePurchaseMirror(id);
         helperFollowers=active;
     }
     private unsafe bool HelperBringAvailable(FollowPortalSignal travel)

@@ -66,6 +66,7 @@ public sealed partial class Plugin
     {
         if(a.Kind=="recording"){
             if(a.QuestId==0)return true;
+            helperExchangeReport="";
             helperObservedQuest=a.QuestId;nextHelperStatus=default;
             // Preserve an already playing conversation rather than replacing it silently.
             if(helperIncoming.Count>0||helperBlocked.Length>0)return true;
@@ -75,6 +76,7 @@ public sealed partial class Plugin
             if(helperReservedConversation==a.Npc.Conversation)FinishHelperConversation("Leader cancelled the recorded conversation.");return true;
         }
         if(a.Kind!="conversation")return false;
+        helperExchangeReport="";
         if(HelperQuestScope.Evidence(a.Steps??[])==0){
             if(helperReservedConversation==a.Npc.Conversation)FinishHelperConversation("Non-quest NPC interaction ignored.");
             RecordFollowTravel("Helper non-quest ignored",new {npc=a.Npc.Name});return true;

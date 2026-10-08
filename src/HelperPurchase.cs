@@ -70,7 +70,8 @@ public sealed partial class Plugin
         if(helperReplaying||!SharingQuest||values==null||count is <3 or >4||values[0].Type is not (AtkValueType.Int or AtkValueType.UInt)||values[0].Int!=0||values[1].Type is not (AtkValueType.Int or AtkValueType.UInt)||values[2].Type is not (AtkValueType.Int or AtkValueType.UInt))return;
         var name=PurchaseShops.FirstOrDefault(n=>(nint)addon==GardenGui.GetAddonByName(n).Address);
         if(name==null)return;
-        // Observe the leader's selection only. Sending always requires the button.
+        ObservePurchaseMirroring(DateTimeOffset.UtcNow);
+        // A manual button sends immediately; mirroring waits for confirmed inventory deltas.
         purchaseQuote=null;purchaseVendor=null;purchaseSent.Clear();
         var target=Targets.Target;var self=Objects.LocalPlayer;var map=AgentMap.Instance();
         if(target==null||self==null||map==null||target.ObjectKind!=ObjectKind.EventNpc||Vector3.Distance(self.Position,target.Position)>target.HitboxRadius+4)return;
@@ -82,6 +83,7 @@ public sealed partial class Plugin
         if(matches!=1)return;
         purchaseQuote=selected;purchaseVendor=new(Guid.NewGuid().ToString("N"),target.BaseId,target.Name.TextValue,Client.TerritoryType,map->CurrentMapId,Player.CurrentWorld.RowId,FollowTravelPosition.From(target.Position),FollowTravelPosition.From(self.Position),self.Rotation);
         purchaseQuoteUntil=DateTimeOffset.UtcNow.AddSeconds(60);
+        CapturePurchaseMirror();
     }
     private unsafe string PurchasePrompt()
     {
@@ -93,12 +95,13 @@ public sealed partial class Plugin
     {
         var name=PurchaseShop();
         if(name.Length==0){if(HelperShopVisible()){ImGui.BeginDisabled();ImGui.Button("Follower will buy the same");ImGui.EndDisabled();ImGui.TextWrapped("This shop layout is not supported yet. Export diagnostics with its purchase window open.");}return;}
+        DrawPurchaseMirrorToggle(follower);
         var now=DateTimeOffset.UtcNow;var quote=purchaseQuote;var vendor=purchaseVendor;
         var valid=quote!=null&&vendor!=null&&now<purchaseQuoteUntil&&quote.Shop==name&&Targets.Target?.BaseId==vendor.BaseId&&Targets.Target?.Name.TextValue==vendor.Name&&vendor.World==Player.CurrentWorld.RowId&&vendor.Territory==Client.TerritoryType&&FindPurchase(quote,out _)!=null;
         if(valid&&PurchasePrompt() is {Length:>0} prompt)purchaseQuote=quote=quote! with {Prompt=prompt};
         if(valid)ImGui.TextWrapped($"{quote!.Quantity} × {quote.ItemName} — {string.Join(" + ",quote.Costs.Select(c=>$"{c.Amount:N0} {c.Name}"))}");
         else ImGui.TextWrapped("Select an item and quantity in the vendor's Buy/Exchange window first.");
-        ImGui.BeginDisabled(!valid||!helperVendorPurchases||!follower.VendorPurchases||!HelperPolicy.Audience(follower,now.ToUnixTimeMilliseconds())||purchaseSent.Contains(follower.Id));
+        ImGui.BeginDisabled(purchaseMirrorFollowers.Contains(follower.Id)||!valid||!helperVendorPurchases||!follower.VendorPurchases||!HelperPolicy.Audience(follower,now.ToUnixTimeMilliseconds())||purchaseSent.Contains(follower.Id));
         if(ImGui.Button("Follower will buy the same")){
             if(helperOutgoing.Count<32){
                 var request=new HelperAction(Guid.NewGuid().ToString("N"),Player.CharacterName,Player.HomeWorld.RowId,"vendorPurchase",now.ToUnixTimeMilliseconds(),vendor!,Sessions:[follower.Id],Purchase:quote);
@@ -113,22 +116,35 @@ public sealed partial class Plugin
     private void ReceiveHelperPurchase(HelperAction action)
     {
         if(!HelperPurchasePolicy.Valid(action.Purchase)){helperLastIssue="Invalid vendor purchase rejected.";return;}
-        if(purchasePending!=null||helperExchangePending!=null||helperIncoming.Count>0||helperReservedConversation.Length>0){helperLastIssue="Finish the current helper action before requesting a purchase.";return;}
-        purchasePending=action;purchaseRequestId=0;purchaseRequestSlot=0;purchaseRequestOptionPending=false;purchaseOpenedVendor=false;purchaseGreetingClicks=0;purchaseGreetingNext=default;purchaseStage=0;purchaseNext=default;purchaseUntil=DateTimeOffset.UtcNow.AddSeconds(60);helperExchangeReport="";
+        if(purchasePending is {} active){
+            if(purchaseQueue.Count>=16||!HelperPurchasePolicy.SameVendor(active.Npc,action.Npc)){helperLastIssue="Purchase queue full or vendor differs; request rejected.";RecordFollowTravel("Vendor purchase queue rejected",new {action.Id,reason=helperLastIssue});return;}
+            purchaseQueue.Enqueue(action);RecordFollowTravel("Vendor purchase queued",new {action.Id,item=action.Purchase!.ItemName,queued=purchaseQueue.Count});return;
+        }
+        if(helperExchangePending!=null||helperIncoming.Count>0||helperReservedConversation.Length>0){helperLastIssue="Finish the current helper action before requesting a purchase.";return;}
+        purchasePending=action;purchaseWaitingPreviousClose=false;purchaseRequestId=0;purchaseRequestSlot=0;purchaseRequestOptionPending=false;purchaseOpenedVendor=false;purchaseGreetingClicks=0;purchaseGreetingNext=default;purchaseStage=0;purchaseNext=default;purchaseUntil=DateTimeOffset.UtcNow.AddSeconds(60);helperExchangeReport="";
         helperQuestStatus="Purchase requested; checking vendor and exact costs.";followSession.Pause();RequestFollowMovementStop();nextHelperStatus=default;
     }
     private void FinishHelperPurchase(string reason,bool success=false)
     {
         RecordFollowTravel(success?"Vendor purchase confirmed":"Vendor purchase stopped",new {id=purchasePending?.Id,reason});purchasePending=null;
-        helperExchangeReport=reason;helperLastIssue=success?"":reason;helperQuestStatus=reason;nextHelperStatus=default;ResumeAfterConfirmedTravel();
+        helperExchangeReport=reason;helperLastIssue=success?"":reason;helperQuestStatus=reason;nextHelperStatus=default;
+        if(success&&purchaseQueue.TryDequeue(out var next)){
+            if(HelperPolicy.Fresh(next,DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),followArmedAt)&&helperPermission.Allows("vendorPurchase")){ReceiveHelperPurchase(next);purchaseWaitingPreviousClose=true;return;}
+            reason="Queued purchases expired or permission ended; remaining purchases cancelled.";helperExchangeReport=reason;helperLastIssue=reason;helperQuestStatus=reason;
+        }
+        purchaseQueue.Clear();ResumeAfterConfirmedTravel();
     }
     private unsafe void UpdateHelperPurchase(DateTimeOffset now)
     {
         if(purchasePending is not {} action)return;
-        if(!helperPermission.Allows("vendorPurchase")||!followSession.Armed){purchasePending=null;return;}
+        if(!helperPermission.Allows("vendorPurchase")||!followSession.Armed){purchasePending=null;purchaseQueue.Clear();return;}
         if(now>=purchaseUntil||!HelperPolicy.Fresh(action,now.ToUnixTimeMilliseconds(),followArmedAt)){FinishHelperPurchase("Purchase timed out; no automatic retry. Check inventory before requesting again.");return;}
         if(now<purchaseNext||!Player.IsLoaded||Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51])return;
         purchaseNext=now.AddMilliseconds(300);
+        if(purchaseWaitingPreviousClose){
+            if(VisibleFollowAddon("Request")||VisibleFollowAddon("SelectYesno")||VisibleFollowAddon("ShopExchangeItemDialog")||VisibleFollowAddon("ShopExchangeCurrencyDialog"))return;
+            purchaseWaitingPreviousClose=false;
+        }
         var p=action.Purchase!;var inventory=InventoryManager.Instance();var map=AgentMap.Instance();var self=Objects.LocalPlayer;if(inventory==null||map==null||self==null)return;
         if(purchaseStage>=2&&HelperPurchasePolicy.Confirmed(p,purchaseBeforeItem,inventory->GetInventoryItemCount(p.ItemId),purchaseBeforeCosts,p.Costs.Select(c=>inventory->GetInventoryItemCount(c.ItemId)).ToArray())){FinishHelperPurchase($"Purchased {p.Quantity} × {p.ItemName}.",true);return;}
         if(purchaseStage==4)return;
