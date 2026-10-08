@@ -9,6 +9,7 @@ public sealed partial class Plugin
     private HelperFollower[] helperFollowers=[];
     private Task<(HelperReply? Reply,string Error)>? helperStatusTask,helperLeaderTask,helperControlTask,helperSendTask;
     private DateTimeOffset nextHelperStatus,nextHelperLeader;
+    private HelperAction? helperSendingAction;
     private string helperStatusSession="",helperLeaderIdentity="",helperError="";
     private long helperCursor,helperStatusGeneration,helperTravelAfter,helperTravelCutoff;
     private string helperActorIdentity="",helperSendIdentity="",helperControlIdentity="";
@@ -43,7 +44,15 @@ public sealed partial class Plugin
         UpdateHelperActor();
         UpdateHelperSceneHook();
         if(helperControlTask?.IsCompleted==true){var r=helperControlTask.GetAwaiter().GetResult();helperControlTask=null;if(helperControlIdentity==helperActorIdentity){helperError=r.Error;CompleteHelperBring(r.Reply,r.Error);}nextHelperLeader=default;}
-        if(helperSendTask?.IsCompleted==true){var r=helperSendTask.GetAwaiter().GetResult();helperSendTask=null;if(helperSendIdentity==helperActorIdentity&&r.Error.Length>0)helperError=r.Error;}
+        if(helperSendTask?.IsCompleted==true){var r=helperSendTask.GetAwaiter().GetResult();helperSendTask=null;if(helperSendIdentity==helperActorIdentity&&r.Error.Length>0){
+                helperError=r.Error;
+                if(helperSendingAction is {} failed){
+                    RecordFollowTravel("Helper request failed",new {error=r.Error,action=failed});
+                    // A rejected batch cannot arrive: release its recording reservation.
+                    if(failed.Kind=="conversation"&&r.Error.Contains("HTTP 400")&&helperOutgoing.Count<32)
+                        helperOutgoing.Enqueue(failed with {Id=Guid.NewGuid().ToString("N"),Kind="cancelConversation",SentAt=now.ToUnixTimeMilliseconds(),Steps=null});
+                }
+            }helperSendingAction=null;}
         if(helperStatusTask?.IsCompleted==true){
             var r=helperStatusTask.GetAwaiter().GetResult();helperStatusTask=null;
             if(helperStatusSession==followLeaseId&&helperStatusGeneration==followArmedAt&&helperStatusKey==config.PairingKey&&followSession.Armed&&helperPermission.Active){
@@ -83,7 +92,7 @@ public sealed partial class Plugin
             helperLeaderTask=helperRelay.Call(config.PairingKey,"op=leader&name="+Uri.EscapeDataString(Player.CharacterName)+"&world="+Player.HomeWorld.RowId);
         }
         if(helperControlTask==null&&helperControls.Count==0&&helperSendTask==null&&helperOutgoing.TryDequeue(out var outgoing)&&now.ToUnixTimeMilliseconds()-outgoing.SentAt<10000&&SharingQuest&&outgoing.Name==Player.CharacterName&&outgoing.World==Player.HomeWorld.RowId){
-            helperSendIdentity=helperActorIdentity;helperSendTask=helperRelay.Call(config.PairingKey,"op=action",outgoing);}
+            helperSendingAction=outgoing;helperSendIdentity=helperActorIdentity;helperSendTask=helperRelay.Call(config.PairingKey,"op=action",outgoing);}
         if(helperControlTask==null&&helperControls.TryDequeue(out var control)&&Player.IsLoaded&&control.Identity==config.PairingKey+"/"+Player.CharacterName+"/"+Player.HomeWorld.RowId)
             {helperControlIdentity=helperActorIdentity;helperControlTask=helperRelay.Call(config.PairingKey,"op=control&session="+control.Follower.Id,new {name=Player.CharacterName,world=Player.HomeWorld.RowId,command=control.Command});}
         ObserveHelperDialogue();

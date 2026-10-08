@@ -18,10 +18,10 @@ public sealed partial class Plugin
         if(addon==null||!addon->IsVisible||!addon->IsReady||cut!=null&&cut->SkipDialogAddonId==addon->Id)return false;
         if(name=="DifficultySelectYesNo"){
             var duty=(AddonDifficultySelectYesNo*)addon;if(duty->PromptText==null)return false;
-            prompt=duty->PromptText->NodeText.ToString();proceed=duty->ProceedButton;
+            prompt=TravelMenuText(duty->PromptText->NodeText.StringPtr)??"";proceed=duty->ProceedButton;
         }else if(name=="SelectYesno"){
             var duty=(AddonSelectYesno*)addon;if(duty->PromptText==null)return false;
-            prompt=duty->PromptText->NodeText.ToString();proceed=duty->YesButton;
+            prompt=TravelMenuText(duty->PromptText->NodeText.StringPtr)??"";proceed=duty->YesButton;
         }else return false;
         prompt=HelperConversationPolicy.NormalizePrompt(prompt);
         return HelperDutyPolicy.QuestTitle(prompt).Length>0&&proceed!=null&&proceed->IsEnabled&&proceed->AtkComponentBase.OwnerNode!=null;

@@ -53,7 +53,7 @@ public sealed partial class Plugin
         var sessions=helperFollowers.Where(f=>HelperPolicy.Audience(f,now.ToUnixTimeMilliseconds(),kind=="skip")).Select(f=>f.Id).ToArray();
         if(sessions.Length==0)return;
         if(helperRecorded.Count>=128||helperOutgoing.Count>=32){helperRecordingFailed=true;helperError="NPC recording is full; this conversation will not be replayed partially.";return;}
-        if(kind is "talk" or "choice" or "acceptQuest" or "eventReplay" or "skip" or "completeQuest")RecordFollowTravel("Helper captured choice",new {kind,npc=npc.Name,text,addon,scene,questId});
+        if(kind is "talk" or "choice" or "acceptQuest" or "eventReplay" or "skip" or "completeQuest" or "soloDuty")RecordFollowTravel("Helper captured choice",new {kind,npc=npc.Name,text,addon,scene,questId});
         var action=new HelperAction(Guid.NewGuid().ToString("N"),Player.CharacterName,Player.HomeWorld.RowId,kind,now.ToUnixTimeMilliseconds(),npc,text,signature,addon,scene,sessions,QuestId:questId);
         if(helperRecording){helperRecorded.Add(action);helperRecordQuiet=default;AnnounceHelperQuestRecording();}
     }
