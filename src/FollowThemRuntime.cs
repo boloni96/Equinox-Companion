@@ -101,6 +101,8 @@ public sealed partial class Plugin
         StartHelperSession();followSession.Arm(); followArmedAt=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(); relayGeneration++; nextFollowCheck = default;
         followStatus = "STARTED — Looking for " + config.FollowThem.TargetName + " nearby.";
     }
+    private static SeString HelperBarText(string text,string tone)=>new SeStringBuilder()
+        .AddUiForeground(HelperStatusPolicy.GameColor(tone)).AddText(text).AddUiForegroundOff().Build();
     private void RefreshFollowBar()
     {
         if (!config.EnableFollowThem) { followBar?.Remove(); followBar = null; followBarText = ""; return; }
@@ -109,9 +111,13 @@ public sealed partial class Plugin
         var followers=ActiveHelperFollowers();
         if(followers.Length>0){
             var leaderText="FollowThem: Followed by "+string.Join(", ",followers.Select(x=>x.Name));
-            if(leaderText!=followBarText){followBar.Text=new SeStringBuilder().AddText(leaderText).Build();followBarText=leaderText;}
+            var now=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            var tones=followers.Select(x=>HelperStatusPolicy.Tone(x.Control=="pause"?"Paused":x.QuestPaused?"Quest Helper paused":x.Status,now-x.Updated>=15000)).ToArray();
+            var leaderTone=HelperStatusPolicy.Combine(tones);
+            var leaderKey=leaderText+"/"+leaderTone;
+            if(leaderKey!=followBarText){followBar.Text=HelperBarText(leaderText,leaderTone);followBarText=leaderKey;}
             var paused=followers.All(x=>x.Control=="pause");
-            followBar.Tooltip=new SeStringBuilder().AddText((paused?"Paused. Left-click to resume.":"Left-click to pause.")+" Right-click for Helper Controls.").Build();
+            followBar.Tooltip=new SeStringBuilder().AddText((paused?"Paused. Left-click to resume.":"Left-click to pause.")+" Right-click for Helper Controls.\n"+string.Join("\n",followers.Select(x=>x.Name+": "+(now-x.Updated>=15000?"Status unavailable":x.Control=="pause"?"Paused":x.Status)+(x.QuestPaused?" · Quest Helper paused":"")))).Build();
             followBar.OnClick=e=>{
                 if(e.ClickType==MouseClickType.Right){helperWindowOpen=true;return;}
                 if(e.ClickType!=MouseClickType.Left)return;
@@ -127,8 +133,10 @@ public sealed partial class Plugin
             FollowPhase.Waiting => "WAITING", FollowPhase.Loading => "LOADING", _ => "STOPPED"
         };
         var text = "FollowThem: " + label;
-        if (text != followBarText) { followBar.Text = new SeStringBuilder().AddText(text).Build(); followBarText = text; }
-        followBar.Tooltip = new SeStringBuilder().AddText(followStatus + (followSession.Armed ? " Left-click to stop." : followStopPending||followStopUnconfirmed ? " Tap and release a movement key to confirm stop." : " Left-click to start.") + " Right-click to open Companion and Helper status.").Build();
+        var tone=HelperStatusPolicy.Tone(HelperPaused?"Paused":helperLastIssue.Length>0?"Quest Helper blocked: "+helperLastIssue:HelperQuestBusy?helperQuestStatus:label+" "+followStatus,stopped:!followSession.Armed&&label=="STOPPED");
+        var key=text+"/"+tone;
+        if (key != followBarText) { followBar.Text = HelperBarText(text,tone); followBarText = key; }
+        followBar.Tooltip = new SeStringBuilder().AddText(followStatus + (helperLastIssue.Length>0?" · Quest Helper blocked: "+helperLastIssue:"") + (followSession.Armed ? " Left-click to stop." : followStopPending||followStopUnconfirmed ? " Tap and release a movement key to confirm stop." : " Left-click to start.") + " Right-click to open Companion and Helper status.").Build();
         followBar.OnClick = e => { if(e.ClickType==MouseClickType.Right){followThemSelectTab=true;helperWindowOpen=true;Open();} else if(e.ClickType==MouseClickType.Left) ToggleFollowThem(); };
     }
     private bool followManualInputSeen,followStuckStopRequested;

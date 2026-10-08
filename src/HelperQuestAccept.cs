@@ -15,6 +15,7 @@ public sealed partial class Plugin
     private readonly HashSet<string> helperSkippedConversations=new();
     private unsafe void SkipHelperConversation(HelperAction action,string reason)
     {
+        helperLastIssue=reason;
         RecordFollowTravel("Helper skipped quest",new {reason,action.QuestId,npc=action.Npc.Name});
         helperSkippedConversations.Add(action.Npc.Conversation);
         var keep=helperIncoming.Where(x=>x.Npc.Conversation!=action.Npc.Conversation).ToArray();helperIncoming.Clear();foreach(var x in keep)helperIncoming.Enqueue(x);

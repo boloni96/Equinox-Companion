@@ -25,6 +25,7 @@ public sealed partial class Plugin
         helperApproaching=false;helperStopRequested=false;helperStationary.Reset();helperWorkingId="";
     }
     private void BlockHelper(string reason){
+        helperLastIssue=reason;
         RecordFollowTravel("Helper blocked",new {reason,npc=helperNpcActive?.Name});
         helperConversations.Clear();
         if(helperIncoming.TryPeek(out var failed)&&helperNpcActive?.Conversation==failed.Npc.Conversation){SkipHelperConversation(failed,reason);return;}

@@ -103,3 +103,20 @@ public static class HelperQuestResultPolicy
 {
     public static bool Valid(HelperAction a)=>a.Kind=="completeQuest"&&a.Addon=="JournalResult"&&HelperQuestScenePolicy.Quest(a.QuestId)&&a.Scene is "complete" or "decline";
 }
+
+public static class HelperStatusPolicy
+{
+    public static ushort GameColor(string tone)=>tone switch {"working"=>45,"waiting"=>25,"blocked"=>32,"error"=>17,_=>3};
+    public static string Combine(IEnumerable<string> tones){var all=tones.ToArray();return new[]{"error","blocked","waiting","inactive","working"}.FirstOrDefault(all.Contains)??"inactive";}
+    public static string Tone(string text,bool stale=false,bool stopped=false,bool notice=false)
+    {
+        if(stale||stopped)return "inactive";
+        var s=text.ToLowerInvariant();
+        if(s.Contains("stopped")||s.Contains("no active followers")||s.Contains("status unavailable"))return "inactive";
+        if(s.Contains("error")||s.Contains("failed")||s.Contains("http "))return "error";
+        if(s.Contains("not queued")||s.Contains("no meeting")||s.Contains("no supported")||s.Contains("requires")||s.Contains("blocked")||s.Contains("unavailable")||s.Contains("cannot")||s.Contains("not confirmed")||s.Contains("quest helper:"))return "blocked";
+        if(s.Contains("waiting")||s.Contains("paused")||s.Contains("loading")||s.Contains("stopping"))return "waiting";
+        if(notice&&!s.Contains("queued")&&!s.Contains("prepared")&&!s.Contains("sent")&&!s.Contains("confirmed"))return "error";
+        return "working";
+    }
+}
