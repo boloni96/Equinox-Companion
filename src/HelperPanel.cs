@@ -26,9 +26,13 @@ public sealed partial class Plugin
                 MessageToggle("Share my NPC and dialogue actions with active followers",config.FollowThem.ShareQuestActions,v=>config.FollowThem.ShareQuestActions=v);
                 MessageToggle("Enable Quest Helper for my next follow session",config.FollowThem.QuestHelper,v=>config.FollowThem.QuestHelper=v);
                 if(ImGui.IsItemHovered())ImGui.SetTooltip("Only the follower grants permission when pressing Start. Stop revokes it. Only the leader can pause/resume. Follower Stop ends permission; the leader cannot restart it.");
-                MessageToggle("Mirror the leader's cutscene skips (TextAdvance; next session)",config.FollowThem.VerifiedCutsceneSkip,v=>config.FollowThem.VerifiedCutsceneSkip=v);
+                MessageToggle("Mirror the leader's cutscene skips (next session)",config.FollowThem.VerifiedCutsceneSkip,v=>config.FollowThem.VerifiedCutsceneSkip=v);
                 ImGui.TextWrapped("Quest Helper starts disabled. Changes apply to your next session. Match NPC and response text; differing quest progress blocks assistance. Accepts the same quest only after the leader accepts it. Mirrors verified quest completion; optional reward choices and general Yes/No prompts remain manual. Journal V7.11.91 enables explicit Ironworks hand token exchanges and matching solo quest battle Proceed actions. Mirrors a new leader FATE Level Sync in the same FATE, with right-side direct approach when Lifestream is enabled. No combat automation or obstacle navigation.");
-                ImGui.TextWrapped("Requires TextAdvance installed and enabled. Companion temporarily requests only cutscene skipping for the matching leader scene, checks the game-owned Skip cutscene prompt, and releases control afterward. Other TextAdvance automation stays disabled during that request. Stop other plugins controlling TextAdvance before starting. Off by default.");
+                MessageToggle("Use TextAdvance instead of Companion (optional; next session)",config.FollowThem.UseTextAdvanceCutsceneSkip,v=>config.FollowThem.UseTextAdvanceCutsceneSkip=v);
+                ImGui.TextWrapped(config.FollowThem.UseTextAdvanceCutsceneSkip
+                    ?"TextAdvance must be installed and loaded. Companion requests only matching cutscene skips and releases control afterward. Stop other plugins controlling TextAdvance first."
+                    :"Companion built-in: no other plugin required. Requests the game's Escape input for the recorded scene, then selects Yes only in its verified skip menu. One attempt; stops on mismatch or timeout. In-game validation pending.");
+                ImGui.TextWrapped("Skipping remains opt-in. Provider changes apply after Stop/Start.");
                 if(followSession.Armed){ImGui.TextWrapped(helperPermission.Quest?"Quest assistance permitted for this session.":"This session allows FollowThem only.");DrawHelperFollowerControls();}
                 if(helperBlocked.Length>0)DrawHelperStatusText("Blocked: "+helperBlocked);
                 if(ImGui.Button("Open Helper Controls"))helperWindowOpen=true;

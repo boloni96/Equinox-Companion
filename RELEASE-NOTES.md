@@ -1,10 +1,12 @@
-# Companion 0.5.1.109
+# Companion 0.5.1.110
 
-- Record the leader's Leave button on a solo-duty prompt, separately from Proceed.
-- Replay Leave only for the exact matching quest, progress and prompt, using the game-owned Leave button event.
-- Wait for the original window to close before resuming following; never turn cancellation into duty entry.
-- Supports SelectYesno and DifficultySelectYesNo. Window X/Escape dismissal is not inferred as a recorded Leave.
-- Correct queued quest envelope timestamps at actual send time so the relay's ten-second freshness validation accepts recordings retained during a brief status gap; original step timestamps are preserved.
-- Regression checks distinguish Leave, Proceed and unrelated prompts.
+- Add a built-in Companion cutscene-skip provider with no TextAdvance dependency.
+- Keep TextAdvance as an optional provider; provider changes apply at the next follower session.
+- Built-in requests InputId.ESC for a bounded 100 ms pulse only in the exact recorded quest scene, with active skip permission and no blocking menu/text entry.
+- Select Yes through the verified game-owned skip list's ListItemClick event once. No direct cutscene agent call, OpenSkipDialog, FireCallbackInt, or constructed confirmation callback.
+- Stop input on completion, timeout, pause/stop and disposal. Never automatically switch providers after failure.
+- Regression coverage checks input identity, scene/permission boundaries, pulse expiry and defaults.
 
-Build/test validation is not in-game verification. No Journal deployment required.
+Skipping remains opt-in. Build/tests do not establish in-game operation or crash-free behavior. Post-Proceed continuation recording remains unsupported. No crash reproduction requested and no Journal deployment needed.
+
+References: FFXIVClientStructs InputData/InputId, AddonSelectString, PopupMenu and AtkComponentList APIs; Questionable/TextAdvance integration remains available. Built-in implementation does not copy ECommons' cutscene code patch.

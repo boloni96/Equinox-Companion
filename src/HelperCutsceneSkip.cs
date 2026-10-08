@@ -17,6 +17,7 @@ public sealed partial class Plugin
     }
     private unsafe void UpdateHelperCutsceneSkip(HelperAction a,DateTimeOffset now)
     {
+        if(!helperSessionTextAdvance){UpdateHelperNativeCutsceneSkip(a,now);return;}
         if(!helperPermission.Skip){BlockHelper("Cutscene skipping is not enabled for this session.");return;}
         if(helperTextAdvanceAction==a.Id&&(!HelperInCutscene()||HelperScene()!=a.Scene)){
             ReleaseHelperTextAdvance();CompleteHelperAction(now);return;

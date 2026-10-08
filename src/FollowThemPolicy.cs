@@ -6,6 +6,7 @@ public sealed class FollowThemSettings
     public bool QuestHelper {get;set;}
     public bool ShareQuestActions {get;set;}
     public bool SkipLeaderCutscenes {get;set;}
+    public bool UseTextAdvanceCutsceneSkip {get;set;} // Optional external provider; Companion is the default.
     public bool VerifiedCutsceneSkip {get;set;} // Fresh opt-in; never inherit the pre-crash setting.
     public bool PreferRightSide {get;set;} = true;
     public string TargetName { get; set; } = "";
