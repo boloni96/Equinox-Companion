@@ -55,7 +55,7 @@ public static class HelperConversationPolicy
     public static string NormalizePrompt(string text)=>System.Text.RegularExpressions.Regex.Replace(text,@"\s+"," ").Trim();
     public static int Delay(long previous,long current)=>(int)Math.Clamp(current-previous,450,600000);
     public static bool Cancellation(HelperAction a)=>a.Kind=="acceptQuest"&&a.Scene=="decline"||a.Kind=="eventReplay"&&a.Scene=="no";
-    public static bool ValidSteps(HelperAction batch)=>batch.Steps is {Length:>0 and <=128} steps&&steps[0].Kind=="interact"&&steps.All(a=>a.Steps==null&&a.Npc==batch.Npc&&a.Name==batch.Name&&a.World==batch.World&&a.Kind is "interact" or "talk" or "choice" or "skip" or "acceptQuest" or "eventReplay")&&steps.Select(a=>a.Id).Distinct().Count()==steps.Length&&steps.Zip(steps.Skip(1)).All(p=>p.First.SentAt<=p.Second.SentAt);
+    public static bool ValidSteps(HelperAction batch)=>batch.Steps is {Length:>0 and <=128} steps&&steps[0].Kind=="interact"&&steps.All(a=>a.Steps==null&&a.Npc==batch.Npc&&a.Name==batch.Name&&a.World==batch.World&&a.Kind is "interact" or "talk" or "choice" or "skip" or "acceptQuest" or "eventReplay" or "completeQuest")&&steps.Select(a=>a.Id).Distinct().Count()==steps.Length&&steps.Zip(steps.Skip(1)).All(p=>p.First.SentAt<=p.Second.SentAt);
 }
 
 public static class HelperSessionPolicy
@@ -97,4 +97,9 @@ public static class HelperQuestScenePolicy
     public static bool Confirmation(HelperAction a)=>a.Kind=="interact"&&a.Text=="confirmQuestScene"&&Quest(a.QuestId)&&a.Scene.StartsWith(a.QuestId+":",StringComparison.Ordinal);
     public static string Step(bool accepted,byte sequence)=>accepted?"quest-step:"+sequence:"";
     public static bool SameStep(string signature,bool accepted,byte sequence)=>signature.Length==0||accepted&&signature==Step(true,sequence);
+}
+
+public static class HelperQuestResultPolicy
+{
+    public static bool Valid(HelperAction a)=>a.Kind=="completeQuest"&&a.Addon=="JournalResult"&&HelperQuestScenePolicy.Quest(a.QuestId)&&a.Scene is "complete" or "decline";
 }

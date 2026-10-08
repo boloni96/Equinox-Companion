@@ -85,7 +85,7 @@ public sealed partial class Plugin
             ClearHelperActions();ResumeAfterConfirmedTravel();nextHelperStatus=default;
             RecordFollowTravel("Helper recovered",new {reason="NPC window closed; normal following resumed."});
         }
-        UpdateHelperFateSync(now);ObserveHelperQuestAcceptance(now);ObserveHelperReplayCheck();ObserveHelperRecording(now);
+        UpdateHelperFateSync(now);ObserveHelperQuestAcceptance(now);ObserveHelperQuestResult(now);ObserveHelperReplayCheck();ObserveHelperRecording(now);
         if(helperReservedConversation.Length>0&&now>=helperReservationUntil)FinishHelperConversation("NPC recording or playback timed out; waiting for a new interaction.");
         UpdateQuestHelper(now);RefreshHelperLeaderBar();
     }

@@ -48,7 +48,7 @@ public sealed partial class Plugin
         }
         if(a.Kind=="interact"){
             helperTargetKind=HelperQuestScenePolicy.ObjectKind(a.Text);
-            if(a.QuestId!=0&&!HelperQuestScenePolicy.SameStep(a.Signature,FFXIVClientStructs.FFXIV.Client.Game.QuestManager.Instance()!=null&&FFXIVClientStructs.FFXIV.Client.Game.QuestManager.Instance()->IsQuestAccepted(a.QuestId),FFXIVClientStructs.FFXIV.Client.Game.QuestManager.GetQuestSequence(a.QuestId))){BlockHelper("Your quest step differs from the recorded interaction.");return;}
+            if(helperInteractAttempts==0&&a.QuestId!=0&&!HelperQuestScenePolicy.SameStep(a.Signature,FFXIVClientStructs.FFXIV.Client.Game.QuestManager.Instance()!=null&&FFXIVClientStructs.FFXIV.Client.Game.QuestManager.Instance()->IsQuestAccepted(a.QuestId),FFXIVClientStructs.FFXIV.Client.Game.QuestManager.GetQuestSequence(a.QuestId))){BlockHelper("Your quest step differs from the recorded interaction.");return;}
             if(helperNpcActive?.Conversation==a.Npc.Conversation&&a.QuestId!=0&&helperNativeScenes.Any(scene=>scene.StartsWith(a.QuestId+":",StringComparison.Ordinal))){CompleteHelperAction(now);return;}
             if(QuestConversationVisible()){
                 if(helperNpcActive?.Conversation==a.Npc.Conversation){CompleteHelperAction(now);return;}
@@ -85,6 +85,7 @@ public sealed partial class Plugin
             CompleteHelperAction(now);return;
         }
         if(a.Kind=="eventReplay"){UpdateHelperEventReplay(a,now);return;}
+        if(a.Kind=="completeQuest"){UpdateHelperQuestResult(a,now);return;}
         if(a.Kind=="acceptQuest"){UpdateHelperQuestAccept(a,now);return;}
         if(a.Kind=="skip"){
             if(!helperPermission.Skip){CompleteHelperAction(now);return;}
