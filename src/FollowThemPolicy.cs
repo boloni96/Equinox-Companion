@@ -29,6 +29,7 @@ public sealed class FollowThemSettings
     public bool FollowTakeoff { get; set; } = true;
     public bool StopOnMovement { get; set; }
     public int StuckSeconds { get; set; } = 60;
+    public bool UseAetheryteTickets { get; set; }
     public int TeleportGilLimit { get; set; } = 5000;
 }
 public enum FollowPhase { Stopped, Waiting, Loading, Following }

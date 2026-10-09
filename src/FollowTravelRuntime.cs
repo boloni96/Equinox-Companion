@@ -99,6 +99,7 @@ public sealed partial class Plugin
     private unsafe void UpdateFollowTravel(DateTimeOffset now)
     {
         if(!SharingTravel||Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51])clickedAethernetSource=null;
+        UpdateFollowTicketPrompt(now);
         UpdateFollowBoundary(now);
         UpdateFollowWorldCommandHook();
         UpdateFriendEstateHook();
@@ -186,6 +187,7 @@ public sealed partial class Plugin
         }
         foreach(var destination in telepo->TeleportList)if((signal.TravelKind=="estate"?destination.HouseId.Id.ToString("X16")==signal.EstateId:destination.AetheryteId==signal.AetheryteId&&destination.SubIndex==0&&destination.Ward==0&&destination.Plot==0)){
             if(destination.GilCost>Math.Max(0,config.FollowThem.TeleportGilLimit)||destination.GilCost>inventory->GetGil()){FollowChatNotice("TRAVEL — Teleport exceeds your gil limit or available gil; waiting.");return;}
+            BeginFollowTicketPrompt(signal,now);
             usingSharedTravel=true;try{var ok=telepo->Teleport(destination.AetheryteId,destination.SubIndex);if(travelAwaitingArrival?.Id==signal.Id)routeTeleportAccepted=ok;RecordFollowTravel("Native teleport requested",new {signal.Id,accepted=ok,destination.AetheryteId,destination.SubIndex});FollowChatNotice(ok?"TRAVEL — Requested the selected character's Teleport destination.":"TRAVEL — Game refused Teleport; FollowThem is waiting.");}finally{usingSharedTravel=false;}return;
         }
         if(signal.TravelKind=="estate"&&signal.FriendContentId.Length>0&&signal.Destination is "Private Estate" or "Free Company Estate"){

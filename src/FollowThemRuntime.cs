@@ -333,6 +333,8 @@ public sealed partial class Plugin
         MessageToggle("Share my travel with active paired followers", config.FollowThem.SharePortalTransitions, v => config.FollowThem.SharePortalTransitions = v);
         MessageToggle("Follow shared Teleport / aethernet destinations (experimental)",config.FollowThem.UseSharedTeleports,v=>{config.FollowThem.UseSharedTeleports=v;relayGeneration++;});
         MessageToggle("Meet at shared Teleports even when the selected character is on another map",config.FollowThem.MeetAtTeleports,v=>config.FollowThem.MeetAtTeleports=v);
+        MessageToggle("Use Aetheryte Tickets for Companion teleports",config.FollowThem.UseAetheryteTickets,v=>config.FollowThem.UseAetheryteTickets=v);
+        ImGui.TextWrapped("Ticket prompt: enabled uses a ticket; disabled pays gil. Applies only to teleports requested by Companion. Your gil limit still applies.");
         DrawCommittedInteger("Maximum gil per followed Teleport", config.FollowThem.TeleportGilLimit, 0, 10000, value => config.FollowThem.TeleportGilLimit = value);
         ImGui.TextWrapped("Shared travel requires an active follow session. Teleport uses your own unlocked public destination and gil, within this limit. Ward entry, exact available estate teleports and matched transport menus are experimental. World/Data Center travel uses the separate Lifestream options. Aethernet requires the same nearby crystal and a matching unlocked menu entry. Party offers use the separate option above.");
         MessageToggle("Use my selected character's shared portal (experimental)", config.FollowThem.UseSharedPortals, v => { config.FollowThem.UseSharedPortals = v; receivedPortal=null; relayGeneration++; });
