@@ -54,7 +54,7 @@ public static class SyncValidation
         if (e.Kind == "collection.observed") return e.Collection is { } collection &&
             new[] { "mount", "minion", "orchestrion", "emote", "barding", "card", "ornament", "framerkit", "quest", "hairstyle" }.Contains(collection.Category) &&
             collection.Known is { Length: > 0 and <= 5000 } && collection.Unlocked is { Length: <= 5000 } && collection.Obtained is { Length: <= 5000 } && collection.Known.All(id=>id is > 0 and < 1000000) &&
-            collection.Unlocked.All(collection.Known.Contains) && collection.Obtained.All(collection.Known.Contains);
+            collection.Unlocked.All(collection.Known.Contains) && collection.Obtained.All(collection.Known.Contains) && EventQuestPolicy.Valid(collection);
         if (e.Kind == "fashion.observed") return e.Fashion is { Score: >= 0 and <= 100, Remaining: >= 0 and <= 4, ThemeId: >= 0 and <= 65535 } fashion && DateTimeOffset.TryParse(fashion.Cycle,out var cycle) && cycle <= e.At && e.At-cycle < TimeSpan.FromDays(7);
         if (e.Kind == "submarines.observed") return e.Voyage is { } voyage && Regex.IsMatch(voyage.FcId ?? "", @"^[1-9]\d{0,19}$") &&
             voyage.Submarines is { Length: > 0 and <= 4 } && voyage.Submarines.Select(s=>s?.Slot).Distinct().Count()==voyage.Submarines.Length && voyage.Submarines.All(s=>s is not null && s.Slot is >= 0 and <= 3 && Text(s.Name) && s.Rank is > 0 and <= 200 && s.Parts is { Length: 4 } && s.Route is { Length: <= 5 } && s.RegisterTime > 0 && s.RegisterTime <= now.ToUnixTimeSeconds() && s.Parts.All(p=>p<=65535) && s.ReturnTime >= 0 && s.ReturnTime < now.AddDays(30).ToUnixTimeSeconds());

@@ -7,7 +7,7 @@ namespace EquinoxCompanion;
 
 public sealed partial class Plugin
 {
-    private sealed record CatalogueEntry(string Category, uint Id, uint ItemId);
+    private sealed record CatalogueEntry(string Category, uint Id, uint ItemId, EventQuestDefinition? Quest = null);
     private CatalogueEntry[][]? collectionGroups;
     private int nextCollectionGroup;
     private Dictionary<uint, uint[]>? hairstyleUnlocks;
@@ -35,9 +35,30 @@ public sealed partial class Plugin
             if (!File.Exists(path)) { collectionStatus = "Collection catalogue missing; reinstall this plugin build."; return; }
             var entries = JsonSerializer.Deserialize<CatalogueEntry[]>(File.ReadAllText(path), new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? [];
             collectionGroups = entries.Where(x => x.Id > 0).GroupBy(x => x.Category).Select(g => g.DistinctBy(x=>x.Id).ToArray()).ToArray();
+            // Read the installed game's festival quest definitions, not a fixed event/year list.
+            var seasonal = new List<CatalogueEntry>();
+            foreach(var q in DataManager.GetExcelSheet<Lumina.Excel.Sheets.Quest>(Dalamud.Game.ClientLanguage.English))
+            {
+                if(q.Festival.RowId==0)continue;
+                var name=q.Name.ToString();var festival=q.Festival.Value.Name.ToString();
+                if(string.IsNullOrWhiteSpace(name)||name.Length>100||name.Any(char.IsControl)||
+                   string.IsNullOrWhiteSpace(festival)||festival.Length>100||festival.Any(char.IsControl))continue;
+                var rewards = new List<EventQuestReward>();
+                var itemIds = q.OptionalItemReward.Select(x=>x.RowId).ToList();
+                if(q.ItemRewardType is 1 or 3 or 5)itemIds.AddRange(q.Reward.Select(x=>x.RowId));
+                foreach(var id in itemIds.Where(id=>id>0).Distinct().Take(12))
+                {
+                    var itemName=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>(Dalamud.Game.ClientLanguage.English).GetRowOrDefault(id)?.Name.ToString();
+                    if(!string.IsNullOrWhiteSpace(itemName)&&itemName.Length<=100&&!itemName.Any(char.IsControl))rewards.Add(new(id,itemName));
+                }
+                seasonal.Add(new("quest",q.RowId,0,new(q.RowId,name,q.Festival.RowId,festival,(int)q.ClassJobLevel[0],
+                    q.PreviousQuest.Select(x=>x.RowId).Where(id=>id>0).ToArray(),rewards.ToArray())));
+            }
+            collectionGroups=collectionGroups.Concat(seasonal.OrderBy(x=>x.Id).Chunk(8)).ToArray();
         }
         if (collectionGroups.Length == 0) return;
-        var group = collectionGroups[nextCollectionGroup++ % collectionGroups.Length];
+        var segmentIndex = nextCollectionGroup++ % collectionGroups.Length;
+        var group = collectionGroups[segmentIndex];
         var unlocked = new List<uint>(); var obtained = new List<uint>(); var known = new List<uint>();
         if (group[0].Category == "hairstyle" && hairstyleUnlocks is null)
             hairstyleUnlocks = DataManager.GetExcelSheet<Lumina.Excel.Sheets.CharaMakeCustomize>(Dalamud.Game.ClientLanguage.English)
@@ -75,7 +96,10 @@ public sealed partial class Plugin
         }
         if (known.Count == 0) return;
         KeepDiscovery(new(Guid.NewGuid().ToString("N"), "collection.observed", now, actor, null,
-            Collection: new(group[0].Category, known.ToArray(), unlocked.ToArray(), obtained.ToArray())));
+            Collection: new(group[0].Category, known.ToArray(), unlocked.ToArray(), obtained.ToArray(),
+                group[0].Quest is null?0:segmentIndex+1,
+                group[0].Quest is null?null:group.Select(x=>x.Quest!).ToArray(),
+                group[0].Category=="quest"&&QuestManager.Instance()!=null?known.Where(id=>QuestManager.Instance()->IsQuestAccepted(id)).ToArray():null)));
         collectionStatus = $"{group[0].Category}: {unlocked.Count}/{group.Length} unlocked · {obtained.Count} reward items held";
     }
 
