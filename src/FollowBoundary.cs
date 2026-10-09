@@ -8,6 +8,7 @@ public sealed partial class Plugin
 {
     private FollowPortalSignal? boundarySample,boundaryDeparture;
     private Vector3 boundaryPrevious,boundaryDirection;
+    private readonly FollowBoundaryMotion boundaryMotion=new();
     private DateTimeOffset boundarySampleAt,boundaryDepartureAt,nextInstanceChoice;
     private bool boundaryLoading;
     private static unsafe uint CurrentFollowInstance()=>UIState.Instance()==null?0:UIState.Instance()->PublicInstance.InstanceId;
@@ -41,14 +42,21 @@ public sealed partial class Plugin
     private static unsafe uint CurrentFollowDuty()=>(uint)(FFXIVClientStructs.FFXIV.Client.Game.GameMain.Instance()==null?0:FFXIVClientStructs.FFXIV.Client.Game.GameMain.Instance()->CurrentContentFinderConditionId);
     private unsafe void UpdateFollowBoundary(DateTimeOffset now)
     {
-        if(!SharingTravel||config.PairingKey.Length!=64){boundarySample=null;boundaryDeparture=null;boundaryLoading=false;return;}
+        if(!SharingTravel||config.PairingKey.Length!=64){boundarySample=null;boundaryDeparture=null;boundaryLoading=false;boundaryMotion.Reset();return;}
         var loading=Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51];
-        if(loading){
-            if(!boundaryLoading&&boundarySample is {} s&&now-boundarySampleAt<TimeSpan.FromSeconds(1)&&outgoingTravel==null&&transportCapture==null&&outgoingPortal==null&&!SharingWorldIntent&&boundaryDirection.LengthSquared()>.01f){
+        // Player availability can disappear before the loading flags become visible.
+        // Retain a recent departure sample until playable arrival is observed.
+        var unavailable=!Player.IsLoaded||Objects.LocalPlayer==null;
+        var changedArea=boundarySample is {} old&&Client.TerritoryType!=0&&old.Territory!=Client.TerritoryType;
+        if(loading||unavailable||changedArea&&!boundaryLoading){
+            if(!boundaryLoading&&boundarySample is {} s&&now-boundarySampleAt<=TimeSpan.FromMilliseconds(1500)&&outgoingTravel==null&&transportCapture==null&&outgoingPortal==null&&!SharingWorldIntent&&boundaryMotion.TryDirection(now,out var direction)){
+                boundaryDirection=direction;
                 var goal=new Vector3(s.X,s.Y,s.Z)+Vector3.Normalize(boundaryDirection)*3;
                 boundaryDeparture=s with {Approach=FollowTravelPosition.From(goal),SourceKind="boundary"};boundaryDepartureAt=now;
             }
-            boundaryLoading=true;return;
+            if(!boundaryLoading&&boundaryDeparture==null&&boundarySample is {} missed)
+                RecordFollowTravel("Boundary capture unavailable",new {source=missed.Territory,loading,unavailable,sampleAgeMs=(now-boundarySampleAt).TotalMilliseconds,explicitTravel=outgoingTravel!=null||transportCapture!=null||outgoingPortal!=null||SharingWorldIntent});
+            boundaryLoading=true;if(loading||unavailable)return;
         }
         if(!Player.IsLoaded||Objects.LocalPlayer is not {} self){boundarySample=null;boundaryDeparture=null;return;}
         if(boundaryLoading){
@@ -57,15 +65,15 @@ public sealed partial class Plugin
                 RecordFollowTravel("Boundary departure retained",new {s.Territory,s.DutyId,s.Approach});
                 EnqueueOutgoingTravel(config.PairingKey,s with {SentAt=now.ToUnixTimeMilliseconds()},portalRelay.HasFollowers(config.PairingKey,s.Name,s.HomeWorld));
             }
-            boundaryDeparture=null;boundarySample=null;boundaryDirection=default;
+            boundaryDeparture=null;boundarySample=null;boundaryDirection=default;boundaryMotion.Reset();
         }
         // Cheap local position observation; only a confirmed uncaptured zone
         // transition produces a relay message. No Journal changes or uploads.
         if(now-boundarySampleAt<TimeSpan.FromMilliseconds(100))return;
         if(boundarySample is {} previous&&previous.Territory==Client.TerritoryType){
             var delta=self.Position-boundaryPrevious;delta.Y=0;
-            if(delta.LengthSquared() is >.0025f and <25)boundaryDirection=delta;
-            else if(delta.LengthSquared()<.0025f)boundaryDirection=default;
+            boundaryMotion.Observe(delta,now);
+            boundaryDirection=boundaryMotion.TryDirection(now,out var recent)?recent:default;
         }
         boundaryPrevious=self.Position;boundarySampleAt=now;
         boundarySample=Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.Unconscious]?null:TravelSignal("boundary",0,"",0,self.Position);

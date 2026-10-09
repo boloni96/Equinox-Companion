@@ -150,7 +150,7 @@ public sealed partial class Plugin
         if(purchaseStage==4)return;
         if(Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.Unconscious]||FollowMovementKeysHeld()){FinishHelperPurchase("Purchase cancelled while moving, in combat or incapacitated.");return;}
         if(action.Npc.World!=Player.CurrentWorld.RowId||action.Npc.Territory!=Client.TerritoryType||action.Npc.Map!=map->CurrentMapId||HelperTravelBusy){helperQuestStatus="Purchase waiting for the vendor's area.";return;}
-        var target=Objects.FirstOrDefault(o=>o.ObjectKind==ObjectKind.EventNpc&&o.BaseId==action.Npc.BaseId&&o.Name.TextValue==action.Npc.Name&&o.IsTargetable&&Vector3.DistanceSquared(o.Position,action.Npc.Position.Point)<1);
+        var target=Objects.FirstOrDefault(o=>o.ObjectKind==ObjectKind.EventNpc&&o.BaseId==action.Npc.BaseId&&o.Name.TextValue==action.Npc.Name&&(o.IsTargetable||purchaseOpenedVendor&&purchaseStage>0&&Targets.Target?.GameObjectId==o.GameObjectId)&&Vector3.DistanceSquared(o.Position,action.Npc.Position.Point)<1);
         if(target==null||Vector3.Distance(self.Position,target.Position)>target.HitboxRadius+4){helperQuestStatus="Purchase waiting: move within reach of "+action.Npc.Name+".";return;}
         if(purchaseStage==0){
             if(PurchaseShop().Length>0){if(Targets.Target?.GameObjectId!=target.GameObjectId){FinishHelperPurchase("Another vendor is selected; purchase cancelled.");return;}purchaseStage=1;}

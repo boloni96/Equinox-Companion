@@ -60,6 +60,12 @@ public sealed partial class Plugin
             return;
         }
         var map=AgentMap.Instance();
+        if(signal.TravelKind=="boundary"&&travelAwaitingArrival?.Id==signal.Id&&routeSawLoading&&
+           followSession.Armed&&followArmedAt==approachSession&&config.PairingKey==approachKey&&
+           Player.ContentId==approachCharacter&&Player.CurrentWorld.RowId==signal.ArrivalWorld&&
+           map!=null&&Client.TerritoryType==signal.ArrivalTerritory&&map->CurrentMapId==signal.ArrivalMap){
+            CancelFollowApproach();TravelDiagnostic("Zone crossing observed; checking arrival.");return;
+        }
         var remote=signal.TravelKind=="world"||config.FollowThem.MeetAtTeleports&&signal.TravelKind is "teleport" or "estate" or "friendestate";
         if(!config.EnableFollowThem||!followSession.Armed||followArmedAt!=approachSession||config.PairingKey!=approachKey||Player.IsLoaded&&Player.ContentId!=approachCharacter||Player.CurrentWorld.RowId!=signal.CurrentWorld||map==null||!remote&&(Client.TerritoryType!=signal.Territory||map->CurrentMapId!=signal.MapId)||!FollowThemSession.Matches(config.FollowThem.TargetName,config.FollowThem.HomeWorld,signal.Name,signal.HomeWorld)||signal.ExpiresAt<=now.ToUnixTimeMilliseconds()||Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.Unconscious]){
             CancelFollowApproach();TravelDiagnostic("Travel preparation cancelled or expired; no action performed.");return;

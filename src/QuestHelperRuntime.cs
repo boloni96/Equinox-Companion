@@ -40,7 +40,7 @@ public sealed partial class Plugin
         if(a.Npc.World!=Player.CurrentWorld.RowId||a.Npc.Territory!=Client.TerritoryType){helperQuestStatus="Waiting to reach the NPC's area.";return;}
         if(HelperTravelBusy){helperQuestStatus="Waiting for travel to finish.";return;}
         if(HelperShopVisible()){BlockHelper("A shop is open; Quest Helper does not mirror vendors.");return;}
-        if(helperWorkingId!=a.Id){helperWorkingId=a.Id;helperActionSubmitted=false;helperTalkAttempts=0;helperQuestMenuSelected=false;helperActionStarted=now;helperStopRequested=false;helperInteractAttempts=0;helperInteractRetryAt=default;helperStationary.Reset();followSession.Pause();RequestFollowMovementStop();}
+        if(helperWorkingId!=a.Id){helperWorkingId=a.Id;helperActionSubmitted=false;helperTalkAttempts=0;helperQuestMenuSelected=false;helperActionStarted=now;helperStopRequested=false;helperInteractAttempts=0;helperInteractRetryAt=default;helperStationary.Reset();followSession.Pause();if(a.Kind=="interact"&&!HelperQuestScenePolicy.Confirmation(a))RequestFollowMovementStop();}
         if(FollowMovementKeysHeld()){if(helperApproaching)CancelHelperApproach();helperQuestStatus="Your movement paused NPC approach.";return;}
         if(HelperQuestScenePolicy.Confirmation(a)){
             if(helperNpcActive?.Conversation!=a.Npc.Conversation){BlockHelper("Quest scene belongs to another interaction.");return;}
