@@ -29,11 +29,17 @@ public sealed partial class Plugin
     {
         var now=DateTimeOffset.UtcNow;
         if(helperRecordAudience.Length==0||helperOutgoing.Count>=32)return;
-        helperOutgoing.Enqueue(new(Guid.NewGuid().ToString("N"),Player.CharacterName,Player.HomeWorld.RowId,kind,now.ToUnixTimeMilliseconds(),npc,Sessions:helperRecordAudience,Steps:steps,QuestId:questId));
+        var owner=helperRecorded.FirstOrDefault();
+        helperOutgoing.Enqueue(new(Guid.NewGuid().ToString("N"),owner?.Name??Player.CharacterName,owner?.World??Player.HomeWorld.RowId,kind,now.ToUnixTimeMilliseconds(),npc,Sessions:helperRecordAudience,Steps:steps,QuestId:questId));
     }
     private unsafe void ObserveHelperRecording(DateTimeOffset now)
     {
         if(!helperRecording)return;
+        if(!helperRecordingFailed&&helperCaptureNpc is {} dutyNpc&&helperRecorded.Any(a=>a.Kind=="soloDuty")&&
+           (Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]||Client.TerritoryType!=dutyNpc.Territory)){
+            RecordFollowTravel("Helper duty continuation committed at loading",new {npc=dutyNpc.Name,steps=helperRecorded.Count});
+            CommitHelperRecording(dutyNpc);return;
+        }
         if(HelperShopVisible()){ResetHelperRecording();return;}
         if(!RecordingQuest||helperCaptureNpc is not {} npc||now-helperCaptureAt>TimeSpan.FromMinutes(10)||helperRecordingFailed){ResetHelperRecording();return;}
         helperRecordAudience=helperRecordAudience.Where(id=>helperFollowers.Any(f=>f.Id==id&&HelperPolicy.RecordingAudience(f,now.ToUnixTimeMilliseconds()))).ToArray();

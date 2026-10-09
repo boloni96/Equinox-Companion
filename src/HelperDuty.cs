@@ -39,8 +39,9 @@ public sealed partial class Plugin
             if(quest==0||manager==null||!manager->IsQuestAccepted(quest))return;
             FlushHelperTalk();EmitHelper(leave?"choice":"soloDuty",prompt,leave?HelperDutyPolicy.LeaveSignature(prompt):HelperPolicy.Signature([prompt]),args.AddonName,HelperQuestScenePolicy.Step(true,QuestManager.GetQuestSequence(quest)),quest);
             RecordFollowTravel("Helper duty decision captured",new {questId=quest,decision=leave?"leave":"proceed",addon=args.AddonName});
-            // Commit before the leader's loading transition changes the source territory.
-            if(helperCaptureNpc is {} npc)CommitHelperRecording(npc);
+            // Proceed may open more dialogue and cutscenes before loading into the duty.
+            // Keep those in this recording; loading is the boundary, not the button press.
+            if(leave&&helperCaptureNpc is {} npc)CommitHelperRecording(npc);
         }catch(Exception e){Log.Debug(e,"Solo duty choice capture unavailable");}
     }
     private unsafe void UpdateHelperSoloDuty(HelperAction action,DateTimeOffset now)

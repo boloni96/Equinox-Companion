@@ -191,7 +191,13 @@ public sealed partial class Plugin
         if(p.Costs.Select((c,i)=>inventory->GetInventoryItemCount(c.ItemId)!=purchaseBeforeCosts[i]).Any(changed=>changed)||inventory->GetInventoryItemCount(p.ItemId)!=purchaseBeforeItem){FinishHelperPurchase("Inventory or currency changed before confirmation; check the purchase manually.");return;}
         AtkUnitBase* confirmation=null;AtkComponentButton* button=null;
         if(VisibleFollowAddon("SelectYesno")){
-            if(p.Prompt.Length==0||PurchasePrompt()!=p.Prompt){FinishHelperPurchase("Purchase confirmation differs or was not captured on the leader. Nothing confirmed.");return;}
+            var actualPrompt=PurchasePrompt();
+            // Visible is not ready: the native text node may still be empty during opening.
+            if(actualPrompt.Length==0){helperQuestStatus="Waiting for the purchase confirmation to finish opening.";return;}
+            if(p.Prompt.Length==0||actualPrompt!=p.Prompt){
+                RecordFollowTravel("Vendor confirmation mismatch",new {expected=p.Prompt,actual=actualPrompt,item=p.ItemId});
+                FinishHelperPurchase("Purchase confirmation differs or was not captured on the leader. Nothing confirmed.");return;
+            }
             var yes=(AddonSelectYesno*)GardenGui.GetAddonByName("SelectYesno").Address;confirmation=(AtkUnitBase*)yes;button=yes->YesButton;
         }else if(p.Shop=="ShopExchangeItem"&&VisibleFollowAddon("ShopExchangeItemDialog")){
             var agent=AgentShop.Instance();var dialog=(AddonShopExchangeItemDialog*)GardenGui.GetAddonByName("ShopExchangeItemDialog").Address;

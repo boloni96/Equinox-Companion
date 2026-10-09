@@ -43,6 +43,12 @@ public static class HelperCutsceneReplayPolicy
                 if(next<steps.Length&&steps[next] is {Kind:"skip",Addon:"SelectString",Text:"Skip cutscene?"} skip&&
                    skip.Scene==current.Scene&&skip.Npc==current.Npc)continue;
             }
+            // A Talk snapshot can finalize just after YES while the skipped scene is fading.
+            // Only contiguous dialogue belonging to this exact skip is superseded.
+            if(current.Kind=="talk"&&result.LastOrDefault() is {Kind:"skip"} previous&&
+               previous.Scene.Length>0&&previous.Scene==current.Scene&&previous.Npc==current.Npc&&
+               previous.QuestId==current.QuestId&&previous.Addon=="SelectString"&&previous.Text=="Skip cutscene?")
+                continue;
             result.Add(current);
         }
         return result.ToArray();
