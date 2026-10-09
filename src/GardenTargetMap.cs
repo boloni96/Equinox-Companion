@@ -4,6 +4,14 @@ public sealed record SharedGardenTarget(string GameHouseId,string World,string D
 
 public static class GardenTargetMap
 {
+    // Inspection messages describe the current crop, including when a visitor cannot
+    // open its numbered menu. An older identical message may belong to a prior crop.
+    public static bool CanRepeatObservation(string kind, TimeSpan elapsed) =>
+        elapsed >= TimeSpan.FromSeconds(2) &&
+        kind is "garden.empty" or "garden.empty.unmapped" or "garden.dead" or
+            "garden.ready" or "garden.observed" or "garden.unmapped" or
+            "garden.status" or "garden.status.unmapped";
+
     public static bool IsEmptyChat(CropChat chat) => chat.Text.Trim()=="There is nothing in this bed." &&
         string.IsNullOrWhiteSpace(chat.Sender) && chat.Target.TargetId is not null &&
         chat.Target.TargetDetails is {DataId:2003757,EventArgument:not null} &&
