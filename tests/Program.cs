@@ -1664,3 +1664,15 @@ Check("77 wrong world cannot complete",FollowAethernetArrival.Confirmed(arrival7
 Check("77 wrong map cannot complete",FollowAethernetArrival.Confirmed(arrival77,true,true,false,true,410,144,197,0,new(0,0,0),crystal77).ToString(),"False");
 Check("77 distant destination cannot complete",FollowAethernetArrival.Confirmed(arrival77,true,true,false,true,410,144,196,0,new(40,0,0),crystal77).ToString(),"False");
 Check("77 wrong floor cannot complete",FollowAethernetArrival.Confirmed(arrival77,true,true,false,true,410,144,196,0,new(0,18,0),crystal77).ToString(),"False");
+
+var observedTimestampEvent = new SyncEvent(new string('e',32), "house.entered", time, realActor, realAddress);
+Check("Original observation timestamp", observedTimestampEvent.ObservedAt?.ToString("O"), time.ToString("O"));
+Check("Cache observation time stays unknown", (observedTimestampEvent with {Kind="submarines.cached"}).ObservedAt?.ToString("O"), null);
+var timestampJson = JsonSerializer.Serialize(observedTimestampEvent, new JsonSerializerOptions {PropertyNamingPolicy=JsonNamingPolicy.CamelCase});
+var timestampRoundtrip = JsonSerializer.Deserialize<SyncEvent>(timestampJson,new JsonSerializerOptions {PropertyNameCaseInsensitive=true})!;
+Check("Queue roundtrip preserves original time", timestampRoundtrip.ObservedAt?.ToString("O"),time.ToString("O"));
+
+var dyeVessel = new SubmarineDetails(0,"Test",10,0,1,[3,4,1,2],[],null,[1,0,5,0]);
+var dyeJson=JsonSerializer.Serialize(dyeVessel,new JsonSerializerOptions {PropertyNamingPolicy=JsonNamingPolicy.CamelCase});
+Check("Dyes use numeric array not base64",JsonDocument.Parse(dyeJson).RootElement.GetProperty("stains").ValueKind.ToString(),"Array");
+Check("Legacy vessel has unknown dyes",JsonSerializer.Deserialize<SubmarineDetails>("{\"slot\":0,\"name\":\"Old\",\"rank\":1,\"returnTime\":0,\"registerTime\":1,\"parts\":[3,4,1,2],\"route\":[]}",new JsonSerializerOptions {PropertyNameCaseInsensitive=true})!.Stains is null?"unknown":"known","unknown");

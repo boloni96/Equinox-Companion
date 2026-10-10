@@ -4,14 +4,19 @@ using System.Net.Http.Json;
 using System.Text.Json;
 namespace EquinoxCompanion;
 
-public sealed record SyncEvent(string Id, string Kind, DateTimeOffset At, Actor Actor, Address? Address, int? Patch = null, int? Bed = null, PlantDetails? Plant = null, HouseDetails? House = null, CharacterDetails? Character = null, CropDetails? Crop = null, CollectionDetails? Collection = null, FashionDetails? Fashion = null, VoyageDetails? Voyage = null, GardenTargetDetails? GardenTarget = null, StorageDetails? Storage = null, FreeCompanyDetails? Company = null, CachedVoyage? CachedVoyage = null, GardenPlanChange? PlanEdit = null, SubmarineSupplies? Supplies = null, CharacterRegistration? Registration = null, GardenBatchOrderChange? BatchOrder = null);
+public sealed record SyncEvent(string Id, string Kind, DateTimeOffset At, Actor Actor, Address? Address, int? Patch = null, int? Bed = null, PlantDetails? Plant = null, HouseDetails? House = null, CharacterDetails? Character = null, CropDetails? Crop = null, CollectionDetails? Collection = null, FashionDetails? Fashion = null, VoyageDetails? Voyage = null, GardenTargetDetails? GardenTarget = null, StorageDetails? Storage = null, FreeCompanyDetails? Company = null, CachedVoyage? CachedVoyage = null, GardenPlanChange? PlanEdit = null, SubmarineSupplies? Supplies = null, CharacterRegistration? Registration = null, GardenBatchOrderChange? BatchOrder = null)
+{
+    // At is the original occurrence/observation time; a resend never refreshes it.
+    // Imported third-party cache data has no known game observation time.
+    public DateTimeOffset? ObservedAt => Kind == "submarines.cached" ? null : At;
+}
 public sealed record GardenTargetDetails(uint Argument, float X, float Y, float Z);
 public sealed record StorageDetails(string Key, string Name, uint[] Items);
 public sealed record EventQuestReward(uint ItemId, string Name);
 public sealed record EventQuestDefinition(uint Id, string Name, uint FestivalId, string FestivalName, int MinLevel, uint[] PreviousQuests, EventQuestReward[] Rewards);
 public sealed record CollectionDetails(string Category, uint[] Known, uint[] Unlocked, uint[] Obtained, int Segment = 0, EventQuestDefinition[]? QuestDefinitions = null, uint[]? Accepted = null);
 public sealed record FashionDetails(int Score, int Remaining, int ThemeId, string Cycle);
-public sealed record SubmarineDetails(int Slot, string Name, int Rank, long ReturnTime, uint RegisterTime, ushort[] Parts, [property: System.Text.Json.Serialization.JsonConverter(typeof(SubmarineRouteJson))] byte[] Route, bool? NeedsRepair = null);
+public sealed record SubmarineDetails(int Slot, string Name, int Rank, long ReturnTime, uint RegisterTime, ushort[] Parts, [property: System.Text.Json.Serialization.JsonConverter(typeof(SubmarineRouteJson))] byte[] Route, bool? NeedsRepair = null, int[]? Stains = null);
 public sealed record VoyageDetails(string FcId, SubmarineDetails[] Submarines);
 public sealed record SyncResult(string[] Accepted, string Status, bool Retry);
 public sealed class CompanionSync : IDisposable
@@ -25,7 +30,7 @@ public sealed class CompanionSync : IDisposable
         {
             using var request = new HttpRequestMessage(HttpMethod.Post, "https://equinoxjournal.pages.dev/api/companion/events");
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
-            request.Content = JsonContent.Create(new { events }, options: Json);
+            request.Content = JsonContent.Create(new { events, sentAt = DateTimeOffset.UtcNow }, options: Json);
             using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancel.Token);
             if (!response.IsSuccessStatusCode)
                 return new([], response.StatusCode switch {
