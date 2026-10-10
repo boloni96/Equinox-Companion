@@ -285,10 +285,16 @@ public sealed partial class Plugin : IDalamudPlugin
     {
         var now = DateTimeOffset.UtcNow;
         UpdateQuickLoot(now);
-        UpdateFollowPortalRelay(now);
-        UpdateHelper(now);
-        UpdateFollowThem(now);
         UpdateCofferMarkers(now);
+        // Give a coffer click a short uncontested turn before other automatic interactions.
+        // Movement-stop handling remains responsive during this brief priority window.
+        if(now>=cofferPriorityUntil)
+        {
+            UpdateFollowPortalRelay(now);
+            UpdateHelper(now);
+            UpdateFollowThem(now);
+        }
+        else UpdateFollowMovementStop(now);
         UpdateSync(now);
         UpdateSharedRoster(now);
         UpdateCharacterRegistration(now);

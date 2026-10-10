@@ -91,7 +91,7 @@ public sealed partial class Plugin
         if (!config.EnableCofferMarkers) return;
         if (cofferHook == null && !cofferFault) SetCofferMarkers(true);
         if (cofferFault || now < nextCofferCheck) return;
-        nextCofferCheck = now.AddMilliseconds(500);
+        nextCofferCheck = now.AddMilliseconds(config.AutoOpenCoffers?200:500);
         try
         {
             var cid = Player.IsLoaded ? Player.ContentId : 0;

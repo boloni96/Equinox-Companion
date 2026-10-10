@@ -12,16 +12,17 @@ public sealed partial class Plugin
 {
     private readonly CofferAutoOpenPolicy cofferAutoOpen = new();
     private bool cofferAutoFault;
+    private DateTimeOffset cofferPriorityUntil;
     private string cofferAutoStatus="Auto-open is off.";
     private void ResetCofferAutoOpen()
     {
-        cofferAutoOpen.Clear();cofferAutoFault=false;
+        cofferAutoOpen.Clear();cofferAutoFault=false;cofferPriorityUntil=default;
         cofferAutoStatus=config.AutoOpenCoffers?"Waiting for a nearby unopened coffer.":"Auto-open is off.";
     }
     private unsafe bool CofferInteractionReady()
     {
         if(!Player.IsLoaded || Objects.LocalPlayer is not {IsTargetable:true} || FollowTransitionBusy() ||
-            Conditions[ConditionFlag.InCombat] || Conditions[ConditionFlag.Unconscious] ||
+            Conditions[ConditionFlag.Unconscious] ||
             Conditions[ConditionFlag.TradeOpen] || Conditions[ConditionFlag.Crafting] || Conditions[ConditionFlag.Gathering])return false;
         foreach(var name in new[]{"SelectYesno","SelectString","SelectIconString","Talk"})
         {
@@ -33,7 +34,7 @@ public sealed partial class Plugin
     private unsafe void TryAutoOpenCoffer(DateTimeOffset now)
     {
         if(!config.EnableCofferMarkers || !config.AutoOpenCoffers || cofferAutoFault)return;
-        if(!CofferInteractionReady()){cofferAutoStatus="Waiting: combat, loading or another interaction is active.";return;}
+        if(!CofferInteractionReady()){cofferAutoStatus="Waiting: loading, casting or another interaction is active.";return;}
         var self=Objects.LocalPlayer!;
         foreach(var point in cofferMemory.Points.OrderBy(p=>Vector3.DistanceSquared(self.Position,p.Position)))
         {
@@ -45,8 +46,17 @@ public sealed partial class Plugin
             if(!CofferAutoOpenPolicy.Eligible(config.AutoOpenCoffers,CofferInteractionReady(),true,obj.IsTargetable,true,opened,Vector3.Distance(self.Position,obj.Position)))continue;
             var system=TargetSystem.Instance();
             if(system==null || !cofferAutoOpen.Reserve(point,now))return;
+            // Target explicitly for the interaction, then restore the previous target.
+            // The native call still checks line of sight and the game decides whether it can open.
+            var previousTarget=Targets.Target;
+            var previousId=previousTarget?.GameObjectId;
+            var previousAddress=previousTarget?.Address;
+            var wasReplaying=helperReplaying;var wasRelayInteracting=relayInteracting;
             try
             {
+                helperReplaying=true;relayInteracting=true;
+                Targets.Target=obj;
+                cofferPriorityUntil=now.AddMilliseconds(250);
                 system->InteractWithObject((NativeObject*)obj.Address,true);
                 cofferAutoStatus="Requested opening a nearby coffer; waiting for the game's confirmation.";
                 // Do not mark it green here. Observation must confirm that the chest opened.
@@ -57,6 +67,13 @@ public sealed partial class Plugin
                 Chat.PrintError("[Equinox] "+cofferAutoStatus);
                 errorJournal.Record("coffer-auto-open",cofferAutoStatus,exceptionType:e.GetType().Name);
             }
+            finally
+            {
+                helperReplaying=wasReplaying;relayInteracting=wasRelayInteracting;
+                // Do not overwrite a different target selected by the game during interaction.
+                if(Targets.Target?.GameObjectId==obj.GameObjectId)
+                    Targets.Target=previousId is {} id?Objects.FirstOrDefault(o=>o.GameObjectId==id&&o.Address==previousAddress):null;
+            }
             return;
         }
         cofferAutoStatus="Watching within 2.5 yalms. At most two attempts per coffer this visit; blocked coffers can be opened manually.";
@@ -65,7 +82,7 @@ public sealed partial class Plugin
     {
         MessageToggle("Auto-open nearby treasure coffers",config.AutoOpenCoffers,v=>{config.AutoOpenCoffers=v;ResetCofferAutoOpen();});
         if(!config.AutoOpenCoffers)return;
-        ImGui.TextWrapped("Opens ordinary treasure coffers within 2.5 yalms when out of combat and available. Does not move you, click portals or confirm menus. Local to this PC; independent of FollowThem. QuickLoot handles rolls separately. Turning off Treasure Coffer markers also stops auto-open.");
+        ImGui.TextWrapped("Opens ordinary treasure coffers within 2.5 yalms as a quick priority, including in combat when not casting or otherwise occupied. Restores your previous target after the click; confirmed opened coffers are never clicked again. Does not move you, click portals or confirm menus. Local to this PC; independent of FollowThem. QuickLoot handles rolls separately. Turning off Treasure Coffer markers also stops auto-open.");
         ImGui.TextWrapped(cofferAutoStatus);
         if(cofferAutoFault && ImGui.Button("Retry coffer auto-open"))ResetCofferAutoOpen();
     }

@@ -23,7 +23,7 @@ public sealed class CofferAutoOpenPolicy
         var count=1;
         if(attempts.TryGetValue(point.Id,out var prior) && prior.BaseId==point.BaseId && Vector3.DistanceSquared(prior.Position,point.Position)<.25f)count+=prior.Count;
         attempts[point.Id]=(point.BaseId,point.Position,count,now);
-        nextAttempt=now.AddSeconds(2);
+        nextAttempt=now.AddMilliseconds(250);
         return true;
     }
 }
