@@ -41,6 +41,7 @@ public sealed partial class Plugin
     {
         if(args.Target is not MenuTargetInventory target||target.TargetItem is not {} item)return;
         var id=item.ItemId%1000000;if(id==0||item.ItemId>=2000000)return;
+        args.AddMenuItem(new MenuItem{Name=new SeStringBuilder().AddText("Where is it cheapest?").Build(),OnClicked=_=>OpenMarketSearch(id.ToString())});
         args.AddMenuItem(new MenuItem{Name=new SeStringBuilder().AddText("Do I already have it?").Build(),OnClicked=_=>OpenItemSearch(id.ToString())});
     }
     private static int ItemLocationKind(string key)

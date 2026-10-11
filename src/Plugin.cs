@@ -222,6 +222,7 @@ public sealed partial class Plugin : IDalamudPlugin
         fashionBrowserLink = Chat.AddChatLinkHandler(10513, (_, _) => OpenFashionBrowser());
         fashionCommandRegistered = Commands.AddHandler("/fashionr", new CommandInfo(OnFashionCommand) { HelpMessage = "Open the current Fashion Report V1 picture in game." });
         if (!fashionCommandRegistered) Log.Warning("/fashionr is already registered by another plugin. Use /equinox fashion instead.");
+        InitializeMarketSearch();
         itemSearchWindow=new ItemSearchWindow(this);windows.AddWindow(itemSearchWindow);
         mainWindow = new CompanionWindow(this); windows.AddWindow(mainWindow);
         welcomeWindow = new WelcomeWindow(this); windows.AddWindow(welcomeWindow);
@@ -248,6 +249,7 @@ public sealed partial class Plugin : IDalamudPlugin
     private readonly Dalamud.Game.Text.SeStringHandling.Payloads.DalamudLinkPayload fashionBrowserLink;
     private void OnCommand(string command, string args)
     {
+        if(args.Trim().Equals("cheap",StringComparison.OrdinalIgnoreCase) || args.Trim().StartsWith("cheap ",StringComparison.OrdinalIgnoreCase)){OpenMarketSearch(args.Trim()[5..].Trim());return;}
         if(args.Trim().StartsWith("travel ",StringComparison.OrdinalIgnoreCase)){StartSharedWorldTravel(args.Trim()[7..]);return;}
         if(args.Trim().StartsWith("loot",StringComparison.OrdinalIgnoreCase)){OnQuickLootCommand(args.Trim()[4..].Trim());return;}
         if (args.Trim().Equals("fashion", StringComparison.OrdinalIgnoreCase)) OnFashionCommand(command, args);
@@ -1136,6 +1138,7 @@ public sealed partial class Plugin : IDalamudPlugin
         Client.Login -= OnGardenNoticeLogin;
         Client.TerritoryChanged -= OnCofferTerritoryChanged;
         Pi.UiBuilder.Draw -= Draw;
+        DisposeMarketSearch();
         windows.RemoveAllWindows();
         fashionWindow.Dispose();
         Pi.UiBuilder.OpenMainUi -= Open;

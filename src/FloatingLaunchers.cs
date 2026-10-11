@@ -30,6 +30,7 @@ public sealed partial class Plugin
     {
         minimizedLaunchers.Add(name);
         if(name == "Companion") { mainWindow.IsOpen=false; visible=false; }
+        else if(name == "Where is it cheapest?") marketWindow.IsOpen=false;
         else if(name == "Do I already have it?") itemSearchWindow.IsOpen=false;
         else if(name == "Fashion Report") fashionWindow.IsOpen=false;
         else if(name=="Planting")plantingWindow.IsOpen=false;
@@ -55,6 +56,8 @@ public sealed partial class Plugin
         if(fashionWindow.IsOpen) minimizedLaunchers.Remove("Fashion Report");
         if(plantingWindow.IsOpen) minimizedLaunchers.Remove("Planting");
         if(itemSearchWindow.IsOpen)minimizedLaunchers.Remove("Do I already have it?");
+        if(marketWindow.IsOpen)minimizedLaunchers.Remove("Where is it cheapest?");
+        DrawLauncher("Where is it cheapest?",6,null);
         DrawLauncher("Do I already have it?",5,null);
         DrawLauncher("Companion", 0, "icon.png");
         DrawLauncher("Fashion Report", 1, "garden-art/assets/category-icons/fashion-report.png");
@@ -68,7 +71,8 @@ public sealed partial class Plugin
             pendingLauncher=null;
             if(minimizedLaunchers.Contains(pending))
             {
-                if(pending=="Do I already have it?")itemSearchWindow.IsOpen=true;
+                if(pending=="Where is it cheapest?")marketWindow.IsOpen=true;
+                else if(pending=="Do I already have it?")itemSearchWindow.IsOpen=true;
                 else if(pending=="Companion") Open();
                 else if(pending=="Fashion Report") fashionWindow.OpenReport();
                 else if(pending=="Planting")OnPlantingCommand("/gardening", "");
@@ -100,6 +104,7 @@ public sealed partial class Plugin
                 var tex = Textures.GetFromFile(Path.Combine(Pi.AssemblyLocation.DirectoryName!, artwork)).GetWrapOrDefault();
                 if (tex is not null) draw.AddImage(tex.Handle, p + new Vector2(2), p + new Vector2(62), Vector2.Zero, Vector2.One, tint);
             }
+            else if(name=="Where is it cheapest?")DrawMarketSearchIcon(p,new Vector2(64),o.Opacity);
             else if(name=="Do I already have it?")DrawItemSearchIcon(p,new Vector2(64),o.Opacity);
             else
             {
@@ -146,13 +151,13 @@ public sealed partial class Plugin
         var changed = ImGui.SliderFloat("Opacity", ref opacity, .2f, 1, "%.2f");
         changed |= ImGui.Checkbox("Blur background", ref blur);
         changed |= ImGui.Checkbox("Lock position", ref locked);
-        if (ImGui.Button("Reset position")) { o.X = 24; o.Y = 180 + (name == "Companion" ? 0 : name == "Fashion Report" ? 76 : name=="Planting"?152:name=="Welcome"?228:name=="New Character"?304:380); changed = true; }
+        if (ImGui.Button("Reset position")) { o.X = 24; o.Y = 180 + (name == "Companion" ? 0 : name == "Fashion Report" ? 76 : name=="Planting"?152:name=="Welcome"?228:name=="New Character"?304:name=="Where is it cheapest?"?456:380); changed = true; }
         if (changed) { o.Opacity = opacity; o.Blur = blur; o.Locked = locked; SaveConfiguration(); }
     }
     private void DrawFloatingLauncherSettings()
     {
         ImGui.TextWrapped("Use the native title-bar collapse triangle or double-click the title bar to minimize to an icon. Single-click reopens its window; double-click closes both. Esc minimizes the focused window to its icon. X closes without an icon. Commands and keybinds reopen windows. Drag icons to move them.");
-        var names = new[] { "Companion", "Fashion Report", "Planting", "Welcome", "New Character", "Do I already have it?" };
+        var names = new[] { "Companion", "Fashion Report", "Planting", "Welcome", "New Character", "Do I already have it?", "Where is it cheapest?" };
         for (var i = 0; i < names.Length; i++) { ImGui.PushID(i); DrawLauncherOptions(names[i], LauncherOptions(names[i], i)); ImGui.Separator(); ImGui.PopID(); }
     }
 }

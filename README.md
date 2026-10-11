@@ -93,3 +93,11 @@ See RELEASE-0.5.1.59.md for active FollowThem sessions, travel, waiting, takeoff
 ## Companion 0.5.1.60
 
 See RELEASE-0.5.1.60.md for background saves, diagnostics, movement recovery and experimental travel coverage. Deploy Journal V7.11.77 for the extended relay. Optional Lifestream integration; no vnavmesh dependency.
+
+## Cross-world market search
+
+`/whereischeap Thavnairian Onion` opens its own movable window. Use `/whereischeap` to reopen it, or right-click an inventory item and choose **Where is it cheapest?**. `/equinox cheap <item>` is the fallback if another plugin owns the short command.
+
+Search by English item name or item ID; partial names show a choice list. All regions searches North America, Europe, Japan and Oceania through Universalis. Region and HQ/NQ filters are available. Results show unit price, quantity, stack total before purchase tax, world, data center, region, listing review age and a copy-location button. Results are the cheapest recorded listings, up to 100 per selected region; they are not guaranteed live stock or a promise that the current character can travel there.
+
+Requests run off the drawing thread, repeated searches are cached for 60 seconds, and failures in one region do not hide successful regions. Esc or the collapse triangle minimizes the window to its own icon. No Companion tab is added.

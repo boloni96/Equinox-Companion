@@ -1747,3 +1747,5 @@ var duplicate125=roster125 with{People=[new SharedPerson("p125","Person",[char12
 Check("125 ambiguous actor remains unlinked",SubmarineDisplayIndex.Build(duplicate125,history125).Supplies.Count.ToString(),"0");
 var departed125=roster125 with{People=[new SharedPerson("p125","Person",[char125 with{FcMember=false}])]};
 Check("125 former member cache excluded",SubmarineDisplayIndex.Build(departed125,history125).Caches.Count.ToString(),"0");
+
+await Market126Tests.Run();
