@@ -41,7 +41,10 @@ public sealed partial class Plugin
         gardenSelectionFollow.Reset();
         plantingWindow.IsOpen=true;
     }
-    private SharedGardenPlan[] GardenPlanSources()
+    private readonly UiProjectionCache<SharedGardenPlan[]> gardenSourcesCache=new();
+    private SharedGardenPlan[] GardenPlanSources()=>gardenSourcesCache.Get(config.SharedRoster,
+        $"{config.Discoveries.Count}:{config.Discoveries.LastOrDefault()?.Id}",Environment.TickCount64,BuildGardenPlanSources);
+    private SharedGardenPlan[] BuildGardenPlanSources()
     {
         var saved=config.SharedRoster?.GardenPlans??[];var result=saved.ToList();
         var houses=(config.SharedRoster?.People??[]).SelectMany(p=>p.Characters).SelectMany(c=>c.Houses).DistinctBy(h=>h.Id);

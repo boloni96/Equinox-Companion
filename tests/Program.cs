@@ -1290,7 +1290,7 @@ var supply59=new SubmarineSupplyView(100,30,50,140,DateTimeOffset.UtcNow,true);
 var now59=DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 Check("59 fleet sailing green",SubmarineAttention.Evaluate([now59+100],[false],supply59,1,now59).Level.ToString(),"1");
 Check("59 idle yellow",SubmarineAttention.Evaluate([0],[false],supply59,1,now59).Level.ToString(),"2");
-Check("59 returned yellow",SubmarineAttention.Evaluate([now59],[false],supply59,1,now59).Level.ToString(),"2");
+Check("124 returned calm green",SubmarineAttention.Evaluate([now59],[false],supply59,1,now59).Level.ToString(),"1");
 Check("59 repairs orange",SubmarineAttention.Evaluate([0],[true],supply59,1,now59).Level.ToString(),"3");
 Check("59 fuel orange",SubmarineAttention.Evaluate([0],[false],supply59 with {Ceruleum=0},1,now59).Level.ToString(),"3");
 Check("59 kits orange",SubmarineAttention.Evaluate([0],[false],supply59 with {RepairKits=0},1,now59).Level.ToString(),"3");
@@ -1701,3 +1701,21 @@ Check("New observation wakes idle upload in half a second", (SyncSchedule.Wake(t
 Check("Observation burst respects upload spacing", (SyncSchedule.Wake(time,time.AddSeconds(30),time,0)-time).TotalSeconds.ToString(),"2");
 Check("New observations do not postpone an already scheduled upload", SyncSchedule.Wake(time,time.AddMilliseconds(200),time.AddMinutes(-1),0).ToString("O"),time.AddMilliseconds(200).ToString("O"));
 Check("New observations preserve failed upload backoff", SyncSchedule.Wake(time,time.AddMinutes(2),time,1).ToString("O"),time.AddMinutes(2).ToString("O"));
+
+Check("124 no fleet zero reserves neutral",SubmarineAttention.Evaluate([],[],supply59 with {Ceruleum=0,RepairKits=0,InventorySpace=0},null,now59).Level.ToString(),"0");
+Check("124 empty workshop registration only",SubmarineAttention.Evaluate([],[],supply59 with {Ceruleum=0,RepairKits=0},1,now59).Text,"1 new submarine slot(s) available");
+Check("124 invalid capacity neutral",SubmarineAttention.Evaluate([],[],supply59,9,now59).Level.ToString(),"0");
+Check("124 orphan repair ignored",SubmarineAttention.Evaluate([],[true],supply59,null,now59).Level.ToString(),"0");
+Check("124 Solari one vessel low repair retained",SubmarineAttention.Evaluate([now59+100],[false],supply59 with {RepairKits=0},1,now59).Level.ToString(),"3");
+Check("124 unknown supplies sailing",SubmarineAttention.Evaluate([now59+100],[null],null,null,now59).Level.ToString(),"1");
+Check("124 no-workshop rows do not taint group",SubmarineAttention.Combine([SubmarineAttention.Evaluate([],[],supply59 with {Ceruleum=0},null,now59).Level,1]).ToString(),"1");
+
+var displayCache124=new UiProjectionCache<int>();var source124=new object();var builds124=0;
+int Build124()=>++builds124;
+Check("124 display builds once",displayCache124.Get(source124,"a",0,Build124).ToString(),"1");
+Check("124 display reuses frame projection",displayCache124.Get(source124,"a",16,Build124).ToString(),"1");
+Check("124 new event invalidates immediately",displayCache124.Get(source124,"b",17,Build124).ToString(),"2");
+Check("124 shared roster invalidates immediately",displayCache124.Get(new object(),"b",18,Build124).ToString(),"3");
+Check("124 display refreshes bounded stale input",displayCache124.Get(source124,"b",300,Build124).ToString(),"4");
+Check("124 stable source cache",displayCache124.Get(source124,"b",400,Build124).ToString(),"4");
+Check("124 ttl expires for same source",displayCache124.Get(source124,"b",550,Build124).ToString(),"5");

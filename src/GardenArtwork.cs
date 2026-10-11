@@ -133,7 +133,11 @@ public sealed partial class Plugin
         if(!drawingGardenGuide)return ResolveLocalGardenActions();
         return gardenGuideActions??=ResolveLocalGardenActions().ToArray();
     }
-    private IEnumerable<SyncEvent> ResolveLocalGardenActions()
+    private readonly UiProjectionCache<SyncEvent[]> gardenLocalActionsCache=new();
+    private IEnumerable<SyncEvent> ResolveLocalGardenActions()=>gardenLocalActionsCache.Get(config.SharedRoster,
+        $"{config.Planting.Count}:{config.Planting.LastOrDefault()?.EventId}:{config.Tending.Count}:{config.Tending.LastOrDefault()?.EventId}:{config.Discoveries.Count}:{config.Discoveries.LastOrDefault()?.Id}:{gardenBedSync?.Mappings.Count()}:{gardenBedSync?.Mappings.LastOrDefault()?.Id}",
+        Environment.TickCount64,()=>BuildLocalGardenActions().ToArray());
+    private IEnumerable<SyncEvent> BuildLocalGardenActions()
     {
         var resolve=GardenTargetMap.CreateResolver(GardenMappings());
         return config.Planting.Select(p=>new SyncEvent(p.EventId,"garden.planted",p.ConfirmedAt,WithWorldNames(p.Actor),WithAddressNames(p.Address),p.Patch,p.Bed,p.Plant))

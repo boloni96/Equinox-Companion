@@ -15,32 +15,39 @@ public sealed partial class Plugin
         var remaining=DateTimeOffset.FromUnixTimeSeconds(seconds)-DateTimeOffset.UtcNow;
         return remaining<=TimeSpan.Zero?"Voyage Complete":$"Returns in {(int)remaining.TotalHours}h {remaining.Minutes}m";
     }
+    private readonly UiProjectionCache<(Dictionary<string,SharedVoyage> Direct,Dictionary<string,SharedCachedVoyage> Caches,Dictionary<string,SharedSubmarineSupplies> Supplies)> submarineDisplayCache=new();
+    private (Dictionary<string,SharedVoyage>,Dictionary<string,SharedCachedVoyage>,Dictionary<string,SharedSubmarineSupplies>) BuildSubmarineDisplay()
+    {
+        var observations=new List<SharedVoyage>(config.SharedRoster?.Voyages??[]);
+        foreach(var e in config.Discoveries.Where(e=>e.Voyage is not null))
+        {
+            var fc=config.Discoveries.LastOrDefault(x=>x.Character?.FreeCompany?.Id==e.Voyage!.FcId)?.Character?.FreeCompany;
+            observations.Add(new(e.Voyage!.FcId,fc?.Name??"Free Company",e.At,e.Voyage.Submarines,e.Voyage.Slots));
+        }
+        var direct=observations.GroupBy(v=>v.FcId).ToDictionary(g=>g.Key,g=>g.MaxBy(v=>v.At)!);
+        var caches=CachedSubmarineRecords().ToDictionary(c=>c.CharacterId);
+        var supplies=SubmarineSupplyRecords();
+        return (direct,caches,supplies);
+    }
     private void DrawSubmarines()
     {
         ImGui.TextWrapped("Open the FC workshop voyage panel to refresh timers. Character and account order follows your Persons tabs.");
         ImGui.TextWrapped(config.SyncAutoRetainer?autoRetainerStatus:"Background submarine sync is off. Enable it in Settings > Tracking.");
         if(ImGui.TreeNode("Colour rules / reserve reminders")){
-            ImGui.TextWrapped("Green: recorded fleet voyaging. Yellow: dispatch/collection or an unlocked empty slot. Orange: observed repair or supplies below your reserves. Grey: no fleet data. Counts are last recorded values; unknown repair/route costs are not assumed safe.");
+            ImGui.TextWrapped("Green: voyaging or Voyage Complete. Yellow: dispatch or a confirmed unlocked empty slot. Orange: repairs or low reserves for a recorded fleet. Grey: no fleet evidence; stock alone never creates maintenance warnings. Counts are last recorded values.");
             DrawCommittedInteger("Ceruleum reserve",config.SubmarineFuelReserve,1,100000,v=>config.SubmarineFuelReserve=v);
             DrawCommittedInteger("Repair-kit reserve",config.SubmarineRepairReserve,1,100000,v=>config.SubmarineRepairReserve=v);
             DrawCommittedInteger("Free inventory slots reserve",config.SubmarineSpaceReserve,1,140,v=>config.SubmarineSpaceReserve=v);
             ImGui.TreePop();
         }
-        var observations=new List<SharedVoyage>(config.SharedRoster?.Voyages??[]);
-        foreach(var e in config.Discoveries.Where(e=>e.Voyage is not null))
-        {
-            var fc=config.Discoveries.LastOrDefault(x=>x.Character?.FreeCompany?.Id==e.Voyage!.FcId)?.Character?.FreeCompany;
-            observations.Add(new(e.Voyage!.FcId,fc?.Name??"Free Company",e.At,e.Voyage.Submarines));
-        }
-        var direct=observations.GroupBy(v=>v.FcId).ToDictionary(g=>g.Key,g=>g.MaxBy(v=>v.At)!);
-        var caches=CachedSubmarineRecords().ToDictionary(c=>c.CharacterId);
-        var supplies=SubmarineSupplyRecords();
+        var (direct,caches,supplies)=submarineDisplayCache.Get(config.SharedRoster,
+            $"{config.Discoveries.Count}:{config.Discoveries.LastOrDefault()?.Id}",Environment.TickCount64,BuildSubmarineDisplay);
         var now=DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         FleetAttention Attention(SharedCharacter c){
             caches.TryGetValue(c.Id,out var cache);if(cache?.Data.FcId!=c.FcId||c.FcMember==false)cache=null;
             direct.TryGetValue(c.FcId,out var fleet);if(c.FcMember==false)fleet=null;
             supplies.TryGetValue(c.Id,out var supplied);
-            return SubmarineAttention.Evaluate(fleet?.Submarines.Select(x=>x.ReturnTime).ToArray()??cache?.Data.Submarines.Select(x=>x.ReturnTime).ToArray()??[],fleet?.Submarines.Select(x=>x.NeedsRepair).ToArray()??[],SubmarineSupplyStatus.Select(c.FcId,supplied,cache),cache?.Data.Slots,now,config.SubmarineFuelReserve,config.SubmarineRepairReserve,config.SubmarineSpaceReserve);
+            return SubmarineAttention.Evaluate(fleet?.Submarines.Select(x=>x.ReturnTime).ToArray()??cache?.Data.Submarines.Select(x=>x.ReturnTime).ToArray()??[],fleet?.Submarines.Select(x=>x.NeedsRepair).ToArray()??[],SubmarineSupplyStatus.Select(c.FcId,supplied,cache),fleet?.Slots,now,config.SubmarineFuelReserve,config.SubmarineRepairReserve,config.SubmarineSpaceReserve);
         }
         var attention=(config.SharedRoster?.People??[]).SelectMany(p=>p.Characters).GroupBy(c=>c.Id).ToDictionary(g=>g.Key,g=>Attention(g.First()));
         if(ImGui.SmallButton("Refresh submarine data")){autoRetainerForceRead=true;autoRetainerCharacters.Clear();nextAutoRetainerRead=default;nextRosterRead=default;}
