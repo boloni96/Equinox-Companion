@@ -27,6 +27,9 @@ internal static class Market126Tests
         using var canceled = new CancellationTokenSource(); canceled.Cancel();
         try { await service.Search(5113, 0, 0, canceled.Token); throw new Exception("cancellation ignored"); }
         catch(OperationCanceledException) { Console.WriteLine("PASS 126 market cancellation"); }
+        var requestsBeforeForce = handler.Urls.Count;
+        await service.Search(5111, 0, 2, CancellationToken.None, force: true);
+        Check(handler.Urls.Count == requestsBeforeForce + 4, "manual refresh bypasses cache");
         handler.Body = "{}";
         result = await service.Search(5114, 2, 0, CancellationToken.None);
         Check(result.FailedRegions.SequenceEqual(new[]{"Europe"}), "invalid response marked unavailable");

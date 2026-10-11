@@ -983,7 +983,7 @@ public sealed partial class Plugin : IDalamudPlugin
         var shortcutSize = ImGui.GetFontSize() * 2.1f;
         var houseShortcuts=CurrentHouseShortcuts();
         ImGui.TableSetupColumn("Status", ImGuiTableColumnFlags.WidthStretch);
-        ImGui.TableSetupColumn("Shortcuts", ImGuiTableColumnFlags.WidthFixed, shortcutSize*Math.Max(2,houseShortcuts.Length+1)+ImGui.GetStyle().ItemSpacing.X*Math.Max(1,houseShortcuts.Length));
+        ImGui.TableSetupColumn("Shortcuts", ImGuiTableColumnFlags.WidthFixed, shortcutSize*Math.Max(3,houseShortcuts.Length+1)+ImGui.GetStyle().ItemSpacing.X*Math.Max(2,houseShortcuts.Length));
         ImGui.TableNextColumn();
         var icon = Textures.GetFromFile(System.IO.Path.Combine(Pi.AssemblyLocation.DirectoryName!, "icon.png")).GetWrapOrDefault();
         if (icon is not null) { ImGui.Image(icon.Handle, new Vector2(40, 40)); ImGui.SameLine(); }
@@ -992,11 +992,15 @@ public sealed partial class Plugin : IDalamudPlugin
             DrawSharedStatus();
             ImGui.EndGroup();
         ImGui.TableNextColumn();
+        var shortcutPitch=shortcutSize+ImGui.GetStyle().ItemSpacing.X;
+        var shortcutStart=ImGui.GetCursorPosX();
+        ImGui.SetCursorPosX(shortcutStart+Math.Max(0,2-houseShortcuts.Length)*shortcutPitch);
         foreach(var house in houseShortcuts){DrawHouseShortcut(house,shortcutSize);ImGui.SameLine();}
-        var fashionX=ImGui.GetCursorPosX();if(houseShortcuts.Length==0){fashionX+=shortcutSize+ImGui.GetStyle().ItemSpacing.X;ImGui.SetCursorPosX(fashionX);}
+        var fashionX=ImGui.GetCursorPosX();
         DrawHeaderShortcut(true, shortcutSize);
         var secondRowY=ImGui.GetCursorPosY();
-        ImGui.SetCursorPosX(Math.Max(0,fashionX-shortcutSize-ImGui.GetStyle().ItemSpacing.X));DrawItemSearchShortcut(shortcutSize);
+        ImGui.SetCursorPosX(fashionX-2*shortcutPitch);DrawMarketSearchShortcut(shortcutSize);
+        ImGui.SameLine();ImGui.SetCursorPosX(fashionX-shortcutPitch);ImGui.SetCursorPosY(secondRowY);DrawItemSearchShortcut(shortcutSize);
         ImGui.SameLine();ImGui.SetCursorPosX(fashionX);ImGui.SetCursorPosY(secondRowY);DrawHeaderShortcut(false, shortcutSize);
         ImGui.EndTable();
         }

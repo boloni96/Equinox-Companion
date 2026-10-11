@@ -17,13 +17,13 @@ internal sealed class MarketSearch : IDisposable
     {
         http = handler is null ? new HttpClient() : new HttpClient(handler);
         http.Timeout = TimeSpan.FromSeconds(20);
-        http.DefaultRequestHeaders.UserAgent.ParseAdd("EquinoxCompanion/0.5.1.126");
+        http.DefaultRequestHeaders.UserAgent.ParseAdd("EquinoxCompanion/0.5.1.127");
     }
-    internal async Task<MarketResult> Search(uint item, int region, int quality, CancellationToken token)
+    internal async Task<MarketResult> Search(uint item, int region, int quality, CancellationToken token, bool force = false)
     {
         var key = $"{item}/{region}/{quality}";
         lock(cache)
-            if(cache.TryGetValue(key, out var saved) && DateTimeOffset.UtcNow - saved.FetchedAt < TimeSpan.FromSeconds(60)) return saved;
+            if(!force && cache.TryGetValue(key, out var saved) && DateTimeOffset.UtcNow - saved.FetchedAt < TimeSpan.FromSeconds(60)) return saved;
         var regions = region == 0 ? Regions : [Regions[region - 1]];
         var responses = await Task.WhenAll(regions.Select(async name =>
         {

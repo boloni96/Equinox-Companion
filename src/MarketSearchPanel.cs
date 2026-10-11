@@ -16,7 +16,11 @@ public sealed partial class Plugin
     private string marketQuery = "", marketMessage = "Search by item name or item ID.", marketSelectedName = "";
     private uint marketSelectedId;
     private int marketRegion, marketQuality;
-    private DateTimeOffset marketNextSearch;
+    private DateTimeOffset marketNextSearch, marketAutoRefreshAt;
+    private int marketRefreshFailures, marketRefreshChoice = 1;
+    private DateTimeOffset marketTravelNext;
+    private string marketTravelStatus = "";
+    private static readonly int[] MarketRefreshChoices = [15, 30, 60];
     private IEnumerator<Lumina.Excel.Sheets.Item>? marketIndexReader;
     private readonly List<(uint Id, string Name)> marketItems = [];
     private (uint Id, string Name)[] marketMatches = [];
@@ -35,6 +39,7 @@ public sealed partial class Plugin
     }
     private void InitializeMarketSearch()
     {
+        marketRefreshChoice = config.MarketRefreshSeconds == 15 ? 0 : config.MarketRefreshSeconds == 60 ? 2 : 1;
         marketWindow = new(this); windows.AddWindow(marketWindow);
         marketCommandRegistered = Commands.AddHandler("/whereischeap", new CommandInfo((_, args) => OpenMarketSearch(args)) { HelpMessage = "Find cheapest recorded market listings: /whereischeap item name or ID. Opens a separate window." });
         if(!marketCommandRegistered) Log.Warning("/whereischeap is already registered. Use /equinox cheap instead.");
@@ -91,17 +96,18 @@ public sealed partial class Plugin
         marketSelectedId = item.Id; marketSelectedName = item.Name; marketMatches = [];
         StartMarketSearch();
     }
-    private void StartMarketSearch()
+    private void StartMarketSearch(bool preserveResults = false, bool force = false)
     {
-        CancelMarketSearch(); marketResult = null;
+        CancelMarketSearch();
+        if(!preserveResults) { marketResult = null; marketRefreshFailures = 0; }
         if(marketSelectedId == 0) return;
         if(DateTimeOffset.UtcNow < marketNextSearch)
-        { marketMessage = "Please wait a moment, then press Search prices."; return; }
+        { marketAutoRefreshAt = marketNextSearch; marketMessage = "Searching shortly…"; return; }
         marketNextSearch = DateTimeOffset.UtcNow.AddSeconds(2);
         marketCancellation = new();
         var token = marketCancellation.Token; var id = marketSelectedId; var region = marketRegion; var quality = marketQuality;
-        marketTask = Task.Run(() => marketSearch.Search(id, region, quality, token), token);
-        marketMessage = "Searching Universalis…";
+        marketTask = Task.Run(() => marketSearch.Search(id, region, quality, token, force), token);
+        marketMessage = marketResult is null ? "Searching Universalis…" : "Checking for new prices…";
     }
     private string MarketDataCenter(uint world)
     {
@@ -117,12 +123,26 @@ public sealed partial class Plugin
         {
             if(marketTask.IsCompletedSuccessfully)
             {
-                marketResult = marketTask.Result;
-                marketMessage = marketResult.Listings.Length == 0 ? "No listings returned for the selected filters." : $"{marketResult.Listings.Length} listings · cheapest unit price first";
+                var incoming = marketTask.Result;
+                var updated = marketResult is not null && !marketResult.Listings.SequenceEqual(incoming.Listings);
+                marketResult = MarketRefresh.Merge(marketResult, incoming);
+                marketRefreshFailures = incoming.FailedRegions.Length == 0 ? 0 : Math.Min(4, marketRefreshFailures + 1);
+                marketAutoRefreshAt = MarketRefresh.Next(incoming, marketRefreshFailures, MarketRefreshChoices[marketRefreshChoice]);
+                marketMessage = incoming.FailedRegions.Length > 0 ? "Some regions unavailable; older results kept for those regions." :
+                    marketResult.Listings.Length == 0 ? "No listings returned for the selected filters." :
+                    $"{marketResult.Listings.Length} listings · cheapest unit price first" + (updated ? " · Updated" : "");
             }
-            else { _ = marketTask.Exception; marketMessage = "Search unavailable. Please try again."; }
+            else
+            {
+                _ = marketTask.Exception;
+                marketRefreshFailures = Math.Min(4, marketRefreshFailures + 1);
+                marketAutoRefreshAt = MarketRefresh.Next(new([], [], DateTimeOffset.UtcNow), marketRefreshFailures);
+                marketMessage = "Check failed; previous results kept. Will retry automatically.";
+            }
             marketTask = null;
         }
+        if(!marketPendingLookup && MarketRefresh.Due(marketWindow.IsOpen, marketSelectedId, marketTask is not null, DateTimeOffset.UtcNow, marketAutoRefreshAt))
+            StartMarketSearch(preserveResults: true, force: true);
         ImGui.TextWrapped("Market board prices across NA, Europe, Japan and Oceania.");
         ImGui.SetNextItemWidth(Math.Max(200, ImGui.GetContentRegionAvail().X - 95));
         var submit = ImGui.InputTextWithHint("##MarketQuery", "Item name or item ID", ref marketQuery, 200, ImGuiInputTextFlags.EnterReturnsTrue);
@@ -132,12 +152,18 @@ public sealed partial class Plugin
         ImGui.SameLine(); ImGui.SetNextItemWidth(140);
         changed |= ImGui.Combo("Quality", ref marketQuality, "Any quality\0NQ only\0HQ only\0");
         if(changed && marketSelectedId != 0) StartMarketSearch();
+        ImGui.SetNextItemWidth(140);
+        if(ImGui.Combo("Auto-refresh while open", ref marketRefreshChoice, "15 seconds\0" + "30 seconds\0" + "60 seconds\0"))
+        {
+            config.MarketRefreshSeconds = MarketRefreshChoices[marketRefreshChoice]; SaveConfiguration();
+            if(marketResult is {} current) marketAutoRefreshAt = MarketRefresh.Next(current, marketRefreshFailures, config.MarketRefreshSeconds);
+        }
         if(!marketIndexReady) ImGui.TextDisabled("Preparing item names…");
         if(marketSelectedId != 0)
         {
             ImGui.TextWrapped(marketSelectedName);
             ImGui.BeginDisabled(marketTask is not null || DateTimeOffset.UtcNow < marketNextSearch);
-            if(ImGui.Button("Search prices")) StartMarketSearch();
+            if(ImGui.Button("Refresh now")) StartMarketSearch(preserveResults: true, force: true);
             ImGui.EndDisabled(); ImGui.SameLine();
             if(ImGui.Button("Copy item name")) ImGui.SetClipboardText(marketSelectedName);
         }
@@ -146,8 +172,10 @@ public sealed partial class Plugin
         {
             if(result.FailedRegions.Length > 0)
                 ImGui.TextColored(new Vector4(1, .72f, .3f, 1), "Incomplete search — unavailable: " + string.Join(", ", result.FailedRegions));
-            ImGui.TextDisabled($"Fetched {result.FetchedAt.LocalDateTime:HH:mm:ss} · cached for 60s · up to 100 cheapest listings per region");
+            ImGui.TextDisabled($"Last check {result.FetchedAt.LocalDateTime:HH:mm:ss} · up to 100 cheapest listings per region");
         }
+        if(marketSelectedId != 0)
+            ImGui.TextDisabled(marketTask is not null ? "Auto-refresh active · checking Universalis" : $"Auto-refresh while open · next check in {Math.Max(0, (int)Math.Ceiling((marketAutoRefreshAt - DateTimeOffset.UtcNow).TotalSeconds))}s");
         ImGui.TextWrapped("Recorded prices may have changed or sold. Stack totals exclude purchase tax. Check world access for your character; a listed region is not a travel guarantee.");
         if(marketMatches.Length > 0)
         {
@@ -156,15 +184,17 @@ public sealed partial class Plugin
             ImGui.EndChild(); return;
         }
         if(marketResult is null) return;
-        if(ImGui.BeginTable("MarketListings", 8, ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.ScrollY | ImGuiTableFlags.Resizable, new Vector2(0, 0)))
+        if(marketTravelStatus.Length > 0) ImGui.TextWrapped(marketTravelStatus);
+        if(ImGui.BeginTable("MarketListings", 9, ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.ScrollY | ImGuiTableFlags.Resizable, new Vector2(0, 0)))
         {
             foreach(var heading in new[] { "Unit gil", "Qty", "Stack gil", "Quality", "World", "DC / Region", "Checked", "Location" }) ImGui.TableSetupColumn(heading);
+            ImGui.TableSetupColumn("Travel", ImGuiTableColumnFlags.WidthFixed, 65);
             ImGui.TableSetupScrollFreeze(0, 1); ImGui.TableHeadersRow();
             var now = DateTimeOffset.UtcNow;
             var clipper = ImGui.ImGuiListClipper(); clipper.Begin(marketResult.Listings.Length);
             while(clipper.Step()) for(var i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
             {
-                var row = marketResult.Listings[i]; ImGui.PushID(i); ImGui.TableNextRow();
+                var row = marketResult.Listings[i]; ImGui.PushID($"{row.WorldId}:{row.Retainer}:{row.Price}:{row.Quantity}:{row.Hq}:{i}"); ImGui.TableNextRow();
                 ImGui.TableNextColumn(); ImGui.TextUnformatted(row.Price.ToString("N0"));
                 ImGui.TableNextColumn(); ImGui.TextUnformatted(row.Quantity.ToString());
                 ImGui.TableNextColumn(); ImGui.TextUnformatted(row.Total.ToString("N0"));
@@ -174,6 +204,12 @@ public sealed partial class Plugin
                 ImGui.TableNextColumn(); ImGui.TextUnformatted(MarketSearch.Age(row.Reviewed, now));
                 if(ImGui.IsItemHovered()) ImGui.SetTooltip("Last recorded listing review · Retainer: " + row.Retainer);
                 ImGui.TableNextColumn(); if(ImGui.SmallButton("Copy")) ImGui.SetClipboardText($"{marketSelectedName} · {row.World} ({MarketDataCenter(row.WorldId)}, {row.Region}) · {row.Price:N0} gil each · {row.Quantity} × {(row.Hq ? "HQ" : "NQ")} · {row.Retainer}");
+                ImGui.TableNextColumn();
+                var here = Player.IsLoaded && Player.CurrentWorld.RowId == row.WorldId;
+                ImGui.BeginDisabled(!Player.IsLoaded || here || DateTimeOffset.UtcNow < marketTravelNext);
+                if(ImGui.SmallButton(here ? "Here" : "Travel")) TravelToMarketWorld(row.WorldId);
+                ImGui.EndDisabled();
+                if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled)) ImGui.SetTooltip(here ? "You are already on this world." : $"Ask Lifestream to travel to {row.World}. Data Center travel may log this character out and back in. Requires a supported destination.");
                 ImGui.PopID();
             }
             clipper.End(); clipper.Destroy(); ImGui.EndTable();
@@ -186,6 +222,36 @@ public sealed partial class Plugin
         var gold = ImGui.ColorConvertFloat4ToU32(new Vector4(1, .8f, .3f, opacity));
         d.AddCircleFilled(at + new Vector2(24, 35) * scale, 9 * scale, gold, 24);
         d.AddText(at + new Vector2(20, 27) * scale, ImGui.ColorConvertFloat4ToU32(new Vector4(.1f, .12f, .16f, opacity)), "$" );
+    }
+    private void TravelToMarketWorld(uint world)
+    {
+        if(!Player.IsLoaded || Player.CurrentWorld.RowId == world) return;
+        marketTravelNext = DateTimeOffset.UtcNow.AddSeconds(2);
+        if(Conditions[Dalamud.Game.ClientState.Conditions.ConditionFlag.InCombat] ||
+            Conditions[Dalamud.Game.ClientState.Conditions.ConditionFlag.BetweenAreas] ||
+            Conditions[Dalamud.Game.ClientState.Conditions.ConditionFlag.BetweenAreas51])
+        { marketTravelStatus = "Travel waits until your character is out of combat and loading. Click Travel again when ready."; return; }
+        var destination = DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().GetRowOrDefault(world);
+        if(destination is not {} target || !target.IsPublic) { marketTravelStatus = "This destination is not available to this game client."; return; }
+        try
+        {
+            if(LifestreamBusy()) { marketTravelStatus = "Lifestream is already busy; your current trip was kept."; return; }
+            if(Pi.GetIpcSubscriber<uint, bool>("Lifestream.ChangeWorldById").InvokeFunc(world))
+            {
+                marketTravelStatus = "Lifestream accepted travel to " + target.Name.ToString() + ". Follow its travel progress.";
+                ShareFollowWorldIntent(world);
+            }
+            else marketTravelStatus = "Lifestream declined this destination. Check its travel settings and your character's world access.";
+        }
+        catch(Exception) { marketTravelStatus = "Lifestream must be installed and enabled for World travel."; }
+    }
+    private void DrawMarketSearchShortcut(float size)
+    {
+        var at = ImGui.GetCursorScreenPos();
+        var clicked = ImGui.InvisibleButton("Open cheapest prices##header", new Vector2(size));
+        DrawMarketSearchIcon(at, new Vector2(size), 1);
+        if(ImGui.IsItemHovered()) ImGui.SetTooltip("Where is it cheapest? · /whereischeap");
+        if(clicked) OpenMarketSearch("");
     }
     private void DisposeMarketSearch()
     {

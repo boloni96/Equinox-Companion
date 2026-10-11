@@ -1749,3 +1749,5 @@ var departed125=roster125 with{People=[new SharedPerson("p125","Person",[char125
 Check("125 former member cache excluded",SubmarineDisplayIndex.Build(departed125,history125).Caches.Count.ToString(),"0");
 
 await Market126Tests.Run();
+
+Market127Tests.Run();
