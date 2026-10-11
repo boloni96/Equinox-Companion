@@ -78,6 +78,20 @@ public sealed partial class Plugin
     }
     private void DrawItemSearch()
     {
+        var activeFilters=(itemLocationFilter>0?1:0)+(itemQualityFilter>0?1:0)+(itemFreshnessFilter>0?1:0)+(itemWorld.Length>0?1:0);
+        if(ImGui.CollapsingHeader("Filters"+(activeFilters>0?$" · {activeFilters} active":"")+"###item-filters"))
+        {
+            if(ImGui.BeginTable("item-filter-grid",2,ImGuiTableFlags.SizingStretchSame))
+            {
+                ImGui.TableNextColumn();ImGui.TextDisabled("Location");ImGui.SetNextItemWidth(-1);ImGui.Combo("###location",ref itemLocationFilter,ItemLocationNames,ItemLocationNames.Length);
+                ImGui.TableNextColumn();ImGui.TextDisabled("Quality");ImGui.SetNextItemWidth(-1);ImGui.Combo("###quality",ref itemQualityFilter,new[]{"Any quality","NQ","HQ","Not recorded"},4);
+                ImGui.TableNextColumn();ImGui.TextDisabled("Last checked");ImGui.SetNextItemWidth(-1);ImGui.Combo("###checked",ref itemFreshnessFilter,new[]{"Any time","Last 24 hours","Last 7 days","Last 30 days"},4);
+                ImGui.TableNextColumn();ImGui.TextDisabled("World");ImGui.SetNextItemWidth(-1);
+                if(ImGui.BeginCombo("###item-world",itemWorld.Length>0?itemWorld:"All worlds")){if(ImGui.Selectable("All worlds",itemWorld==""))itemWorld="";foreach(var world in (config.SharedRoster?.People??[]).SelectMany(p=>p.Characters).Select(c=>c.World).Distinct().Order())if(ImGui.Selectable(world,itemWorld==world))itemWorld=world;ImGui.EndCombo();}
+                ImGui.EndTable();
+            }
+            if(ImGui.Button("Clear filters")){if(itemCurrentOnly)itemRestorePerson=itemPreviousPerson;itemCurrentOnly=false;itemWorld=itemAccount=itemCharacter="";itemLocationFilter=itemQualityFilter=itemFreshnessFilter=0;}
+        }
         ImGui.SetNextItemWidth(Math.Max(200,ImGui.GetContentRegionAvail().X));
         if(ImGui.InputTextWithHint("###item-search","Item name",ref itemSearchQuery,120)){itemExactId=null;itemSearchDiscoveryCount=-1;}
         BuildItemSearch();
@@ -86,20 +100,26 @@ public sealed partial class Plugin
         var loggedCharacter=config.SharedRoster?.People.SelectMany(p=>p.Characters).FirstOrDefault(c=>Player.IsLoaded&&c.ContentId==Player.ContentId.ToString());
         ImGui.BeginDisabled(loggedCharacter is null);if(ImGui.Checkbox("Current character only"+(loggedCharacter is null?"":" · "+loggedCharacter.Name)+"###current-character-search",ref itemCurrentOnly)){if(itemCurrentOnly)itemPreviousPerson=itemActivePerson;else itemRestorePerson=itemPreviousPerson;}ImGui.EndDisabled();
         if(loggedCharacter is null&&itemCurrentOnly)ImGui.TextDisabled("Log into a paired character to use this filter.");
-        if(ImGui.BeginTable("item-filter-grid",2,ImGuiTableFlags.SizingStretchSame))
-        {
-            ImGui.TableNextColumn();ImGui.TextDisabled("Location");ImGui.SetNextItemWidth(-1);ImGui.Combo("###location",ref itemLocationFilter,ItemLocationNames,ItemLocationNames.Length);
-            ImGui.TableNextColumn();ImGui.TextDisabled("Quality");ImGui.SetNextItemWidth(-1);ImGui.Combo("###quality",ref itemQualityFilter,new[]{"Any quality","NQ","HQ","Not recorded"},4);
-            ImGui.TableNextColumn();ImGui.TextDisabled("Last checked");ImGui.SetNextItemWidth(-1);ImGui.Combo("###checked",ref itemFreshnessFilter,new[]{"Any time","Last 24 hours","Last 7 days","Last 30 days"},4);
-            ImGui.TableNextColumn();ImGui.TextDisabled("World");ImGui.SetNextItemWidth(-1);
-            if(ImGui.BeginCombo("###item-world",itemWorld.Length>0?itemWorld:"All worlds")){if(ImGui.Selectable("All worlds",itemWorld==""))itemWorld="";foreach(var world in (config.SharedRoster?.People??[]).SelectMany(p=>p.Characters).Select(c=>c.World).Distinct().Order())if(ImGui.Selectable(world,itemWorld==world))itemWorld=world;ImGui.EndCombo();}
-            ImGui.EndTable();
-        }
-        if(ImGui.Button("Clear filters")){if(itemCurrentOnly)itemRestorePerson=itemPreviousPerson;itemCurrentOnly=false;itemWorld=itemAccount=itemCharacter="";itemLocationFilter=itemQualityFilter=itemFreshnessFilter=0;}
+
         var people=config.SharedRoster?.People??[];
         if(people.Length==0){ImGui.TextWrapped("Refresh shared profiles to load your paired persons and characters.");return;}
         var logged=people.SelectMany(p=>p.Characters).FirstOrDefault(c=>Player.IsLoaded&&c.ContentId==Player.ContentId.ToString());
         if(logged is not null)ImGui.TextColored(new Vector4(.5f,.85f,1,1),"Logged in: "+logged.Name+" @ "+logged.World);
+        var scopePerson=people.FirstOrDefault(p=>((itemSelectCurrentPerson||itemCurrentOnly)&&p.Characters.Any(c=>c.Id==loggedCharacter?.Id))||itemRestorePerson==p.Id)
+            ??people.FirstOrDefault(p=>p.Id==itemActivePerson)??people[0];
+        var accounts=scopePerson.Characters.GroupBy(c=>c.AccountId).ToArray();
+
+        var scopeChars=scopePerson.Characters.Where(c=>itemCurrentOnly?c.Id==loggedCharacter?.Id:itemAccount==""||string.Equals(c.Account,itemAccount,StringComparison.OrdinalIgnoreCase)).Where(c=>itemWorld==""||c.World==itemWorld).ToArray();
+        if(ImGui.BeginTable("item-scope-grid",2,ImGuiTableFlags.SizingStretchSame))
+        {
+            ImGui.TableNextColumn();ImGui.TextDisabled("Account");ImGui.SetNextItemWidth(-1);ImGui.BeginDisabled(itemCurrentOnly);
+            if(ImGui.BeginCombo("###account",itemAccount.Length>0?itemAccount:"All accounts"))
+            {if(ImGui.Selectable("All accounts",itemAccount==""))itemAccount="";foreach(var a in accounts)if(ImGui.Selectable(a.First().Account+"###"+a.Key,string.Equals(itemAccount,a.First().Account,StringComparison.OrdinalIgnoreCase)))itemAccount=a.First().Account;ImGui.EndCombo();}
+            ImGui.EndDisabled();ImGui.TableNextColumn();ImGui.TextDisabled("Character");ImGui.SetNextItemWidth(-1);ImGui.BeginDisabled(itemCurrentOnly);
+            if(ImGui.BeginCombo("###character",people.SelectMany(p=>p.Characters).FirstOrDefault(c=>c.Id==itemCharacter)?.Name??"All characters"))
+            {if(ImGui.Selectable("All characters",itemCharacter==""))itemCharacter="";foreach(var c in scopeChars)if(ImGui.Selectable(c.Name+" @ "+c.World+"###"+c.Id,itemCharacter==c.Id))itemCharacter=c.Id;ImGui.EndCombo();}
+            ImGui.EndDisabled();ImGui.EndTable();
+        }
         if(!ImGui.BeginTabBar("item-persons"))return;
         foreach(var person in people)
         {
@@ -109,20 +129,7 @@ public sealed partial class Plugin
             if(itemSelectCurrentPerson&&current is not null)itemSelectCurrentPerson=false;
             itemActivePerson=person.Id;if(itemRestorePerson==person.Id)itemRestorePerson="";
             ImGui.PushID(person.Id);
-            var accounts=person.Characters.GroupBy(c=>c.AccountId).ToArray();
-
-            var chars=person.Characters.Where(c=>itemCurrentOnly?c.Id==loggedCharacter?.Id:itemAccount==""||string.Equals(c.Account,itemAccount,StringComparison.OrdinalIgnoreCase)).Where(c=>itemWorld==""||c.World==itemWorld).ToArray();
-            if(ImGui.BeginTable("item-scope-grid",2,ImGuiTableFlags.SizingStretchSame))
-            {
-                ImGui.TableNextColumn();ImGui.TextDisabled("Account");ImGui.SetNextItemWidth(-1);ImGui.BeginDisabled(itemCurrentOnly);
-                if(ImGui.BeginCombo("###account",itemAccount.Length>0?itemAccount:"All accounts"))
-                {if(ImGui.Selectable("All accounts",itemAccount==""))itemAccount="";foreach(var a in accounts)if(ImGui.Selectable(a.First().Account+"###"+a.Key,string.Equals(itemAccount,a.First().Account,StringComparison.OrdinalIgnoreCase)))itemAccount=a.First().Account;ImGui.EndCombo();}
-                ImGui.EndDisabled();ImGui.TableNextColumn();ImGui.TextDisabled("Character");ImGui.SetNextItemWidth(-1);ImGui.BeginDisabled(itemCurrentOnly);
-                if(ImGui.BeginCombo("###character",people.SelectMany(p=>p.Characters).FirstOrDefault(c=>c.Id==itemCharacter)?.Name??"All characters"))
-                {if(ImGui.Selectable("All characters",itemCharacter==""))itemCharacter="";foreach(var c in chars)if(ImGui.Selectable(c.Name+" @ "+c.World+"###"+c.Id,itemCharacter==c.Id))itemCharacter=c.Id;ImGui.EndCombo();}
-                ImGui.EndDisabled();ImGui.EndTable();
-            }
-            chars=person.Characters.Where(c=>itemCurrentOnly?c.Id==loggedCharacter?.Id:(itemAccount==""||string.Equals(c.Account,itemAccount,StringComparison.OrdinalIgnoreCase))&&(itemCharacter==""||c.Id==itemCharacter)).Where(c=>itemWorld==""||c.World==itemWorld).ToArray();
+            var chars=person.Characters.Where(c=>itemCurrentOnly?c.Id==loggedCharacter?.Id:(itemAccount==""||string.Equals(c.Account,itemAccount,StringComparison.OrdinalIgnoreCase))&&(itemCharacter==""||c.Id==itemCharacter)).Where(c=>itemWorld==""||c.World==itemWorld).ToArray();
             var rows=itemSearchMatches.Where(x=>(itemLocationFilter==0||ItemLocationKind(x.Location.Key)==itemLocationFilter)&&(itemQualityFilter==0||(x.Location.Stacks is null?3:x.Stack.Hq?2:1)==itemQualityFilter)&&(itemFreshnessFilter==0||DateTimeOffset.UtcNow-x.Location.At<=TimeSpan.FromDays(new[]{0,1,7,30}[itemFreshnessFilter]))).ToArray();
             var scopeOwners=chars.Select(c=>c.Id).Concat(chars.Where(c=>c.FcMember!=false).Select(c=>"fc:"+c.FcId)).ToHashSet();
             var housingRows=rows.Where(x=>x.Location.Key.StartsWith("house:")&&(x.Location.CharacterIds??[]).Intersect(chars.Select(c=>c.Id)).Any()).ToArray();
@@ -130,6 +137,16 @@ public sealed partial class Plugin
             ImGui.TextDisabled($"{count} matching records · {chars.Count(c=>rows.Any(x=>x.Location.OwnerId==c.Id))} characters");
             bool? expand=null;if(ImGui.SmallButton("Expand results"))expand=true;ImGui.SameLine();if(ImGui.SmallButton("Collapse results"))expand=false;
             ImGui.BeginChild("item-results",Vector2.Zero);
+            // Update stored child states before closing their parents: hidden children
+            // are not drawn, so SetNextItemOpen inside an account cannot reach them.
+            if(expand is {} openAll)
+            {
+                var state=ImGui.GetStateStorage();
+                foreach(var c in person.Characters)
+                    state.SetBool(ImGui.GetID("###char-"+c.Id),openAll);
+                foreach(var account in person.Characters.GroupBy(c=>c.AccountId))
+                    state.SetBool(ImGui.GetID("###account-"+account.Key),openAll);
+            }
             foreach(var account in chars.GroupBy(c=>c.AccountId).OrderByDescending(a=>a.Any(c=>c.Id==current?.Id)))
             {
                 var relevant=account.Where(c=>rows.Any(x=>x.Location.OwnerId==c.Id)).OrderByDescending(c=>c.Id==current?.Id).ToArray();if(relevant.Length==0)continue;
