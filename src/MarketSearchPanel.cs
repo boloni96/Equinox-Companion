@@ -14,7 +14,8 @@ public sealed partial class Plugin
     private MarketResult? marketResult;
     private bool marketCommandRegistered, marketIndexReady, marketPendingLookup;
     private string marketQuery = "", marketMessage = "Search by item name or item ID.", marketSelectedName = "";
-    private uint marketSelectedId;
+    private uint marketSelectedId, marketExactId, marketWorld;
+    private (uint Id, string Name, int Region)[]? marketWorlds;
     private int marketRegion, marketQuality;
     private DateTimeOffset marketNextSearch, marketAutoRefreshAt;
     private int marketRefreshFailures, marketRefreshChoice = 1;
@@ -44,11 +45,16 @@ public sealed partial class Plugin
         marketCommandRegistered = Commands.AddHandler("/whereischeap", new CommandInfo((_, args) => OpenMarketSearch(args)) { HelpMessage = "Find cheapest recorded market listings: /whereischeap item name or ID. Opens a separate window." });
         if(!marketCommandRegistered) Log.Warning("/whereischeap is already registered. Use /equinox cheap instead.");
     }
+    private void OpenMarketItem(uint id)
+    {
+        OpenMarketSearch(SearchItemName(id));
+        marketExactId = id;
+    }
     private void OpenMarketSearch(string query)
     {
         marketWindow.IsOpen = true; minimizedLaunchers.Remove("Where is it cheapest?");
         if(string.IsNullOrWhiteSpace(query)) return;
-        marketQuery = query.Trim().Trim('"'); marketPendingLookup = true;
+        marketExactId = 0; marketQuery = query.Trim().Trim('"'); marketPendingLookup = true;
         CancelMarketSearch(); marketResult = null; marketSelectedId = 0; marketMatches = [];
     }
     private void CancelMarketSearch()
@@ -79,9 +85,10 @@ public sealed partial class Plugin
         marketPendingLookup = false; CancelMarketSearch(); marketResult = null; marketMatches = []; marketSelectedId = 0;
         var query = marketQuery.Trim().Trim('"');
         if(query.Length == 0) { marketMessage = "Enter an item name or ID."; return; }
-        if(uint.TryParse(query, out var id))
+        var exactId = marketExactId; marketExactId = 0;
+        if(exactId != 0 || uint.TryParse(query, out exactId))
         {
-            var item = marketItems.FirstOrDefault(i => i.Id == id);
+            var item = marketItems.FirstOrDefault(i => i.Id == exactId);
             if(item.Id == 0) { marketMessage = "This item ID is not a marketable item."; return; }
             SelectMarketItem(item); return;
         }
@@ -93,7 +100,7 @@ public sealed partial class Plugin
     }
     private void SelectMarketItem((uint Id, string Name) item)
     {
-        marketSelectedId = item.Id; marketSelectedName = item.Name; marketMatches = [];
+        marketSelectedId = item.Id; marketSelectedName = item.Name; marketQuery = item.Name; marketMatches = [];
         StartMarketSearch();
     }
     private void StartMarketSearch(bool preserveResults = false, bool force = false)
@@ -106,7 +113,10 @@ public sealed partial class Plugin
         marketNextSearch = DateTimeOffset.UtcNow.AddSeconds(2);
         marketCancellation = new();
         var token = marketCancellation.Token; var id = marketSelectedId; var region = marketRegion; var quality = marketQuality;
-        marketTask = Task.Run(() => marketSearch.Search(id, region, quality, token, force), token);
+        var selectedWorld = marketWorlds?.FirstOrDefault(w => w.Id == marketWorld) ?? default;
+        var world = marketWorld; if(world != 0) region = selectedWorld.Region;
+        var worldName = selectedWorld.Name ?? "";
+        marketTask = Task.Run(() => marketSearch.Search(id, region, quality, token, force, world, worldName), token);
         marketMessage = marketResult is null ? "Searching Universalis…" : "Checking for new prices…";
     }
     private string MarketDataCenter(uint world)
@@ -145,11 +155,26 @@ public sealed partial class Plugin
             StartMarketSearch(preserveResults: true, force: true);
         ImGui.TextWrapped("Market board prices across NA, Europe, Japan and Oceania.");
         ImGui.SetNextItemWidth(Math.Max(200, ImGui.GetContentRegionAvail().X - 95));
+        var previousQuery = marketQuery;
         var submit = ImGui.InputTextWithHint("##MarketQuery", "Item name or item ID", ref marketQuery, 200, ImGuiInputTextFlags.EnterReturnsTrue);
+        if(previousQuery != marketQuery) marketExactId = 0;
         ImGui.SameLine(); if(ImGui.Button("Find item") || submit) marketPendingLookup = true;
         ImGui.SetNextItemWidth(180);
         var changed = ImGui.Combo("Region", ref marketRegion, "All regions\0North America\0Europe\0Japan\0Oceania\0");
-        ImGui.SameLine(); ImGui.SetNextItemWidth(140);
+        if(changed) marketWorld = 0;
+        marketWorlds ??= DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().Where(w => w.IsPublic)
+            .Select(w => (Id:w.RowId, Name:w.Name.ToString(), Region:(int)w.DataCenter.Value.Region.RowId switch { 1 => 3, 2 => 1, 3 => 2, 4 => 4, _ => 0 }))
+            .Where(w => w.Region != 0).OrderBy(w => w.Name).ToArray();
+        ImGui.SameLine(); ImGui.SetNextItemWidth(180);
+        if(ImGui.BeginCombo("World", marketWorld == 0 ? "All worlds" : marketWorlds.FirstOrDefault(w => w.Id == marketWorld).Name))
+        {
+            if(ImGui.Selectable("All worlds", marketWorld == 0)) { marketWorld = 0; changed = true; }
+            foreach(var world in marketWorlds)
+                if((marketRegion == 0 || world.Region == marketRegion) && ImGui.Selectable(world.Name, marketWorld == world.Id))
+                { marketWorld = world.Id; changed = true; }
+            ImGui.EndCombo();
+        }
+        ImGui.SetNextItemWidth(140);
         changed |= ImGui.Combo("Quality", ref marketQuality, "Any quality\0NQ only\0HQ only\0");
         if(changed && marketSelectedId != 0) StartMarketSearch();
         ImGui.SetNextItemWidth(140);
@@ -172,7 +197,7 @@ public sealed partial class Plugin
         {
             if(result.FailedRegions.Length > 0)
                 ImGui.TextColored(new Vector4(1, .72f, .3f, 1), "Incomplete search — unavailable: " + string.Join(", ", result.FailedRegions));
-            ImGui.TextDisabled($"Last check {result.FetchedAt.LocalDateTime:HH:mm:ss} · up to 100 cheapest listings per region");
+            ImGui.TextDisabled($"Last check {result.FetchedAt.LocalDateTime:HH:mm:ss} · up to 100 cheapest listings per queried world/region");
         }
         if(marketSelectedId != 0)
             ImGui.TextDisabled(marketTask is not null ? "Auto-refresh active · checking Universalis" : $"Auto-refresh while open · next check in {Math.Max(0, (int)Math.Ceiling((marketAutoRefreshAt - DateTimeOffset.UtcNow).TotalSeconds))}s");

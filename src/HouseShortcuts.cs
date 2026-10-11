@@ -3,7 +3,10 @@ using Dalamud.Bindings.ImGui;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
-    private SharedHouse[] CurrentHouseShortcuts()=>HouseShortcutSelection.For(Player.IsLoaded?ReadActor():null,config.SharedRoster?.People??[]);
+    private readonly UiProjectionCache<SharedHouse[]> houseShortcutCache = new(1000);
+    private SharedHouse[] CurrentHouseShortcuts() => houseShortcutCache.Get(config.SharedRoster,
+        Player.IsLoaded ? Player.ContentId.ToString() : "", Environment.TickCount64,
+        () => HouseShortcutSelection.For(Player.IsLoaded ? ReadActor() : null, config.SharedRoster?.People ?? []));
     private void DrawHouseShortcut(SharedHouse house,float size)
     {
         var now=DateTimeOffset.UtcNow;var fc=house.Type=="Free Company house";var at=ImGui.GetCursorScreenPos();

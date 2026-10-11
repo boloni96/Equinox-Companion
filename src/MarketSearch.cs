@@ -17,23 +17,23 @@ internal sealed class MarketSearch : IDisposable
     {
         http = handler is null ? new HttpClient() : new HttpClient(handler);
         http.Timeout = TimeSpan.FromSeconds(20);
-        http.DefaultRequestHeaders.UserAgent.ParseAdd("EquinoxCompanion/0.5.1.127");
+        http.DefaultRequestHeaders.UserAgent.ParseAdd("EquinoxCompanion/0.5.1.128");
     }
-    internal async Task<MarketResult> Search(uint item, int region, int quality, CancellationToken token, bool force = false)
+    internal async Task<MarketResult> Search(uint item, int region, int quality, CancellationToken token, bool force = false, uint world = 0, string worldName = "")
     {
-        var key = $"{item}/{region}/{quality}";
+        var key = $"{item}/{region}/{quality}/{world}";
         lock(cache)
             if(!force && cache.TryGetValue(key, out var saved) && DateTimeOffset.UtcNow - saved.FetchedAt < TimeSpan.FromSeconds(60)) return saved;
-        var regions = region == 0 ? Regions : [Regions[region - 1]];
+        var regions = world != 0 ? new[] { region > 0 ? Regions[region - 1] : "Selected world" } : region == 0 ? Regions : [Regions[region - 1]];
         var responses = await Task.WhenAll(regions.Select(async name =>
         {
             try
             {
                 var qualityQuery = quality == 0 ? "" : quality == 1 ? "&hq=false" : "&hq=true";
-                using var response = await http.GetAsync($"https://universalis.app/api/v2/{name}/{item}?listings=100&entries=0{qualityQuery}", token).ConfigureAwait(false);
+                using var response = await http.GetAsync($"https://universalis.app/api/v2/{(world == 0 ? name : world.ToString(System.Globalization.CultureInfo.InvariantCulture))}/{item}?listings=100&entries=0{qualityQuery}", token).ConfigureAwait(false);
                 response.EnsureSuccessStatusCode();
                 var body = await response.Content.ReadAsStringAsync(token).ConfigureAwait(false);
-                return (Rows: Parse(body, name), Failed: (string?)null);
+                return (Rows: Parse(body, name, world, worldName), Failed: (string?)null);
             }
             catch(OperationCanceledException) when(token.IsCancellationRequested) { throw; }
             catch(Exception ex) when(ex is HttpRequestException or JsonException or OperationCanceledException or InvalidOperationException or FormatException or OverflowException or KeyNotFoundException)
@@ -49,7 +49,7 @@ internal sealed class MarketSearch : IDisposable
         }
         return result;
     }
-    internal static MarketListing[] Parse(string body, string region)
+    internal static MarketListing[] Parse(string body, string region, uint fallbackWorld = 0, string fallbackName = "")
     {
         using var document = JsonDocument.Parse(body);
         var root = document.RootElement;
@@ -60,9 +60,9 @@ internal sealed class MarketSearch : IDisposable
         {
             var price = listing.GetProperty("pricePerUnit").GetInt64();
             var quantity = listing.GetProperty("quantity").GetInt32();
-            var worldId = listing.GetProperty("worldID").GetUInt32();
+            var worldId = listing.TryGetProperty("worldID", out var worldValue) ? worldValue.GetUInt32() : fallbackWorld;
             if(price <= 0 || quantity <= 0 || worldId == 0 || price > long.MaxValue / quantity) continue;
-            rows.Add(new(region, worldId, listing.GetProperty("worldName").GetString() ?? $"World {worldId}", listing.GetProperty("hq").GetBoolean(), price, quantity,
+            rows.Add(new(region, worldId, listing.TryGetProperty("worldName", out var worldLabel) ? worldLabel.GetString() ?? $"World {worldId}" : fallbackName.Length > 0 ? fallbackName : $"World {worldId}", listing.GetProperty("hq").GetBoolean(), price, quantity,
                 listing.TryGetProperty("retainerName", out var retainer) ? retainer.GetString() ?? "" : "",
                 listing.TryGetProperty("lastReviewTime", out var reviewed) && reviewed.TryGetInt64(out var timestamp) ? timestamp : 0));
         }

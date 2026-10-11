@@ -29,42 +29,11 @@ public sealed partial class Plugin
             return;
         }
         if (now < collectionReadyAt) return;
-        if (collectionGroups is null)
-        {
-            var path = Path.Combine(Pi.AssemblyLocation.DirectoryName!, "collection-ids.json");
-            if (!File.Exists(path)) { collectionStatus = "Collection catalogue missing; reinstall this plugin build."; return; }
-            var entries = JsonSerializer.Deserialize<CatalogueEntry[]>(File.ReadAllText(path), new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? [];
-            collectionGroups = entries.Where(x => x.Id > 0).GroupBy(x => x.Category).Select(g => g.DistinctBy(x=>x.Id).ToArray()).ToArray();
-            // Read the installed game's festival quest definitions, not a fixed event/year list.
-            var seasonal = new List<CatalogueEntry>();
-            foreach(var q in DataManager.GetExcelSheet<Lumina.Excel.Sheets.Quest>(Dalamud.Game.ClientLanguage.English))
-            {
-                if(q.Festival.RowId==0)continue;
-                var name=q.Name.ToString();var festival=q.Festival.Value.Name.ToString();
-                if(string.IsNullOrWhiteSpace(name)||name.Length>100||name.Any(char.IsControl)||
-                   string.IsNullOrWhiteSpace(festival)||festival.Length>100||festival.Any(char.IsControl))continue;
-                var rewards = new List<EventQuestReward>();
-                var itemIds = q.OptionalItemReward.Select(x=>x.RowId).ToList();
-                if(q.ItemRewardType is 1 or 3 or 5)itemIds.AddRange(q.Reward.Select(x=>x.RowId));
-                foreach(var id in itemIds.Where(id=>id>0).Distinct().Take(12))
-                {
-                    var itemName=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>(Dalamud.Game.ClientLanguage.English).GetRowOrDefault(id)?.Name.ToString();
-                    if(!string.IsNullOrWhiteSpace(itemName)&&itemName.Length<=100&&!itemName.Any(char.IsControl))rewards.Add(new(id,itemName));
-                }
-                seasonal.Add(new("quest",q.RowId,0,new(q.RowId,name,q.Festival.RowId,festival,(int)q.ClassJobLevel[0],
-                    q.PreviousQuest.Select(x=>x.RowId).Where(id=>id>0).ToArray(),rewards.ToArray())));
-            }
-            collectionGroups=collectionGroups.Concat(seasonal.OrderBy(x=>x.Id).Chunk(8)).ToArray();
-        }
+        if (collectionGroups is null) return;
         if (collectionGroups.Length == 0) return;
         var segmentIndex = nextCollectionGroup++ % collectionGroups.Length;
         var group = collectionGroups[segmentIndex];
         var unlocked = new List<uint>(); var obtained = new List<uint>(); var known = new List<uint>();
-        if (group[0].Category == "hairstyle" && hairstyleUnlocks is null)
-            hairstyleUnlocks = DataManager.GetExcelSheet<Lumina.Excel.Sheets.CharaMakeCustomize>(Dalamud.Game.ClientLanguage.English)
-                .Where(x => x.HintItem.RowId > 0 && x.UnlockLink > 0)
-                .GroupBy(x => x.HintItem.RowId)
-                .ToDictionary(g => g.Key, g => g.Select(x => (uint)x.UnlockLink).Distinct().ToArray());
         var inventory = InventoryManager.Instance();
         foreach (var entry in group)
         {

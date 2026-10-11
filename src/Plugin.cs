@@ -289,6 +289,7 @@ public sealed partial class Plugin : IDalamudPlugin
             id.RoomNumber, id.IsApartment, id.IsWorkshop, WorldName(id.WorldId), DistrictName(id.TerritoryTypeId));
     }
 
+    private int discoveryStage;
     private unsafe void UpdateCore(IFramework framework)
     {
         var now = DateTimeOffset.UtcNow;
@@ -303,14 +304,20 @@ public sealed partial class Plugin : IDalamudPlugin
             UpdateFollowThem(now);
         }
         else UpdateFollowMovementStop(now);
+        var perf = System.Diagnostics.Stopwatch.GetTimestamp();
         UpdateSync(now);
+        TrackPerformance("sync queue", perf);
+        perf = System.Diagnostics.Stopwatch.GetTimestamp();
         UpdateSharedRoster(now);
         UpdateCharacterRegistration(now);
         UpdateHouseNotices(now);
         UpdateGardenCareNotices(now);
         MaintainRecords(now);
+        TrackPerformance("roster and maintenance", perf);
         if (faulted) return;
+        perf = System.Diagnostics.Stopwatch.GetTimestamp();
         UpdateAutoRetainer(now);
+        TrackPerformance("submarine cache", perf);
         
         if (!Player.IsLoaded || Player.ContentId == 0)
         {
@@ -323,7 +330,7 @@ public sealed partial class Plugin : IDalamudPlugin
         {
             gardenBedSync=null;
             gate.Reset(); StopRecording(); character = Player.ContentId;
-            nextDiscovery = default; nextCharacterRefresh = default; characterReadyAt = now.AddSeconds(15);
+            discoveryStage = 0; nextDiscovery = default; nextCharacterRefresh = default; characterReadyAt = now.AddSeconds(15);
             fashionWindow.Tick(login: true);
         }
         fashionWindow.Tick();
@@ -334,14 +341,19 @@ public sealed partial class Plugin : IDalamudPlugin
             companyCandidate = null; snapshot = null; currentAddress = null; Volatile.Write(ref pendingTend, null); Volatile.Write(ref pendingRemove, null); Volatile.Write(ref pendingHarvest, null); Volatile.Write(ref pendingPlant, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); messages.Clear(); menuMessages.Clear(); readyMenus.Clear(); cropChats.Clear(); cropMatcher.Clear(); harvestInspections.Clear(); harvestedChats.Clear(); status = "Waiting for the area to finish loading."; return;
         }
         ObserveSafely("company-profile", () => ObserveCompanyProfile(now));
+        ObserveSafely("catalogue", () => PrepareCollectionCatalogue(now));
         if (now >= nextDiscovery)
         {
-            nextDiscovery = now.AddSeconds(5);
-            ObserveSafely("details", () => ObserveDetails(now));
-            ObserveSafely("collections", () => ObserveCollections(now));
-            ObserveSafely("storage", () => ObserveStorage(now));
-            ObserveSafely("voyages", () => ObserveActivities(now));
-            ObserveSafely("fashion", DrainFashionObservations);
+            // One stage per second instead of five scans in one frame.
+            nextDiscovery = now.AddSeconds(1);
+            switch(discoveryStage++ % 5)
+            {
+                case 0: ObserveSafely("details", () => ObserveDetails(now)); break;
+                case 1: ObserveSafely("collections", () => ObserveCollections(now)); break;
+                case 2: ObserveSafely("storage", () => ObserveStorage(now)); break;
+                case 3: ObserveSafely("voyages", () => ObserveActivities(now)); break;
+                case 4: ObserveSafely("fashion", DrainFashionObservations); break;
+            }
         }
         if (now < nextSample) return;
         nextSample = now.AddMilliseconds(ObservingGardens ? 50 : 250);
@@ -631,12 +643,14 @@ public sealed partial class Plugin : IDalamudPlugin
 
     private void ObserveSafely(string source, Action observe)
     {
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
         try { observe(); }
         catch (Exception ex)
         {
             errorJournal.Record(source, "Observation deferred; other tracking continues.", exceptionType: ex.GetType().Name);
             Log.Debug(ex, "{Source} observation deferred", source);
         }
+        finally { TrackPerformance(source, started); }
     }
 
     private void WakeObservationSync()
@@ -966,12 +980,16 @@ public sealed partial class Plugin : IDalamudPlugin
         escapePopupWasOpen=ImGui.IsPopupOpen("",ImGuiPopupFlags.AnyPopupId|ImGuiPopupFlags.AnyPopupLevel);
         var escapeDown=Keys[Dalamud.Game.ClientState.Keys.VirtualKey.ESCAPE];
         escapeRequested=escapeDown&&!escapeWasDown;escapeWasDown=escapeDown;
+        var perf = System.Diagnostics.Stopwatch.GetTimestamp();
         windows.Draw();
+        TrackPerformance("window drawing", perf);
+        perf = System.Diagnostics.Stopwatch.GetTimestamp();
         visible = mainWindow.IsOpen;
         DrawFloatingLaunchers();
         DrawPlantingMarkers();
         DrawCofferMarkers();
         DrawHelperControls();
+        TrackPerformance("overlays", perf);
         if (!visible) showSavedPairingKey = false;
     }
 
@@ -1108,6 +1126,7 @@ public sealed partial class Plugin : IDalamudPlugin
 
     public void Dispose()
     {
+        catalogueQuests?.Dispose(); catalogueHair?.Dispose();
         var keepCoffersEnabled = config.EnableCofferMarkers;
         SetCofferMarkers(false);
         config.EnableCofferMarkers = keepCoffersEnabled;

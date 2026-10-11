@@ -1,3 +1,7 @@
+# Current release: Companion 0.5.1.128
+
+World-filtered market search, item-name context search, staggered observation work and collection catalogue preparation. See [release notes](RELEASE-0.5.1.128.md).
+
 # Equinox Companion 0.5.1.50
 
 Current update: My Empire, /gardening batch following, coloured garden groups,

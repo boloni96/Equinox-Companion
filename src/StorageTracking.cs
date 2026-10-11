@@ -29,7 +29,10 @@ public sealed partial class Plugin
         {
             var ids = items.Where(i=>i>0 && i<1000000).Distinct().Order().ToArray();
             var last=config.Discoveries.LastOrDefault(e=>e.Kind=="storage.observed"&&e.Actor.ContentId==actor.ContentId&&e.Storage?.Key==key);
-            KeepDiscovery(new(Guid.NewGuid().ToString("N"), "storage.observed", now, actor, null, Storage:new(key,name,ids,stacks)),last is not null&&now-last.At>=TimeSpan.FromMinutes(30));
+            var details = new StorageDetails(key, name, ids, stacks);
+            // Compare unchanged containers without allocating two JSON documents.
+            if(last?.Storage is {} previous && last.Actor == actor && now-last.At < TimeSpan.FromMinutes(30) && StorageObservationEquality.Same(previous, details)) return;
+            KeepDiscovery(new(Guid.NewGuid().ToString("N"), "storage.observed", now, actor, null, Storage:details),last is not null&&now-last.At>=TimeSpan.FromMinutes(30));
         }
         StorageStack[] ReadStacks(InventoryContainer* container)
         {

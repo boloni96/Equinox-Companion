@@ -9,6 +9,12 @@ public sealed partial class Plugin
     private DateTimeOffset configurationDue;
     private double maxDrawMs,maxUpdateMs,maxSnapshotMs;
     private string configurationError="";
+    private readonly Dictionary<string, double> performanceStages = [];
+    private void TrackPerformance(string stage, long started)
+    {
+        var ms = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+        performanceStages[stage] = Math.Max(performanceStages.GetValueOrDefault(stage), ms);
+    }
     private void SaveConfiguration()
     {
         // Coalesce a burst without postponing persistence indefinitely.
@@ -52,7 +58,8 @@ public sealed partial class Plugin
         ImGui.TextUnformatted($"Peak draw: {maxDrawMs:F2} · update: {maxUpdateMs:F2} · save snapshot: {maxSnapshotMs:F2}");
         ImGui.TextUnformatted(configurationDirty||configurationWriter.Busy?"Local save pending…":"Local save complete.");
         if(configurationError.Length>0)ImGui.TextWrapped(configurationError);
-        if(ImGui.Button("Reset timing measurements"))maxDrawMs=maxUpdateMs=maxSnapshotMs=0;
+        foreach(var stage in performanceStages.OrderByDescending(x => x.Value)) ImGui.TextUnformatted($"{stage.Key}: {stage.Value:F2} ms peak");
+        if(ImGui.Button("Reset timing measurements")) { maxDrawMs=maxUpdateMs=maxSnapshotMs=0; performanceStages.Clear(); }
         ImGui.TextWrapped("Reset, reproduce one hitch, then note these values. File serialization and writing run on a single background worker. These timings do not measure other plugins or the game's rendering.");
         ImGui.Separator();
     }
