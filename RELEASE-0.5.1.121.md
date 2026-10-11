@@ -1,0 +1,13 @@
+# Companion 0.5.1.121 — Housing item locations and clearer search filters
+
+Housing storage observations cover loaded indoor/outdoor furnishing and storeroom containers, plus installed fixtures, at private/FC estates, apartments and private chambers. Capture requires a loaded housing territory, furnishing-edit interface, housing permission and ten seconds of stable character/estate/context. Workshop, unloaded or unavailable containers are ignored. Estate identity includes the game's room/apartment identity; labels show world, district, ward, plot or room and placed/stored location. Container slots and quantities use the existing storage contract.
+
+Journal V7.11.129 (protocol18) is required before storage uploads, preventing older websites from dropping housing records. Shared housing records are deduplicated by estate/container and carry their original observation time. Newer loaded empty snapshots clear contents; older observations cannot erase newer state. Known paired estate links and observing characters scope the shared results. Housing records do not imply personal possession or current withdrawal permission. The same records feed Collection and /doihaveit.
+
+Current character only is beside the search controls. It temporarily overrides Person/account/character scope and restores the prior scope when unchecked, retaining other filters. Location, quality, last-checked age and World are always visible in a two-column layout. Account/character selectors also resize to the window; no expandable Filters section. Matching-record/character counts and Expand results / Collapse results make results easier to inspect. Small result sets initially expand their characters.
+
+Existing FC chest, normal/premium saddlebags, retainer inventory/equipment/market listings/crystals, character equipment/Armoury, Armoire and dresser capture remains. Loaded storage observations refresh their recorded check time at most every thirty minutes when unchanged; changes still capture normally. Item names reuse the game name cache.
+
+Validation: official API15 Release build and GateTests; authenticated Journal upload/live-roster, malformed keys/slots, stale and empty housing snapshots, shared search/Collection and save roundtrip tests. Native housing menus, the physical meaning of housing container slots, and current-character/World/expand controls require in-game testing. Open the relevant furnishing/storage menu and wait ten seconds before checking results. No unattended remote inventory access is claimed.
+
+Mail attachments and expansion of outfit-glamour sets into their constituent stored pieces remain investigation items; this release does not infer their contents.

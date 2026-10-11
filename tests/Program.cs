@@ -286,7 +286,7 @@ Check("old website holds empty-bed observations", SyncValidation.SupportedByWebs
 Check("updated website accepts new observations", SyncValidation.SupportedByWebsite("garden.empty", 2).ToString(), "True");
 Check("hairstyle uses collection contract", SyncValidation.CanSend(collectionEvent with { Collection = new("hairstyle", [637], [637], []) }, time).ToString(), "True");
 Check("storage waits for protocol3", SyncValidation.SupportedByWebsite("storage.observed",2).ToString(), "False");
-Check("storage positions accepted by protocol17", SyncValidation.SupportedByWebsite("storage.observed",17).ToString(), "True");
+Check("storage positions accepted by protocol18", SyncValidation.SupportedByWebsite("storage.observed",18).ToString(), "True");
 Check("named retainer inventory accepted", SyncValidation.CanSend(collectionEvent with { Kind="storage.observed", Collection=null, Storage=new("retainer:123:10003", "Retainer Example · Inventory 4", [12345]) }, time).ToString(), "True");
 Check("empty loaded container accepted", SyncValidation.CanSend(collectionEvent with { Kind="storage.observed", Collection=null, Storage=new("bag:0", "Inventory 1", []) }, time).ToString(), "True");
 Check("shared chest has explicit scope", SyncValidation.CanSend(collectionEvent with { Kind="storage.observed", Collection=null, Storage=new("fc:123:20004", "Available in FC Chest · Inventory 5", [12345]) }, time).ToString(), "True");
@@ -1684,11 +1684,16 @@ Check("Item stack quantity roundtrip",restoredItem.Stacks![0].Quantity.ToString(
 Check("Item HQ roundtrip",restoredItem.Stacks[0].Hq?"HQ":"NQ","HQ");
 Check("Legacy item quantity stays unknown",new StorageDetails("bag:0","Inventory 1",[10]).Stacks is null?"unknown":"known","unknown");
 Check("Item data waits for supporting Journal",SyncValidation.SupportedByWebsite("storage.observed",15)?"send":"hold","hold");
-Check("Item data supported by V128",SyncValidation.SupportedByWebsite("storage.observed",17)?"send":"hold","send");
+Check("Item data supported by V129",SyncValidation.SupportedByWebsite("storage.observed",18)?"send":"hold","send");
 
 var positioned=new StorageStack(10,7,true,"Test item",[new(2,3),new(14,4)]);
 var slotRoundtrip=JsonSerializer.Deserialize<StorageStack>(JsonSerializer.Serialize(positioned))!;
 Check("Multiple stack slots retained",string.Join(",",slotRoundtrip.Positions!.Select(p=>p.Slot)),"2,14");
 Check("Multiple slot quantities retained",slotRoundtrip.Positions.Sum(p=>p.Quantity).ToString(),"7");
 Check("Older stack slot remains unknown",new StorageStack(10,7,true,"Test item").Positions is null?"unknown":"known","unknown");
-Check("Slot observations wait for V128",SyncValidation.SupportedByWebsite("storage.observed",16)?"send":"hold","hold");
+Check("Housing observations wait for V129",SyncValidation.SupportedByWebsite("storage.observed",17)?"send":"hold","hold");
+
+var housingStorageEvent=new SyncEvent(Guid.NewGuid().ToString("N"),"storage.observed",DateTimeOffset.UtcNow,new Actor("123","Owner",410,410),null,Storage:new("house:0000000000000001:27001","Rafflesia · Shirogane W1 P1 · Indoor storeroom 1",[10],[new(10,2,false,"Chair",[new(1,2)])]));
+Check("Housing storage observation accepted",SyncValidation.CanSend(housingStorageEvent,DateTimeOffset.UtcNow).ToString(),"True");
+Check("Unsupported housing container rejected",SyncValidation.CanSend(housingStorageEvent with{Storage=housingStorageEvent.Storage! with{Key="house:0000000000000001:99999"}},DateTimeOffset.UtcNow).ToString(),"False");
+Check("Housing identity required",SyncValidation.CanSend(housingStorageEvent with{Storage=housingStorageEvent.Storage! with{Key="house:wrong:27001"}},DateTimeOffset.UtcNow).ToString(),"False");

@@ -153,7 +153,7 @@ public sealed partial class Plugin : IDalamudPlugin
         if (events.Length == 0) {
             if (eligible.Length > 0) syncStatus = "Eligible records exceed the upload size limit; kept locally. Export diagnostics.";
             else if (pending.Any(e => !SyncValidation.SupportedByWebsite(e.Kind, config.SharedRoster?.ProtocolVersion ?? 1)))
-                syncStatus = "New observations kept locally. Deploy Journal V7.11.128, save once, then refresh shared profiles.";
+                syncStatus = "New observations kept locally. Deploy Journal V7.11.129, save once, then refresh shared profiles.";
             nextSync = now.AddSeconds(FastGardenSync ? 1 : 30); return;
         }
         syncHistoryFirst = !syncHistoryFirst;
