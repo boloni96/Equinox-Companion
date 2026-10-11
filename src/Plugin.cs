@@ -1126,6 +1126,7 @@ public sealed partial class Plugin : IDalamudPlugin
 
     public void Dispose()
     {
+        CancelMarketShopping();
         catalogueQuests?.Dispose(); catalogueHair?.Dispose();
         var keepCoffersEnabled = config.EnableCofferMarkers;
         SetCofferMarkers(false);

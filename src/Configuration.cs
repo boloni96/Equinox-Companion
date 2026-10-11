@@ -15,6 +15,7 @@ public sealed class Configuration : IPluginConfiguration
         copy.Planting=[..Planting];copy.Tending=[..Tending];copy.SentEvents=[..SentEvents];
         return copy;
     }
+    public List<MarketShoppingRequest> MarketShoppingItems { get; set; } = [];
     public int MarketRefreshSeconds { get; set; } = 30;
     public int SubmarineFuelReserve { get; set; } = 50;
     public int SubmarineRepairReserve { get; set; } = 10;

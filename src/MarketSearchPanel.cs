@@ -24,6 +24,8 @@ public sealed partial class Plugin
     private static readonly int[] MarketRefreshChoices = [15, 30, 60];
     private IEnumerator<Lumina.Excel.Sheets.Item>? marketIndexReader;
     private readonly List<(uint Id, string Name)> marketItems = [];
+    private readonly Dictionary<string, uint> marketItemNames = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<uint> marketableIds = [];
     private (uint Id, string Name)[] marketMatches = [];
     private readonly Dictionary<uint, string> marketDataCenters = [];
     private sealed class MarketSearchWindow : Window
@@ -42,6 +44,7 @@ public sealed partial class Plugin
     {
         marketRefreshChoice = config.MarketRefreshSeconds == 15 ? 0 : config.MarketRefreshSeconds == 60 ? 2 : 1;
         marketWindow = new(this); windows.AddWindow(marketWindow);
+        RestoreMarketShopping();
         marketCommandRegistered = Commands.AddHandler("/whereischeap", new CommandInfo((_, args) => OpenMarketSearch(args)) { HelpMessage = "Find cheapest recorded market listings: /whereischeap item name or ID. Opens a separate window." });
         if(!marketCommandRegistered) Log.Warning("/whereischeap is already registered. Use /equinox cheap instead.");
     }
@@ -54,6 +57,7 @@ public sealed partial class Plugin
     {
         marketWindow.IsOpen = true; minimizedLaunchers.Remove("Where is it cheapest?");
         if(string.IsNullOrWhiteSpace(query)) return;
+        marketShoppingMode = false; CancelMarketShopping();
         marketExactId = 0; marketQuery = query.Trim().Trim('"'); marketPendingLookup = true;
         CancelMarketSearch(); marketResult = null; marketSelectedId = 0; marketMatches = [];
     }
@@ -73,11 +77,11 @@ public sealed partial class Plugin
             if(!marketIndexReader.MoveNext())
             { marketIndexReader.Dispose(); marketIndexReader = null; marketIndexReady = true; break; }
             var item = marketIndexReader.Current;
+            var name = item.Name.ToString();
+            if(name.Length == 0) continue;
+            if(!marketItemNames.TryAdd(name, item.RowId)) marketItemNames[name] = 0;
             if(item.ItemSearchCategory.RowId != 0 && !item.IsUntradable)
-            {
-                var name = item.Name.ToString();
-                if(name.Length > 0) marketItems.Add((item.RowId, name));
-            }
+            { marketItems.Add((item.RowId, name)); marketableIds.Add(item.RowId); }
         } while(Stopwatch.GetElapsedTime(start).TotalMilliseconds < 1);
     }
     private void FindMarketItem()
@@ -128,6 +132,9 @@ public sealed partial class Plugin
     private void DrawMarketSearch()
     {
         BuildMarketItemIndex();
+        PumpMarketSources();
+        DrawMarketShoppingToolbar();
+        if(marketShoppingMode) { DrawMarketShopping(); return; }
         if(marketIndexReady && marketPendingLookup) FindMarketItem();
         if(marketTask?.IsCompleted == true)
         {
@@ -159,34 +166,12 @@ public sealed partial class Plugin
         var submit = ImGui.InputTextWithHint("##MarketQuery", "Item name or item ID", ref marketQuery, 200, ImGuiInputTextFlags.EnterReturnsTrue);
         if(previousQuery != marketQuery) marketExactId = 0;
         ImGui.SameLine(); if(ImGui.Button("Find item") || submit) marketPendingLookup = true;
-        ImGui.SetNextItemWidth(180);
-        var changed = ImGui.Combo("Region", ref marketRegion, "All regions\0North America\0Europe\0Japan\0Oceania\0");
-        if(changed) marketWorld = 0;
-        marketWorlds ??= DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().Where(w => w.IsPublic)
-            .Select(w => (Id:w.RowId, Name:w.Name.ToString(), Region:(int)w.DataCenter.Value.Region.RowId switch { 1 => 3, 2 => 1, 3 => 2, 4 => 4, _ => 0 }))
-            .Where(w => w.Region != 0).OrderBy(w => w.Name).ToArray();
-        ImGui.SameLine(); ImGui.SetNextItemWidth(180);
-        if(ImGui.BeginCombo("World", marketWorld == 0 ? "All worlds" : marketWorlds.FirstOrDefault(w => w.Id == marketWorld).Name))
-        {
-            if(ImGui.Selectable("All worlds", marketWorld == 0)) { marketWorld = 0; changed = true; }
-            foreach(var world in marketWorlds)
-                if((marketRegion == 0 || world.Region == marketRegion) && ImGui.Selectable(world.Name, marketWorld == world.Id))
-                { marketWorld = world.Id; changed = true; }
-            ImGui.EndCombo();
-        }
-        ImGui.SetNextItemWidth(140);
-        changed |= ImGui.Combo("Quality", ref marketQuality, "Any quality\0NQ only\0HQ only\0");
-        if(changed && marketSelectedId != 0) StartMarketSearch();
-        ImGui.SetNextItemWidth(140);
-        if(ImGui.Combo("Auto-refresh while open", ref marketRefreshChoice, "15 seconds\0" + "30 seconds\0" + "60 seconds\0"))
-        {
-            config.MarketRefreshSeconds = MarketRefreshChoices[marketRefreshChoice]; SaveConfiguration();
-            if(marketResult is {} current) marketAutoRefreshAt = MarketRefresh.Next(current, marketRefreshFailures, config.MarketRefreshSeconds);
-        }
+        if(DrawMarketFilters()) { ResetMarketShoppingResults(); if(marketSelectedId != 0) StartMarketSearch(); }
         if(!marketIndexReady) ImGui.TextDisabled("Preparing item names…");
         if(marketSelectedId != 0)
         {
             ImGui.TextWrapped(marketSelectedName);
+            DrawMarketItemSources(marketSelectedId, marketSelectedName);
             ImGui.BeginDisabled(marketTask is not null || DateTimeOffset.UtcNow < marketNextSearch);
             if(ImGui.Button("Refresh now")) StartMarketSearch(preserveResults: true, force: true);
             ImGui.EndDisabled(); ImGui.SameLine();
@@ -210,16 +195,48 @@ public sealed partial class Plugin
         }
         if(marketResult is null) return;
         if(marketTravelStatus.Length > 0) ImGui.TextWrapped(marketTravelStatus);
-        if(ImGui.BeginTable("MarketListings", 9, ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.ScrollY | ImGuiTableFlags.Resizable, new Vector2(0, 0)))
+        DrawMarketListings(marketResult, marketSelectedName, "MarketListings");
+    }
+    private bool DrawMarketFilters()
+    {
+        ImGui.SetNextItemWidth(180);
+        var changed = ImGui.Combo("Region", ref marketRegion, "All regions\0North America\0Europe\0Japan\0Oceania\0");
+        if(changed) marketWorld = 0;
+        marketWorlds ??= DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().Where(w => w.IsPublic)
+            .Select(w => (Id:w.RowId, Name:w.Name.ToString(), Region:(int)w.DataCenter.Value.Region.RowId switch { 1 => 3, 2 => 1, 3 => 2, 4 => 4, _ => 0 }))
+            .Where(w => w.Region != 0).OrderBy(w => w.Name).ToArray();
+        ImGui.SameLine(); ImGui.SetNextItemWidth(180);
+        if(ImGui.BeginCombo("World", marketWorld == 0 ? "All worlds" : marketWorlds.FirstOrDefault(w => w.Id == marketWorld).Name))
+        {
+            if(ImGui.Selectable("All worlds", marketWorld == 0)) { marketWorld = 0; changed = true; }
+            foreach(var world in marketWorlds)
+                if((marketRegion == 0 || world.Region == marketRegion) && ImGui.Selectable(world.Name, marketWorld == world.Id))
+                { marketWorld = world.Id; changed = true; }
+            ImGui.EndCombo();
+        }
+        ImGui.SetNextItemWidth(140);
+        changed |= ImGui.Combo("Quality", ref marketQuality, "Any quality\0NQ only\0HQ only\0");
+        ImGui.SetNextItemWidth(140);
+        if(ImGui.Combo("Auto-refresh while open", ref marketRefreshChoice, "15 seconds\0" + "30 seconds\0" + "60 seconds\0"))
+        {
+            config.MarketRefreshSeconds = MarketRefreshChoices[marketRefreshChoice]; SaveConfiguration();
+            foreach(var entry in marketShoppingEntries) if(entry.Result is {} loaded) entry.Due = MarketRefresh.Next(loaded, entry.Failures, config.MarketRefreshSeconds);
+            if(marketResult is {} current) marketAutoRefreshAt = MarketRefresh.Next(current, marketRefreshFailures, config.MarketRefreshSeconds);
+        }
+        return changed;
+    }
+    private void DrawMarketListings(MarketResult result, string itemName, string tableId, float height = 0)
+    {
+        if(ImGui.BeginTable(tableId, 9, ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.ScrollY | ImGuiTableFlags.Resizable, new Vector2(0, height)))
         {
             foreach(var heading in new[] { "Unit gil", "Qty", "Stack gil", "Quality", "World", "DC / Region", "Checked", "Location" }) ImGui.TableSetupColumn(heading);
             ImGui.TableSetupColumn("Travel", ImGuiTableColumnFlags.WidthFixed, 65);
             ImGui.TableSetupScrollFreeze(0, 1); ImGui.TableHeadersRow();
             var now = DateTimeOffset.UtcNow;
-            var clipper = ImGui.ImGuiListClipper(); clipper.Begin(marketResult.Listings.Length);
+            var clipper = ImGui.ImGuiListClipper(); clipper.Begin(result.Listings.Length);
             while(clipper.Step()) for(var i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
             {
-                var row = marketResult.Listings[i]; ImGui.PushID($"{row.WorldId}:{row.Retainer}:{row.Price}:{row.Quantity}:{row.Hq}:{i}"); ImGui.TableNextRow();
+                var row = result.Listings[i]; ImGui.PushID($"{row.WorldId}:{row.Retainer}:{row.Price}:{row.Quantity}:{row.Hq}:{i}"); ImGui.TableNextRow();
                 ImGui.TableNextColumn(); ImGui.TextUnformatted(row.Price.ToString("N0"));
                 ImGui.TableNextColumn(); ImGui.TextUnformatted(row.Quantity.ToString());
                 ImGui.TableNextColumn(); ImGui.TextUnformatted(row.Total.ToString("N0"));
@@ -228,7 +245,7 @@ public sealed partial class Plugin
                 ImGui.TableNextColumn(); ImGui.TextUnformatted(MarketDataCenter(row.WorldId) + " / " + row.Region);
                 ImGui.TableNextColumn(); ImGui.TextUnformatted(MarketSearch.Age(row.Reviewed, now));
                 if(ImGui.IsItemHovered()) ImGui.SetTooltip("Last recorded listing review · Retainer: " + row.Retainer);
-                ImGui.TableNextColumn(); if(ImGui.SmallButton("Copy")) ImGui.SetClipboardText($"{marketSelectedName} · {row.World} ({MarketDataCenter(row.WorldId)}, {row.Region}) · {row.Price:N0} gil each · {row.Quantity} × {(row.Hq ? "HQ" : "NQ")} · {row.Retainer}");
+                ImGui.TableNextColumn(); if(ImGui.SmallButton("Copy")) ImGui.SetClipboardText($"{itemName} · {row.World} ({MarketDataCenter(row.WorldId)}, {row.Region}) · {row.Price:N0} gil each · {row.Quantity} × {(row.Hq ? "HQ" : "NQ")} · {row.Retainer}");
                 ImGui.TableNextColumn();
                 var here = Player.IsLoaded && Player.CurrentWorld.RowId == row.WorldId;
                 ImGui.BeginDisabled(!Player.IsLoaded || here || DateTimeOffset.UtcNow < marketTravelNext);
@@ -280,7 +297,7 @@ public sealed partial class Plugin
     }
     private void DisposeMarketSearch()
     {
-        CancelMarketSearch(); marketIndexReader?.Dispose(); marketSearch.Dispose();
+        CancelMarketSearch(); marketIndexReader?.Dispose(); marketSourceReader?.Dispose(); marketSearch.Dispose();
         if(marketCommandRegistered) Commands.RemoveHandler("/whereischeap");
     }
 }

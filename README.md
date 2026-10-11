@@ -1,6 +1,6 @@
-# Current release: Companion 0.5.1.128
+# Current release: Companion 0.5.1.129
 
-World-filtered market search, item-name context search, staggered observation work and collection catalogue preparation. See [release notes](RELEASE-0.5.1.128.md).
+Artisan shopping-list import with quantities, collapsible item rows, local item sources and whole-stack world estimates. See [release notes](RELEASE-0.5.1.129.md).
 
 # Equinox Companion 0.5.1.50
 
