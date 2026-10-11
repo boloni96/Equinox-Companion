@@ -13,7 +13,7 @@ public sealed partial class Plugin
     {
         if(seconds<=0)return "No voyage recorded";
         var remaining=DateTimeOffset.FromUnixTimeSeconds(seconds)-DateTimeOffset.UtcNow;
-        return remaining<=TimeSpan.Zero?"Return due — confirm in workshop":$"Returns in {(int)remaining.TotalHours}h {remaining.Minutes}m";
+        return remaining<=TimeSpan.Zero?"Voyage Complete":$"Returns in {(int)remaining.TotalHours}h {remaining.Minutes}m";
     }
     private void DrawSubmarines()
     {
@@ -91,6 +91,10 @@ public sealed partial class Plugin
                         GardenImage("assets/category-icons/free-company.png",ImGui.GetCursorScreenPos(),new System.Numerics.Vector2(fcIconSize));
                         ImGui.Dummy(new System.Numerics.Vector2(fcIconSize));ImGui.SameLine();
                         ImGui.TextWrapped((observed?.FcName??cache?.FcName??"Free Company")+" · FC fleet");
+                        var knownSlots=observed?.Slots;
+                        var registered=observed?.Submarines.Length??cache?.Data.Submarines.Length??0;
+                        if(knownSlots is {} capacity && capacity>registered)ImGui.TextWrapped($"A new submarine can be registered! ({registered}/{capacity})");
+                        for(var slot=registered;slot<4;slot++)ImGui.TextDisabled($"Submarine {slot+1}: "+(knownSlots is null?"unlock status not recorded":slot<knownSlots?"unlocked · ready to register":"locked · explore "+new[]{"workshop","J · Unidentified Derelict","O · The Wreckage of Discovery I","T · Purgatory"}[slot]));
                         if(cache is not null)
                         {
                             var v=cache.Data;

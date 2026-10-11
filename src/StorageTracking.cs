@@ -23,20 +23,32 @@ public sealed partial class Plugin
         if (!SyncValidation.ActorReady(actor) || collectionCharacter != Player.ContentId) return;
         var manager = InventoryManager.Instance();
         if (manager == null) return;
-        void Save(string key, string name, IEnumerable<uint> items)
+        void Save(string key, string name, IEnumerable<uint> items, StorageStack[]? stacks = null)
         {
             var ids = items.Where(i=>i>0 && i<1000000).Distinct().Order().ToArray();
-            KeepDiscovery(new(Guid.NewGuid().ToString("N"), "storage.observed", now, actor, null, Storage:new(key,name,ids)));
+            KeepDiscovery(new(Guid.NewGuid().ToString("N"), "storage.observed", now, actor, null, Storage:new(key,name,ids,stacks)));
+        }
+        StorageStack[] ReadStacks(InventoryContainer* container)
+        {
+            var stacks=new List<StorageStack>();
+            for(var i=0;i<container->Size;i++)
+            {
+                var item=container->Items[i];var id=item.ItemId%1000000;
+                if(item.Quantity<=0||id==0)continue;
+                var name=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>(Dalamud.Game.ClientLanguage.English).GetRowOrDefault(id)?.Name.ToString()??$"Item {id}";
+                stacks.Add(new(id,item.Quantity,(item.Flags&InventoryItem.ItemFlags.HighQuality)!=0,name));
+            }
+            return stacks.GroupBy(x=>(x.ItemId,x.Hq)).Select(g=>new StorageStack(g.Key.ItemId,g.Sum(x=>x.Quantity),g.Key.Hq,g.First().Name)).OrderBy(x=>x.ItemId).ThenBy(x=>x.Hq).ToArray();
         }
         foreach (var type in Enum.GetValues<InventoryType>())
         {
             var id=(uint)type;
-            if (!(id<=3 || id==1000 || id is >=3200 and <=3500 || id is >=4000 and <=4101)) continue;
+            if (!(id<=3 || id==1000 || id==2001 || id is >=3200 and <=3500 || id is >=4000 and <=4101)) continue;
             var container=manager->GetInventoryContainer(type);
             if (container==null || !container->IsLoaded || container->Items==null || container->Size is <=0 or >200) continue;
             var items=new List<uint>();
             for(var i=0;i<container->Size;i++)if(container->Items[i].Quantity>0)items.Add(container->Items[i].ItemId % 1000000);
-            Save("bag:"+id, id<=3?$"Inventory {id+1}":id==1000?"Equipped":id>=4000?$"{(id>=4100?"Premium chocobo saddlebag":"Chocobo saddlebag")} {id%100+1}":"Armoury Chest · "+type.ToString().Replace("Armory", ""),items);
+            Save("bag:"+id, id<=3?$"Inventory {id+1}":id==1000?"Equipped":id==2001?"Crystals":id>=4000?$"{(id>=4100?"Premium chocobo saddlebag":"Chocobo saddlebag")} {id%100+1}":"Armoury Chest · "+type.ToString().Replace("Armory", ""),items,ReadStacks(container));
         }
         var state=UIState.Instance();
         if(state!=null && state->Cabinet.IsCabinetLoaded())
@@ -62,13 +74,13 @@ public sealed partial class Plugin
         {
             var member=false;
             for(var i=0;i<(int)membership->EntryCount;i++)if(membership->CharData[i].ContentId==Player.ContentId && membership->CharData[i].HomeWorld==actor.HomeWorldId)member=true;
-            if(member)foreach(var type in Enum.GetValues<InventoryType>().Where(t=>(uint)t is >=20000 and <=20004))
+            if(member)foreach(var type in Enum.GetValues<InventoryType>().Where(t=>(uint)t is >=20000 and <=20004 or 22001))
             {
                 var container=manager->GetInventoryContainer(type);
                 if(container==null || !container->IsLoaded || container->Items==null || container->Size is <=0 or >200)continue;
                 var items=new List<uint>();
                 for(var i=0;i<container->Size;i++)if(container->Items[i].Quantity>0)items.Add(container->Items[i].ItemId % 1000000);
-                Save($"fc:{proxy->Id}:{(uint)type}",$"Available in FC Chest · Inventory {(uint)type-19999} · {proxy->NameString}",items);
+                Save($"fc:{proxy->Id}:{(uint)type}",$"Available in FC Chest · {((uint)type==22001?"Crystals":$"Inventory {(uint)type-19999}")} · {proxy->NameString}",items,ReadStacks(container));
             }
         }
         // A stable, open retainer inventory is required before attributing its containers.
@@ -81,13 +93,13 @@ public sealed partial class Plugin
         if(retainers==null)return;
         var retainer=retainers->GetActiveRetainer();
         if(retainer==null || retainer->RetainerId!=active)return;
-        foreach(var type in Enum.GetValues<InventoryType>().Where(t=>(uint)t is >=10000 and <=10006 or 11000 or 12002))
+        foreach(var type in Enum.GetValues<InventoryType>().Where(t=>(uint)t is >=10000 and <=10006 or 11000 or 12001 or 12002))
         {
             var container=manager->GetInventoryContainer(type);
             if(container==null || !container->IsLoaded || container->Items==null || container->Size is <=0 or >200)continue;
             var items=new List<uint>();
             for(var i=0;i<container->Size;i++)if(container->Items[i].Quantity>0)items.Add(container->Items[i].ItemId % 1000000);
-            Save($"retainer:{active}:{(uint)type}",$"Retainer {retainer->NameString} · {((uint)type==11000?"Equipped":(uint)type==12002?"Market listings":$"Inventory {(uint)type-9999}")}",items);
+            Save($"retainer:{active}:{(uint)type}",$"Retainer {retainer->NameString} · {((uint)type==11000?"Equipped":(uint)type==12002?"Market listings":(uint)type==12001?"Crystals":$"Inventory {(uint)type-9999}")}",items,ReadStacks(container));
         }
     }
 }

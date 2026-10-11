@@ -37,6 +37,7 @@ public sealed partial class Plugin : IDalamudPlugin
     [PluginService] internal static ICondition Conditions { get; private set; } = null!;
     [PluginService] internal static ICommandManager Commands { get; private set; } = null!;
     [PluginService] internal static ITargetManager Targets { get; private set; } = null!;
+    [PluginService] internal static IContextMenu ContextMenu { get; private set; } = null!;
     [PluginService] internal static IChatGui Chat { get; private set; } = null!;
     [PluginService] internal static IGameInteropProvider Interop { get; private set; } = null!;
     [PluginService] internal static IAddonLifecycle Addons { get; private set; } = null!;
@@ -151,7 +152,7 @@ public sealed partial class Plugin : IDalamudPlugin
         if (events.Length == 0) {
             if (eligible.Length > 0) syncStatus = "Eligible records exceed the upload size limit; kept locally. Export diagnostics.";
             else if (pending.Any(e => !SyncValidation.SupportedByWebsite(e.Kind, config.SharedRoster?.ProtocolVersion ?? 1)))
-                syncStatus = "New observations kept locally. Deploy Journal V7.11.57, save once, then refresh shared profiles.";
+                syncStatus = "New observations kept locally. Deploy Journal V7.11.127, save once, then refresh shared profiles.";
             nextSync = now.AddSeconds(FastGardenSync ? 1 : 30); return;
         }
         syncHistoryFirst = !syncHistoryFirst;
@@ -206,6 +207,8 @@ public sealed partial class Plugin : IDalamudPlugin
         try { fashionHook = Interop.HookFromAddress<FFXIVClientStructs.FFXIV.Client.Game.Event.EventFramework.Delegates.ProcessEventPlay>(FFXIVClientStructs.FFXIV.Client.Game.Event.EventFramework.MemberFunctionPointers.ProcessEventPlay, ObserveNpcEvent); fashionHook.Enable(); }
         catch (Exception ex) { errorJournal.Record("plugin", "Fashion observer unavailable", exceptionType: ex.GetType().Name); }
         if (config.TrackGardens) { callbackHook?.Enable(); callbackIntHook?.Enable(); plantHook?.Enable(); }
+        ContextMenu.OnMenuOpened += OnItemSearchMenu;
+        itemSearchCommandRegistered=Commands.AddHandler("/doihaveit",new CommandInfo((_,args)=>OpenItemSearch(args)){HelpMessage="Search recorded item locations across paired characters."});
         Commands.AddHandler("/equinox", new CommandInfo(OnCommand) { HelpMessage = "Open Equinox Companion, shared profiles, housing and settings." });
         shortTravelCommandRegistered = Commands.AddHandler("/et", new CommandInfo((command,args)=>StartSharedWorldTravel(args)) { HelpMessage = "Alias for /equinox travel: /et sir, /et raff, or a full World name." });
         if(!shortTravelCommandRegistered)Log.Warning("/et is already registered; use /eqtravel or /equinox travel.");
@@ -1122,6 +1125,8 @@ public sealed partial class Plugin : IDalamudPlugin
         fashionWindow.Dispose();
         Pi.UiBuilder.OpenMainUi -= Open;
         Pi.UiBuilder.OpenConfigUi -= Open;
+        ContextMenu.OnMenuOpened -= OnItemSearchMenu;
+        if(itemSearchCommandRegistered)Commands.RemoveHandler("/doihaveit");
         Commands.RemoveHandler("/equinox");
         if(travelCommandRegistered)Commands.RemoveHandler("/eqtravel");
         if(shortTravelCommandRegistered)Commands.RemoveHandler("/et");

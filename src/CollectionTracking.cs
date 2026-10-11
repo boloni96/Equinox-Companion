@@ -150,7 +150,7 @@ public sealed partial class Plugin
             subs.Add(new(i,s.NameString,s.RankId,s.ReturnTime,s.RegisterTime,[s.HullId,s.SternId,s.BowId,s.BridgeId],s.CurrentExplorationPoints.ToArray(),ReadSubmarineRepair(i),ReadSubmarineStains(i,[s.HullId,s.SternId,s.BowId,s.BridgeId])));
         }
         // An unloaded panel is not evidence that all vessels have been deleted.
-        if (subs.Count > 0) KeepDiscovery(new(Guid.NewGuid().ToString("N"), "submarines.observed", now, actor, null, Voyage: new(fcId,subs.ToArray())));
+        if (subs.Count > 0) KeepDiscovery(new(Guid.NewGuid().ToString("N"), "submarines.observed", now, actor, null, Voyage: new(fcId,subs.ToArray(),1 + new byte[]{10,15,20}.Count(HousingManager.IsSubmarineExplorationExplored))));
     }
 
 }

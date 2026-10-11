@@ -286,7 +286,7 @@ Check("old website holds empty-bed observations", SyncValidation.SupportedByWebs
 Check("updated website accepts new observations", SyncValidation.SupportedByWebsite("garden.empty", 2).ToString(), "True");
 Check("hairstyle uses collection contract", SyncValidation.CanSend(collectionEvent with { Collection = new("hairstyle", [637], [637], []) }, time).ToString(), "True");
 Check("storage waits for protocol3", SyncValidation.SupportedByWebsite("storage.observed",2).ToString(), "False");
-Check("storage accepted by protocol3", SyncValidation.SupportedByWebsite("storage.observed",3).ToString(), "True");
+Check("storage quantities accepted by protocol16", SyncValidation.SupportedByWebsite("storage.observed",16).ToString(), "True");
 Check("named retainer inventory accepted", SyncValidation.CanSend(collectionEvent with { Kind="storage.observed", Collection=null, Storage=new("retainer:123:10003", "Retainer Example · Inventory 4", [12345]) }, time).ToString(), "True");
 Check("empty loaded container accepted", SyncValidation.CanSend(collectionEvent with { Kind="storage.observed", Collection=null, Storage=new("bag:0", "Inventory 1", []) }, time).ToString(), "True");
 Check("shared chest has explicit scope", SyncValidation.CanSend(collectionEvent with { Kind="storage.observed", Collection=null, Storage=new("fc:123:20004", "Available in FC Chest · Inventory 5", [12345]) }, time).ToString(), "True");
@@ -1676,3 +1676,12 @@ var dyeVessel = new SubmarineDetails(0,"Test",10,0,1,[3,4,1,2],[],null,[1,0,5,0]
 var dyeJson=JsonSerializer.Serialize(dyeVessel,new JsonSerializerOptions {PropertyNamingPolicy=JsonNamingPolicy.CamelCase});
 Check("Dyes use numeric array not base64",JsonDocument.Parse(dyeJson).RootElement.GetProperty("stains").ValueKind.ToString(),"Array");
 Check("Legacy vessel has unknown dyes",JsonSerializer.Deserialize<SubmarineDetails>("{\"slot\":0,\"name\":\"Old\",\"rank\":1,\"returnTime\":0,\"registerTime\":1,\"parts\":[3,4,1,2],\"route\":[]}",new JsonSerializerOptions {PropertyNameCaseInsensitive=true})!.Stains is null?"unknown":"known","unknown");
+
+var itemRecord = new StorageDetails("bag:0","Inventory 1",[10],[new StorageStack(10,7,true,"Test item")]);
+var itemJson=JsonSerializer.Serialize(itemRecord,new JsonSerializerOptions{PropertyNamingPolicy=JsonNamingPolicy.CamelCase});
+var restoredItem=JsonSerializer.Deserialize<StorageDetails>(itemJson,new JsonSerializerOptions{PropertyNameCaseInsensitive=true})!;
+Check("Item stack quantity roundtrip",restoredItem.Stacks![0].Quantity.ToString(),"7");
+Check("Item HQ roundtrip",restoredItem.Stacks[0].Hq?"HQ":"NQ","HQ");
+Check("Legacy item quantity stays unknown",new StorageDetails("bag:0","Inventory 1",[10]).Stacks is null?"unknown":"known","unknown");
+Check("Item data waits for supporting Journal",SyncValidation.SupportedByWebsite("storage.observed",15)?"send":"hold","hold");
+Check("Item data supported by V127",SyncValidation.SupportedByWebsite("storage.observed",16)?"send":"hold","send");

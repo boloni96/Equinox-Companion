@@ -11,13 +11,14 @@ public sealed record SyncEvent(string Id, string Kind, DateTimeOffset At, Actor 
     public DateTimeOffset? ObservedAt => Kind == "submarines.cached" ? null : At;
 }
 public sealed record GardenTargetDetails(uint Argument, float X, float Y, float Z);
-public sealed record StorageDetails(string Key, string Name, uint[] Items);
+public sealed record StorageDetails(string Key, string Name, uint[] Items, StorageStack[]? Stacks = null);
+public sealed record StorageStack(uint ItemId,int Quantity,bool Hq,string Name);
 public sealed record EventQuestReward(uint ItemId, string Name);
 public sealed record EventQuestDefinition(uint Id, string Name, uint FestivalId, string FestivalName, int MinLevel, uint[] PreviousQuests, EventQuestReward[] Rewards);
 public sealed record CollectionDetails(string Category, uint[] Known, uint[] Unlocked, uint[] Obtained, int Segment = 0, EventQuestDefinition[]? QuestDefinitions = null, uint[]? Accepted = null);
 public sealed record FashionDetails(int Score, int Remaining, int ThemeId, string Cycle);
 public sealed record SubmarineDetails(int Slot, string Name, int Rank, long ReturnTime, uint RegisterTime, ushort[] Parts, [property: System.Text.Json.Serialization.JsonConverter(typeof(SubmarineRouteJson))] byte[] Route, bool? NeedsRepair = null, int[]? Stains = null);
-public sealed record VoyageDetails(string FcId, SubmarineDetails[] Submarines);
+public sealed record VoyageDetails(string FcId, SubmarineDetails[] Submarines, int? Slots = null);
 public sealed record SyncResult(string[] Accepted, string Status, bool Retry);
 public sealed class CompanionSync : IDisposable
 {
