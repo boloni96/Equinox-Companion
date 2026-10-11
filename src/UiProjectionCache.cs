@@ -1,7 +1,7 @@
 namespace EquinoxCompanion;
 
 // Cache derived display data, never game observation or upload work.
-public sealed class UiProjectionCache<T>
+public sealed class UiProjectionCache<T>(long maxAgeMs=250)
 {
     private object? identity;
     private string stamp="";
@@ -11,7 +11,7 @@ public sealed class UiProjectionCache<T>
     public T Get(object? source,string version,long now,Func<T> build)
     {
         if(ready&&ReferenceEquals(identity,source)&&stamp==version&&now<expires)return value;
-        var next=build();value=next;identity=source;stamp=version;expires=now+250;ready=true;
+        var next=build();value=next;identity=source;stamp=version;expires=maxAgeMs==0?long.MaxValue:now+maxAgeMs;ready=true;
         return value;
     }
 }

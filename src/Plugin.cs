@@ -1037,6 +1037,8 @@ public sealed partial class Plugin : IDalamudPlugin
             ImGui.TextWrapped(cropChatStatus);
             ImGui.TextWrapped($"Gardening guide CPU draw: {gardenDrawLastMs:F2} ms · session peak {gardenDrawPeakMs:F2} ms (not total game frame time).");
             if(ImGui.SmallButton("Reset garden draw peak"))gardenDrawPeakMs=0;
+            ImGui.TextWrapped($"Submarines CPU draw: {submarineDrawLastMs:F2} ms · peak {submarineDrawPeakMs:F2} ms. Last data rebuild: {submarineIndexLastMs:F2} ms · {submarineIndexBuilds} rebuilds.");
+            if(ImGui.SmallButton("Reset submarine draw peak"))submarineDrawPeakMs=0;
             ImGui.TextWrapped($"Saved planting records: {config.Planting.Count}. Plant observer: {(plantHook is null ? "unavailable" : "ready")}");
             if (ImGui.CollapsingHeader("Recent observed house visits · latest 50"))
             {

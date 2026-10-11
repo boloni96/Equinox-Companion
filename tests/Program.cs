@@ -1719,3 +1719,31 @@ Check("124 shared roster invalidates immediately",displayCache124.Get(new object
 Check("124 display refreshes bounded stale input",displayCache124.Get(source124,"b",300,Build124).ToString(),"4");
 Check("124 stable source cache",displayCache124.Get(source124,"b",400,Build124).ToString(),"4");
 Check("124 ttl expires for same source",displayCache124.Get(source124,"b",550,Build124).ToString(),"5");
+
+var cache125=new UiProjectionCache<int>(0);var builds125=0;var identity125=new object();
+Check("125 unchanged history not rebuilt after time passes",cache125.Get(identity125,"same",0,()=>++builds125).ToString(),"1");
+Check("125 unchanged history remains cached",cache125.Get(identity125,"same",100000,()=>++builds125).ToString(),"1");
+Check("125 changed history rebuilds immediately",cache125.Get(identity125,"new",100001,()=>++builds125).ToString(),"2");
+var char125=new SharedCharacter("c125","Fleet Tester","Test World","DC","Region","Main",[],FcMember:true,FcId:"123");
+var roster125=new SharedRoster(1,time,[new SharedPerson("p125","Person",[char125])]);
+var actor125=new Actor("999","Fleet Tester",1,1,"Test World");
+var fleet125=new SubmarineDetails(0,"Test vessel",1,9999999999,1,[1,1,1,1],[]);
+var history125=new[]{
+ new SyncEvent("new","submarines.observed",time.AddMinutes(2),actor125,null,Voyage:new("123",[fleet125],4)),
+ new SyncEvent("old","submarines.observed",time,actor125,null,Voyage:new("123",[],1)),
+ new SyncEvent("stock","submarines.supplies",time,actor125,null,Supplies:new("123",72,286,20,140)),
+ new SyncEvent("cache","submarines.cached",time,actor125,null,CachedVoyage:new("123","autoretainer",1,2,4,[])),
+ new SyncEvent("foreign","submarines.supplies",time.AddMinutes(3),actor125,null,Supplies:new("456",0,0,0,140))
+};
+var enumerated125=0;
+IEnumerable<SyncEvent> Read125(){foreach(var e in history125){enumerated125++;yield return e;}}
+var index125=SubmarineDisplayIndex.Build(roster125,Read125());
+Check("125 history enumerated once",enumerated125.ToString(),history125.Length.ToString());
+Check("125 newest fleet retained",index125.Direct["123"].Submarines.Length.ToString(),"1");
+Check("125 observed slot count retained",index125.Direct["123"].Slots.ToString(),"4");
+Check("125 supply identity respected",index125.Supplies["c125"].Data.Ceruleum.ToString(),"72");
+Check("125 cache linked by unique name/world",index125.Caches.Count.ToString(),"1");
+var duplicate125=roster125 with{People=[new SharedPerson("p125","Person",[char125,char125 with{Id="other"}])]};
+Check("125 ambiguous actor remains unlinked",SubmarineDisplayIndex.Build(duplicate125,history125).Supplies.Count.ToString(),"0");
+var departed125=roster125 with{People=[new SharedPerson("p125","Person",[char125 with{FcMember=false}])]};
+Check("125 former member cache excluded",SubmarineDisplayIndex.Build(departed125,history125).Caches.Count.ToString(),"0");

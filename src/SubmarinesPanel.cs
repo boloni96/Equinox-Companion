@@ -15,21 +15,25 @@ public sealed partial class Plugin
         var remaining=DateTimeOffset.FromUnixTimeSeconds(seconds)-DateTimeOffset.UtcNow;
         return remaining<=TimeSpan.Zero?"Voyage Complete":$"Returns in {(int)remaining.TotalHours}h {remaining.Minutes}m";
     }
-    private readonly UiProjectionCache<(Dictionary<string,SharedVoyage> Direct,Dictionary<string,SharedCachedVoyage> Caches,Dictionary<string,SharedSubmarineSupplies> Supplies)> submarineDisplayCache=new();
-    private (Dictionary<string,SharedVoyage>,Dictionary<string,SharedCachedVoyage>,Dictionary<string,SharedSubmarineSupplies>) BuildSubmarineDisplay()
+    private readonly UiProjectionCache<SubmarineDisplayIndex> submarineDisplayCache=new(0);
+    private readonly UiProjectionCache<Dictionary<string,FleetAttention>> submarineAttentionCache=new(0);
+    private readonly UiProjectionCache<IGrouping<string,SharedCharacter>[]> submarineAccountCache=new();
+    private double submarineDrawLastMs,submarineDrawPeakMs,submarineIndexLastMs;
+    private long submarineIndexBuilds;
+    private SubmarineDisplayIndex BuildSubmarineDisplay()
     {
-        var observations=new List<SharedVoyage>(config.SharedRoster?.Voyages??[]);
-        foreach(var e in config.Discoveries.Where(e=>e.Voyage is not null))
-        {
-            var fc=config.Discoveries.LastOrDefault(x=>x.Character?.FreeCompany?.Id==e.Voyage!.FcId)?.Character?.FreeCompany;
-            observations.Add(new(e.Voyage!.FcId,fc?.Name??"Free Company",e.At,e.Voyage.Submarines,e.Voyage.Slots));
-        }
-        var direct=observations.GroupBy(v=>v.FcId).ToDictionary(g=>g.Key,g=>g.MaxBy(v=>v.At)!);
-        var caches=CachedSubmarineRecords().ToDictionary(c=>c.CharacterId);
-        var supplies=SubmarineSupplyRecords();
-        return (direct,caches,supplies);
+        var started=System.Diagnostics.Stopwatch.GetTimestamp();
+        var result=SubmarineDisplayIndex.Build(config.SharedRoster,config.Discoveries);
+        submarineIndexLastMs=System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;submarineIndexBuilds++;
+        return result;
     }
     private void DrawSubmarines()
+    {
+        var started=System.Diagnostics.Stopwatch.GetTimestamp();
+        try{DrawSubmarinesContents();}
+        finally{submarineDrawLastMs=System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;submarineDrawPeakMs=Math.Max(submarineDrawPeakMs,submarineDrawLastMs);}
+    }
+    private void DrawSubmarinesContents()
     {
         ImGui.TextWrapped("Open the FC workshop voyage panel to refresh timers. Character and account order follows your Persons tabs.");
         ImGui.TextWrapped(config.SyncAutoRetainer?autoRetainerStatus:"Background submarine sync is off. Enable it in Settings > Tracking.");
@@ -40,8 +44,9 @@ public sealed partial class Plugin
             DrawCommittedInteger("Free inventory slots reserve",config.SubmarineSpaceReserve,1,140,v=>config.SubmarineSpaceReserve=v);
             ImGui.TreePop();
         }
-        var (direct,caches,supplies)=submarineDisplayCache.Get(config.SharedRoster,
+        var index=submarineDisplayCache.Get(config.SharedRoster,
             $"{config.Discoveries.Count}:{config.Discoveries.LastOrDefault()?.Id}",Environment.TickCount64,BuildSubmarineDisplay);
+        var (direct,caches,supplies)=index;
         var now=DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         FleetAttention Attention(SharedCharacter c){
             caches.TryGetValue(c.Id,out var cache);if(cache?.Data.FcId!=c.FcId||c.FcMember==false)cache=null;
@@ -49,7 +54,8 @@ public sealed partial class Plugin
             supplies.TryGetValue(c.Id,out var supplied);
             return SubmarineAttention.Evaluate(fleet?.Submarines.Select(x=>x.ReturnTime).ToArray()??cache?.Data.Submarines.Select(x=>x.ReturnTime).ToArray()??[],fleet?.Submarines.Select(x=>x.NeedsRepair).ToArray()??[],SubmarineSupplyStatus.Select(c.FcId,supplied,cache),fleet?.Slots,now,config.SubmarineFuelReserve,config.SubmarineRepairReserve,config.SubmarineSpaceReserve);
         }
-        var attention=(config.SharedRoster?.People??[]).SelectMany(p=>p.Characters).GroupBy(c=>c.Id).ToDictionary(g=>g.Key,g=>Attention(g.First()));
+        var attention=submarineAttentionCache.Get(index,$"{now}:{config.SubmarineFuelReserve}:{config.SubmarineRepairReserve}:{config.SubmarineSpaceReserve}",Environment.TickCount64,
+            ()=>(config.SharedRoster?.People??[]).SelectMany(p=>p.Characters).GroupBy(c=>c.Id).ToDictionary(g=>g.Key,g=>Attention(g.First())));
         if(ImGui.SmallButton("Refresh submarine data")){autoRetainerForceRead=true;autoRetainerCharacters.Clear();nextAutoRetainerRead=default;nextRosterRead=default;}
         if(ImGui.IsItemHovered())ImGui.SetTooltip("Read available cached records and refresh the paired Journal. Offline characters retain their last recorded values.");
         var represented=new HashSet<string>();var shown=0;
@@ -59,10 +65,10 @@ public sealed partial class Plugin
         if(!ImGui.BeginTabBar("submarine-persons"))return;
         foreach(var person in people.OrderBy(PersonRank))
         {
-            var characters=OrderedSharedCharacters(person);
-            var accounts=characters.GroupBy(SharedCharacterGrouping.AccountKey).ToArray();
-            var hasData=characters.Any(c=>c.FcMember!=false&&direct.ContainsKey(c.FcId)||caches.ContainsKey(c.Id)||supplies.ContainsKey(c.Id));
             if(!ImGui.BeginTabItem(person.Name.Replace("##","")+"###submarine-person-"+person.Id))continue;
+            var accounts=submarineAccountCache.Get(index,$"{person.Id}:{Player.ContentId}:{config.HouseCharactersFirst}",Environment.TickCount64,
+                ()=>OrderedSharedCharacters(person).Where(c=>c.FcMember!=false&&direct.ContainsKey(c.FcId)||caches.ContainsKey(c.Id)||supplies.ContainsKey(c.Id)).GroupBy(SharedCharacterGrouping.AccountKey).ToArray());
+            var hasData=accounts.Length>0;
             ImGui.PushID(person.Id);
             ImGui.BeginChild("submarine-person-scroll",System.Numerics.Vector2.Zero);
             if(!hasData)ImGui.TextWrapped("No submarine or supply records for this person yet.");
