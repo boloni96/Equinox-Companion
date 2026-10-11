@@ -1,68 +1,156 @@
 using Dalamud.Bindings.ImGui;
 using Dalamud.Game.Gui.ContextMenu;
 using Dalamud.Game.Text.SeStringHandling;
+using Dalamud.Interface.Windowing;
+using System.Numerics;
 namespace EquinoxCompanion;
 
 public sealed partial class Plugin
 {
-    private string itemSearchQuery="";
-    private string itemSearchBuiltQuery="";
+    private ItemSearchWindow itemSearchWindow=null!;
+    private string itemSearchQuery="",itemSearchBuiltQuery="",itemAccount="",itemCharacter="";
+    private uint? itemExactId;
     private SharedRoster? itemSearchRoster;
-    private int itemSearchDiscoveryCount=-1,itemSearchLocationCount;
+    private int itemSearchDiscoveryCount=-1,itemSearchLocationCount,itemLocationFilter,itemQualityFilter,itemFreshnessFilter;
+    private bool itemSearchCommandRegistered,itemSelectCurrentPerson;
     private readonly List<(SharedItemLocation Location,StorageStack Stack)> itemSearchMatches=[];
-    private bool itemSearchSelectTab, itemSearchCommandRegistered;
-    private void OpenItemSearch(string query){itemSearchQuery=query.Trim();itemSearchSelectTab=true;visible=true;}
+    private static readonly string[] ItemLocationNames=["All locations","Inventory","Equipped","Armoury","Saddlebags","Retainers","FC chest","Armoire","Dresser"];
+    private sealed class ItemSearchWindow:Window
+    {
+        private readonly Plugin plugin;
+        public ItemSearchWindow(Plugin p):base("Do I already have it?###EquinoxItemSearch")
+        {
+            plugin=p;Size=new(730,520);SizeCondition=ImGuiCond.FirstUseEver;
+            SizeConstraints=new(){MinimumSize=new(480,320),MaximumSize=new(float.MaxValue)};
+            AllowPinning=true;AllowClickthrough=true;AllowBackgroundBlur=true;RespectCloseHotkey=false;
+        }
+        public override void Draw()=>plugin.DrawItemSearch();
+        public override void PostDraw()=>HandleNativeCollapse(this,()=>plugin.MinimizeLauncher("Do I already have it?"));
+    }
+    private readonly Dictionary<uint,string> searchItemNames=[];
+    private string SearchItemName(uint id){if(!searchItemNames.TryGetValue(id,out var name))searchItemNames[id]=name=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>(Dalamud.Game.ClientLanguage.English).GetRowOrDefault(id)?.Name.ToString()??$"Item {id}";return name;}
+    private void OpenItemSearch(string query)
+    {
+        itemExactId=uint.TryParse(query.Trim(),out var id)&&id>0?id:null;
+        itemSearchQuery=itemExactId is {} selected?SearchItemName(selected):query.Trim();
+        itemSearchDiscoveryCount=-1;itemSelectCurrentPerson=true;itemSearchWindow.IsOpen=true;
+        minimizedLaunchers.Remove("Do I already have it?");
+    }
     private void OnItemSearchMenu(IMenuOpenedArgs args)
     {
-        if(args.Target is not MenuTargetInventory target || target.TargetItem is not {} item)return;
+        if(args.Target is not MenuTargetInventory target||target.TargetItem is not {} item)return;
         var id=item.ItemId%1000000;if(id==0||item.ItemId>=2000000)return;
         args.AddMenuItem(new MenuItem{Name=new SeStringBuilder().AddText("Do I already have it?").Build(),OnClicked=_=>OpenItemSearch(id.ToString())});
     }
-    private void DrawItemSearch()
+    private static int ItemLocationKind(string key)
     {
-        ImGui.TextWrapped("Do I already have it?");
-        ImGui.SetNextItemWidth(Math.Min(460,ImGui.GetContentRegionAvail().X));
-        ImGui.InputTextWithHint("###item-search","Item name or ID",ref itemSearchQuery,120);
-        ImGui.TextWrapped("Last recorded possessions across your paired Journal. Unscanned locations may be missing. Collectible unlocks are separate.");
+        if(key.StartsWith("fc:"))return 6;if(key.StartsWith("retainer:"))return 5;
+        if(key=="armoire")return 7;if(key=="dresser")return 8;
+        if(!int.TryParse(key.Split(':').Last(),out var id))return 0;
+        return id<=3||id==2001?1:id==1000?2:id>=4000?4:3;
+    }
+    private void BuildItemSearch()
+    {
         var query=itemSearchQuery.Trim();
-        if(itemSearchBuiltQuery!=query||itemSearchRoster!=config.SharedRoster||itemSearchDiscoveryCount!=config.Discoveries.Count)
-        {
+        if(itemSearchBuiltQuery==query&&itemSearchRoster==config.SharedRoster&&itemSearchDiscoveryCount==config.Discoveries.Count)return;
         itemSearchBuiltQuery=query;itemSearchRoster=config.SharedRoster;itemSearchDiscoveryCount=config.Discoveries.Count;itemSearchMatches.Clear();
         var chars=config.SharedRoster?.People.SelectMany(p=>p.Characters).ToArray()??[];
-        var locations=(config.SharedRoster?.ItemLocations??[]).ToList();
-        // Latest local observations can be newer than the shared website copy.
-        foreach(var e in config.Discoveries.Where(e=>e.Kind=="storage.observed"&&e.Storage is not null).OrderBy(e=>e.At))
+        var locations=(config.SharedRoster?.ItemLocations??[]).ToDictionary(x=>(x.OwnerId,x.Key));
+        foreach(var e in config.Discoveries.Where(e=>e.Kind=="storage.observed"&&e.Storage is not null))
         {
             var c=chars.FirstOrDefault(c=>c.ContentId==e.Actor.ContentId);if(c is null)continue;
             var s=e.Storage!;var fc=s.Key.StartsWith("fc:")?s.Key.Split(':')[1]:null;
             if(fc is not null&&(c.FcMember==false||c.FcId!=fc))continue;
-            var owner=fc is null?c.Id:"fc:"+fc;var old=locations.FirstOrDefault(x=>x.OwnerId==owner&&x.Key==s.Key);
-            if(old is not null&&old.At>=e.At)continue;
-            if(old is not null)locations.Remove(old);
-            locations.Add(new(owner,fc is null?c.Name+" @ "+c.World:"Free Company",s.Key,s.Name,e.At,s.Items,s.Stacks));
+            var owner=fc is null?c.Id:"fc:"+fc;var key=(owner,s.Key);
+            if(locations.TryGetValue(key,out var old)&&old.At>=e.At)continue;
+            locations[key]=new(owner,fc is null?c.Name+" @ "+c.World:"Free Company",s.Key,s.Name,e.At,s.Items,s.Stacks);
         }
-        itemSearchLocationCount=locations.Count;
-        foreach(var location in locations.OrderBy(x=>x.OwnerName).ThenBy(x=>x.Name))
+        itemSearchLocationCount=locations.Count;if(query.Length==0)return;
+        foreach(var location in locations.Values)
+        foreach(var stack in location.Stacks??location.Items.Select(id=>new StorageStack(id,0,false,SearchItemName(id))))
         {
-            var stacks=location.Stacks??location.Items.Select(id=>new StorageStack(id,0,false,DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>().GetRowOrDefault(id)?.Name.ToString()??$"Item {id}")).ToArray();
-            foreach(var stack in stacks)
+            var name=SearchItemName(stack.ItemId);
+            if(itemExactId is {} exact?stack.ItemId!=exact:stack.ItemId.ToString()!=query&&!name.Contains(query,StringComparison.OrdinalIgnoreCase)&&!stack.Name.Contains(query,StringComparison.OrdinalIgnoreCase))continue;
+            itemSearchMatches.Add((location,stack with{Name=name}));
+        }
+    }
+    private void DrawItemSearch()
+    {
+        ImGui.SetNextItemWidth(Math.Max(200,ImGui.GetContentRegionAvail().X));
+        if(ImGui.InputTextWithHint("###item-search","Item name",ref itemSearchQuery,120)){itemExactId=null;itemSearchDiscoveryCount=-1;}
+        BuildItemSearch();
+        ImGui.TextDisabled($"{itemSearchLocationCount} recorded locations · last observed possessions");
+        if(config.SharedRoster?.ItemLocationsTruncated==true)ImGui.TextWrapped("Shared results are partial because of size. The Journal searches its full saved records.");
+        if(ImGui.CollapsingHeader("Filters"))
+        {
+            ImGui.SetNextItemWidth(180);ImGui.Combo("Location",ref itemLocationFilter,ItemLocationNames,ItemLocationNames.Length);
+            ImGui.SetNextItemWidth(180);ImGui.Combo("Quality",ref itemQualityFilter,new[]{"Any quality","NQ","HQ","Unknown"},4);
+            ImGui.SetNextItemWidth(180);ImGui.Combo("Checked",ref itemFreshnessFilter,new[]{"Any time","Last 24 hours","Last 7 days","Last 30 days"},4);
+            if(ImGui.Button("Clear filters")){itemAccount="";itemCharacter="";itemLocationFilter=itemQualityFilter=itemFreshnessFilter=0;}
+        }
+        var people=config.SharedRoster?.People??[];
+        if(people.Length==0){ImGui.TextWrapped("Refresh shared profiles to load your paired persons and characters.");return;}
+        var logged=people.SelectMany(p=>p.Characters).FirstOrDefault(c=>Player.IsLoaded&&c.ContentId==Player.ContentId.ToString());
+        if(logged is not null)ImGui.TextColored(new Vector4(.5f,.85f,1,1),"Logged in: "+logged.Name+" @ "+logged.World);
+        if(!ImGui.BeginTabBar("item-persons"))return;
+        foreach(var person in people)
+        {
+            var current=person.Characters.FirstOrDefault(c=>Player.IsLoaded&&c.ContentId==Player.ContentId.ToString());
+            var flags=itemSelectCurrentPerson&&current is not null?ImGuiTabItemFlags.SetSelected:ImGuiTabItemFlags.None;
+            if(!ImGui.BeginTabItem(person.Name.Replace("##","")+"###items-person-"+person.Id,flags))continue;
+            if(itemSelectCurrentPerson&&current is not null)itemSelectCurrentPerson=false;
+            ImGui.PushID(person.Id);
+            var accounts=person.Characters.GroupBy(c=>c.AccountId).ToArray();
+
+            ImGui.SetNextItemWidth(170);
+            if(ImGui.BeginCombo("Account",itemAccount.Length>0?itemAccount:"All accounts"))
+            {if(ImGui.Selectable("All accounts",itemAccount=="")){itemAccount="";}foreach(var a in accounts)if(ImGui.Selectable(a.First().Account+"###"+a.Key,string.Equals(itemAccount,a.First().Account,StringComparison.OrdinalIgnoreCase))){itemAccount=a.First().Account;}ImGui.EndCombo();}
+            ImGui.SameLine();ImGui.SetNextItemWidth(220);
+            var chars=person.Characters.Where(c=>itemAccount==""||string.Equals(c.Account,itemAccount,StringComparison.OrdinalIgnoreCase)).ToArray();
+
+            if(ImGui.BeginCombo("Character",people.SelectMany(p=>p.Characters).FirstOrDefault(c=>c.Id==itemCharacter)?.Name??"All characters"))
+            {if(ImGui.Selectable("All characters",itemCharacter==""))itemCharacter="";foreach(var c in chars)if(ImGui.Selectable(c.Name+" @ "+c.World+"###"+c.Id,itemCharacter==c.Id))itemCharacter=c.Id;ImGui.EndCombo();}
+            chars=chars.Where(c=>itemCharacter==""||c.Id==itemCharacter).ToArray();
+            var rows=itemSearchMatches.Where(x=>(itemLocationFilter==0||ItemLocationKind(x.Location.Key)==itemLocationFilter)&&(itemQualityFilter==0||(x.Location.Stacks is null?3:x.Stack.Hq?2:1)==itemQualityFilter)&&(itemFreshnessFilter==0||DateTimeOffset.UtcNow-x.Location.At<=TimeSpan.FromDays(new[]{0,1,7,30}[itemFreshnessFilter]))).ToArray();
+            ImGui.BeginChild("item-results",Vector2.Zero);
+            var scopeOwners=chars.Select(c=>c.Id).Concat(chars.Where(c=>c.FcMember!=false).Select(c=>"fc:"+c.FcId)).ToHashSet();
+            var count=rows.Count(x=>scopeOwners.Contains(x.Location.OwnerId));
+            foreach(var account in chars.GroupBy(c=>c.AccountId).OrderByDescending(a=>a.Any(c=>c.Id==current?.Id)))
             {
-                if(stack.ItemId.ToString()!=query&&!stack.Name.Contains(query,StringComparison.OrdinalIgnoreCase))continue;
-                if(query.Length>0)itemSearchMatches.Add((location,stack));
+                var relevant=account.Where(c=>rows.Any(x=>x.Location.OwnerId==c.Id)).OrderByDescending(c=>c.Id==current?.Id).ToArray();if(relevant.Length==0)continue;
+                ImGui.SetNextItemOpen(true,ImGuiCond.Once);
+                if(!ImGui.CollapsingHeader(account.First().Account+"###account-"+account.Key))continue;
+                foreach(var c in relevant){var owned=rows.Where(x=>x.Location.OwnerId==c.Id).ToArray();ImGui.SetNextItemOpen(c.Id==current?.Id,ImGuiCond.Once);if(ImGui.TreeNodeEx(c.Name+" @ "+c.World+(c.Id==current?.Id?" · Logged in":"")+"###char-"+c.Id,ImGuiTreeNodeFlags.SpanAvailWidth)){foreach(var row in owned)DrawItemLocation(row.Location,row.Stack);ImGui.TreePop();}}
             }
+            var fcIds=chars.Where(c=>c.FcMember!=false).Select(c=>"fc:"+c.FcId).ToHashSet();
+            var chests=rows.Where(x=>fcIds.Contains(x.Location.OwnerId)).ToArray();
+            if(chests.Length>0){ImGui.SetNextItemOpen(true,ImGuiCond.Once);if(ImGui.CollapsingHeader("Shared FC chests"))foreach(var row in chests)DrawItemLocation(row.Location,row.Stack);}
+            if(count==0)ImGui.TextWrapped(itemSearchQuery.Length==0?"Search for an item by name.":"No matching recorded items in this view. Try clearing filters; unscanned locations may be missing.");
+            ImGui.EndChild();ImGui.PopID();ImGui.EndTabItem();
         }
-        }
-        ImGui.TextDisabled($"{itemSearchLocationCount} recorded locations · use /doihaveit <name or ID>");
-        if(config.SharedRoster?.ItemLocationsTruncated==true)ImGui.TextWrapped("The shared search is partial because of its size. Search the Journal for the full saved records.");
-        if(query.Length==0)return;
-        ImGui.BeginChild("item-results",System.Numerics.Vector2.Zero);
-        foreach(var (location,stack) in itemSearchMatches)
-        {
-            ImGui.Separator();ImGui.TextWrapped(stack.Name+(location.Stacks is null?" · quality not recorded":stack.Hq?" · HQ":" · NQ"));
-            ImGui.TextWrapped(location.OwnerName+" · "+location.Name);
-            ImGui.TextDisabled((location.Stacks is null?"Quantity not recorded":stack.Quantity+" recorded")+$" · Item {stack.ItemId} · Checked {location.At.LocalDateTime:g}");
-        }
-        if(itemSearchMatches.Count==0)ImGui.TextWrapped("No match in recorded locations. This does not confirm you do not own it. Open inventories, retainers or the FC chest with collection sync enabled to refresh.");
-        ImGui.EndChild();
+        ImGui.EndTabBar();
+    }
+    private static void DrawItemLocation(SharedItemLocation location,StorageStack stack)
+    {
+        ImGui.Separator();ImGui.TextWrapped(stack.Name+(location.Stacks is null?" · quality unknown":stack.Hq?" · HQ":" · NQ"));
+        ImGui.TextWrapped(location.Name);
+        ImGui.TextWrapped(stack.Positions is {Length:>0}?string.Join(" · ",stack.Positions.Select(p=>$"Slot {p.Slot} × {p.Quantity}")):"Slot not recorded");
+        ImGui.TextDisabled((location.Stacks is null?"Quantity not recorded":stack.Quantity+" recorded")+$" · Checked {location.At.LocalDateTime:g}");
+    }
+    private static void DrawItemSearchIcon(Vector2 at,Vector2 size,float opacity=1)
+    {
+        var d=ImGui.GetWindowDrawList();var scale=size.X/64;
+        var blue=ImGui.ColorConvertFloat4ToU32(new Vector4(.25f,.72f,1,opacity));var white=ImGui.ColorConvertFloat4ToU32(new Vector4(.93f,.97f,1,opacity));
+        d.AddCircleFilled(at+size/2,size.X*.46f,ImGui.ColorConvertFloat4ToU32(new Vector4(.06f,.15f,.24f,opacity)),32);
+        d.AddRect(at+new Vector2(12,17)*scale,at+new Vector2(39,43)*scale,blue,3*scale,ImDrawFlags.None,2*scale);
+        d.AddLine(at+new Vector2(12,25)*scale,at+new Vector2(39,25)*scale,blue,2*scale);
+        d.AddCircle(at+new Vector2(39,37)*scale,10*scale,white,24,3*scale);
+        d.AddLine(at+new Vector2(46,45)*scale,at+new Vector2(55,54)*scale,white,4*scale);
+    }
+    private void DrawItemSearchShortcut(float size)
+    {
+        var at=ImGui.GetCursorScreenPos();var click=ImGui.InvisibleButton("Open item search##header",new Vector2(size));DrawItemSearchIcon(at,new(size));
+        if(ImGui.IsItemHovered())ImGui.SetTooltip("Do I already have it? · /doihaveit");
+        if(click){itemSearchWindow.IsOpen=true;minimizedLaunchers.Remove("Do I already have it?");}
     }
 }

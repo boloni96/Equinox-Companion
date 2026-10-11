@@ -12,7 +12,8 @@ public sealed record SyncEvent(string Id, string Kind, DateTimeOffset At, Actor 
 }
 public sealed record GardenTargetDetails(uint Argument, float X, float Y, float Z);
 public sealed record StorageDetails(string Key, string Name, uint[] Items, StorageStack[]? Stacks = null);
-public sealed record StorageStack(uint ItemId,int Quantity,bool Hq,string Name);
+public sealed record StorageStack(uint ItemId,int Quantity,bool Hq,string Name,StoragePosition[]? Positions = null);
+public sealed record StoragePosition(int Slot,int Quantity);
 public sealed record EventQuestReward(uint ItemId, string Name);
 public sealed record EventQuestDefinition(uint Id, string Name, uint FestivalId, string FestivalName, int MinLevel, uint[] PreviousQuests, EventQuestReward[] Rewards);
 public sealed record CollectionDetails(string Category, uint[] Known, uint[] Unlocked, uint[] Obtained, int Segment = 0, EventQuestDefinition[]? QuestDefinitions = null, uint[]? Accepted = null);

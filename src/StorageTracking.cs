@@ -36,9 +36,9 @@ public sealed partial class Plugin
                 var item=container->Items[i];var id=item.ItemId%1000000;
                 if(item.Quantity<=0||id==0)continue;
                 var name=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>(Dalamud.Game.ClientLanguage.English).GetRowOrDefault(id)?.Name.ToString()??$"Item {id}";
-                stacks.Add(new(id,item.Quantity,(item.Flags&InventoryItem.ItemFlags.HighQuality)!=0,name));
+                stacks.Add(new(id,item.Quantity,(item.Flags&InventoryItem.ItemFlags.HighQuality)!=0,name,[new(i+1,item.Quantity)]));
             }
-            return stacks.GroupBy(x=>(x.ItemId,x.Hq)).Select(g=>new StorageStack(g.Key.ItemId,g.Sum(x=>x.Quantity),g.Key.Hq,g.First().Name)).OrderBy(x=>x.ItemId).ThenBy(x=>x.Hq).ToArray();
+            return stacks.GroupBy(x=>(x.ItemId,x.Hq)).Select(g=>new StorageStack(g.Key.ItemId,g.Sum(x=>x.Quantity),g.Key.Hq,g.First().Name,g.SelectMany(x=>x.Positions??[]).OrderBy(x=>x.Slot).ToArray())).OrderBy(x=>x.ItemId).ThenBy(x=>x.Hq).ToArray();
         }
         foreach (var type in Enum.GetValues<InventoryType>())
         {
@@ -48,7 +48,7 @@ public sealed partial class Plugin
             if (container==null || !container->IsLoaded || container->Items==null || container->Size is <=0 or >200) continue;
             var items=new List<uint>();
             for(var i=0;i<container->Size;i++)if(container->Items[i].Quantity>0)items.Add(container->Items[i].ItemId % 1000000);
-            Save("bag:"+id, id<=3?$"Inventory {id+1}":id==1000?"Equipped":id==2001?"Crystals":id>=4000?$"{(id>=4100?"Premium chocobo saddlebag":"Chocobo saddlebag")} {id%100+1}":"Armoury Chest · "+type.ToString().Replace("Armory", ""),items,ReadStacks(container));
+            Save("bag:"+id, id<=3?$"Inventory {id+1}":id==1000?"Equipped":id==2001?"Crystals":id>=4000?$"{(id>=4100?"Premium chocobo saddlebag":"Chocobo saddlebag")} {id%100+1}":"Armoury Chest · "+type.ToString().Replace("Armory", "").Replace("Feets","Feet").Replace("OffHand","Off hand").Replace("MainHand","Main hand").Replace("SoulCrystal","Soul crystal"),items,ReadStacks(container));
         }
         var state=UIState.Instance();
         if(state!=null && state->Cabinet.IsCabinetLoaded())

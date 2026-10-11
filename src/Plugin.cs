@@ -37,6 +37,7 @@ public sealed partial class Plugin : IDalamudPlugin
     [PluginService] internal static ICondition Conditions { get; private set; } = null!;
     [PluginService] internal static ICommandManager Commands { get; private set; } = null!;
     [PluginService] internal static ITargetManager Targets { get; private set; } = null!;
+    [PluginService] internal static IKeyState Keys { get; private set; } = null!;
     [PluginService] internal static IContextMenu ContextMenu { get; private set; } = null!;
     [PluginService] internal static IChatGui Chat { get; private set; } = null!;
     [PluginService] internal static IGameInteropProvider Interop { get; private set; } = null!;
@@ -152,7 +153,7 @@ public sealed partial class Plugin : IDalamudPlugin
         if (events.Length == 0) {
             if (eligible.Length > 0) syncStatus = "Eligible records exceed the upload size limit; kept locally. Export diagnostics.";
             else if (pending.Any(e => !SyncValidation.SupportedByWebsite(e.Kind, config.SharedRoster?.ProtocolVersion ?? 1)))
-                syncStatus = "New observations kept locally. Deploy Journal V7.11.127, save once, then refresh shared profiles.";
+                syncStatus = "New observations kept locally. Deploy Journal V7.11.128, save once, then refresh shared profiles.";
             nextSync = now.AddSeconds(FastGardenSync ? 1 : 30); return;
         }
         syncHistoryFirst = !syncHistoryFirst;
@@ -220,6 +221,7 @@ public sealed partial class Plugin : IDalamudPlugin
         fashionBrowserLink = Chat.AddChatLinkHandler(10513, (_, _) => OpenFashionBrowser());
         fashionCommandRegistered = Commands.AddHandler("/fashionr", new CommandInfo(OnFashionCommand) { HelpMessage = "Open the current Fashion Report V1 picture in game." });
         if (!fashionCommandRegistered) Log.Warning("/fashionr is already registered by another plugin. Use /equinox fashion instead.");
+        itemSearchWindow=new ItemSearchWindow(this);windows.AddWindow(itemSearchWindow);
         mainWindow = new CompanionWindow(this); windows.AddWindow(mainWindow);
         welcomeWindow = new WelcomeWindow(this); windows.AddWindow(welcomeWindow);
         fashionWindow = new FashionReportWindow(OpenFashionBrowser); windows.AddWindow(fashionWindow); fashionWindow.Minimize = () => MinimizeLauncher("Fashion Report");
@@ -953,6 +955,8 @@ public sealed partial class Plugin : IDalamudPlugin
         UpdateShortcuts();
         mainWindow.IsOpen = visible;
         escapePopupWasOpen=ImGui.IsPopupOpen("",ImGuiPopupFlags.AnyPopupId|ImGuiPopupFlags.AnyPopupLevel);
+        var escapeDown=Keys[Dalamud.Game.ClientState.Keys.VirtualKey.ESCAPE];
+        escapeRequested=escapeDown&&!escapeWasDown;escapeWasDown=escapeDown;
         windows.Draw();
         visible = mainWindow.IsOpen;
         DrawFloatingLaunchers();
@@ -970,7 +974,7 @@ public sealed partial class Plugin : IDalamudPlugin
         var shortcutSize = ImGui.GetFontSize() * 2.1f;
         var houseShortcuts=CurrentHouseShortcuts();
         ImGui.TableSetupColumn("Status", ImGuiTableColumnFlags.WidthStretch);
-        ImGui.TableSetupColumn("Shortcuts", ImGuiTableColumnFlags.WidthFixed, shortcutSize*(houseShortcuts.Length+1)+ImGui.GetStyle().ItemSpacing.X*houseShortcuts.Length);
+        ImGui.TableSetupColumn("Shortcuts", ImGuiTableColumnFlags.WidthFixed, shortcutSize*Math.Max(2,houseShortcuts.Length+1)+ImGui.GetStyle().ItemSpacing.X*Math.Max(1,houseShortcuts.Length));
         ImGui.TableNextColumn();
         var icon = Textures.GetFromFile(System.IO.Path.Combine(Pi.AssemblyLocation.DirectoryName!, "icon.png")).GetWrapOrDefault();
         if (icon is not null) { ImGui.Image(icon.Handle, new Vector2(40, 40)); ImGui.SameLine(); }
@@ -980,9 +984,11 @@ public sealed partial class Plugin : IDalamudPlugin
             ImGui.EndGroup();
         ImGui.TableNextColumn();
         foreach(var house in houseShortcuts){DrawHouseShortcut(house,shortcutSize);ImGui.SameLine();}
-        var fashionX=ImGui.GetCursorPosX();
+        var fashionX=ImGui.GetCursorPosX();if(houseShortcuts.Length==0){fashionX+=shortcutSize+ImGui.GetStyle().ItemSpacing.X;ImGui.SetCursorPosX(fashionX);}
         DrawHeaderShortcut(true, shortcutSize);
-        ImGui.SetCursorPosX(fashionX);DrawHeaderShortcut(false, shortcutSize);
+        var secondRowY=ImGui.GetCursorPosY();
+        ImGui.SetCursorPosX(Math.Max(0,fashionX-shortcutSize-ImGui.GetStyle().ItemSpacing.X));DrawItemSearchShortcut(shortcutSize);
+        ImGui.SameLine();ImGui.SetCursorPosX(fashionX);ImGui.SetCursorPosY(secondRowY);DrawHeaderShortcut(false, shortcutSize);
         ImGui.EndTable();
         }
             DrawOrderedTabs();
