@@ -98,7 +98,7 @@ public sealed partial class Plugin : IDalamudPlugin
     private bool faulted;
     private readonly CompanionSync sync = new();
     private Task<SyncResult>? syncTask;
-    private DateTimeOffset nextSync;
+    private DateTimeOffset nextSync, lastSyncAttempt;
     private string syncStatus = "Not paired. Local records only.";
     private string pairingInput = "";
     private int syncFailures;
@@ -131,10 +131,10 @@ public sealed partial class Plugin : IDalamudPlugin
                 syncFailures = result.Retry ? Math.Min(syncFailures + 1, 5) : 0;
                 nextSync = now.AddSeconds(result.Retry ? Math.Min(600, 30 * (1 << syncFailures)) : FastGardenSync ? 2 : 5);
             }
-            else { errorJournal.Record("upload", "Upload task failed; records kept.", exceptionType: syncTask.Exception?.GetBaseException().GetType().Name); syncStatus = "Sync paused after a connection error; local records are kept."; nextSync = now.AddMinutes(2); }
+            else { syncFailures = Math.Min(syncFailures + 1, 5); errorJournal.Record("upload", "Upload task failed; records kept.", exceptionType: syncTask.Exception?.GetBaseException().GetType().Name); syncStatus = "Sync paused after a connection error; local records are kept."; nextSync = now.AddMinutes(2); }
             syncTask = null;
         }
-        if (!config.SyncEnabled || config.PairingKey.Length != 64 || syncTask is not null || now < nextSync) return;
+        if (!config.SyncEnabled || config.PairingKey.Length != 64 || syncTask is not null || now < nextSync || now < lastSyncAttempt.AddSeconds(2)) return;
         var sent = config.SentEvents.ToHashSet();
         var pending = config.Houses.Where(h => h.Kind == "house.entered" && !sent.Contains(h.EventId))
             .Select(h => new SyncEvent(h.EventId, h.Kind, h.ObservedAt, WithWorldNames(h.Actor), WithAddressNames(h.Address)))
@@ -160,6 +160,7 @@ public sealed partial class Plugin : IDalamudPlugin
         lastSyncBatchSize = events.Length;
         lastSyncBatchOldest = events.Min(e => e.At); lastSyncBatchNewest = events.Max(e => e.At);
         syncStatus = $"Sending {events.Length} events · recent actions and history recovery…";
+        lastSyncAttempt = now;
         syncTask = sync.Send(config.PairingKey, events);
     }
 
@@ -368,6 +369,7 @@ public sealed partial class Plugin : IDalamudPlugin
                 {
                     var visit = new HouseObservation(Guid.NewGuid().ToString("N"), now, kind, actor, address);
                     config.Houses.Add(visit);
+                    WakeObservationSync();
                     if (config.NotifyHouseEntries && kind == "house.entered") pendingHouseNotices.Add(visit);
 
                     SaveConfiguration();
@@ -635,13 +637,18 @@ public sealed partial class Plugin : IDalamudPlugin
         }
     }
 
+    private void WakeObservationSync()
+    {
+        nextSync = SyncSchedule.Wake(DateTimeOffset.UtcNow, nextSync, lastSyncAttempt, syncFailures);
+    }
+
     private void KeepDiscovery(SyncEvent e, bool force = false)
     {
         if (!SyncValidation.CanSend(e, DateTimeOffset.UtcNow)) return;
         var last = config.Discoveries.LastOrDefault(x => x.Kind == e.Kind && x.Actor.ContentId == e.Actor.ContentId && x.Address?.HouseId == e.Address?.HouseId && x.Patch == e.Patch && x.Bed == e.Bed && x.Collection?.Category == e.Collection?.Category && x.Collection?.Segment == e.Collection?.Segment && x.Storage?.Key == e.Storage?.Key && x.GardenTarget?.Argument == e.GardenTarget?.Argument && x.Company?.Id == e.Company?.Id && x.Company?.Profile?.Source == e.Company?.Profile?.Source);
         if (!force && last is not null && !GardenTargetMap.CanRepeatObservation(e.Kind, e.At - last.At) && !(e.GardenTarget is not null && e.At-last.At > TimeSpan.FromDays(30)) && !(e.Kind is "garden.ready" or "garden.observed" or "garden.status" or "garden.empty" or "garden.dead" && config.Planting.Any(p => p.Actor.ContentId == e.Actor.ContentId && p.Address.HouseId == e.Address?.HouseId && p.Patch == e.Patch && p.Bed == e.Bed && p.ConfirmedAt > last.At)) && JsonSerializer.Serialize(new { last.Actor, last.Address, last.House, last.Character, last.Crop, last.Collection, last.Fashion, last.Voyage, last.GardenTarget, last.Storage, last.Company, last.CachedVoyage, last.Supplies }) == JsonSerializer.Serialize(new { e.Actor, e.Address, e.House, e.Character, e.Crop, e.Collection, e.Fashion, e.Voyage, e.GardenTarget, e.Storage, e.Company, e.CachedVoyage, e.Supplies })) return;
         config.Discoveries.Add(e);
-        if(e.Kind.StartsWith("garden.") || e.Kind.StartsWith("house.")) GardenActionRecorded();
+        WakeObservationSync();
         if(collectingStorage)storageChanged=true;else SaveConfiguration();
     }
 

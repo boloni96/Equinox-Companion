@@ -143,7 +143,7 @@ public sealed partial class Plugin
     private IEnumerable<SharedGardenTarget> GardenMappings() => (config.SharedRoster?.GardenTargets??[])
         .Concat(config.Discoveries.Select(GardenTargetMap.FromNumbered).OfType<SharedGardenTarget>())
         .Concat((gardenBedSync?.Mappings??[]).Select(e=>GardenTargetMap.FromNumbered(e with {Address=WithAddressNames(e.Address!)})).OfType<SharedGardenTarget>());
-    private void GardenActionRecorded(){if(syncFailures==0)nextSync=default;}
+    private void GardenActionRecorded()=>WakeObservationSync();
     private SharedGardenPlan EffectiveGardenPlan(SharedGardenPlan plan)
     {
         var actions=$"{config.Planting.LastOrDefault()?.EventId}:{config.Tending.LastOrDefault()?.EventId}:{config.Discoveries.LastOrDefault()?.Id}:{gardenBedSync?.Mappings.LastOrDefault()?.Id}";

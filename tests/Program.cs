@@ -1697,3 +1697,7 @@ var housingStorageEvent=new SyncEvent(Guid.NewGuid().ToString("N"),"storage.obse
 Check("Housing storage observation accepted",SyncValidation.CanSend(housingStorageEvent,DateTimeOffset.UtcNow).ToString(),"True");
 Check("Unsupported housing container rejected",SyncValidation.CanSend(housingStorageEvent with{Storage=housingStorageEvent.Storage! with{Key="house:0000000000000001:99999"}},DateTimeOffset.UtcNow).ToString(),"False");
 Check("Housing identity required",SyncValidation.CanSend(housingStorageEvent with{Storage=housingStorageEvent.Storage! with{Key="house:wrong:27001"}},DateTimeOffset.UtcNow).ToString(),"False");
+Check("New observation wakes idle upload in half a second", (SyncSchedule.Wake(time,time.AddSeconds(30),time.AddMinutes(-1),0)-time).TotalMilliseconds.ToString(),"500");
+Check("Observation burst respects upload spacing", (SyncSchedule.Wake(time,time.AddSeconds(30),time,0)-time).TotalSeconds.ToString(),"2");
+Check("New observations do not postpone an already scheduled upload", SyncSchedule.Wake(time,time.AddMilliseconds(200),time.AddMinutes(-1),0).ToString("O"),time.AddMilliseconds(200).ToString("O"));
+Check("New observations preserve failed upload backoff", SyncSchedule.Wake(time,time.AddMinutes(2),time,1).ToString("O"),time.AddMinutes(2).ToString("O"));
