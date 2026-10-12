@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 namespace EquinoxCompanion;
 internal sealed record MaintenanceNotice(string Title,string Url,DateTimeOffset? Start,DateTimeOffset? End,bool Completed,DateTimeOffset? Published=null)
 {
+ internal bool Scheduled(DateTimeOffset now)=>!Completed&&Start is {} start&&End is {} end&&end>start&&now<end;
  internal bool Relevant(string world,string dc)=>Title.Contains("All Worlds",StringComparison.OrdinalIgnoreCase)||world.Length>0&&Title.Contains(world,StringComparison.OrdinalIgnoreCase)||dc.Length>0&&Title.Contains(dc,StringComparison.OrdinalIgnoreCase);
  internal string Identity=>$"{Url}/{Start:O}/{End:O}/{Completed}";
  internal string Message(DateTimeOffset now,TimeZoneInfo zone)

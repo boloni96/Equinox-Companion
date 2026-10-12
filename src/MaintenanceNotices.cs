@@ -26,13 +26,13 @@ public sealed partial class Plugin
    {
     maintenanceNextCheck=now.AddMinutes(15);maintenanceFailureShown=false;
     var world=Player.HomeWorld.Value.Name.ToString();var dc=Player.HomeWorld.Value.DataCenter.Value.Name.ToString();
-    foreach(var notice in task.Result.Where(n=>n.Relevant(world,dc)&&!n.Completed&&(n.End is {} end?end>now.AddHours(-24):n.Published>now.AddDays(-14))).Take(3))
+    foreach(var notice in task.Result.Where(n=>n.Relevant(world,dc)&&n.Scheduled(now)).Take(3))
      if(maintenanceSession.New(notice))PrintMaintenance(notice.Message(now,TimeZoneInfo.Local),notice.Url);
    }
    else
    {
     _ = task.Exception;maintenanceNextCheck=now.AddMinutes(2);
-    if(!maintenanceFailureShown){maintenanceFailureShown=true;PrintMaintenance("Maintenance check unavailable; check the official notices.",MaintenanceService.Index);}
+    if(!maintenanceFailureShown){maintenanceFailureShown=true;Log.Warning("Maintenance check unavailable; will retry quietly.");}
    }
   }
   if(maintenanceTask is null&&now>=maintenanceNextCheck)
