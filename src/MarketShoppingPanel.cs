@@ -55,6 +55,17 @@ public sealed partial class Plugin
             marketShoppingMode = !marketShoppingMode;
             if(marketShoppingMode) CancelMarketSearch(); else CancelMarketShopping();
         }
+        ImGui.SameLine();
+        if(ImGui.Button("Help")) ImGui.OpenPopup("MarketHelp");
+        ImGui.SetNextWindowSize(new Vector2(460, 0), ImGuiCond.Always);
+        if(ImGui.BeginPopup("MarketHelp"))
+        {
+            ImGui.TextWrapped("Market board prices across NA, Europe, Japan and Oceania. Recorded listings may have changed or sold. Totals exclude tax; check your character's world access before travel.");
+            ImGui.Separator();
+            ImGui.TextWrapped("Shopping lists check one item at a time while open. Large lists take longer than the selected refresh interval. Up to 100 listings are returned per queried world/region.");
+            ImGui.TextWrapped("Compare total spend and price per item: buying extra can lower the unit price but cost more overall. Whole stacks only; estimates are not a guaranteed lowest-cost combination.");
+            ImGui.EndPopup();
+        }
         ImGui.SetNextWindowSize(new Vector2(580, 390), ImGuiCond.FirstUseEver);
         if(ImGui.BeginPopupModal("Import shopping list", ImGuiWindowFlags.AlwaysAutoResize))
         {
@@ -145,8 +156,6 @@ public sealed partial class Plugin
             marketImportText = ""; marketImportError = ""; SaveMarketShopping();
         }
         ImGui.EndDisabled();
-        ImGui.TextWrapped("Price checks are queued one item at a time while this window is open. Large lists take longer than the selected refresh interval.");
-        ImGui.TextWrapped("Compare total spend and price per item: buying extra can lower the unit price but cost more overall. Whole stacks only; estimates exclude tax and are not a guaranteed lowest-cost combination.");
         if(marketShoppingEntries.Count == 0) ImGui.TextWrapped("Import your remaining ingredients from Artisan to start.");
         if(marketTravelStatus.Length > 0) ImGui.TextWrapped(marketTravelStatus);
         if(ImGui.BeginChild("ShoppingItems", new Vector2(0, 0), false))

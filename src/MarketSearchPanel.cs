@@ -160,7 +160,6 @@ public sealed partial class Plugin
         }
         if(!marketPendingLookup && MarketRefresh.Due(marketWindow.IsOpen, marketSelectedId, marketTask is not null, DateTimeOffset.UtcNow, marketAutoRefreshAt))
             StartMarketSearch(preserveResults: true, force: true);
-        ImGui.TextWrapped("Market board prices across NA, Europe, Japan and Oceania.");
         ImGui.SetNextItemWidth(Math.Max(200, ImGui.GetContentRegionAvail().X - 130));
         var previousQuery = marketQuery;
         var submit = ImGui.InputTextWithHint("##MarketQuery", "Item name or item ID", ref marketQuery, 200, ImGuiInputTextFlags.EnterReturnsTrue);
@@ -179,23 +178,31 @@ public sealed partial class Plugin
         if(!marketIndexReady) ImGui.TextDisabled("Preparing item names…");
         if(marketSelectedId != 0)
         {
-            ImGui.TextWrapped(marketSelectedName);
-            DrawMarketItemSources(marketSelectedId, marketSelectedName);
             ImGui.BeginDisabled(marketTask is not null || DateTimeOffset.UtcNow < marketNextSearch);
             if(ImGui.Button("Refresh now")) StartMarketSearch(preserveResults: true, force: true);
             ImGui.EndDisabled(); ImGui.SameLine();
             if(ImGui.Button("Copy item name")) ImGui.SetClipboardText(marketSelectedName);
+            ImGui.SameLine();
+            if(ImGui.Button("Sources")) ImGui.OpenPopup("MarketSourceDetails");
+            if(ImGui.IsItemHovered()) ImGui.SetTooltip(MarketSourceLabel(marketSelectedId));
+            ImGui.SetNextWindowSizeConstraints(new Vector2(300, 0), new Vector2(550, 450));
+            if(ImGui.BeginPopup("MarketSourceDetails"))
+            {
+                ImGui.TextWrapped(marketSelectedName);
+                DrawMarketItemSources(marketSelectedId, marketSelectedName);
+                ImGui.EndPopup();
+            }
+            ImGui.SameLine();
+            ImGui.TextDisabled(marketTask is not null ? "Checking…" : $"Refresh in {Math.Max(0, (int)Math.Ceiling((marketAutoRefreshAt - DateTimeOffset.UtcNow).TotalSeconds))}s");
         }
         ImGui.TextWrapped(marketMessage);
+        if(ImGui.IsItemHovered() && marketResult is {} checkedResult)
+            ImGui.SetTooltip($"Last check {checkedResult.FetchedAt.LocalDateTime:HH:mm:ss} · up to 100 listings per queried world/region");
         if(marketResult is {} result)
         {
             if(result.FailedRegions.Length > 0)
                 ImGui.TextColored(new Vector4(1, .72f, .3f, 1), "Incomplete search — unavailable: " + string.Join(", ", result.FailedRegions));
-            ImGui.TextDisabled($"Last check {result.FetchedAt.LocalDateTime:HH:mm:ss} · up to 100 cheapest listings per queried world/region");
         }
-        if(marketSelectedId != 0)
-            ImGui.TextDisabled(marketTask is not null ? "Auto-refresh active · checking Universalis" : $"Auto-refresh while open · next check in {Math.Max(0, (int)Math.Ceiling((marketAutoRefreshAt - DateTimeOffset.UtcNow).TotalSeconds))}s");
-        ImGui.TextWrapped("Recorded prices may have changed or sold. Stack totals exclude purchase tax. Check world access for your character; a listed region is not a travel guarantee.");
         if(marketMatches.Length > 0)
         {
             if(ImGui.BeginChild("MarketMatches", new Vector2(0, 0), true))
@@ -208,14 +215,16 @@ public sealed partial class Plugin
     }
     private bool DrawMarketFilters()
     {
-        ImGui.SetNextItemWidth(180);
-        var changed = ImGui.Combo("Region", ref marketRegion, "All regions\0North America\0Europe\0Japan\0Oceania\0");
+        var filterWidth = Math.Max(200, ImGui.GetContentRegionAvail().X - ImGui.GetStyle().ItemSpacing.X * 3);
+        ImGui.SetNextItemWidth(filterWidth * .26f);
+        var changed = ImGui.Combo("##MarketRegion", ref marketRegion, "All regions\0North America\0Europe\0Japan\0Oceania\0");
+        if(ImGui.IsItemHovered()) ImGui.SetTooltip("Region");
         if(changed) marketWorld = 0;
         marketWorlds ??= DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().Where(w => w.IsPublic)
             .Select(w => (Id:w.RowId, Name:w.Name.ToString(), Region:(int)w.DataCenter.Value.Region.RowId switch { 1 => 3, 2 => 1, 3 => 2, 4 => 4, _ => 0 }))
             .Where(w => w.Region != 0).OrderBy(w => w.Name).ToArray();
-        ImGui.SameLine(); ImGui.SetNextItemWidth(180);
-        if(ImGui.BeginCombo("World", marketWorld == 0 ? "All worlds" : marketWorlds.FirstOrDefault(w => w.Id == marketWorld).Name))
+        ImGui.SameLine(); ImGui.SetNextItemWidth(filterWidth * .26f);
+        if(ImGui.BeginCombo("##MarketWorld", marketWorld == 0 ? "All worlds" : marketWorlds.FirstOrDefault(w => w.Id == marketWorld).Name))
         {
             if(ImGui.Selectable("All worlds", marketWorld == 0)) { marketWorld = 0; changed = true; }
             foreach(var world in marketWorlds)
@@ -223,15 +232,18 @@ public sealed partial class Plugin
                 { marketWorld = world.Id; changed = true; }
             ImGui.EndCombo();
         }
-        ImGui.SetNextItemWidth(140);
-        changed |= ImGui.Combo("Quality", ref marketQuality, "Any quality\0NQ only\0HQ only\0");
-        ImGui.SetNextItemWidth(140);
-        if(ImGui.Combo("Auto-refresh while open", ref marketRefreshChoice, "15 seconds\0" + "30 seconds\0" + "60 seconds\0"))
+        if(ImGui.IsItemHovered()) ImGui.SetTooltip("World");
+        ImGui.SameLine(); ImGui.SetNextItemWidth(filterWidth * .20f);
+        changed |= ImGui.Combo("##MarketQuality", ref marketQuality, "Any quality\0NQ only\0HQ only\0");
+        if(ImGui.IsItemHovered()) ImGui.SetTooltip("Quality");
+        ImGui.SameLine(); ImGui.SetNextItemWidth(filterWidth * .28f);
+        if(ImGui.Combo("##MarketAutoRefresh", ref marketRefreshChoice, "Refresh: 15s\0" + "Refresh: 30s\0" + "Refresh: 60s\0"))
         {
             config.MarketRefreshSeconds = MarketRefreshChoices[marketRefreshChoice]; SaveConfiguration();
             foreach(var entry in marketShoppingEntries) if(entry.Result is {} loaded) entry.Due = MarketRefresh.Next(loaded, entry.Failures, config.MarketRefreshSeconds);
             if(marketResult is {} current) marketAutoRefreshAt = MarketRefresh.Next(current, marketRefreshFailures, config.MarketRefreshSeconds);
         }
+        if(ImGui.IsItemHovered()) ImGui.SetTooltip("Auto-refresh interval while this window is open");
         return changed;
     }
     private void DrawMarketListings(MarketResult result, string itemName, string tableId, float height = 0)
