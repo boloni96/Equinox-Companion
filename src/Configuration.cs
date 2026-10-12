@@ -47,6 +47,7 @@ public sealed class Configuration : IPluginConfiguration
     public bool NotifyGardenDead { get; set; } = true;
     public bool NotifyGardenMaturity { get; set; } = true;
     public bool NotifyGardenUnknownCare { get; set; } = true;
+    public bool NotifyMaintenance { get; set; } = true;
     public bool NotifyFashionLink { get; set; } = true;
     public bool NotifyPlantingUnavailable { get; set; } = true;
     public bool NotifyBrowserErrors { get; set; } = true;

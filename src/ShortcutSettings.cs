@@ -88,6 +88,7 @@ public sealed partial class Plugin
         ImGui.EndDisabled();
         ImGui.TextWrapped("Once per character login: one light-blue tending message and/or one orange risk message, grouped by Person across all paired accounts and characters. Mature crops do not trigger reminders. No house lists or repeated messages during the session.");
         ImGui.Separator();ImGui.TextUnformatted("Commands and Fashion Report");
+        MessageToggle("Maintenance reminder · 5 minutes after login (local computer time)",config.NotifyMaintenance,v=>config.NotifyMaintenance=v);
         MessageToggle("Fashion Report browser link",config.NotifyFashionLink,v=>config.NotifyFashionLink=v);
         MessageToggle("Gardening command: house not identified",config.NotifyPlantingUnavailable,v=>config.NotifyPlantingUnavailable=v);
         MessageToggle("Fashion Report: could not open browser",config.NotifyBrowserErrors,v=>config.NotifyBrowserErrors=v);

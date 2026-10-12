@@ -234,6 +234,9 @@ public sealed partial class Plugin : IDalamudPlugin
         Pi.UiBuilder.OpenConfigUi += Open;
         Framework.Update += Update;
         Client.Login += OnGardenNoticeLogin;
+        Client.Login += ResetMaintenanceLogin;
+        maintenanceLogout=(_,_)=>ResetMaintenanceLogin();
+        Client.Logout += maintenanceLogout;
         Client.TerritoryChanged += OnCofferTerritoryChanged;
         Chat.LogMessage += OnLog;
         Chat.ChatMessage += OnGardenChat;
@@ -293,6 +296,7 @@ public sealed partial class Plugin : IDalamudPlugin
     private unsafe void UpdateCore(IFramework framework)
     {
         var now = DateTimeOffset.UtcNow;
+        UpdateMaintenanceNotices(now);
         UpdateQuickLoot(now);
         UpdateCofferMarkers(now);
         // Give a coffer click a short uncontested turn before other automatic interactions.
@@ -1126,6 +1130,7 @@ public sealed partial class Plugin : IDalamudPlugin
 
     public void Dispose()
     {
+        DisposeMaintenanceNotices();
         CancelMarketShopping();
         catalogueQuests?.Dispose(); catalogueHair?.Dispose();
         var keepCoffersEnabled = config.EnableCofferMarkers;
@@ -1160,6 +1165,8 @@ public sealed partial class Plugin : IDalamudPlugin
         foreach (var menuEvent in MenuEvents) Addons.UnregisterListener(menuEvent, GardenMenus, OnGardenMenu);
         Framework.Update -= Update;
         Client.Login -= OnGardenNoticeLogin;
+        Client.Login -= ResetMaintenanceLogin;
+        Client.Logout -= maintenanceLogout;
         Client.TerritoryChanged -= OnCofferTerritoryChanged;
         Pi.UiBuilder.Draw -= Draw;
         DisposeMarketSearch();
