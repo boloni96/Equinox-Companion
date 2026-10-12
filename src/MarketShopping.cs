@@ -4,7 +4,11 @@ namespace EquinoxCompanion;
 
 public sealed record MarketShoppingRequest(string Name, int Quantity);
 internal sealed record MarketImport(MarketShoppingRequest[] Items, string[] Errors);
-internal sealed record MarketWorldPlan(uint WorldId, string World, string Region, long Available, long BuyQuantity, long Cost, bool Complete, MarketListing[] Purchases);
+internal sealed record MarketWorldPlan(uint WorldId, string World, string Region, long Available, long BuyQuantity, long Cost, bool Complete, MarketListing[] Purchases)
+{
+    internal MarketListing[] UnitPricePurchases { get; init; } = [];
+    internal bool HasUnitPriceAlternative => !Purchases.SequenceEqual(UnitPricePurchases);
+}
 internal static class MarketShopping
 {
     internal const int MaxItems = 100, MaxQuantity = 1_000_000;
@@ -47,11 +51,12 @@ internal static class MarketShopping
                 if(cost > long.MaxValue - row.Total) continue;
                 chosen.Add(row); quantity += row.Quantity; cost += row.Total;
             }
+            var unitPricePurchases = chosen.ToArray();
             // Avoid a cheap-unit oversized stack when one sufficient stack costs less.
             var single = rows.Where(x => x.Quantity >= needed).OrderBy(x => x.Total).FirstOrDefault();
             if(single is not null && (quantity < needed || single.Total < cost))
             { chosen = [single]; quantity = single.Quantity; cost = single.Total; }
-            plans.Add(new(group.Key, rows[0].World, rows[0].Region, available, quantity, cost, quantity >= needed, chosen.ToArray()));
+            plans.Add(new(group.Key, rows[0].World, rows[0].Region, available, quantity, cost, quantity >= needed, chosen.ToArray()) { UnitPricePurchases = unitPricePurchases });
         }
         return plans.OrderByDescending(x => x.Complete).ThenBy(x => x.Cost).ThenBy(x => x.World, StringComparer.Ordinal).ToArray();
     }

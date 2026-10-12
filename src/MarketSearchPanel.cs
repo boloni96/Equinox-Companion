@@ -161,10 +161,19 @@ public sealed partial class Plugin
         if(!marketPendingLookup && MarketRefresh.Due(marketWindow.IsOpen, marketSelectedId, marketTask is not null, DateTimeOffset.UtcNow, marketAutoRefreshAt))
             StartMarketSearch(preserveResults: true, force: true);
         ImGui.TextWrapped("Market board prices across NA, Europe, Japan and Oceania.");
-        ImGui.SetNextItemWidth(Math.Max(200, ImGui.GetContentRegionAvail().X - 95));
+        ImGui.SetNextItemWidth(Math.Max(200, ImGui.GetContentRegionAvail().X - 130));
         var previousQuery = marketQuery;
         var submit = ImGui.InputTextWithHint("##MarketQuery", "Item name or item ID", ref marketQuery, 200, ImGuiInputTextFlags.EnterReturnsTrue);
         if(previousQuery != marketQuery) marketExactId = 0;
+        ImGui.SameLine();
+        if(ImGui.Button("X##ClearMarketSearch"))
+        {
+            CancelMarketSearch(); marketQuery = ""; marketSelectedName = "";
+            marketSelectedId = 0; marketExactId = 0; marketPendingLookup = false;
+            marketMatches = []; marketResult = null; marketAutoRefreshAt = default;
+            marketRefreshFailures = 0; marketMessage = "Search by item name or item ID.";
+        }
+        if(ImGui.IsItemHovered()) ImGui.SetTooltip("Clear search text and results");
         ImGui.SameLine(); if(ImGui.Button("Find item") || submit) marketPendingLookup = true;
         if(DrawMarketFilters()) { ResetMarketShoppingResults(); if(marketSelectedId != 0) StartMarketSearch(); }
         if(!marketIndexReady) ImGui.TextDisabled("Preparing item names…");

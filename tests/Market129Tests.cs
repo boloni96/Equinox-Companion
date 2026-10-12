@@ -21,6 +21,8 @@ internal static class Market129Tests
         Check(plans.Last().WorldId == 2 && !plans.Last().Complete, "partial cheap world ranks after complete worlds");
         Check(plans.All(p=>p.Purchases.All(x=>x.WorldId==p.WorldId)), "world plans never mix destinations");
         var oversized = MarketShopping.Plans(new[]{Row(1,1,999),Row(1,2,3)},3).Single();
+        Check(oversized.HasUnitPriceAlternative && oversized.UnitPricePurchases.Single().Quantity == 999 && oversized.UnitPricePurchases.Single().Total == 999, "bulk low-unit-price option retained alongside lower total");
+        Check(!plans[0].HasUnitPriceAlternative, "identical purchase options not duplicated");
         Check(oversized.Cost == 6 && oversized.BuyQuantity == 3, "cheaper sufficient single stack beats oversized cheap-unit stack");
         Check(MarketShopping.Plans([],3).Length == 0 && MarketShopping.Plans([Row(1,1,1)],0).Length == 0, "empty inputs make no plan");
         Check(MarketShopping.Plans([Row(1,0,5),Row(1,1,0)],2).Length == 0, "invalid listing quantity or price ignored");

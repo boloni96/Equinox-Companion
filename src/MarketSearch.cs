@@ -17,7 +17,7 @@ internal sealed class MarketSearch : IDisposable
     {
         http = handler is null ? new HttpClient() : new HttpClient(handler);
         http.Timeout = TimeSpan.FromSeconds(20);
-        http.DefaultRequestHeaders.UserAgent.ParseAdd("EquinoxCompanion/0.5.1.129");
+        http.DefaultRequestHeaders.UserAgent.ParseAdd("EquinoxCompanion/0.5.1.130");
     }
     internal async Task<MarketResult> Search(uint item, int region, int quality, CancellationToken token, bool force = false, uint world = 0, string worldName = "")
     {

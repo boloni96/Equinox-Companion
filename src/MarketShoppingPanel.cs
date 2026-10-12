@@ -8,7 +8,7 @@ public sealed partial class Plugin
     {
         internal MarketShoppingRequest Request = request;
         internal uint ItemId, PlanWorld;
-        internal bool Resolved;
+        internal bool Resolved, PlanUnitPrice;
         internal string Status = "Preparing item names…";
         internal MarketResult? Result;
         internal MarketWorldPlan[] Plans = [];
@@ -138,8 +138,15 @@ public sealed partial class Plugin
         if(ImGui.Button("Expand all")) marketShoppingExpand = true;
         ImGui.SameLine(); if(ImGui.Button("Collapse all")) marketShoppingExpand = false;
         ImGui.SameLine(); if(ImGui.Button("Refresh list")) foreach(var entry in marketShoppingEntries) entry.Due = default;
+        ImGui.SameLine(); ImGui.BeginDisabled(marketShoppingEntries.Count == 0);
+        if(ImGui.Button("Reset list"))
+        {
+            CancelMarketShopping(); marketShoppingEntries.Clear(); marketShoppingCursor = 0;
+            marketImportText = ""; marketImportError = ""; SaveMarketShopping();
+        }
+        ImGui.EndDisabled();
         ImGui.TextWrapped("Price checks are queued one item at a time while this window is open. Large lists take longer than the selected refresh interval.");
-        ImGui.TextWrapped("Estimates use whole stacks from the cheapest unit-price listings returned, or a cheaper single sufficient stack. They exclude tax and may buy extra; not a guaranteed lowest-cost combination.");
+        ImGui.TextWrapped("Compare total spend and price per item: buying extra can lower the unit price but cost more overall. Whole stacks only; estimates exclude tax and are not a guaranteed lowest-cost combination.");
         if(marketShoppingEntries.Count == 0) ImGui.TextWrapped("Import your remaining ingredients from Artisan to start.");
         if(marketTravelStatus.Length > 0) ImGui.TextWrapped(marketTravelStatus);
         if(ImGui.BeginChild("ShoppingItems", new Vector2(0, 0), false))
@@ -181,28 +188,44 @@ public sealed partial class Plugin
     }
     private void DrawMarketShoppingPlans(ShoppingEntry entry)
     {
-        if(!ImGui.BeginTable("WorldPlans", 6, ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.ScrollY, new Vector2(0, 180))) return;
-        foreach(var name in new[] { "World", "Available", "Plan quantity", "Plan gil", "Stacks", "Travel" }) ImGui.TableSetupColumn(name);
-        ImGui.TableSetupScrollFreeze(0, 1); ImGui.TableHeadersRow();
+        if(!ImGui.BeginTable("WorldPlans", 8, ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.ScrollY | ImGuiTableFlags.ScrollX | ImGuiTableFlags.Resizable, new Vector2(0, 210))) return;
+        foreach(var column in new[] { ("World",90f), ("DC / Region",145f), ("Option",125f), ("Buy quantity",125f), ("Gil / item",85f), ("Total gil",90f), ("Stacks",55f), ("Travel",60f) })
+            ImGui.TableSetupColumn(column.Item1, ImGuiTableColumnFlags.WidthFixed, column.Item2);
+        ImGui.TableSetupScrollFreeze(1, 1); ImGui.TableHeadersRow();
         foreach(var plan in entry.Plans)
         {
-            ImGui.PushID((int)plan.WorldId); ImGui.TableNextRow();
-            ImGui.TableNextColumn(); ImGui.TextUnformatted(plan.World);
-            if(ImGui.IsItemHovered()) ImGui.SetTooltip(MarketDataCenter(plan.WorldId) + " / " + plan.Region);
-            ImGui.TableNextColumn(); ImGui.TextUnformatted(plan.Available.ToString("N0"));
-            ImGui.TableNextColumn(); ImGui.TextUnformatted(plan.BuyQuantity.ToString("N0") + (plan.Complete ? "" : " · short"));
-            ImGui.TableNextColumn(); ImGui.TextUnformatted(plan.Cost.ToString("N0"));
-            ImGui.TableNextColumn(); if(ImGui.SmallButton("View")) entry.PlanWorld = plan.WorldId;
-            ImGui.TableNextColumn(); var here = Player.IsLoaded && Player.CurrentWorld.RowId == plan.WorldId;
-            ImGui.BeginDisabled(!Player.IsLoaded || here || DateTimeOffset.UtcNow < marketTravelNext);
-            if(ImGui.SmallButton(here ? "Here" : "Travel")) TravelToMarketWorld(plan.WorldId);
-            ImGui.EndDisabled(); ImGui.PopID();
+            ImGui.PushID((int)plan.WorldId);
+            DrawOption(plan, plan.Purchases, false);
+            if(plan.HasUnitPriceAlternative) DrawOption(plan, plan.UnitPricePurchases, true);
+            ImGui.PopID();
         }
         ImGui.EndTable();
         if(entry.Plans.FirstOrDefault(x => x.WorldId == entry.PlanWorld) is {} selected)
         {
-            ImGui.TextWrapped($"{selected.World}: buy {selected.BuyQuantity:N0} for {selected.Cost:N0} gil before tax · need {entry.Request.Quantity:N0}.");
-            DrawMarketListings(new(selected.Purchases, [], entry.Result!.FetchedAt), entry.Request.Name, "ChosenStacks", 170);
+            var rows = entry.PlanUnitPrice && selected.HasUnitPriceAlternative ? selected.UnitPricePurchases : selected.Purchases;
+            var quantity = rows.Sum(x => (long)x.Quantity); var cost = rows.Sum(x => x.Total);
+            ImGui.TextWrapped($"{selected.World} · {MarketDataCenter(selected.WorldId)} / {selected.Region}: buy {quantity:N0} for {cost:N0} gil before tax · need {entry.Request.Quantity:N0} · " + QuantityDifference(quantity));
+            DrawMarketListings(new(rows, [], entry.Result!.FetchedAt), entry.Request.Name, "ChosenStacks", 170);
+        }
+        string QuantityDifference(long quantity) => quantity >= entry.Request.Quantity ? $"{quantity - entry.Request.Quantity:N0} extra" : $"{entry.Request.Quantity - quantity:N0} short";
+        void DrawOption(MarketWorldPlan plan, MarketListing[] rows, bool unitPrice)
+        {
+            var quantity = rows.Sum(x => (long)x.Quantity); var cost = rows.Sum(x => x.Total);
+            ImGui.PushID(unitPrice ? 1 : 0); ImGui.TableNextRow();
+            ImGui.TableNextColumn(); ImGui.TextUnformatted(plan.World);
+            if(ImGui.IsItemHovered()) ImGui.SetTooltip($"Returned stock on this world: {plan.Available:N0}");
+            ImGui.TableNextColumn(); ImGui.TextUnformatted(MarketDataCenter(plan.WorldId) + " / " + plan.Region);
+            ImGui.TableNextColumn(); ImGui.TextUnformatted(unitPrice ? "Lowest unit first" : "Lower total est.");
+            if(ImGui.IsItemHovered()) ImGui.SetTooltip(unitPrice ? "Whole stacks ordered by unit price until your required quantity is covered." : "Lower total of the cheapest-unit stack plan and a single sufficient stack. Not an exhaustive combination search.");
+            ImGui.TableNextColumn(); ImGui.TextUnformatted($"{quantity:N0} ({QuantityDifference(quantity)})");
+            ImGui.TableNextColumn(); ImGui.TextUnformatted(quantity > 0 ? ((decimal)cost / quantity).ToString("N2") : "—");
+            if(ImGui.IsItemHovered()) ImGui.SetTooltip("Average gil per purchased item across these whole stacks.");
+            ImGui.TableNextColumn(); ImGui.TextUnformatted(cost.ToString("N0"));
+            ImGui.TableNextColumn(); if(ImGui.SmallButton("View")) { entry.PlanWorld = plan.WorldId; entry.PlanUnitPrice = unitPrice; }
+            ImGui.TableNextColumn(); var here = Player.IsLoaded && Player.CurrentWorld.RowId == plan.WorldId;
+            ImGui.BeginDisabled(!Player.IsLoaded || here || DateTimeOffset.UtcNow < marketTravelNext);
+            if(ImGui.SmallButton(here ? "Here" : "Travel")) TravelToMarketWorld(plan.WorldId);
+            ImGui.EndDisabled(); ImGui.PopID();
         }
     }
 }

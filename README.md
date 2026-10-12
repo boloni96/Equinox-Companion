@@ -1,6 +1,6 @@
-# Current release: Companion 0.5.1.129
+# Current release: Companion 0.5.1.130
 
-Artisan shopping-list import with quantities, collapsible item rows, local item sources and whole-stack world estimates. See [release notes](RELEASE-0.5.1.129.md).
+Artisan shopping-list import with quantities, collapsible item rows, local item sources and whole-stack world estimates. See [release notes](RELEASE-0.5.1.130.md).
 
 # Equinox Companion 0.5.1.50
 
