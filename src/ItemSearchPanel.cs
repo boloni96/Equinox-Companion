@@ -93,19 +93,21 @@ public sealed partial class Plugin
             }
             if(ImGui.Button("Clear filters")){if(itemCurrentOnly)itemRestorePerson=itemPreviousPerson;itemCurrentOnly=false;itemWorld=itemAccount=itemCharacter="";itemLocationFilter=itemQualityFilter=itemFreshnessFilter=0;}
         }
-        ImGui.SetNextItemWidth(Math.Max(200,ImGui.GetContentRegionAvail().X));
+        ImGui.SetNextItemWidth(Math.Max(200,ImGui.GetContentRegionAvail().X-35));
         if(ImGui.InputTextWithHint("###item-search","Item name",ref itemSearchQuery,120)){itemExactId=null;itemSearchDiscoveryCount=-1;}
+        ImGui.SameLine();if(ImGui.Button("X##ClearOwnedSearch")){itemSearchQuery="";itemExactId=null;itemSearchDiscoveryCount=-1;}
+        if(ImGui.IsItemHovered())ImGui.SetTooltip("Clear search text and results");
         BuildItemSearch();
-        ImGui.TextDisabled($"{itemSearchLocationCount} recorded locations · last observed possessions");
-        if(config.SharedRoster?.ItemLocationsTruncated==true)ImGui.TextWrapped("Shared results are partial because of size. The Journal searches its full saved records.");
         var loggedCharacter=config.SharedRoster?.People.SelectMany(p=>p.Characters).FirstOrDefault(c=>Player.IsLoaded&&c.ContentId==Player.ContentId.ToString());
-        ImGui.BeginDisabled(loggedCharacter is null);if(ImGui.Checkbox("Current character only"+(loggedCharacter is null?"":" · "+loggedCharacter.Name)+"###current-character-search",ref itemCurrentOnly)){if(itemCurrentOnly)itemPreviousPerson=itemActivePerson;else itemRestorePerson=itemPreviousPerson;}ImGui.EndDisabled();
+        ImGui.BeginDisabled(loggedCharacter is null);if(ImGui.Checkbox("Current character only###current-character-search",ref itemCurrentOnly)){if(itemCurrentOnly)itemPreviousPerson=itemActivePerson;else itemRestorePerson=itemPreviousPerson;}ImGui.EndDisabled();
+        if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))ImGui.SetTooltip(loggedCharacter is null?"Log into a paired character to use this filter.":"Logged in: "+loggedCharacter.Name+" @ "+loggedCharacter.World);
+        ImGui.SameLine();ImGui.TextDisabled($"{itemSearchLocationCount} locations");
+        if(ImGui.IsItemHovered())ImGui.SetTooltip("Last observed possessions; unscanned locations may be missing.");
+        if(config.SharedRoster?.ItemLocationsTruncated==true){ImGui.SameLine();ImGui.TextColored(new Vector4(1,.72f,.3f,1),"Partial shared results");if(ImGui.IsItemHovered())ImGui.SetTooltip("Shared results are partial because of size. The Journal searches its full saved records.");}
         if(loggedCharacter is null&&itemCurrentOnly)ImGui.TextDisabled("Log into a paired character to use this filter.");
 
         var people=config.SharedRoster?.People??[];
         if(people.Length==0){ImGui.TextWrapped("Refresh shared profiles to load your paired persons and characters.");return;}
-        var logged=people.SelectMany(p=>p.Characters).FirstOrDefault(c=>Player.IsLoaded&&c.ContentId==Player.ContentId.ToString());
-        if(logged is not null)ImGui.TextColored(new Vector4(.5f,.85f,1,1),"Logged in: "+logged.Name+" @ "+logged.World);
         var scopePerson=people.FirstOrDefault(p=>((itemSelectCurrentPerson||itemCurrentOnly)&&p.Characters.Any(c=>c.Id==loggedCharacter?.Id))||itemRestorePerson==p.Id)
             ??people.FirstOrDefault(p=>p.Id==itemActivePerson)??people[0];
         var accounts=scopePerson.Characters.GroupBy(c=>c.AccountId).ToArray();
@@ -113,10 +115,10 @@ public sealed partial class Plugin
         var scopeChars=scopePerson.Characters.Where(c=>itemCurrentOnly?c.Id==loggedCharacter?.Id:itemAccount==""||string.Equals(c.Account,itemAccount,StringComparison.OrdinalIgnoreCase)).Where(c=>itemWorld==""||c.World==itemWorld).ToArray();
         if(ImGui.BeginTable("item-scope-grid",2,ImGuiTableFlags.SizingStretchSame))
         {
-            ImGui.TableNextColumn();ImGui.TextDisabled("Account");ImGui.SetNextItemWidth(-1);ImGui.BeginDisabled(itemCurrentOnly);
+            ImGui.TableNextColumn();ImGui.SetNextItemWidth(-1);ImGui.BeginDisabled(itemCurrentOnly);
             if(ImGui.BeginCombo("###account",itemAccount.Length>0?itemAccount:"All accounts"))
             {if(ImGui.Selectable("All accounts",itemAccount==""))itemAccount="";foreach(var a in accounts)if(ImGui.Selectable(a.First().Account+"###"+a.Key,string.Equals(itemAccount,a.First().Account,StringComparison.OrdinalIgnoreCase)))itemAccount=a.First().Account;ImGui.EndCombo();}
-            ImGui.EndDisabled();ImGui.TableNextColumn();ImGui.TextDisabled("Character");ImGui.SetNextItemWidth(-1);ImGui.BeginDisabled(itemCurrentOnly);
+            ImGui.EndDisabled();ImGui.TableNextColumn();ImGui.SetNextItemWidth(-1);ImGui.BeginDisabled(itemCurrentOnly);
             if(ImGui.BeginCombo("###character",people.SelectMany(p=>p.Characters).FirstOrDefault(c=>c.Id==itemCharacter)?.Name??"All characters"))
             {if(ImGui.Selectable("All characters",itemCharacter==""))itemCharacter="";foreach(var c in scopeChars)if(ImGui.Selectable(c.Name+" @ "+c.World+"###"+c.Id,itemCharacter==c.Id))itemCharacter=c.Id;ImGui.EndCombo();}
             ImGui.EndDisabled();ImGui.EndTable();
@@ -136,7 +138,7 @@ public sealed partial class Plugin
             var housingRows=rows.Where(x=>x.Location.Key.StartsWith("house:")&&(x.Location.CharacterIds??[]).Intersect(chars.Select(c=>c.Id)).Any()).ToArray();
             var count=rows.Count(x=>scopeOwners.Contains(x.Location.OwnerId))+housingRows.Length;
             ImGui.TextDisabled($"{count} matching records · {chars.Count(c=>rows.Any(x=>x.Location.OwnerId==c.Id))} characters");
-            bool? expand=null;if(ImGui.SmallButton("Expand results"))expand=true;ImGui.SameLine();if(ImGui.SmallButton("Collapse results"))expand=false;
+            ImGui.SameLine();bool? expand=null;if(ImGui.SmallButton("Expand results"))expand=true;ImGui.SameLine();if(ImGui.SmallButton("Collapse results"))expand=false;
             ImGui.BeginChild("item-results",Vector2.Zero);
             // Update stored child states before closing their parents: hidden children
             // are not drawn, so SetNextItemOpen inside an account cannot reach them.
