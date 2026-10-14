@@ -47,12 +47,12 @@ public sealed partial class Plugin
             {
                 var rankName = (gc, Player.Sex == 0) switch
                 {
-                    (1, true) => DataManager.GetExcelSheet<Lumina.Excel.Sheets.GCRankLimsaMaleText>(lang).GetRowOrDefault(rank)?.NameRank.ToString(),
-                    (1, false) => DataManager.GetExcelSheet<Lumina.Excel.Sheets.GCRankLimsaFemaleText>(lang).GetRowOrDefault(rank)?.NameRank.ToString(),
-                    (2, true) => DataManager.GetExcelSheet<Lumina.Excel.Sheets.GCRankGridaniaMaleText>(lang).GetRowOrDefault(rank)?.NameRank.ToString(),
-                    (2, false) => DataManager.GetExcelSheet<Lumina.Excel.Sheets.GCRankGridaniaFemaleText>(lang).GetRowOrDefault(rank)?.NameRank.ToString(),
-                    (3, true) => DataManager.GetExcelSheet<Lumina.Excel.Sheets.GCRankUldahMaleText>(lang).GetRowOrDefault(rank)?.NameRank.ToString(),
-                    (3, false) => DataManager.GetExcelSheet<Lumina.Excel.Sheets.GCRankUldahFemaleText>(lang).GetRowOrDefault(rank)?.NameRank.ToString(),
+                    (1, true) => DataManager.GetExcelSheet<Lumina.Excel.Sheets.GCRankLimsaMaleText>(lang).GetRowOrDefault(rank)?.Singular.ToString(),
+                    (1, false) => DataManager.GetExcelSheet<Lumina.Excel.Sheets.GCRankLimsaFemaleText>(lang).GetRowOrDefault(rank)?.Singular.ToString(),
+                    (2, true) => DataManager.GetExcelSheet<Lumina.Excel.Sheets.GCRankGridaniaMaleText>(lang).GetRowOrDefault(rank)?.Singular.ToString(),
+                    (2, false) => DataManager.GetExcelSheet<Lumina.Excel.Sheets.GCRankGridaniaFemaleText>(lang).GetRowOrDefault(rank)?.Singular.ToString(),
+                    (3, true) => DataManager.GetExcelSheet<Lumina.Excel.Sheets.GCRankUldahMaleText>(lang).GetRowOrDefault(rank)?.Singular.ToString(),
+                    (3, false) => DataManager.GetExcelSheet<Lumina.Excel.Sheets.GCRankUldahFemaleText>(lang).GetRowOrDefault(rank)?.Singular.ToString(),
                     _ => null
                 };
                 company += " / " + (string.IsNullOrWhiteSpace(rankName) ? "Rank " + rank : rankName);

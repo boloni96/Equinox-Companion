@@ -1,4 +1,5 @@
 using Dalamud.Bindings.ImGui;
+using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using Dalamud.Game.Gui.ContextMenu;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Interface.Windowing;
@@ -7,6 +8,7 @@ namespace EquinoxCompanion;
 
 public sealed partial class Plugin
 {
+    [Dalamud.IoC.PluginService] internal static Dalamud.Plugin.Services.IGameGui GameGui { get; private set; } = null!;
     private ItemSearchWindow itemSearchWindow=null!;
     private string itemSearchQuery="",itemSearchBuiltQuery="",itemAccount="",itemCharacter="";
     private uint? itemExactId;
@@ -37,10 +39,38 @@ public sealed partial class Plugin
         itemSearchDiscoveryCount=-1;itemSelectCurrentPerson=true;itemSearchWindow.IsOpen=true;
         minimizedLaunchers.Remove("Do I already have it?");
     }
+    private unsafe uint ContextSearchItem(IMenuOpenedArgs args)
+    {
+        if(args.Target is MenuTargetInventory inventory)
+            return ItemContextPolicy.Normalize(inventory.TargetItem?.ItemId ?? 0);
+        // Character menus must never inherit an unrelated hovered item.
+        if(args.Target is not MenuTargetDefault target || target.TargetObject is not null || target.TargetContentId != 0)
+            return 0;
+        ulong raw = 0;
+        switch(args.AddonName)
+        {
+            case "RecipeNote":
+                var recipe = AgentRecipeNote.Instance();
+                if(recipe != null && recipe->IsAgentActive()) raw = recipe->ContextMenuResultItemId;
+                break;
+            case "RecipeTree": case "RecipeMaterialList": case "RecipeProductList":
+                var context = AgentRecipeItemContext.Instance();
+                if(context != null && context->IsAgentActive()) raw = context->ResultItemId;
+                break;
+            case "GatheringNote":
+                var gathering = AgentGatheringNote.Instance();
+                if(gathering != null && gathering->IsAgentActive()) raw = gathering->ContextMenuItemId;
+                break;
+            default:
+                raw = GameGui.HoveredItem;
+                break;
+        }
+        return ItemContextPolicy.Normalize(raw);
+    }
     private void OnItemSearchMenu(IMenuOpenedArgs args)
     {
-        if(args.Target is not MenuTargetInventory target||target.TargetItem is not {} item)return;
-        var id=item.ItemId%1000000;if(id==0||item.ItemId>=2000000)return;
+        var id = ContextSearchItem(args);
+        if(id == 0 || DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>().GetRowOrDefault(id) is not {} row || row.Name.IsEmpty) return;
         args.AddMenuItem(new MenuItem{PrefixChar='E',Name=new SeStringBuilder().AddText("Where is it cheapest?").Build(),OnClicked=_=>OpenMarketItem(id)});
         args.AddMenuItem(new MenuItem{PrefixChar='E',Name=new SeStringBuilder().AddText("Do I already have it?").Build(),OnClicked=_=>OpenItemSearch(id.ToString())});
     }
