@@ -9,6 +9,8 @@ namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
     private readonly LotteryLogin lotteryLogin=new();
+    private readonly LotteryBidNoticeGate lotteryBidNotices=new();
+    private DateTimeOffset nextLotteryReminderCheck;
     private (LotteryBid Bid, ulong Character, ulong Target, uint World, DateTimeOffset At)? lotteryPlacard;
     private string lotteryPendingBuyer="unknown";
     private ulong lotteryPendingCharacter;
@@ -23,10 +25,20 @@ public sealed partial class Plugin
     private bool LotteryLoaded => Player.IsLoaded && Player.ContentId!=0 && !Conditions[ConditionFlag.BetweenAreas] && !Conditions[ConditionFlag.BetweenAreas51];
     private void UpdateLottery(DateTimeOffset now)
     {
-        if(!lotteryLogin.Due(Player.IsLoaded?Player.ContentId:0,now,config.NotifyHousingLottery,!LotteryLoaded))return;
-        var p=HousingLottery.Period(now);var left=p.End-now;
-        Chat.Print($"[Equinox] Housing lottery · scheduled {(p.Entry?"entry period":"results period (entries closed)")} · ends {p.End.ToLocalTime():MMM d, h:mm tt} ({(int)left.TotalDays}d {left.Hours}h {left.Minutes}m). {(p.Entry?"Place bids at the plot placard.":"Check your bid's placard for the result and claim any win.")} Duty → Timers → Estate confirms the game status.");
+        var id=Player.IsLoaded?Player.ContentId:0;
+        if(id==0){lotteryBidNotices.Reset();lotteryLogin.Reset();return;}
+        lotteryBidNotices.Due(id,"",now);
+        if(lotteryLogin.Due(id,now,config.NotifyHousingLottery,!LotteryLoaded))
+        {
+            var p=HousingLottery.Period(now);var left=p.End-now;
+            Chat.Print($"[Equinox] Housing lottery · scheduled {(p.Entry?"entry period":"results period (entries closed)")} · ends {HousingLotteryNotices.LocalTime(p.End)} (local time; {(int)left.TotalDays}d {left.Hours}h {left.Minutes}m). {(p.Entry?"Place bids at the plot placard.":"Check your bid's placard for the result and claim any win.")} Duty → Timers → Estate confirms the game status.");
+        }
+        if(!config.NotifyHousingLottery||!LotteryLoaded||now<nextLotteryReminderCheck)return;
+        nextLotteryReminderCheck=now.AddSeconds(15);
+        foreach(var notice in HousingLotteryNotices.Messages(config.Discoveries,id.ToString(),now))
+            if(lotteryBidNotices.Due(id,notice.Key,now))Chat.Print(notice.Text);
     }
+
     private static unsafe string LotteryText(AtkUnitBase* addon,int i)
     {
         if(addon==null||addon->AtkValues==null||i<0||i>=addon->AtkValuesCount)return "";
