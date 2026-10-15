@@ -1,0 +1,30 @@
+[
+  {
+    "Author": "Boloni",
+    "Name": "Equinox Companion",
+    "InternalName": "EquinoxCompanion",
+    "AssemblyVersion": "0.5.1.141",
+    "Description": "New in 141: /bid world picker groups data centres under region headings (North America, Europe, Japan and Oceania). New in 140: Paissa-style column checkbox filters with multiple selections, selection counts, FCFS and missing/outdated phases. /bid defaults to your current world when visiting. New in 139: /bid Paissa plot finder with home-world defaults, expandable DC/world picker, filters, column sorting, paired entry markers and Lifestream GO SEE. Shared bids require Journal V7.11.166. Whereischeap has a saved shopping city and arrival shard. New in 138: Character-specific housing bid reminders during results, with district/ward/plot and entry number, once per login or when results begin. Explicit English AM/PM for local housing deadlines. New in 137: Housing lottery login countdown, read-only English Timers/submission bid capture and winning-number observations from paired characters for private and FC entries. Requires Journal V7.11.164 for bid sync. New in 136: Incomplete optional FC data no longer blocks valid character/job/rank snapshots. Connection shows the current character record, recorded rank and server acknowledgement; exports include this status. New in 135: Full Grand Company rank titles, Crafting Log and other item-context search actions, visible Region/World filters, and per-item Copy name buttons in shopping lists. New in 134: Maintenance chat appears only for a confirmed upcoming or active scheduled window. Completed, expired and unknown schedules remain silent; failed checks retry quietly. New in 133: Official game maintenance reminders five minutes after character login, local AM/PM time, countdown and clickable Lodestone notice. New in 132: Compact Do I already have it header, inline result controls, search clear button and hover details. New in 131: Compact Whereischeap header with one-row filters, source/help popups and more space for results. New in 130: Visible DC/region in shopping comparisons, extra quantities, average unit prices and separate lower-total versus lowest-unit-first stack options. New in 129: Paste Artisan remaining-ingredient lists into Whereischeap. Saved collapsible item rows retain quantities, show local source information, whole-stack world estimates and Lifestream travel. Queued refresh while open. New in 127: Whereischeap refreshes every 15/30/60 seconds while open, with per-result Lifestream Travel buttons and a header icon beside Do I already have it. Results stay visible during checks and region outages. New in 126: Separate /whereischeap item window using Universalis across NA, Europe, Japan and Oceania. Cheapest-first prices, HQ/NQ filters, stack totals and listing age. New in 125: Submarine data rebuilds only on input changes, using indexed single-pass matching. Hidden person tabs skip row preparation; attention summaries refresh once per second. CPU timing diagnostics added. From 124: Reuse submarine and gardening display projections between frames to reduce repeated history scans. Supply and repair warnings require a recorded fleet; no-workshop characters stay neutral. Confirmed workshop slots drive registration reminders. Voyage Complete uses calm green. From 123: New house entries and all changed game observations wake uploads promptly, with batching and error backoff preserved. From 122: Compact collapsible filters above search, Account/Character controls above person tabs, and Collapse results resets hidden characters too. Housing placed/stored observations and shared Collection locations. Separate /doihaveit window, Person/account grouping, filters, full item names, inventory page and slot positions, header shortcut and minimized search icon. Esc minimizes focused windows. Requires Journal V7.11.129 for storage sync. Use /gardening at an identified paired estate for its garden guide; /fashionr opens the current Fashion Report. Observes characters, paired estates, gardening, collections, event quests, Fashion Report and submarine timers. Reads Company Profile and FC member panels. Optional background submarine data and carried supplies require Journal V7.11.27. Pixel garden guide with local planting progress and fast paired updates requires Journal V7.11.28. Click-to-record command shortcuts in Settings. Requires Journal V7.11.18 for garden plans, care reminders and fertilizer sync. House Gardening links and growing/wilting/dead status sync require Journal V7.11.43. Submarine inventory-space and directly observed supply sync require Journal V7.11.52. English garden menus supported. In-game validation build.",
+    "ApplicableVersion": "any",
+    "RepoUrl": "https://github.com/boloni96/Equinox-Companion",
+    "Tags": [
+      "housing",
+      "gardening",
+      "journal"
+    ],
+    "DalamudApiLevel": 15,
+    "LoadRequiredState": 0,
+    "LoadSync": false,
+    "CanUnloadAsync": false,
+    "LoadPriority": 0,
+    "IconUrl": "https://raw.githubusercontent.com/boloni96/Equinox-Companion/main/dist/v0.5.1.141/icon.png",
+    "Punchline": "Your shared characters, estates, collections and timers.",
+    "AcceptsFeedback": true,
+    "IsHide": false,
+    "IsTestingExclusive": false,
+    "DownloadLinkInstall": "https://raw.githubusercontent.com/boloni96/Equinox-Companion/main/dist/v0.5.1.141/EquinoxCompanion.zip",
+    "DownloadLinkUpdate": "https://raw.githubusercontent.com/boloni96/Equinox-Companion/main/dist/v0.5.1.141/EquinoxCompanion.zip",
+    "DownloadLinkTesting": "https://raw.githubusercontent.com/boloni96/Equinox-Companion/main/dist/v0.5.1.141/EquinoxCompanion.zip",
+    "LastUpdate": 1792094337
+  }
+]
