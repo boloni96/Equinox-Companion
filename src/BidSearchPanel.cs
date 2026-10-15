@@ -12,7 +12,7 @@ public sealed partial class Plugin
  private CancellationTokenSource? bidCancel;private Task<BidPlot[]>? bidTask;private uint bidWorld;private ulong bidCharacter;
  private (uint Id,string Name,string Dc,int Region)[]? bidWorlds;
  private BidPlot[] bidPlots=[],bidShown=[];private string bidMessage="",bidTravelMessage="";private DateTimeOffset bidFetched,bidNext,bidRetry,bidAgeCheck;
- private readonly BidFilters bidFilters=new();private int bidSort=5,bidRegion;private bool bidDescending,bidDirty=true,bidAuto=true;
+ private readonly BidFilters bidFilters=new();private int bidSort=-1,bidRegion;private bool bidDescending,bidDirty=true,bidAuto=true;
  private readonly Dictionary<string,string> bidMarkers=new();private readonly Dictionary<string,List<(string Name,SharedHousingBid Bid)>> bidByPlot=new();private SharedRoster? bidLastRoster;private int bidLastLocalCount=-1;private DateTimeOffset bidRound;
  private void InitializeBidSearch(){bidWindow=new(this);windows.AddWindow(bidWindow);bidCommand=Commands.AddHandler("/bid",new CommandInfo((_,_)=>OpenBidSearch()){HelpMessage="Find housing plots with Paissa, paired bids and Lifestream GO SEE. /equinox bid also opens this window."});}
  private void DisposeBidSearch(){CancelBidSearch();bidSearch.Dispose();if(bidCommand)Commands.RemoveHandler("/bid");windows.RemoveWindow(bidWindow);}
@@ -53,7 +53,7 @@ public sealed partial class Plugin
    }ImGui.EndChild();ImGui.EndPopup();
   }
   ImGui.SameLine();ImGui.BeginDisabled(bidTask is not null||bidWorld==0||now<bidRetry);if(ImGui.SmallButton("Refresh"))RefreshBidSearch();ImGui.EndDisabled();ImGui.SameLine();ImGui.Checkbox("Auto 60s",ref bidAuto);
-  if(ImGui.SmallButton("Clear sort & filters")){bidFilters.Clear();bidSort=5;bidDescending=false;bidDirty=true;}
+  if(ImGui.SmallButton("Clear sort & filters")){bidFilters.Clear();bidSort=-1;bidDescending=false;bidDirty=true;}
   ImGui.SameLine();ImGui.TextDisabled(bidMessage+(bidFetched==default?"":$" · checked {bidFetched.ToLocalTime():HH:mm:ss}"));
   if((config.SharedRoster?.ProtocolVersion??0)<20)ImGui.TextDisabled("Deploy Journal V7.11.166 and open it once to receive paired bids. Local bids are still shown.");
   if(ImGui.CollapsingHeader($"Your paired bids · {bidByPlot.Values.Sum(x=>x.Count)} entries this round")){
@@ -68,7 +68,7 @@ public sealed partial class Plugin
    for(var i=0;i<headers.Length;i++)ImGui.TableSetupColumn(headers[i],ImGuiTableColumnFlags.WidthFixed,widths[i]);ImGui.TableSetupScrollFreeze(0,1);ImGui.TableNextRow(ImGuiTableRowFlags.Headers);
    for(var i=0;i<headers.Length;i++){
     ImGui.TableNextColumn();ImGui.PushID(i);
-    if(i is >=3 and <=6 or 8 or 9){if(ImGui.SmallButton(headers[i]+(bidSort==i?(bidDescending?" ▼":" ▲"):" ↕"))){if(bidSort==i)bidDescending=!bidDescending;else{bidSort=i;bidDescending=false;}bidDirty=true;}}
+    if(i is >=3 and <=6 or 8 or 9){if(ImGui.SmallButton(headers[i]+(bidSort==i?(bidDescending?" ▼":" ▲"):" ↕"))){(bidSort,bidDescending)=BidSearch.NextSort(bidSort,bidDescending,i);bidDirty=true;}}
     else ImGui.TextUnformatted(headers[i]);
     switch(i){
      case 0:DrawBidColumnFilter(headers[i],bidFilters.Districts,BidSearch.HousingLotteryDistricts);break;

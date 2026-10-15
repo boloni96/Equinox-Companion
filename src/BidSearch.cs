@@ -13,7 +13,7 @@ internal sealed record BidPlot(uint World,string District,int Ward,int Plot,int 
 internal sealed class BidSearch:IDisposable
 {
  private readonly HttpClient http=new(){Timeout=TimeSpan.FromSeconds(25)};
- public BidSearch(){http.DefaultRequestHeaders.UserAgent.ParseAdd("EquinoxCompanion/0.5.1.141");}
+ public BidSearch(){http.DefaultRequestHeaders.UserAgent.ParseAdd("EquinoxCompanion/0.5.1.142");}
  public async Task<BidPlot[]> Search(uint world,CancellationToken token){using var r=await http.GetAsync($"https://paissadb.zhu.codes/worlds/{world}",HttpCompletionOption.ResponseHeadersRead,token);r.EnsureSuccessStatusCode();await r.Content.LoadIntoBufferAsync(6000000,token);return Parse(await r.Content.ReadAsStringAsync(token),world);}
  internal static BidPlot[] Parse(string json,uint world){
   using var doc=JsonDocument.Parse(json);var root=doc.RootElement;if(root.GetProperty("id").GetUInt32()!=world)throw new JsonException("World mismatch");var rows=new List<BidPlot>();
@@ -27,7 +27,8 @@ internal sealed class BidSearch:IDisposable
    }
   }return rows.DistinctBy(p=>p.Key).ToArray();
  }
- internal static BidPlot[] Sort(IEnumerable<BidPlot> rows,int column,bool descending)=>rows.OrderBy(p=>column==5&&!p.Entries.HasValue||column==6&&!p.Phase.HasValue?1:0).ThenBy(p=>column switch{0=>Array.IndexOf(HousingLotteryDistricts,p.District),1=>p.Ward,2=>p.Plot,3=>p.Size,4=>p.Price,5=>p.Entries??0,6=>p.Phase??0,7=>p.Purchase&6,8=>p.Updated,9=>p.FirstSeen,_=>0},descending?Comparer<double>.Create((a,b)=>b.CompareTo(a)):Comparer<double>.Default).ThenBy(p=>p.Key).ToArray();
+ internal static BidPlot[] Sort(IEnumerable<BidPlot> rows,int column,bool descending)=>rows.OrderBy(p=>column==5&&!p.Entries.HasValue||column==6&&!p.Phase.HasValue?1:0).ThenBy(p=>column switch{0=>Array.IndexOf(HousingLotteryDistricts,p.District),1=>p.Ward,2=>p.Plot,3=>p.Size,4=>p.Price,5=>p.Entries??0,6=>p.Phase??0,7=>p.Purchase&6,8=>p.Updated,9=>p.FirstSeen,_=>0},descending?Comparer<double>.Create((a,b)=>b.CompareTo(a)):Comparer<double>.Default).ThenBy(p=>Array.IndexOf(HousingLotteryDistricts,p.District)).ThenBy(p=>p.Ward).ThenBy(p=>p.Plot).ThenBy(p=>p.World).ToArray();
+ internal static (int Column,bool Descending) NextSort(int column,bool descending,int clicked)=>column!=clicked?(clicked,false):!descending?(clicked,true):(-1,false);
  internal static readonly string[] HousingLotteryDistricts=["Mist","Lavender Beds","Goblet","Shirogane","Empyreum"];
  public void Dispose()=>http.Dispose();
 }
