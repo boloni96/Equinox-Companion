@@ -19,6 +19,8 @@ public static class SyncValidation
         !string.IsNullOrWhiteSpace(a.Name) && a.Name.Length <= 80 &&
         a.HomeWorldId is > 0 and <= 65535 && a.CurrentWorldId is > 0 and <= 65535;
     private static bool FC(FreeCompanyDetails? f) => f is not null && CompanyProfileIdentity.ValidId(f.Id) && Regex.IsMatch(f.Id ?? "", @"^[1-9]\d{0,19}$") && Text(f.Name) && f.Tag is not null && f.Tag.Length <= 10 && f.WorldId > 0;
+    // Incomplete optional FC data must not veto a valid character snapshot.
+    public static FreeCompanyDetails? CompleteCompany(FreeCompanyDetails? company) => FC(company) ? company : null;
     public static bool CompanyReady(FreeCompanyDetails? f) => FC(f) && f!.MasterName.Length <= 80 && f.Profile is { Rank: >= 1 and <= 30, ActiveMembers: >= 1 and <= 512 } p &&
         p.Source is "company-profile" or "member-list" && Text(p.HomeWorld) &&
         new[] {p.Slogan,p.GrandCompany,p.Recruitment,p.Active,p.Focus,p.Seeking,p.EstateName}.All(x=>x is null || x.Length<=500 && !x.Any(char.IsControl)) &&
@@ -39,6 +41,7 @@ public static class SyncValidation
         if (!Regex.IsMatch(e.Id ?? "", "^[a-f0-9]{32}$")) return "Invalid event identifier.";
         if (e.At.Year < 2020 || e.At > now.AddMinutes(5)) return "Invalid event timestamp or clock ahead.";
         if (e.Kind == "character.updated") return "Incomplete character/job/FC details.";
+        if (e.Kind == "company.observed") return "Incomplete or invalid FC identity/profile details.";
         if (e.Address is null) return "Missing estate address.";
         return "Incomplete or invalid estate/garden details for this event type.";
     }

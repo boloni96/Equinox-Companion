@@ -687,7 +687,11 @@ public sealed partial class Plugin : IDalamudPlugin
                 if (members->CharData[i].ContentId == Player.ContentId && members->CharData[i].HomeWorld == actor.HomeWorldId)
                     fc = new(proxy->Id.ToString(CultureInfo.InvariantCulture), proxy->NameString, members->CharData[i].FCTagString, proxy->HomeWorldId, proxy->MasterString, new(proxy->Rank, proxy->TotalMembers, "member-list", actor.HomeWorldName ?? "", GrandCompany: CompanyGrandName((byte)proxy->GrandCompany)));
         }
-        if (fc is not null && string.IsNullOrWhiteSpace(fc.Name)) fc = null;
+        if (fc is not null && SyncValidation.CompleteCompany(fc) is null)
+        {
+            errorJournal.Record("character-details", "Incomplete optional FC details deferred; character/job/rank observations continue.");
+            fc = null;
+        }
         // The company profile may describe a different FC. Use it for that placard only;
         // it never proves that the visiting character is a member.
         foreach (var sign in estateNames.Values.Where(s => s.CharacterId == actor.ContentId && now - s.At < TimeSpan.FromMinutes(2)))
@@ -714,6 +718,7 @@ public sealed partial class Plugin : IDalamudPlugin
             KeepDiscovery(new(Guid.NewGuid().ToString("N"), "character.updated", now, actor, null, Character: info), now >= nextCharacterRefresh);
             if (now >= nextCharacterRefresh) nextCharacterRefresh = now.AddHours(1);
         }
+        else errorJournal.Record("character-details", "Character observation incomplete (job, level or identity fields); retrying.", kind: "character.updated");
         if (SyncValidation.CompanyReady(fc)) KeepDiscovery(new(Guid.NewGuid().ToString("N"), "company.observed", now, actor, null, Company: fc));
         var manager = HousingManager.Instance();
         if (manager == null) return;
@@ -966,7 +971,7 @@ public sealed partial class Plugin : IDalamudPlugin
             Directory.CreateDirectory(dir);
             exportPath = Path.Combine(dir, $"equinox-test-{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.json");
             File.WriteAllText(exportPath, JsonSerializer.Serialize(new {
-                schemaVersion = 7, followTravel = followTravelDiagnostics.ToArray(), pluginVersion = typeof(Plugin).Assembly.GetName().Version?.ToString(), errorLog = errorJournal.Snapshot(), recentGardenMessages=gardenMessageJournal.Snapshot(), exportedAt = DateTimeOffset.UtcNow,
+                schemaVersion = 7, characterSync = ReadCharacterSyncStatus(), followTravel = followTravelDiagnostics.ToArray(), pluginVersion = typeof(Plugin).Assembly.GetName().Version?.ToString(), errorLog = errorJournal.Snapshot(), recentGardenMessages=gardenMessageJournal.Snapshot(), exportedAt = DateTimeOffset.UtcNow,
                 syncDiagnostics = new { enabled = config.SyncEnabled, paired = config.PairingKey.Length == 64, endpoint = "https://equinoxjournal.pages.dev", status = syncStatus, pending = pendingSyncRecords, eligible = readySyncRecords, held = heldSyncRecords, acknowledgedLocal = config.SentEvents.Count, lastSyncReceiptAt, lastSyncBatchSize, lastSyncBatchOldest, lastSyncBatchNewest, nextAttemptAt = nextSync, inFlight = syncTask is not null },
                 helperDiagnostics = new { character=Player.CharacterName, enabled=config.EnableFollowThem, armed=followSession.Armed, target=config.FollowThem.TargetName, questPermission=helperPermission.Quest, paused=HelperPaused, questPaused=helperPermission.QuestPaused, shareQuest=config.FollowThem.ShareQuestActions, stopOnMovement=config.FollowThem.StopOnMovement, followStatus, helperError, helperLastIssue, observedQuest=helperObservedQuest, followers=helperFollowers.Select(f=>new {f.Name,f.Status,f.Quest,f.QuestPaused,f.Control,f.Updated}).ToArray() },
                 eventExchangeDiagnostics=HelperExchangeDiagnostic(),
@@ -1051,6 +1056,7 @@ public sealed partial class Plugin : IDalamudPlugin
                 }
                 ImGui.TextWrapped(syncStatus);
                 ImGui.TextWrapped(SyncQueueStatus);
+                DrawCharacterSyncStatus();
                 if (heldSyncRecords > 0) ImGui.TextWrapped($"{heldSyncRecords} incomplete observation(s) in Diagnostics. They are not sent and do not block valid actions.");
                 ImGui.TextWrapped("Sends character and job details, confirmed owned-estate and FC details, property addresses, planting and tending records, and entry times. Pairing key is saved on this PC and is never included in test exports. Characters match automatically by name and home server. Unmatched houses and patches need linking once.");
     }
