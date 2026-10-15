@@ -133,6 +133,7 @@ public sealed partial class Plugin
     {
         BuildMarketItemIndex();
         PumpMarketSources();
+        DrawShoppingDestination();
         DrawMarketShoppingToolbar();
         if(marketShoppingMode) { DrawMarketShopping(); return; }
         if(marketIndexReady && marketPendingLookup) FindMarketItem();
@@ -270,10 +271,10 @@ public sealed partial class Plugin
                 ImGui.TableNextColumn(); if(ImGui.SmallButton("Copy")) ImGui.SetClipboardText($"{itemName} · {row.World} ({MarketDataCenter(row.WorldId)}, {row.Region}) · {row.Price:N0} gil each · {row.Quantity} × {(row.Hq ? "HQ" : "NQ")} · {row.Retainer}");
                 ImGui.TableNextColumn();
                 var here = Player.IsLoaded && Player.CurrentWorld.RowId == row.WorldId;
-                ImGui.BeginDisabled(!Player.IsLoaded || here || DateTimeOffset.UtcNow < marketTravelNext);
-                if(ImGui.SmallButton(here ? "Here" : "Travel")) TravelToMarketWorld(row.WorldId);
+                ImGui.BeginDisabled(!Player.IsLoaded || shoppingTravel is not null || DateTimeOffset.UtcNow < marketTravelNext);
+                if(ImGui.SmallButton("Travel")) TravelToMarketWorld(row.WorldId);
                 ImGui.EndDisabled();
-                if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled)) ImGui.SetTooltip(here ? "You are already on this world." : $"Ask Lifestream to travel to {row.World}. Data Center travel may log this character out and back in. Requires a supported destination.");
+                if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled)) ImGui.SetTooltip($"Travel to {row.World}, then your saved shopping city / shard. Data Center travel may log out and back in.");
                 ImGui.PopID();
             }
             clipper.End(); clipper.Destroy(); ImGui.EndTable();
@@ -287,28 +288,7 @@ public sealed partial class Plugin
         d.AddCircleFilled(at + new Vector2(24, 35) * scale, 9 * scale, gold, 24);
         d.AddText(at + new Vector2(20, 27) * scale, ImGui.ColorConvertFloat4ToU32(new Vector4(.1f, .12f, .16f, opacity)), "$" );
     }
-    private void TravelToMarketWorld(uint world)
-    {
-        if(!Player.IsLoaded || Player.CurrentWorld.RowId == world) return;
-        marketTravelNext = DateTimeOffset.UtcNow.AddSeconds(2);
-        if(Conditions[Dalamud.Game.ClientState.Conditions.ConditionFlag.InCombat] ||
-            Conditions[Dalamud.Game.ClientState.Conditions.ConditionFlag.BetweenAreas] ||
-            Conditions[Dalamud.Game.ClientState.Conditions.ConditionFlag.BetweenAreas51])
-        { marketTravelStatus = "Travel waits until your character is out of combat and loading. Click Travel again when ready."; return; }
-        var destination = DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().GetRowOrDefault(world);
-        if(destination is not {} target || !target.IsPublic) { marketTravelStatus = "This destination is not available to this game client."; return; }
-        try
-        {
-            if(LifestreamBusy()) { marketTravelStatus = "Lifestream is already busy; your current trip was kept."; return; }
-            if(Pi.GetIpcSubscriber<uint, bool>("Lifestream.ChangeWorldById").InvokeFunc(world))
-            {
-                marketTravelStatus = "Lifestream accepted travel to " + target.Name.ToString() + ". Follow its travel progress.";
-                ShareFollowWorldIntent(world);
-            }
-            else marketTravelStatus = "Lifestream declined this destination. Check its travel settings and your character's world access.";
-        }
-        catch(Exception) { marketTravelStatus = "Lifestream must be installed and enabled for World travel."; }
-    }
+    private void TravelToMarketWorld(uint world) => BeginShoppingTravel(world);
     private void DrawMarketSearchShortcut(float size)
     {
         var at = ImGui.GetCursorScreenPos();

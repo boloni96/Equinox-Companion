@@ -1,0 +1,32 @@
+using System.Net.Http;
+using System.Text.Json;
+namespace EquinoxCompanion;
+internal sealed record BidPlot(uint World,string District,int Ward,int Plot,int Size,long Price,int? Entries,int? Phase,long? PhaseUntil,int Purchase,double Updated,double FirstSeen)
+{
+ public string Key=>$"{World}|{District}|{Ward}|{Plot}";
+ public bool Current(DateTimeOffset now)=>Phase is >=1 and <=3&&PhaseUntil is {} end&&end>now.ToUnixTimeSeconds();
+ public string PhaseLabel(DateTimeOffset now)=>!Current(now)?"Unknown / outdated":Phase switch {1=>"Accepting entries",2=>"Results",3=>"Next round",_=>"Unknown"};
+ public string Tenants=>(Purchase&6) switch {2=>"FC",4=>"Private",6=>"Private / FC",_=>"Unknown"};
+}
+internal sealed class BidSearch:IDisposable
+{
+ private readonly HttpClient http=new(){Timeout=TimeSpan.FromSeconds(25)};
+ public BidSearch(){http.DefaultRequestHeaders.UserAgent.ParseAdd("EquinoxCompanion/0.5.1.139");}
+ public async Task<BidPlot[]> Search(uint world,CancellationToken token){using var r=await http.GetAsync($"https://paissadb.zhu.codes/worlds/{world}",HttpCompletionOption.ResponseHeadersRead,token);r.EnsureSuccessStatusCode();await r.Content.LoadIntoBufferAsync(6000000,token);return Parse(await r.Content.ReadAsStringAsync(token),world);}
+ internal static BidPlot[] Parse(string json,uint world){
+  using var doc=JsonDocument.Parse(json);var root=doc.RootElement;if(root.GetProperty("id").GetUInt32()!=world)throw new JsonException("World mismatch");var rows=new List<BidPlot>();
+  foreach(var d in root.GetProperty("districts").EnumerateArray()){
+   var name=HousingLottery.District(d.GetProperty("name").GetString()??"");if(name is null)continue;
+   foreach(var p in d.GetProperty("open_plots").EnumerateArray()){
+    int? optional(string key)=>p.TryGetProperty(key,out var v)&&v.ValueKind==JsonValueKind.Number&&v.TryGetInt32(out var n)?n:null;
+    var ward=p.GetProperty("ward_number").GetInt32()+1;var plot=p.GetProperty("plot_number").GetInt32()+1;var size=p.GetProperty("size").GetInt32();var price=p.GetProperty("price").GetInt64();var updated=p.GetProperty("last_updated_time").GetDouble();var first=p.GetProperty("first_seen_time").GetDouble();
+    if(p.GetProperty("world_id").GetUInt32()!=world||ward is <1 or >60||plot is <1 or >60||size is <0 or >2||price<0||!double.IsFinite(updated)||!double.IsFinite(first))continue;
+    var entries=optional("lotto_entries");var phase=optional("lotto_phase");rows.Add(new(world,name,ward,plot,size,price,entries>=0?entries:null,phase,optional("lotto_phase_until"),p.GetProperty("purchase_system").GetInt32(),updated,first));
+   }
+  }return rows.DistinctBy(p=>p.Key).ToArray();
+ }
+ internal static BidPlot[] Sort(IEnumerable<BidPlot> rows,int column,bool descending)=>rows.OrderBy(p=>column==5&&!p.Entries.HasValue||column==6&&!p.Phase.HasValue?1:0).ThenBy(p=>column switch{0=>Array.IndexOf(HousingLotteryDistricts,p.District),1=>p.Ward,2=>p.Plot,3=>p.Size,4=>p.Price,5=>p.Entries??0,6=>p.Phase??0,7=>p.Purchase&6,8=>p.Updated,9=>p.FirstSeen,_=>0},descending?Comparer<double>.Create((a,b)=>b.CompareTo(a)):Comparer<double>.Default).ThenBy(p=>p.Key).ToArray();
+ internal static readonly string[] HousingLotteryDistricts=["Mist","Lavender Beds","Goblet","Shirogane","Empyreum"];
+ public void Dispose()=>http.Dispose();
+}
+public sealed record SharedHousingBid(string District,int Ward,int Plot,int Entry,string Buyer,string FcId,string Status,string CycleStart,string Evidence,uint WorldId,string World,DateTimeOffset At,int? Winner=null,DateTimeOffset? ResultAt=null,string CheckedBy="",DateTimeOffset? ClaimedAt=null);

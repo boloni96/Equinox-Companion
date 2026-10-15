@@ -236,8 +236,8 @@ public sealed partial class Plugin
             ImGui.TableNextColumn(); ImGui.TextUnformatted(cost.ToString("N0"));
             ImGui.TableNextColumn(); if(ImGui.SmallButton("View")) { entry.PlanWorld = plan.WorldId; entry.PlanUnitPrice = unitPrice; }
             ImGui.TableNextColumn(); var here = Player.IsLoaded && Player.CurrentWorld.RowId == plan.WorldId;
-            ImGui.BeginDisabled(!Player.IsLoaded || here || DateTimeOffset.UtcNow < marketTravelNext);
-            if(ImGui.SmallButton(here ? "Here" : "Travel")) TravelToMarketWorld(plan.WorldId);
+            ImGui.BeginDisabled(!Player.IsLoaded || shoppingTravel is not null || DateTimeOffset.UtcNow < marketTravelNext);
+            if(ImGui.SmallButton("Travel")) TravelToMarketWorld(plan.WorldId);
             ImGui.EndDisabled(); ImGui.PopID();
         }
     }

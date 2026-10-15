@@ -59,6 +59,8 @@ public sealed class Configuration : IPluginConfiguration
     public Dictionary<string, DateTimeOffset> HousingWarnings { get; set; } = [];
     public SharedRoster? SharedRoster { get; set; }
     public string WelcomeVersion { get; set; } = "";
+    public int ShoppingCity { get; set; }
+    public int ShoppingArrival { get; set; }
     public int Version { get; set; } = 4;
     public bool SyncEnabled { get; set; }
     public string PairingKey { get; set; } = "";

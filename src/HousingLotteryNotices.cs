@@ -2,6 +2,21 @@ using System.Globalization;
 namespace EquinoxCompanion;
 public static class HousingLotteryNotices
 {
+    public static IEnumerable<SyncEvent> WithShared(IEnumerable<SyncEvent> local,SharedRoster? roster)
+    {
+        var all=local.ToList();
+        foreach(var c in roster?.People.SelectMany(p=>p.Characters)??[])
+        foreach(var b in c.HousingBids??[])
+        {
+            if(c.ContentId.Length==0)continue;
+            bool Match(SyncEvent e)=>e.Kind=="housing.lottery"&&e.Actor.ContentId==c.ContentId&&e.Actor.HomeWorldId==b.WorldId&&e.Lottery is {} x&&x.District==b.District&&x.Ward==b.Ward&&x.Plot==b.Plot&&x.Entry==b.Entry&&DateTimeOffset.Parse(x.CycleStart)==DateTimeOffset.Parse(b.CycleStart);
+            var old=all.Where(Match).MaxBy(e=>e.At);if(old is not null&&old.At>b.At&&b.Status=="entered")continue;
+            all.RemoveAll(e=>Match(e)&&(b.Status!="entered"||e.At<=b.At));
+            if(b.Status=="claimed")continue;
+            all.Add(new("shared-bid","housing.lottery",b.ResultAt??b.At,new(c.ContentId,c.Name,b.WorldId,b.WorldId,c.World,c.World),null,Lottery:new(b.District,b.Ward,b.Plot,b.Entry,b.Buyer,b.FcId,b.Status,b.CycleStart,b.Evidence)));
+        }
+        return all;
+    }
     public static string LocalTime(DateTimeOffset value) => value.ToLocalTime().ToString("MMM d, h:mm tt",CultureInfo.InvariantCulture);
     public static IEnumerable<(string Key,string Text)> Messages(IEnumerable<SyncEvent> events,string character,DateTimeOffset now)
     {

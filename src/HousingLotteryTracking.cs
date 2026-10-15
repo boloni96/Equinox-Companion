@@ -35,7 +35,7 @@ public sealed partial class Plugin
         }
         if(!config.NotifyHousingLottery||!LotteryLoaded||now<nextLotteryReminderCheck)return;
         nextLotteryReminderCheck=now.AddSeconds(15);
-        foreach(var notice in HousingLotteryNotices.Messages(config.Discoveries,id.ToString(),now))
+        foreach(var notice in HousingLotteryNotices.Messages(HousingLotteryNotices.WithShared(config.Discoveries,config.SharedRoster),id.ToString(),now))
             if(lotteryBidNotices.Due(id,notice.Key,now))Chat.Print(notice.Text);
     }
 

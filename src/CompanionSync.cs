@@ -67,6 +67,8 @@ public sealed class CompanionSync : IDisposable
             var roster = JsonSerializer.Deserialize<SharedRoster>(await response.Content.ReadAsStringAsync(cancel.Token), Json);
             if (roster is null || roster.People is null || roster.People.Length > 100 || roster.People.Any(p => p is null || p.Characters is null || p.Accounts is {Length:>100} || p.Accounts?.Any(a=>a is null||string.IsNullOrWhiteSpace(a.Id)||string.IsNullOrWhiteSpace(a.Name))==true || p.Characters.Any(c => c is null || c.Houses is null)))
                 return new(null, "Invalid shared profile response; showing saved copy.");
+            if(roster.People.SelectMany(p=>p.Characters).Any(c=>c.HousingBids is {Length:>40}||c.HousingBids?.Any(b=>b is null||b.WorldId is <1 or >65535||b.At.Year<2020||!HousingLottery.Valid(new(b.District,b.Ward,b.Plot,b.Entry,b.Buyer,b.FcId,b.Status=="claimed"?"entered":b.Status,b.CycleStart,b.Evidence)))==true))
+                return new(null,"Invalid shared housing bids; showing saved copy.");
             if (roster.CachedVoyages is { Length: > 500 } || roster.CachedVoyages?.Any(v=>v is null || v.CharacterId is null || v.CharacterName is null || v.World is null || v.FcName is null || v.ImportedAt.Year<2020 || v.ImportedAt>DateTimeOffset.UtcNow.AddMinutes(5) || !AutoRetainerCache.Valid(v.Data,DateTimeOffset.UtcNow)) == true)
                 return new(null,"Invalid AutoRetainer cache response; showing saved copy.");
             if (roster.Voyages is { Length: > 200 } || roster.Voyages?.Any(v=>v is null || v.Submarines is null || v.Submarines.Length>4 || v.Submarines.Any(s=>s is null || s.Name is null || s.ReturnTime<0 || s.ReturnTime>DateTimeOffset.UtcNow.AddDays(30).ToUnixTimeSeconds())) == true)
