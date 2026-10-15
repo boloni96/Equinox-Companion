@@ -43,7 +43,14 @@ public sealed partial class Plugin
   if(ImGui.BeginPopup("BidWorldPicker")){
    ImGui.SetNextItemWidth(220);ImGui.Combo("Region",ref bidRegion,"All regions\0Japan\0North America\0Europe\0Oceania\0");
    ImGui.BeginChild("WorldChoices",new Vector2(280,300),true);
-   foreach(var dc in bidWorlds!.Where(w=>bidRegion==0||w.Region==bidRegion).GroupBy(w=>w.Dc).OrderBy(g=>g.Key))if(ImGui.TreeNode(dc.Key)){foreach(var w in dc)if(ImGui.Selectable(w.Name,w.Id==bidWorld)){bidWorld=w.Id;StartBidSearch();ImGui.CloseCurrentPopup();}ImGui.TreePop();}ImGui.EndChild();ImGui.EndPopup();
+   foreach(var region in new[]{(Id:2,Name:"North America"),(Id:3,Name:"Europe"),(Id:1,Name:"Japan"),(Id:4,Name:"Oceania")}){
+    if(bidRegion!=0&&bidRegion!=region.Id)continue;
+    ImGui.TextDisabled(region.Name);ImGui.Separator();
+    foreach(var dc in bidWorlds!.Where(w=>w.Region==region.Id).GroupBy(w=>w.Dc).OrderBy(g=>g.Key))if(ImGui.TreeNode(dc.Key)){
+     foreach(var w in dc)if(ImGui.Selectable(w.Name,w.Id==bidWorld)){bidWorld=w.Id;StartBidSearch();ImGui.CloseCurrentPopup();}ImGui.TreePop();
+    }
+    ImGui.Spacing();
+   }ImGui.EndChild();ImGui.EndPopup();
   }
   ImGui.SameLine();ImGui.BeginDisabled(bidTask is not null||bidWorld==0||now<bidRetry);if(ImGui.SmallButton("Refresh"))RefreshBidSearch();ImGui.EndDisabled();ImGui.SameLine();ImGui.Checkbox("Auto 60s",ref bidAuto);
   if(ImGui.SmallButton("Clear sort & filters")){bidFilters.Clear();bidSort=5;bidDescending=false;bidDirty=true;}

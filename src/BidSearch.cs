@@ -13,7 +13,7 @@ internal sealed record BidPlot(uint World,string District,int Ward,int Plot,int 
 internal sealed class BidSearch:IDisposable
 {
  private readonly HttpClient http=new(){Timeout=TimeSpan.FromSeconds(25)};
- public BidSearch(){http.DefaultRequestHeaders.UserAgent.ParseAdd("EquinoxCompanion/0.5.1.140");}
+ public BidSearch(){http.DefaultRequestHeaders.UserAgent.ParseAdd("EquinoxCompanion/0.5.1.141");}
  public async Task<BidPlot[]> Search(uint world,CancellationToken token){using var r=await http.GetAsync($"https://paissadb.zhu.codes/worlds/{world}",HttpCompletionOption.ResponseHeadersRead,token);r.EnsureSuccessStatusCode();await r.Content.LoadIntoBufferAsync(6000000,token);return Parse(await r.Content.ReadAsStringAsync(token),world);}
  internal static BidPlot[] Parse(string json,uint world){
   using var doc=JsonDocument.Parse(json);var root=doc.RootElement;if(root.GetProperty("id").GetUInt32()!=world)throw new JsonException("World mismatch");var rows=new List<BidPlot>();
