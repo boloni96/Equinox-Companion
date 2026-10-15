@@ -5,13 +5,15 @@ internal sealed record BidPlot(uint World,string District,int Ward,int Plot,int 
 {
  public string Key=>$"{World}|{District}|{Ward}|{Plot}";
  public bool Current(DateTimeOffset now)=>Phase is >=1 and <=3&&PhaseUntil is {} end&&end>now.ToUnixTimeSeconds();
- public string PhaseLabel(DateTimeOffset now)=>!Current(now)?"Unknown / outdated":Phase switch {1=>"Accepting entries",2=>"Results",3=>"Next round",_=>"Unknown"};
- public string Tenants=>(Purchase&6) switch {2=>"FC",4=>"Private",6=>"Private / FC",_=>"Unknown"};
+ public int PhaseCategory(DateTimeOffset now)=>(Purchase&1)==0?3:Current(now)?Phase!.Value-1:4;
+ public string PhaseLabel(DateTimeOffset now)=>PhaseNames[PhaseCategory(now)];
+ internal static readonly string[] PhaseNames=["Accepting Entries","Results","Unavailable","FCFS","Missing/Outdated"];
+ public string Tenants=>(Purchase&6) switch {2=>"Free Company",4=>"Individual",6=>"Free Company / Individual",_=>"Unknown"};
 }
 internal sealed class BidSearch:IDisposable
 {
  private readonly HttpClient http=new(){Timeout=TimeSpan.FromSeconds(25)};
- public BidSearch(){http.DefaultRequestHeaders.UserAgent.ParseAdd("EquinoxCompanion/0.5.1.139");}
+ public BidSearch(){http.DefaultRequestHeaders.UserAgent.ParseAdd("EquinoxCompanion/0.5.1.140");}
  public async Task<BidPlot[]> Search(uint world,CancellationToken token){using var r=await http.GetAsync($"https://paissadb.zhu.codes/worlds/{world}",HttpCompletionOption.ResponseHeadersRead,token);r.EnsureSuccessStatusCode();await r.Content.LoadIntoBufferAsync(6000000,token);return Parse(await r.Content.ReadAsStringAsync(token),world);}
  internal static BidPlot[] Parse(string json,uint world){
   using var doc=JsonDocument.Parse(json);var root=doc.RootElement;if(root.GetProperty("id").GetUInt32()!=world)throw new JsonException("World mismatch");var rows=new List<BidPlot>();
@@ -30,3 +32,11 @@ internal sealed class BidSearch:IDisposable
  public void Dispose()=>http.Dispose();
 }
 public sealed record SharedHousingBid(string District,int Ward,int Plot,int Entry,string Buyer,string FcId,string Status,string CycleStart,string Evidence,uint WorldId,string World,DateTimeOffset At,int? Winner=null,DateTimeOffset? ResultAt=null,string CheckedBy="",DateTimeOffset? ClaimedAt=null);
+
+internal sealed class BidFilters
+{
+ internal readonly HashSet<int> Districts=[0,1,2,3,4], Wards=[..Enumerable.Range(1,60)], Plots=[..Enumerable.Range(1,60)], Sizes=[0,1,2], Phases=[0], Tenants=[2,4];
+ internal bool Matches(BidPlot p,DateTimeOffset now)=>Districts.Contains(Array.IndexOf(BidSearch.HousingLotteryDistricts,p.District))&&Wards.Contains(p.Ward)&&Plots.Contains(p.Plot)&&Sizes.Contains(p.Size)&&Phases.Contains(p.PhaseCategory(now))&&(Tenants.Count==2||Tenants.Any(t=>(p.Purchase&t)!=0));
+ internal void Clear(){Reset(Districts,0,5);Reset(Wards,1,60);Reset(Plots,1,60);Reset(Sizes,0,3);Reset(Phases,0,5);Tenants.Clear();Tenants.UnionWith([2,4]);}
+ private static void Reset(HashSet<int> set,int start,int count){set.Clear();set.UnionWith(Enumerable.Range(start,count));}
+}
