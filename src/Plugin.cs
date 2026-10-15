@@ -153,7 +153,7 @@ public sealed partial class Plugin : IDalamudPlugin
         if (events.Length == 0) {
             if (eligible.Length > 0) syncStatus = "Eligible records exceed the upload size limit; kept locally. Export diagnostics.";
             else if (pending.Any(e => !SyncValidation.SupportedByWebsite(e.Kind, config.SharedRoster?.ProtocolVersion ?? 1)))
-                syncStatus = "New observations kept locally. Deploy Journal V7.11.129, save once, then refresh shared profiles.";
+                syncStatus = "New observations kept locally. Deploy Journal V7.11.164, save once, then refresh shared profiles.";
             nextSync = now.AddSeconds(FastGardenSync ? 1 : 30); return;
         }
         syncHistoryFirst = !syncHistoryFirst;
@@ -234,6 +234,7 @@ public sealed partial class Plugin : IDalamudPlugin
         Pi.UiBuilder.OpenConfigUi += Open;
         Framework.Update += Update;
         Client.Login += OnGardenNoticeLogin;
+        InitializeLottery();
         Client.Login += ResetMaintenanceLogin;
         maintenanceLogout=(_,_)=>ResetMaintenanceLogin();
         Client.Logout += maintenanceLogout;
@@ -297,6 +298,7 @@ public sealed partial class Plugin : IDalamudPlugin
     {
         var now = DateTimeOffset.UtcNow;
         UpdateMaintenanceNotices(now);
+        UpdateLottery(now);
         UpdateQuickLoot(now);
         UpdateCofferMarkers(now);
         // Give a coffer click a short uncontested turn before other automatic interactions.
@@ -666,7 +668,7 @@ public sealed partial class Plugin : IDalamudPlugin
     {
         if (!SyncValidation.CanSend(e, DateTimeOffset.UtcNow)) return;
         var last = config.Discoveries.LastOrDefault(x => x.Kind == e.Kind && x.Actor.ContentId == e.Actor.ContentId && x.Address?.HouseId == e.Address?.HouseId && x.Patch == e.Patch && x.Bed == e.Bed && x.Collection?.Category == e.Collection?.Category && x.Collection?.Segment == e.Collection?.Segment && x.Storage?.Key == e.Storage?.Key && x.GardenTarget?.Argument == e.GardenTarget?.Argument && x.Company?.Id == e.Company?.Id && x.Company?.Profile?.Source == e.Company?.Profile?.Source);
-        if (!force && last is not null && !GardenTargetMap.CanRepeatObservation(e.Kind, e.At - last.At) && !(e.GardenTarget is not null && e.At-last.At > TimeSpan.FromDays(30)) && !(e.Kind is "garden.ready" or "garden.observed" or "garden.status" or "garden.empty" or "garden.dead" && config.Planting.Any(p => p.Actor.ContentId == e.Actor.ContentId && p.Address.HouseId == e.Address?.HouseId && p.Patch == e.Patch && p.Bed == e.Bed && p.ConfirmedAt > last.At)) && JsonSerializer.Serialize(new { last.Actor, last.Address, last.House, last.Character, last.Crop, last.Collection, last.Fashion, last.Voyage, last.GardenTarget, last.Storage, last.Company, last.CachedVoyage, last.Supplies }) == JsonSerializer.Serialize(new { e.Actor, e.Address, e.House, e.Character, e.Crop, e.Collection, e.Fashion, e.Voyage, e.GardenTarget, e.Storage, e.Company, e.CachedVoyage, e.Supplies })) return;
+        if (!force && last is not null && !GardenTargetMap.CanRepeatObservation(e.Kind, e.At - last.At) && !(e.GardenTarget is not null && e.At-last.At > TimeSpan.FromDays(30)) && !(e.Kind is "garden.ready" or "garden.observed" or "garden.status" or "garden.empty" or "garden.dead" && config.Planting.Any(p => p.Actor.ContentId == e.Actor.ContentId && p.Address.HouseId == e.Address?.HouseId && p.Patch == e.Patch && p.Bed == e.Bed && p.ConfirmedAt > last.At)) && JsonSerializer.Serialize(new { last.Actor, last.Address, last.House, last.Character, last.Crop, last.Collection, last.Fashion, last.Voyage, last.GardenTarget, last.Storage, last.Company, last.CachedVoyage, last.Supplies, last.Lottery, last.LotteryResult }) == JsonSerializer.Serialize(new { e.Actor, e.Address, e.House, e.Character, e.Crop, e.Collection, e.Fashion, e.Voyage, e.GardenTarget, e.Storage, e.Company, e.CachedVoyage, e.Supplies, e.Lottery, e.LotteryResult })) return;
         config.Discoveries.Add(e);
         WakeObservationSync();
         if(collectingStorage)storageChanged=true;else SaveConfiguration();
@@ -1171,6 +1173,7 @@ public sealed partial class Plugin : IDalamudPlugin
         foreach (var menuEvent in MenuEvents) Addons.UnregisterListener(menuEvent, GardenMenus, OnGardenMenu);
         Framework.Update -= Update;
         Client.Login -= OnGardenNoticeLogin;
+        DisposeLottery();
         Client.Login -= ResetMaintenanceLogin;
         Client.Logout -= maintenanceLogout;
         Client.TerritoryChanged -= OnCofferTerritoryChanged;
