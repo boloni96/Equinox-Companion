@@ -14,7 +14,7 @@ public sealed partial class Plugin
  private BidPlot[] bidPlots=[],bidShown=[];private string bidMessage="",bidTravelMessage="";private DateTimeOffset bidFetched,bidNext,bidRetry,bidAgeCheck;
  private readonly BidFilters bidFilters=new();private int bidSort=-1,bidRegion;private bool bidDescending,bidDirty=true,bidAuto=true,bidFavoritesOnly;
  private readonly HashSet<string> bidFavoriteKeys=new();
- private readonly Dictionary<string,string> bidMarkers=new();private readonly Dictionary<string,List<(string Name,SharedHousingBid Bid)>> bidByPlot=new();private SharedRoster? bidLastRoster;private int bidLastLocalCount=-1;private DateTimeOffset bidRound;
+ private readonly Dictionary<string,string> bidMarkers=new();private readonly Dictionary<string,List<(string Name,string Owner,SharedHousingBid Bid)>> bidByPlot=new();private (string Name,string Owner,SharedHousingBid Bid)[] bidRows=[];private SharedRoster? bidLastRoster;private int bidLastLocalCount=-1;private DateTimeOffset bidRound;
  private void InitializeBidSearch(){config.BidFavorites??=[];bidFavoriteKeys.UnionWith(config.BidFavorites.Select(f=>f.Key));bidWindow=new(this);windows.AddWindow(bidWindow);bidCommand=Commands.AddHandler("/bid",new CommandInfo((_,_)=>OpenBidSearch()){HelpMessage="Find housing plots with Paissa, paired bids and Lifestream GO SEE. /equinox bid also opens this window."});}
  private void DisposeBidSearch(){CancelBidSearch();bidSearch.Dispose();if(bidCommand)Commands.RemoveHandler("/bid");windows.RemoveWindow(bidWindow);}
  private void CancelBidSearch(){bidCancel?.Cancel();bidCancel?.Dispose();bidCancel=null;if(bidTask is {} pending)_=pending.ContinueWith(t=>{_=t.Exception;},TaskContinuationOptions.OnlyOnFaulted);bidTask=null;}
@@ -37,12 +37,19 @@ public sealed partial class Plugin
  private void RebuildBidMarkers(DateTimeOffset now){
   var round=HousingLottery.Period(now).Start;if(ReferenceEquals(bidLastRoster,config.SharedRoster)&&bidLastLocalCount==config.Discoveries.Count&&bidRound==round)return;
   bidLastRoster=config.SharedRoster;bidLastLocalCount=config.Discoveries.Count;bidRound=round;bidByPlot.Clear();bidMarkers.Clear();
-  var merged=new Dictionary<string,(string Name,SharedHousingBid Bid)>();
-  void add(string identity,string name,SharedHousingBid b){if(!DateTimeOffset.TryParse(b.CycleStart,out var start)||start!=round)return;var id=$"{identity}|{b.WorldId}|{b.District}|{b.Ward}|{b.Plot}|{b.Entry}";if(!merged.TryGetValue(id,out var old)||b.At>old.Bid.At&&old.Bid.Status=="entered")merged[id]=(name,b);}
-  foreach(var c in config.SharedRoster?.People.SelectMany(p=>p.Characters)??[])foreach(var b in c.HousingBids??[])add(c.ContentId.Length>0?c.ContentId:c.Name+"@"+c.World,c.Name,b);
-  foreach(var e in config.Discoveries.Where(e=>e.Kind=="housing.lottery"&&e.Lottery is not null).OrderBy(e=>e.At)){var b=e.Lottery!;add(e.Actor.ContentId,e.Actor.Name,new(b.District,b.Ward,b.Plot,b.Entry,b.Buyer,b.FcId,b.Status,b.CycleStart,b.Evidence,e.Actor.HomeWorldId,e.Actor.HomeWorldName??"",e.At));}
+  var merged=new Dictionary<string,(string Name,string Owner,SharedHousingBid Bid)>();
+  void add(string identity,string name,string owner,SharedHousingBid b){if(!DateTimeOffset.TryParse(b.CycleStart,out var start)||start!=round)return;var id=$"{identity}|{b.WorldId}|{b.District}|{b.Ward}|{b.Plot}|{b.Entry}";if(!merged.TryGetValue(id,out var old)||b.At>old.Bid.At&&old.Bid.Status=="entered")merged[id]=(name,owner,b);}
+  var characters=(config.SharedRoster?.People??[]).SelectMany(p=>p.Characters.Select(c=>(Person:p,Character:c))).ToArray();
+  string owner(SharedPerson p,SharedCharacter c)=>$"{p.Name} · {(string.IsNullOrWhiteSpace(c.Account)?p.Accounts?.FirstOrDefault(a=>a.Id==c.AccountId)?.Name??"Account unknown":c.Account)}";
+  foreach(var (p,c) in characters)foreach(var b in c.HousingBids??[])add(c.ContentId.Length>0?c.ContentId:c.Name+"@"+c.World,c.Name,owner(p,c),b);
+  foreach(var e in config.Discoveries.Where(e=>e.Kind=="housing.lottery"&&e.Lottery is not null).OrderBy(e=>e.At)){var b=e.Lottery!;
+   var matches=characters.Where(x=>!string.IsNullOrEmpty(x.Character.ContentId)?x.Character.ContentId==e.Actor.ContentId:x.Character.Name==e.Actor.Name&&x.Character.World==e.Actor.HomeWorldName).Take(2).ToArray();
+   var match=matches.Length==1?matches[0]:default;
+   var identity=match.Character is not null?(match.Character.ContentId.Length>0?match.Character.ContentId:match.Character.Name+"@"+match.Character.World):e.Actor.ContentId;
+   add(identity,e.Actor.Name,match.Character is not null?owner(match.Person,match.Character):"Person / account pending sync",new(b.District,b.Ward,b.Plot,b.Entry,b.Buyer,b.FcId,b.Status,b.CycleStart,b.Evidence,e.Actor.HomeWorldId,e.Actor.HomeWorldName??"",e.At));}
   foreach(var v in merged.Values){var b=v.Bid;var key=$"{b.WorldId}|{b.District}|{b.Ward}|{b.Plot}";if(!bidByPlot.TryGetValue(key,out var list))bidByPlot[key]=list=[];list.Add(v);}
-  foreach(var (key,list) in bidByPlot)bidMarkers[key]=string.Join("\n",list.Select(x=>$"{x.Name} · {(x.Bid.Buyer=="fc"?"FC":x.Bid.Buyer=="private"?"Private":"Type unknown")} · Entry #{x.Bid.Entry} · {x.Bid.Status}"));
+  bidRows=bidByPlot.Values.SelectMany(x=>x).OrderBy(x=>x.Owner).ThenBy(x=>x.Name).ThenBy(x=>x.Bid.WorldId).ThenBy(x=>x.Bid.District).ThenBy(x=>x.Bid.Ward).ThenBy(x=>x.Bid.Plot).ThenBy(x=>x.Bid.Entry).ToArray();
+  foreach(var (key,list) in bidByPlot)bidMarkers[key]=string.Join("\n",list.Select(x=>$"{x.Owner} · {x.Name} · {(x.Bid.Buyer=="fc"?"FC":x.Bid.Buyer=="private"?"Private":"Type unknown")} · Entry #{x.Bid.Entry} · {x.Bid.Status}"));
  }
  private void DrawBidSearch(){
   EnsureBidWorlds();var now=DateTimeOffset.UtcNow;
@@ -69,9 +76,7 @@ public sealed partial class Plugin
   if(ImGui.SmallButton("Clear sort & filters")){bidFilters.Clear();bidFavoritesOnly=false;bidSort=-1;bidDescending=false;bidDirty=true;}
   ImGui.SameLine();ImGui.TextDisabled(bidMessage+(bidFetched==default?"":$" · checked {bidFetched.ToLocalTime():HH:mm:ss}"));
   if((config.SharedRoster?.ProtocolVersion??0)<20)ImGui.TextDisabled("Deploy Journal V7.11.166 and open it once to receive paired bids. Local bids are still shown.");
-  if(ImGui.CollapsingHeader($"Your paired bids · {bidByPlot.Values.Sum(x=>x.Count)} entries this round")){
-   ImGui.BeginChild("MyBids",new Vector2(0,110),true);foreach(var (key,entries) in bidByPlot){var b=entries[0].Bid;ImGui.PushID(key);ImGui.TextUnformatted($"{BidWorldName(b.WorldId)} · {b.District} W{b.Ward} P{b.Plot}");ImGui.SameLine();if(ImGui.SmallButton("GO SEE"))GoSeeBid(b.WorldId,b.District,b.Ward,b.Plot);ImGui.TextWrapped(bidMarkers[key]);ImGui.PopID();}ImGui.EndChild();
-  }
+  DrawPairedBidRows();
   DrawBidFavorites();
   if(bidTravelMessage.Length>0)ImGui.TextWrapped(bidTravelMessage);
   if(bidDirty){bidShown=BidSearch.Sort(bidPlots.Where(p=>bidFilters.Matches(p,now)&&(!bidFavoritesOnly||bidFavoriteKeys.Contains(p.Key))),bidSort,bidDescending);bidDirty=false;}
@@ -95,6 +100,26 @@ public sealed partial class Plugin
     ImGui.PopID();
    }
    var clip=ImGui.ImGuiListClipper();clip.Begin(bidShown.Length);while(clip.Step())for(var i=clip.DisplayStart;i<clip.DisplayEnd;i++){var p=bidShown[i];ImGui.PushID(p.Key);ImGui.TableNextRow();string[] values=[p.District,p.Ward.ToString(),p.Plot.ToString(),new[]{"Small","Medium","Large"}[p.Size],p.Price.ToString("N0"),p.Entries?.ToString()??"?",p.PhaseLabel(now),p.Tenants,MarketSearch.Age((long)p.Updated,now),MarketSearch.Age((long)p.FirstSeen,now)];for(var v=0;v<values.Length;v++){ImGui.TableNextColumn();if(v==0){var saved=bidFavoriteKeys.Contains(p.Key);if(ImGui.SmallButton(saved?"★##Favorite":"☆##Favorite"))ToggleBidFavorite(new(p.World,p.District,p.Ward,p.Plot));if(ImGui.IsItemHovered())ImGui.SetTooltip(saved?"Remove from favorites":"Save this plot for later");ImGui.SameLine();}ImGui.TextUnformatted(values[v]);}ImGui.TableNextColumn();if(bidMarkers.TryGetValue(p.Key,out var marker)){ImGui.TextColored(Green,$"Your bids ({bidByPlot[p.Key].Count})");if(ImGui.IsItemHovered())ImGui.SetTooltip(marker);}else ImGui.TextDisabled("—");ImGui.TableNextColumn();ImGui.BeginDisabled(!Player.IsLoaded);if(ImGui.SmallButton("GO SEE"))GoSeeBid(p.World,p.District,p.Ward,p.Plot);ImGui.EndDisabled();ImGui.SameLine();if(ImGui.SmallButton("Copy"))ImGui.SetClipboardText($"{BidWorldName(p.World)} · {p.District} · Ward {p.Ward} · Plot {p.Plot}");ImGui.PopID();}clip.End();clip.Destroy();ImGui.EndTable();}
+ }
+ private void DrawPairedBidRows(){
+  var count=bidByPlot.Values.Sum(x=>x.Count);
+  if(!ImGui.CollapsingHeader($"Your paired bids · {count} {(count==1?"entry":"entries")} this round###PairedBids"))return;
+  if(count==0){ImGui.TextDisabled("No recorded bids this round.");return;}
+  var height=Math.Min(6,count)*ImGui.GetFrameHeightWithSpacing()+ImGui.GetStyle().ScrollbarSize+8;
+  if(!ImGui.BeginTable("MyBids",4,ImGuiTableFlags.ScrollY|ImGuiTableFlags.ScrollX|ImGuiTableFlags.RowBg|ImGuiTableFlags.SizingFixedFit,new Vector2(0,height)))return;
+  ImGui.TableSetupColumn("Person / account");ImGui.TableSetupColumn("Plot");ImGui.TableSetupColumn("Entry");ImGui.TableSetupColumn("Actions");
+  var row=0;
+  foreach(var entry in bidRows){
+   var b=entry.Bid;var address=$"{BidWorldName(b.WorldId)} · {b.District} W{b.Ward} P{b.Plot}";
+   var details=$"{entry.Name} · {(b.Buyer=="fc"?"FC":b.Buyer=="private"?"Private":"Type unknown")} · Entry #{b.Entry} · {b.Status}";
+   ImGui.PushID(row++);ImGui.TableNextRow();ImGui.TableNextColumn();ImGui.TextUnformatted(entry.Owner);
+   ImGui.TableNextColumn();ImGui.TextUnformatted(address);ImGui.TableNextColumn();ImGui.TextUnformatted(details);
+   ImGui.TableNextColumn();if(ImGui.SmallButton("GO SEE"))GoSeeBid(b.WorldId,b.District,b.Ward,b.Plot);
+   ImGui.SameLine();if(ImGui.SmallButton("Copy"))ImGui.SetClipboardText($"{entry.Owner} · {address} · {details}");
+   if(ImGui.IsItemHovered())ImGui.SetTooltip("Copy person, account, character, plot and entry details");
+   ImGui.PopID();
+  }
+  ImGui.EndTable();
  }
  private void ToggleBidFavorite(BidFavorite favorite){
   if(bidFavoriteKeys.Remove(favorite.Key))config.BidFavorites.RemoveAll(f=>f.Key==favorite.Key);
