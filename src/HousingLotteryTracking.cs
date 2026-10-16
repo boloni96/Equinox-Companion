@@ -14,6 +14,7 @@ public sealed partial class Plugin
     private (LotteryBid Bid, ulong Character, ulong Target, uint World, DateTimeOffset At)? lotteryPlacard;
     private string lotteryPendingBuyer="unknown";
     private ulong lotteryPendingCharacter;
+    private uint lotteryPendingWorld;
     private DateTimeOffset lotteryPendingAt;
     private void InitializeLottery()
     {
@@ -64,16 +65,16 @@ public sealed partial class Plugin
                 var status=LotteryText(addon,119);if(!status.Contains("period in progress",StringComparison.OrdinalIgnoreCase)&&!status.Contains("Current Entry",StringComparison.OrdinalIgnoreCase))return;
                 if(status.Contains("Entry period",StringComparison.OrdinalIgnoreCase)!=HousingLottery.Period(now).Entry)return;
                 var kind=LotteryText(addon,123);
-                var buyer=kind.Contains("Free Company",StringComparison.OrdinalIgnoreCase)?"fc":kind.Contains("Private",StringComparison.OrdinalIgnoreCase)||kind.Contains("Personal",StringComparison.OrdinalIgnoreCase)?"private":"unknown";
+                var buyer=HousingLottery.Buyer(kind);
                 var bid=HousingLottery.Parse(LotteryText(addon,121),LotteryText(addon,122),buyer,now,"timers");
                 if(bid is not null)RecordLottery(bid,now);
             }
-            else if(args.AddonName=="SelectYesNoTextScroll")
+            else if(args.AddonName is "SelectYesNoTextScroll" or "SelectYesno" && HousingLottery.EntryConfirmation(LotteryText(addon,0)))
             {
-                var text=LotteryText(addon,0);var first=text.Split('\n')[0];
-                if(!first.Contains("enter the lottery",StringComparison.OrdinalIgnoreCase))return;
-                lotteryPendingBuyer=first.Contains("free company",StringComparison.OrdinalIgnoreCase)?"fc":first.Contains("personal plot",StringComparison.OrdinalIgnoreCase)?"private":"unknown";
-                lotteryPendingAt=now;lotteryPendingCharacter=Player.ContentId;
+                // The buyer can appear after a line break in either confirmation layout.
+                // Read the whole prompt, not just its first line; mixed choices stay unknown.
+                lotteryPendingBuyer=HousingLottery.Buyer(LotteryText(addon,0));
+                lotteryPendingAt=now;lotteryPendingCharacter=Player.ContentId;lotteryPendingWorld=Player.CurrentWorld.RowId;
             }
             else if(ObservePublicLotteryResult(addon,now)){}
             else if(HousingLottery.Result(LotteryText(addon,0)) is {} result)
@@ -108,15 +109,17 @@ public sealed partial class Plugin
         var text=message.OriginalMessage.ExtractText();
         var m=Regex.Match(text,@"^You (?:have )?submitted a lottery entry for plot (\d+), ward (\d+), ([^.]+)\. Your lottery number is (\d+)",RegexOptions.IgnoreCase);
         if(!m.Success)return;var now=DateTimeOffset.UtcNow;
-        var buyer=lotteryPendingCharacter==Player.ContentId&&now-lotteryPendingAt<TimeSpan.FromMinutes(5)?lotteryPendingBuyer:"unknown";
+        var buyer=lotteryPendingCharacter==Player.ContentId&&lotteryPendingWorld==Player.CurrentWorld.RowId&&now-lotteryPendingAt<TimeSpan.FromMinutes(5)?lotteryPendingBuyer:"unknown";
         var bid=HousingLottery.Parse($"Plot {m.Groups[1].Value}, {m.Groups[2].Value} Ward, {m.Groups[3].Value}",$"Lottery Number: {m.Groups[4].Value}",buyer,now,"submission");
         if(bid is not null)RecordLottery(bid,now);
+        lotteryPendingBuyer="unknown";lotteryPendingCharacter=0;lotteryPendingWorld=0;
     }
     private void RecordLottery(LotteryBid bid,DateTimeOffset now)
     {
         var actor=ReadActor();if(!SyncValidation.ActorReady(actor)||actor.HomeWorldId!=actor.CurrentWorldId)return;
         var prior=config.Discoveries.LastOrDefault(e=>e.Kind=="housing.lottery"&&e.Actor.ContentId==actor.ContentId&&e.Lottery is {} b&&b.District==bid.District&&b.Ward==bid.Ward&&b.Plot==bid.Plot&&b.Entry==bid.Entry&&b.CycleStart==bid.CycleStart);
         if(prior?.Lottery is {} old && bid.Evidence=="timers")bid=bid with {CycleStart=old.CycleStart,Status=old.Status,Buyer=bid.Buyer=="unknown"?old.Buyer:bid.Buyer,FcId=old.FcId};
+        if(prior?.Lottery is {} known && bid.Buyer=="unknown" && known.Buyer!="unknown")bid=bid with {Buyer=known.Buyer,FcId=known.FcId};
         if(bid.Buyer=="fc"&&bid.FcId=="")bid=bid with {FcId=config.Discoveries.LastOrDefault(e=>e.Actor.ContentId==actor.ContentId&&e.Kind=="character.updated")?.Character is {FcMember: not false,FreeCompany: {} company}?company.Id:""};
         if(prior?.Lottery is {} previous && (previous with {Evidence=bid.Evidence})==bid)return;
         KeepDiscovery(new(Guid.NewGuid().ToString("N"),"housing.lottery",now,WithWorldNames(actor),null,Lottery:bid));
