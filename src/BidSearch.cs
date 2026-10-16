@@ -13,7 +13,7 @@ internal sealed record BidPlot(uint World,string District,int Ward,int Plot,int 
 internal sealed class BidSearch:IDisposable
 {
  private readonly HttpClient http=new(){Timeout=TimeSpan.FromSeconds(25)};
- public BidSearch(){http.DefaultRequestHeaders.UserAgent.ParseAdd("EquinoxCompanion/0.5.1.143");}
+ public BidSearch(){http.DefaultRequestHeaders.UserAgent.ParseAdd("EquinoxCompanion/0.5.1.144");}
  public async Task<BidPlot[]> Search(uint world,CancellationToken token){using var r=await http.GetAsync($"https://paissadb.zhu.codes/worlds/{world}",HttpCompletionOption.ResponseHeadersRead,token);r.EnsureSuccessStatusCode();await r.Content.LoadIntoBufferAsync(6000000,token);return Parse(await r.Content.ReadAsStringAsync(token),world);}
  internal static BidPlot[] Parse(string json,uint world){
   using var doc=JsonDocument.Parse(json);var root=doc.RootElement;if(root.GetProperty("id").GetUInt32()!=world)throw new JsonException("World mismatch");var rows=new List<BidPlot>();
@@ -45,4 +45,17 @@ internal sealed class BidFilters
 public sealed record BidFavorite(uint World,string District,int Ward,int Plot)
 {
  public string Key=>$"{World}|{District}|{Ward}|{Plot}";
+}
+
+internal sealed class BidWorldSession
+{
+ private ulong character;private uint world;private DateTimeOffset since;private bool ready;
+ internal bool Ready=>ready;
+ internal void Reset(){character=0;world=0;ready=false;since=default;}
+ internal (bool Changed,bool Ready,uint World) Observe(bool loaded,ulong id,uint currentWorld,DateTimeOffset now){
+  if(!loaded||id==0||currentWorld==0){var changed=character!=0||world!=0||ready;Reset();return(changed,false,0);}
+  if(character!=id||world!=currentWorld){character=id;world=currentWorld;since=now;ready=false;return(true,false,0);}
+  if(!ready&&now-since>=TimeSpan.FromSeconds(1)){ready=true;return(true,true,world);}
+  return(false,ready,world);
+ }
 }

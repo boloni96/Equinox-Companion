@@ -9,7 +9,7 @@ public sealed partial class Plugin
 {
  private sealed class BidWindow:Window{private readonly Plugin p;public BidWindow(Plugin p):base("Housing · Find a plot###EquinoxBid"){this.p=p;Size=new(1180,570);SizeCondition=ImGuiCond.FirstUseEver;SizeConstraints=new(){MinimumSize=new(760,380),MaximumSize=new(float.MaxValue)};}public override void Draw()=>p.DrawBidSearch();public override void OnClose()=>p.CancelBidSearch();}
  private BidWindow bidWindow=null!;private readonly BidSearch bidSearch=new();private bool bidCommand;
- private CancellationTokenSource? bidCancel;private Task<BidPlot[]>? bidTask;private uint bidWorld;private ulong bidCharacter;
+ private CancellationTokenSource? bidCancel;private Task<BidPlot[]>? bidTask;private uint bidWorld;private readonly BidWorldSession bidSession=new();
  private (uint Id,string Name,string Dc,int Region)[]? bidWorlds;
  private BidPlot[] bidPlots=[],bidShown=[];private string bidMessage="",bidTravelMessage="";private DateTimeOffset bidFetched,bidNext,bidRetry,bidAgeCheck;
  private readonly BidFilters bidFilters=new();private int bidSort=-1,bidRegion;private bool bidDescending,bidDirty=true,bidAuto=true,bidFavoritesOnly;
@@ -18,7 +18,18 @@ public sealed partial class Plugin
  private void InitializeBidSearch(){config.BidFavorites??=[];bidFavoriteKeys.UnionWith(config.BidFavorites.Select(f=>f.Key));bidWindow=new(this);windows.AddWindow(bidWindow);bidCommand=Commands.AddHandler("/bid",new CommandInfo((_,_)=>OpenBidSearch()){HelpMessage="Find housing plots with Paissa, paired bids and Lifestream GO SEE. /equinox bid also opens this window."});}
  private void DisposeBidSearch(){CancelBidSearch();bidSearch.Dispose();if(bidCommand)Commands.RemoveHandler("/bid");windows.RemoveWindow(bidWindow);}
  private void CancelBidSearch(){bidCancel?.Cancel();bidCancel?.Dispose();bidCancel=null;if(bidTask is {} pending)_=pending.ContinueWith(t=>{_=t.Exception;},TaskContinuationOptions.OnlyOnFaulted);bidTask=null;}
- private void OpenBidSearch(){bidWindow.IsOpen=true;nextRosterRead=default;EnsureBidWorlds();if(Player.IsLoaded){bidCharacter=Player.ContentId;bidWorld=Player.CurrentWorld.RowId!=0?Player.CurrentWorld.RowId:Player.HomeWorld.RowId;bidRegion=bidWorlds!.FirstOrDefault(w=>w.Id==bidWorld).Region;}if(bidWorld!=0)StartBidSearch();}
+ private void OpenBidSearch(){bidWindow.IsOpen=true;nextRosterRead=default;bidSession.Reset();ClearBidWorld();UpdateBidWorld(DateTimeOffset.UtcNow);}
+ private void ClearBidWorld(){CancelBidSearch();bidWorld=0;bidPlots=[];bidShown=[];bidFetched=default;bidNext=default;bidTravelMessage="";bidDirty=true;bidMessage="Waiting for character and current world…";}
+ private void UpdateBidWorld(DateTimeOffset now){
+  var ready=Player.IsLoaded&&!Conditions[ConditionFlag.BetweenAreas]&&!Conditions[ConditionFlag.BetweenAreas51];
+  var change=bidSession.Observe(ready,Player.ContentId,Player.CurrentWorld.RowId,now);
+  if(!change.Changed)return;
+  if(!change.Ready){ClearBidWorld();return;}
+  EnsureBidWorlds();bidWorld=change.World;bidRegion=bidWorlds!.FirstOrDefault(w=>w.Id==bidWorld).Region;
+  bidLastRoster=null;bidLastLocalCount=-1;nextRosterRead=default;
+  if(bidWindow.IsOpen)StartBidSearch();
+ }
+
  private void EnsureBidWorlds(){bidWorlds??=DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().Where(w=>w.IsPublic).Select(w=>(Id:w.RowId,Name:w.Name.ToString(),Dc:w.DataCenter.Value.Name.ToString(),Region:(int)w.DataCenter.Value.Region.RowId)).Where(w=>w.Region is >=1 and <=4).OrderBy(w=>w.Name).ToArray();}
  private void StartBidSearch(){CancelBidSearch();bidPlots=[];bidDirty=true;bidFetched=default;if(bidWorld==0)return;bidCancel=new();bidTask=bidSearch.Search(bidWorld,bidCancel.Token);bidMessage="Checking Paissa…";bidRetry=DateTimeOffset.UtcNow.AddSeconds(10);}
  private void RefreshBidSearch(){if(bidTask is not null||DateTimeOffset.UtcNow<bidRetry)return;bidCancel?.Dispose();bidCancel=new();bidTask=bidSearch.Search(bidWorld,bidCancel.Token);bidMessage="Refreshing Paissa…";bidRetry=DateTimeOffset.UtcNow.AddSeconds(10);}
@@ -35,7 +46,7 @@ public sealed partial class Plugin
  }
  private void DrawBidSearch(){
   EnsureBidWorlds();var now=DateTimeOffset.UtcNow;
-  if(Player.IsLoaded&&bidCharacter!=Player.ContentId){bidCharacter=Player.ContentId;bidWorld=Player.CurrentWorld.RowId!=0?Player.CurrentWorld.RowId:Player.HomeWorld.RowId;bidRegion=bidWorlds!.FirstOrDefault(w=>w.Id==bidWorld).Region;StartBidSearch();}
+  if(!bidSession.Ready){ImGui.TextDisabled("Waiting for character and current world…");DrawBidFavorites();return;}
   if(bidTask?.IsCompleted==true){if(bidTask.IsCompletedSuccessfully){bidPlots=bidTask.Result;bidFetched=now;bidMessage=$"{bidPlots.Length} reported open plots · Paissa";bidNext=now.AddSeconds(60);bidDirty=true;}else{_=bidTask.Exception;bidMessage="Paissa unavailable. Previous results kept; try Refresh.";bidNext=now.AddMinutes(2);}bidTask=null;}
   if(bidAuto&&bidWorld!=0&&bidTask is null&&bidFetched!=default&&now>=bidNext)RefreshBidSearch();
   if(now>=bidAgeCheck){bidAgeCheck=now.AddSeconds(30);bidDirty=true;}RebuildBidMarkers(now);
