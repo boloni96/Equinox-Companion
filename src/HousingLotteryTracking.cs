@@ -61,12 +61,15 @@ public sealed partial class Plugin
             }
             else if(args.AddonName=="ContentsInfoDetail")
             {
-                // Read-only, bounded UI fields; text shape is checked before accepting data.
-                var status=LotteryText(addon,119);if(!status.Contains("period in progress",StringComparison.OrdinalIgnoreCase)&&!status.Contains("Current Entry",StringComparison.OrdinalIgnoreCase))return;
-                if(status.Contains("Entry period",StringComparison.OrdinalIgnoreCase)!=HousingLottery.Period(now).Entry)return;
-                var kind=LotteryText(addon,123);
-                var buyer=HousingLottery.Buyer(kind);
-                var bid=HousingLottery.Parse(LotteryText(addon,121),LotteryText(addon,122),buyer,now,"timers");
+                // Match the displayed labels instead of hard-coded AtkValue offsets.
+                var texts=new List<string>();
+                for(var i=0;i<Math.Min((int)addon->AtkValuesCount,256);i++){var text=LotteryText(addon,i);if(text.Length>0)texts.Add(text);}
+                if(addon->UldManager.NodeList!=null&&addon->UldManager.NodeListCount<=512)
+                    for(var i=0;i<addon->UldManager.NodeListCount;i++){
+                        var node=addon->UldManager.NodeList[i];
+                        if(node!=null&&node->Type==NodeType.Text&&node->IsVisible())texts.Add(((AtkTextNode*)node)->NodeText.ToString());
+                    }
+                var bid=HousingLottery.ParseTimers(string.Join("\n",texts.Distinct()),now);
                 if(bid is not null)RecordLottery(bid,now);
             }
             else if(args.AddonName is "SelectYesNoTextScroll" or "SelectYesno" && HousingLottery.EntryConfirmation(LotteryText(addon,0)))

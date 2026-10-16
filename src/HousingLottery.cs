@@ -28,6 +28,12 @@ public static class HousingLottery
         return fc==personal?"unknown":fc?"fc":"private";
     }
     public static bool EntryConfirmation(string text)=>Regex.IsMatch(text,@"\benter\s+(?:the|this)\s+lottery\b",RegexOptions.IgnoreCase);
+    public static LotteryBid? ParseTimers(string text,DateTimeOffset now)
+    {
+        if(!text.Contains("Housing Lottery Status",StringComparison.OrdinalIgnoreCase)||!text.Contains("Current Entry",StringComparison.OrdinalIgnoreCase))return null;
+        var type=Regex.Match(text,@"Type of Entry:\s*([^\r\n]+)",RegexOptions.IgnoreCase);
+        return Parse(text,text,type.Success?Buyer(type.Groups[1].Value):"unknown",now,"timers");
+    }
     public static bool Valid(LotteryBid? b) => b is not null && District(b.District) is not null && b.Ward is >=1 and <=60 && b.Plot is >=1 and <=60 && b.Entry is >=1 and <=100000 && b.Buyer is "private" or "fc" or "unknown" && (b.FcId==""||CompanyProfileIdentity.ValidId(b.FcId)) && b.Status is "entered" or "won" or "lost" or "forfeited" && DateTimeOffset.TryParse(b.CycleStart,out var at)&&at>=Epoch && b.Evidence is "timers" or "submission" or "result-dialog";
     public static int? WinningNumber(string text)
     {
