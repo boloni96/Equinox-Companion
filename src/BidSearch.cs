@@ -13,7 +13,7 @@ internal sealed record BidPlot(uint World,string District,int Ward,int Plot,int 
 internal sealed class BidSearch:IDisposable
 {
  private readonly HttpClient http=new(){Timeout=TimeSpan.FromSeconds(25)};
- public BidSearch(){http.DefaultRequestHeaders.UserAgent.ParseAdd("EquinoxCompanion/0.5.1.142");}
+ public BidSearch(){http.DefaultRequestHeaders.UserAgent.ParseAdd("EquinoxCompanion/0.5.1.143");}
  public async Task<BidPlot[]> Search(uint world,CancellationToken token){using var r=await http.GetAsync($"https://paissadb.zhu.codes/worlds/{world}",HttpCompletionOption.ResponseHeadersRead,token);r.EnsureSuccessStatusCode();await r.Content.LoadIntoBufferAsync(6000000,token);return Parse(await r.Content.ReadAsStringAsync(token),world);}
  internal static BidPlot[] Parse(string json,uint world){
   using var doc=JsonDocument.Parse(json);var root=doc.RootElement;if(root.GetProperty("id").GetUInt32()!=world)throw new JsonException("World mismatch");var rows=new List<BidPlot>();
@@ -40,4 +40,9 @@ internal sealed class BidFilters
  internal bool Matches(BidPlot p,DateTimeOffset now)=>Districts.Contains(Array.IndexOf(BidSearch.HousingLotteryDistricts,p.District))&&Wards.Contains(p.Ward)&&Plots.Contains(p.Plot)&&Sizes.Contains(p.Size)&&Phases.Contains(p.PhaseCategory(now))&&(Tenants.Count==2||Tenants.Any(t=>(p.Purchase&t)!=0));
  internal void Clear(){Reset(Districts,0,5);Reset(Wards,1,60);Reset(Plots,1,60);Reset(Sizes,0,3);Reset(Phases,0,5);Tenants.Clear();Tenants.UnionWith([2,4]);}
  private static void Reset(HashSet<int> set,int start,int count){set.Clear();set.UnionWith(Enumerable.Range(start,count));}
+}
+
+public sealed record BidFavorite(uint World,string District,int Ward,int Plot)
+{
+ public string Key=>$"{World}|{District}|{Ward}|{Plot}";
 }
