@@ -15,8 +15,10 @@ public sealed partial class Plugin
         var ms = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
         performanceStages[stage] = Math.Max(performanceStages.GetValueOrDefault(stage), ms);
     }
+    private long configurationRevision;
     private void SaveConfiguration()
     {
+        configurationRevision++;
         // Coalesce a burst without postponing persistence indefinitely.
         if(!configurationDirty)configurationDue=DateTimeOffset.UtcNow.AddMilliseconds(250);
         configurationDirty=true;

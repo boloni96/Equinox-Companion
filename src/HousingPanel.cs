@@ -20,7 +20,24 @@ public sealed partial class Plugin
         return $"{world.Value.Name} · {dc.Name} · {region}";
     }
 
+    private sealed record LocalHousingRow(Actor Actor,string Location,HousingCharacterRows Houses);
+    private readonly UiProjectionCache<LocalHousingRow[]> localHousingCache=new(0);
+    private LocalHousingRow[] BuildLocalHousingRows()
+    {
+        var started=System.Diagnostics.Stopwatch.GetTimestamp();
+        try {
+            var index=HousingDisplayIndex.Build(config.Discoveries,config.Houses);
+            return OrderedLocalCharacters().Select(a=>new LocalHousingRow(a,HomeLocation(a),
+                index.Characters.GetValueOrDefault(a.ContentId)??new HousingCharacterRows([],[]))).ToArray();
+        } finally {TrackPerformance("My Empire history index",started);}
+    }
     private void DrawHousing()
+    {
+        var started=System.Diagnostics.Stopwatch.GetTimestamp();
+        try { DrawHousingContents(); }
+        finally { TrackPerformance("My Empire draw",started); }
+    }
+    private void DrawHousingContents()
     {
         ImGui.TextWrapped("My Empire");
         ImGui.TextColored(Green, "0–7 days"); ImGui.SameLine();
@@ -30,33 +47,31 @@ public sealed partial class Plugin
         ImGui.TextWrapped("Based on recorded eligible entries. Hover an estate for details. Other players' visits and demolition suspensions may change the actual deadline.");
         ImGui.TextDisabled("Name bar: left = Private | right = FC. Character order: Settings.");
         ImGui.InputText("Find character / server", ref housingSearch, 100);
-        var actors = OrderedLocalCharacters();
+        var actors = localHousingCache.Get(config,$"{configurationRevision}:{config.Discoveries.Count}:{config.Houses.Count}:{config.Tending.Count}:{config.Planting.Count}:{(Player.IsLoaded?Player.ContentId:0)}",Environment.TickCount64,BuildLocalHousingRows);
         if (actors.Length == 0) ImGui.TextWrapped("No visible characters. Log in to record them, or restore hidden characters in Settings.");
         var now = DateTimeOffset.UtcNow;
-        foreach (var actor in actors)
+        foreach (var row in actors)
         {
-            var location = HomeLocation(actor);
+            var actor=row.Actor;var location=row.Location;
             if (!string.IsNullOrWhiteSpace(housingSearch) && !(actor.Name + " " + location).Contains(housingSearch, StringComparison.OrdinalIgnoreCase)) continue;
             ImGui.PushID(actor.ContentId);
-            var estates = config.Discoveries.Where(d => d.Kind == "house.discovered" && d.Actor.ContentId == actor.ContentId && d.Address is not null && d.House?.Evidence == "owned-estate-id")
-                .GroupBy(d => d.Address!.HouseId).Select(g => g.OrderByDescending(d => d.At).First()).OrderBy(d => HouseDisplayOrder(d.House!.Type)).ToArray();
-            HousingBand? EstateBand(string type) => SummarizeBands(estates.Where(e => e.House!.Type == type)
-                .Select(e => HousingStatus.Band(HousingStatus.LastEligibleEntry(e, config.Discoveries, config.Houses), now)));
+            var estates = row.Houses.Estates;
+            HousingBand? EstateBand(string type) => SummarizeBands(estates.Where(e => e.Estate.House!.Type == type)
+                .Select(e => HousingStatus.Band(e.Entry, now)));
             var expanded = DrawSplitHeader(actor.Name + " · " + location + "###character", EstateBand("Private house"), EstateBand("Free Company house"),
-                estates.Select(e => EntryHover(e.House!.Type, e.Address!.Ward, e.Address.Plot, HousingStatus.LastEligibleEntry(e, config.Discoveries, config.Houses), now)));
+                estates.Select(e => EntryHover(e.Estate.House!.Type, e.Estate.Address!.Ward, e.Estate.Address.Plot, e.Entry, now)));
             if (expanded)
             {
                 ImGui.TextDisabled(location);
                 if (estates.Length == 0) ImGui.TextWrapped("No owned estate confirmed yet. Open its placard and enter; FC details may need the member list opened once.");
                 var firstEstate = true;
-                foreach (var estate in estates)
+                foreach (var estateRow in estates)
                 {
                     if (!firstEstate) { ImGui.Spacing(); ImGui.Separator(); ImGui.Spacing(); }
                     firstEstate = false;
-                    var h = estate.House!; var a = WithAddressNames(estate.Address!);
-                    var entry = HousingStatus.LastEligibleEntry(estate, config.Discoveries, config.Houses);
-                    var ownEntry = config.Houses.Where(v => v.Actor.ContentId == actor.ContentId && v.Address.HouseId == a.HouseId && v.Kind == "house.entered")
-                        .Select(v => (DateTimeOffset?)v.ObservedAt).Max();
+                    var estate=estateRow.Estate;var h = estate.House!; var a = WithAddressNames(estate.Address!);
+                    var entry = estateRow.Entry;
+                    var ownEntry = estateRow.OwnEntry;
                     var band = HousingStatus.Band(entry, now);
                     var colour = band switch { HousingBand.Recent => Green, HousingBand.Warning => Orange, HousingBand.Urgent => Red, HousingBand.Overdue => Purple, _ => Grey };
                     var label = band switch { HousingBand.Recent => "RECENT", HousingBand.Warning => "VISIT SOON", HousingBand.Urgent => "ENTER HOUSE", HousingBand.Overdue => "DEMOLISHED?", _ => "ENTRY UNKNOWN" };
@@ -93,9 +108,7 @@ public sealed partial class Plugin
                     else ImGui.TextWrapped("No eligible entry recorded. Countdown unknown.");
                     ImGui.Spacing();
                 }
-                var ids = estates.Select(d => d.Address!.HouseId).ToHashSet();
-                var other = config.Houses.Where(v => v.Actor.ContentId == actor.ContentId && !ids.Contains(v.Address.HouseId))
-                    .GroupBy(v => v.Address.HouseId).Select(g => g.OrderByDescending(v => v.ObservedAt).First()).OrderByDescending(v => v.ObservedAt).ToArray();
+                var other = row.Houses.OtherVisits;
                 if (other.Length > 0 && ImGui.TreeNode($"Other visits ({other.Length}) · ownership unconfirmed###other-visits"))
                 {
                     var height = ImGui.GetTextLineHeightWithSpacing() * Math.Min(other.Length, 6) + ImGui.GetStyle().WindowPadding.Y * 2;
