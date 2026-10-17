@@ -3,10 +3,10 @@ using System.Net.Http.Headers;
 using System.Text.Json;
 using Dalamud.Bindings.ImGui;
 namespace EquinoxCompanion;
-internal sealed record UpgradeWatch(string HouseId,string World,string HouseName,string OwnerName,string Person,string Account,bool Enabled,string State);
-internal sealed record UpgradeMatch(string Key,string HouseId,string World,uint WorldId,string District,int Ward,int Plot,int Size,long Price,int? Entries,long PhaseUntil,double Updated,string OwnerName,string Person,string Account,string HouseName,string Reason);
+internal sealed record UpgradeWatch(string HouseId,string World,string HouseName,string OwnerName,string Person,string Account,bool Enabled,string State,string OwnerId="");
+internal sealed record UpgradeMatch(string Key,string HouseId,string World,uint WorldId,string District,int Ward,int Plot,int Size,long Price,int? Entries,long PhaseUntil,double Updated,string OwnerName,string Person,string Account,string HouseName,string Reason,string OwnerId="");
 internal sealed record UpgradeFavourite(string District,int Plot,int[] Wards,bool BothDivisions=false,string Id="");
-internal sealed record UpgradeReply(UpgradeWatch[]? Watches,UpgradeMatch[]? Matches,string? Error=null,UpgradeFavourite[]? Favourites=null);
+internal sealed record UpgradeReply(UpgradeWatch[]? Watches,UpgradeMatch[]? Matches,string? Error=null,UpgradeFavourite[]? Favourites=null,string[]? Worlds=null);
 public sealed partial class Plugin
 {
  private readonly HttpClient upgradeHttp=new(){Timeout=TimeSpan.FromSeconds(25)};
@@ -23,10 +23,11 @@ public sealed partial class Plugin
  private bool IsFavouriteLocation(string district,int ward,int plot)=>upgradeFavourites.Any(f=>f.District==district&&(f.Plot==plot||f.BothDivisions&&(f.Plot-1)%30==(plot-1)%30)&&(f.Wards.Length==0||f.Wards.Contains(ward)));
  private UpgradeMatch[] upgradeShown=[];
  private int upgradePage;
- private void RebuildUpgradeRows(){upgradeShown=upgradeMatches.Values.SelectMany(x=>x).OrderBy(m=>m.OwnerName).ThenBy(m=>m.Entries??int.MaxValue).ToArray();upgradePage=0;}
- private async Task<UpgradeReply> FetchUpgrades(string key,string world)
+ private void RebuildUpgradeRows(){upgradeShown=upgradeMatches.Values.SelectMany(x=>x).OrderBy(m=>m.OwnerName).ThenBy(m=>m.Entries??int.MaxValue).ToArray();if(!upgradeManualResults)upgradePage=0;}
+ private async Task<UpgradeReply> FetchUpgrades(string key,string world,bool paired=false)
  {
-  using var request=new HttpRequestMessage(HttpMethod.Get,"https://equinoxjournal.pages.dev/api/companion/housing-upgrades"+(world.Length>0?"?world="+Uri.EscapeDataString(world):""));
+  var query=new List<string>();if(world.Length>0)query.Add("world="+Uri.EscapeDataString(world));if(paired)query.Add("scope=paired");
+  using var request=new HttpRequestMessage(HttpMethod.Get,"https://equinoxjournal.pages.dev/api/companion/housing-upgrades"+(query.Count>0?"?"+string.Join("&",query):""));
   request.Headers.Authorization=new AuthenticationHeaderValue("Bearer",key);
   using var response=await upgradeHttp.SendAsync(request,HttpCompletionOption.ResponseHeadersRead);
   response.EnsureSuccessStatusCode();await response.Content.LoadIntoBufferAsync(6000000);
@@ -36,6 +37,7 @@ public sealed partial class Plugin
  {
   if(upgradeKey!=config.PairingKey){upgradeKey=config.PairingKey;upgradeWorlds.Clear();upgradeMatches.Clear();upgradeShown=[];upgradeWatches=[];upgradeFavourites=[];bidDirty=true;upgradeNext=now;upgradeActor=0;favouriteRevision=0;favouriteNext=default;favouriteStatus="";}
   UpdateHousingFavourites(now);
+  UpdateManualUpgradeCheck();
   if(upgradeRequest?.IsCompleted==true){
    var task=upgradeRequest;upgradeRequest=null;
    if(task.IsFaulted){_=task.Exception;upgradeStatus="Housing watch check unavailable. Deploy Journal V7.11.180; previous results may be outdated.";upgradeNext=now.AddMinutes(5);upgradeWorlds.Clear();}
@@ -73,12 +75,11 @@ public sealed partial class Plugin
   if(bidSection==1){DrawBidFavorites(true);if(bidTravelMessage.Length>0)ImGui.TextWrapped(bidTravelMessage);DrawGoSeeHomeStop();return true;}
   if(bidSection!=3)return false;
   if(ImGui.SmallButton("Set up upgrade watches in Journal"))OpenUpgradeJournal();
-  ImGui.TextWrapped(upgradeStatus);
-  ImGui.BeginDisabled(upgradeRequest is not null);if(ImGui.SmallButton("Check watches")){upgradeWorlds.Clear();upgradeNext=default;}ImGui.EndDisabled();
+  DrawUpgradeScope();
   foreach(var w in upgradeWatches.Where(w=>w.State!="Watching"))ImGui.TextDisabled(w.OwnerName+" · "+w.HouseName+" · "+w.State);
-  var now=DateTimeOffset.UtcNow;var count=0;
-  if(upgradeShown.Length>50){if(ImGui.SmallButton("Previous matches"))upgradePage=Math.Max(0,upgradePage-1);ImGui.SameLine();ImGui.TextUnformatted($"Page {upgradePage+1} / {(upgradeShown.Length+49)/50}");ImGui.SameLine();if(ImGui.SmallButton("Next matches"))upgradePage=Math.Min((upgradeShown.Length-1)/50,upgradePage+1);}
-  foreach(var m in upgradeShown.Skip(upgradePage*50).Take(50).Where(m=>m.PhaseUntil>now.ToUnixTimeSeconds())){
+  var now=DateTimeOffset.UtcNow;var count=0;var rows=upgradeManualResults?upgradeManualRows:upgradeShown;
+  if(rows.Length>50){if(ImGui.SmallButton("Previous matches"))upgradePage=Math.Max(0,upgradePage-1);ImGui.SameLine();ImGui.TextUnformatted($"Page {upgradePage+1} / {(rows.Length+49)/50}");ImGui.SameLine();if(ImGui.SmallButton("Next matches"))upgradePage=Math.Min((rows.Length-1)/50,upgradePage+1);}
+  foreach(var m in rows.Skip(upgradePage*50).Take(50).Where(m=>m.PhaseUntil>now.ToUnixTimeSeconds())){
    count++;ImGui.PushID(m.Key);ImGui.Separator();ImGui.TextUnformatted(m.OwnerName+" · "+m.HouseName);ImGui.TextDisabled(m.Person+" / "+m.Account);
    ImGui.TextWrapped($"{m.World} · {m.District} W{m.Ward} P{m.Plot} · {new[]{"Small","Medium","Large"}[m.Size]} · {m.Price:N0} gil · {m.Entries?.ToString()??"?"} entries");
    ImGui.TextWrapped(m.Reason+$" · Reported {DateTimeOffset.FromUnixTimeSeconds((long)m.Updated).ToLocalTime():g}");
@@ -86,7 +87,7 @@ public sealed partial class Plugin
    var favourite=new BidFavorite(m.WorldId,m.District,m.Ward,m.Plot);if(DrawSavedPlotButton("SaveUpgrade",bidFavoriteKeys.Contains(favourite.Key)))ToggleBidFavorite(favourite);
    ImGui.SameLine();if(ImGui.SmallButton("★"))ChooseFavouriteLocation(m.District,m.Ward,m.Plot);if(ImGui.IsItemHovered())ImGui.SetTooltip("Save this favourite plot here; choose any ward or this ward only.");ImGui.PopID();
   }
-  if(count==0)ImGui.TextWrapped("No matching opportunities reported. Watches check all configured property worlds, on any paired character.");
+  if(count==0&&upgradeManualTask is null)ImGui.TextWrapped("No matching opportunities in the displayed check. Choose a scope and click Check watches.");
   if(bidTravelMessage.Length>0)ImGui.TextWrapped(bidTravelMessage);DrawGoSeeHomeStop();return true;
  }
 }
