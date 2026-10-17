@@ -321,6 +321,7 @@ public sealed partial class Plugin : IDalamudPlugin
         UpdateSharedRoster(now);
         UpdateShoppingTravel(now);
         UpdateBidWorld(now);
+        UpdateGoSeeFriend(now);
         UpdateCharacterRegistration(now);
         UpdateHouseNotices(now);
         UpdateGardenCareNotices(now);

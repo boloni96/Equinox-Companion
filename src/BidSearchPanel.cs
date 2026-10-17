@@ -164,10 +164,16 @@ public sealed partial class Plugin
   }
  }
  private void GoSeeBid(uint world,string district,int ward,int plot){
+  if(goSeeFriendTrip is not null){bidTravelMessage="Already checking a friend’s estate teleport.";return;}
   if(DateTimeOffset.UtcNow<characterSwitchUntil){bidTravelMessage="Wait for the character switch or stop it first.";return;}
   if(!Player.IsLoaded||Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]){bidTravelMessage="Wait until you are out of combat and loading, then click GO SEE.";return;}
   try{if(LifestreamBusy()||shoppingTravel is not null){bidTravelMessage="Travel is already in progress.";return;}
-   if(TryGoSeeOwnEstate(world,district,ward,plot))return;
+   if(TryGoSeeOwnEstate(world,district,ward,plot)||StartGoSeeFriend(world,district,ward,plot))return;
+   GoSeeAddress(world,district,ward,plot);
+  }catch(Exception){bidTravelMessage="Lifestream must be installed and enabled with housing travel support.";}
+ }
+ private void GoSeeAddress(uint world,string district,int ward,int plot){
+  try{
    var name=BidWorldName(world);var address=Pi.GetIpcSubscriber<string,string,string,string,bool,bool,LifeAddress>("Lifestream.BuildAddressBookEntry").InvokeFunc(name,district,ward.ToString(),plot.ToString(),false,false);
    Pi.GetIpcSubscriber<LifeAddress,object>("Lifestream.GoToHousingAddress").InvokeAction(address);bidTravelMessage=$"GO SEE requested: {name} · {district} W{ward} P{plot}. Lifestream chooses the nearby shard; further walking follows its address settings.";
   }catch(Exception){bidTravelMessage="Lifestream must be installed and enabled with housing travel support.";}

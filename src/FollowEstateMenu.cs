@@ -15,21 +15,24 @@ public sealed partial class Plugin
         }
         return texts;
     }
-    private unsafe bool TrySelectFriendEstate(FollowPortalSignal signal,string estate)
+    private unsafe bool TrySelectFriendEstate(FollowPortalSignal signal,string estate)=>ulong.TryParse(signal.FriendContentId,out var id)&&TrySelectFriendEstateRow(id,estate);
+    private unsafe bool FriendEstateMenuBelongsTo(AtkUnitBase* addon,string owner)
+    {
+        var header=TravelNodeText(&addon->UldManager);if(header.Contains(owner))return true;
+        if(addon->AtkValues==null||addon->AtkValuesCount>1024)return false;
+        for(var i=0;i<addon->AtkValuesCount;i++)if(((int)addon->AtkValues[i].Type&15) is 8 or 10&&TravelMenuText(addon->AtkValues[i].String.Value)==owner)return true;
+        return false;
+    }
+    private unsafe bool TrySelectFriendEstateRow(ulong id,string estate,Address? exactAddress=null,uint? feeLimit=null)
     {
         if(estate is not ("Private Estate" or "Free Company Estate"))return false;
         var addon=(AtkUnitBase*)GardenGui.GetAddonByName("TeleportHousingFriend").Address;
         if(addon==null||!addon->IsVisible||!addon->IsReady)return false;
         var friends=InfoProxyFriendList.Instance();
-        if(friends==null||friends->CharData==null||friends->EntryCount>200||!ulong.TryParse(signal.FriendContentId,out var id))return false;
+        if(friends==null||friends->CharData==null||friends->EntryCount>200)return false;
         string owner="";foreach(var friend in friends->CharDataSpan)if(friend.ContentId==id){owner=friend.NameString;break;}
         if(owner.Length==0)return false;
-        var header=TravelNodeText(&addon->UldManager);
-        if(!header.Contains(owner)){
-            if(addon->AtkValues==null||addon->AtkValuesCount>1024)return false;
-            for(var i=0;i<addon->AtkValuesCount;i++)if(((int)addon->AtkValues[i].Type&15) is 8 or 10&&TravelMenuText(addon->AtkValues[i].String.Value)==owner){header.Add(owner);break;}
-        }
-        if(!header.Contains(owner)){TravelDiagnostic("Estate window belongs to another character; waiting for the selected friend's estates.");return false;}
+        if(!FriendEstateMenuBelongsTo(addon,owner))return false;
         if(addon->UldManager.NodeList==null||addon->UldManager.NodeListCount>512)return false;
         AtkComponentList* selected=null;int selectedIndex=-1;uint selectedFee=0;var matches=0;
         for(var i=0;i<addon->UldManager.NodeListCount;i++){
@@ -41,6 +44,7 @@ public sealed partial class Plugin
                 var renderer=list->GetItemRenderer(row);if(renderer==null||renderer->ListItemIndex!=row)continue;
                 var texts=TravelNodeText(&renderer->AtkComponentButton.AtkComponentBase.UldManager);
                 if(!texts.Contains(estate))continue;
+                if(exactAddress is {} target&&!FriendEstateTravelPolicy.MatchesRow(texts,target.DistrictName??"",target.Ward,target.Plot))continue;
                 var parsedFee=FollowEstatePrice.Read(texts);
                 if(parsedFee is not {} fee){TravelDiagnostic("Estate row found, but its price could not be verified; waiting without selecting.");return false;}
                 matches++;selected=list;selectedIndex=row;selectedFee=fee;
@@ -48,7 +52,7 @@ public sealed partial class Plugin
         }
         if(matches!=1||selected==null){TravelDiagnostic("Waiting for one enabled "+estate+" row in the friend's estate window.");return false;}
         var inventory=InventoryManager.Instance();
-        if(inventory==null||selectedFee>Math.Max(0,config.FollowThem.TeleportGilLimit)||selectedFee>inventory->GetGil()){TravelDiagnostic("Estate teleport exceeds your gil limit or available gil; waiting.");return false;}
+        if(inventory==null||selectedFee>(feeLimit??(uint)Math.Max(0,config.FollowThem.TeleportGilLimit))||selectedFee>inventory->GetGil()){TravelDiagnostic("Estate teleport exceeds your gil limit or available gil; waiting.");return false;}
         RecordFollowTravel("Estate row requested",new {owner,estate,row=selectedIndex,fee=selectedFee});
         usingSharedTravel=true;try{selected->DispatchItemEvent(selectedIndex,AtkEventType.ListItemClick);}finally{usingSharedTravel=false;}
         TravelDiagnostic("Requested "+estate+" from "+owner+"'s estate list.");return true;
