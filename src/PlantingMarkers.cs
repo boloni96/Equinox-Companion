@@ -17,7 +17,7 @@ public sealed partial class Plugin
     private string gardenMarkerStatus="";
     private bool gardenMarkerError;
     private (string House,int Batch,int WrongBed,int NextBed)? gardenWrongBed;
-    private bool FastGardenSync => plantingWindow?.IsOpen==true || activeGardenSession is not null;
+    private bool FastGardenSync => plantingWindow?.IsOpen==true || activeGardenSession is not null || (adventureWindow?.IsOpen==true && adventureBoards.Any(b=>b.Id==adventureSelected&&b.Kind=="garden"));
     private static string GardenSessionKey(SharedGardenPlan p)=>$"{p.HouseId}:{p.Batch}:{p.At:O}";
     private void StopGardenSession() { activeGardenSession=null; guidanceBed=null; gardenMarkerStatus="";gardenWrongBed=null; }
     private void RememberGuidanceBed(GardenMenu menu)

@@ -34,6 +34,8 @@ public sealed partial class Plugin
         else if(name == "Do I already have it?") itemSearchWindow.IsOpen=false;
         else if(name == "Fashion Report") fashionWindow.IsOpen=false;
         else if(name=="Planting")plantingWindow.IsOpen=false;
+        else if(name=="Adventure")adventureWindow.IsOpen=false;
+        else if(name=="Housing bids")bidWindow.IsOpen=false;
         else if(name=="Welcome")welcomeWindow.IsOpen=false;
         else if(name=="New Character"){registrationDeferred=true;registrationWindow.IsOpen=false;}
     }
@@ -57,8 +59,12 @@ public sealed partial class Plugin
         if(plantingWindow.IsOpen) minimizedLaunchers.Remove("Planting");
         if(itemSearchWindow.IsOpen)minimizedLaunchers.Remove("Do I already have it?");
         if(marketWindow.IsOpen)minimizedLaunchers.Remove("Where is it cheapest?");
-        DrawLauncher("Where is it cheapest?",6,null);
-        DrawLauncher("Do I already have it?",5,null);
+        if(adventureWindow.IsOpen)minimizedLaunchers.Remove("Adventure");
+        if(bidWindow.IsOpen)minimizedLaunchers.Remove("Housing bids");
+        DrawLauncher("Adventure",7,"garden-art/assets/category-icons/adventure.png");
+        DrawLauncher("Housing bids",8,"garden-art/assets/category-icons/housing-bids.png");
+        DrawLauncher("Where is it cheapest?",6,"garden-art/assets/category-icons/market-search.png");
+        DrawLauncher("Do I already have it?",5,"garden-art/assets/category-icons/item-search.png");
         DrawLauncher("Companion", 0, "icon.png");
         DrawLauncher("Fashion Report", 1, "garden-art/assets/category-icons/fashion-report.png");
         DrawLauncher("Planting", 2, "garden-art/assets/category-icons/gardening.png");
@@ -73,6 +79,8 @@ public sealed partial class Plugin
             {
                 if(pending=="Where is it cheapest?")marketWindow.IsOpen=true;
                 else if(pending=="Do I already have it?")itemSearchWindow.IsOpen=true;
+                else if(pending=="Adventure")OpenAdventure();
+                else if(pending=="Housing bids")bidWindow.IsOpen=true;
                 else if(pending=="Companion") Open();
                 else if(pending=="Fashion Report") fashionWindow.OpenReport();
                 else if(pending=="Planting")OnPlantingCommand("/gardening", "");
@@ -151,13 +159,13 @@ public sealed partial class Plugin
         var changed = ImGui.SliderFloat("Opacity", ref opacity, .2f, 1, "%.2f");
         changed |= ImGui.Checkbox("Blur background", ref blur);
         changed |= ImGui.Checkbox("Lock position", ref locked);
-        if (ImGui.Button("Reset position")) { o.X = 24; o.Y = 180 + (name == "Companion" ? 0 : name == "Fashion Report" ? 76 : name=="Planting"?152:name=="Welcome"?228:name=="New Character"?304:name=="Where is it cheapest?"?456:380); changed = true; }
+        if (ImGui.Button("Reset position")) { o.X = 24; o.Y = 180 + (name == "Companion" ? 0 : name == "Fashion Report" ? 76 : name=="Planting"?152:name=="Welcome"?228:name=="New Character"?304:name=="Where is it cheapest?"?456:name=="Adventure"?532:name=="Housing bids"?608:380); changed = true; }
         if (changed) { o.Opacity = opacity; o.Blur = blur; o.Locked = locked; SaveConfiguration(); }
     }
     private void DrawFloatingLauncherSettings()
     {
         ImGui.TextWrapped("Use the native title-bar collapse triangle or double-click the title bar to minimize to an icon. Single-click reopens its window; double-click closes both. Esc minimizes the focused window to its icon. X closes without an icon. Commands and keybinds reopen windows. Drag icons to move them.");
-        var names = new[] { "Companion", "Fashion Report", "Planting", "Welcome", "New Character", "Do I already have it?", "Where is it cheapest?" };
+        var names = new[] { "Companion", "Fashion Report", "Planting", "Welcome", "New Character", "Do I already have it?", "Where is it cheapest?", "Adventure", "Housing bids" };
         for (var i = 0; i < names.Length; i++) { ImGui.PushID(i); DrawLauncherOptions(names[i], LauncherOptions(names[i], i)); ImGui.Separator(); ImGui.PopID(); }
     }
 }

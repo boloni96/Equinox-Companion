@@ -8,8 +8,9 @@ public sealed partial class Plugin
  private sealed class AdventureWindow:Window
  {
   private readonly Plugin p;
-  public AdventureWindow(Plugin p):base("Adventure · Equinox###EquinoxAdventure"){this.p=p;Size=new(740,590);SizeCondition=ImGuiCond.FirstUseEver;SizeConstraints=new(){MinimumSize=new(510,330),MaximumSize=new(float.MaxValue)};AllowPinning=true;}
+  public AdventureWindow(Plugin p):base("Adventure · Equinox###EquinoxAdventure"){this.p=p;RespectCloseHotkey=false;Size=new(740,590);SizeCondition=ImGuiCond.FirstUseEver;SizeConstraints=new(){MinimumSize=new(510,330),MaximumSize=new(float.MaxValue)};AllowPinning=true;}
   public override void Draw()=>p.DrawAdventure();
+  public override void PostDraw()=>HandleNativeCollapse(this,()=>p.MinimizeLauncher("Adventure"));
  }
  private AdventureWindow adventureWindow=null!;private readonly AdventureSync adventureSync=new();private bool adventureCommand;
  private Task<AdventureReply>? adventureRequest;private bool adventureMutation;private string adventureRequestKey="",adventureConnectionKey="",adventureMessage="Checking your paired Journal…";
@@ -18,7 +19,7 @@ public sealed partial class Plugin
  private readonly Dictionary<string,bool> adventureCompletion=[];private string? adventurePrompt;private bool adventureFollow=true;private readonly BidWorldSession adventureFollowSession=new();
  private static string AdventureText(string value)=>value.Replace("##","");
  private void InitializeAdventures(){adventureWindow=new(this);windows.AddWindow(adventureWindow);adventureCommand=Commands.AddHandler("/adventure",new CommandInfo((_,_)=>OpenAdventure()){HelpMessage="Open shared Garden and Character adventures from your paired Journal. /equinox adventure also works."});}
- private void DisposeAdventures(){if(adventureCommand)Commands.RemoveHandler("/adventure");windows.RemoveWindow(adventureWindow);adventureSync.Dispose();}
+ private void DisposeAdventures(){if(adventureCommand)Commands.RemoveHandler("/adventure");windows.RemoveWindow(adventureWindow);adventureSync.Dispose();DisposeAdventurePortraits();}
  private void OpenAdventure(){adventureWindow.IsOpen=true;adventureNext=default;nextRosterRead=default;}
  private void AdventureAction(AdventureBoard b,int? index=null,AdventureTask? task=null,bool value=false)
  {
@@ -71,9 +72,8 @@ public sealed partial class Plugin
   if(ImGui.Button("Adventure home")){adventureSelected="";adventurePrompt=null;}
   ImGui.SameLine();if(ImGui.Button("Open Journal"))Dalamud.Utility.Util.OpenLink("https://equinoxjournal.pages.dev/#adventure");
   ImGui.SameLine();ImGui.BeginDisabled(adventureRequest is not null);if(ImGui.Button("Refresh"))adventureNext=default;ImGui.EndDisabled();
-  ImGui.TextWrapped(adventureMessage);
-  if(adventureFetched!=default)ImGui.TextDisabled($"Last checked {adventureFetched.ToLocalTime():h:mm:ss tt} · same pairing key");
-  DrawAdventureFilters();
+  if(!adventureFresh)ImGui.TextWrapped(adventureMessage);
+  if(ImGui.CollapsingHeader("People, accounts & connection")){DrawAdventureFilters();ImGui.TextWrapped(adventureMessage);if(adventureFetched!=default)ImGui.TextDisabled($"Last checked {adventureFetched.ToLocalTime():h:mm:ss tt}");}
   ImGui.Separator();
   var board=adventureBoards.FirstOrDefault(b=>b.Id==adventureSelected);
   if(board is null){
@@ -81,7 +81,7 @@ public sealed partial class Plugin
    ImGui.TextWrapped("Current adventures from your Journal. Build or resume an individual route there to share it here. Both windows share the current stop. Keep the Journal open for live checklist updates and manual check confirmation.");
    if(!adventureBoards.Any(AdventureInScope))ImGui.TextWrapped("No shared adventures yet. Open Adventure in the updated Journal and start or resume a route.");
    foreach(var b in adventureBoards.Where(AdventureInScope).OrderBy(b=>b.Kind).ThenBy(b=>b.Title)){
-    ImGui.PushID(b.Id);ImGui.Spacing();ImGui.Separator();ImGui.TextUnformatted(b.Title);
+    ImGui.PushID(b.Id);ImGui.Spacing();ImGui.Separator();DrawAdventureHeading(b.Kind=="garden"?"gardening":"adventure",b.Title);
     ImGui.TextDisabled(b.Index>=b.Stops.Length?$"Round reviewed · {b.Stops.Length} stops":$"Stop {b.Index+1} of {b.Stops.Length} · {b.Stops[b.Index].Title}");
     if(ImGui.Button(b.Index>=b.Stops.Length?"Review adventure":"Resume adventure →")){adventureSelected=b.Id;adventurePrompt=null;adventureFollowSession.Reset();}
     ImGui.PopID();
@@ -103,14 +103,15 @@ public sealed partial class Plugin
   else{
    var stop=board.Stops[board.Index];ImGui.TextUnformatted(stop.Title);ImGui.TextWrapped(stop.Subtitle);
    if(ImGui.SmallButton("Copy stop"))ImGui.SetClipboardText(stop.Title+" · "+stop.Subtitle);
-   foreach(var character in (config.SharedRoster?.People??[]).SelectMany(p=>p.Characters).Where(c=>stop.CharacterIds?.Contains(c.Id)==true)){ImGui.PushID("travel-"+character.Id);ImGui.TextUnformatted(character.Name+" · "+character.Account);DrawCharacterTravel(character);ImGui.PopID();}
+   foreach(var character in (config.SharedRoster?.People??[]).SelectMany(p=>p.Characters).Where(c=>stop.CharacterIds?.Contains(c.Id)==true)){DrawAdventureCharacter(character,stop);}
    if(!string.IsNullOrEmpty(stop.HouseId)){
     ImGui.SameLine();if(ImGui.SmallButton("Garden guide")){OnPlantingCommand("/gardening","");}
     var house=config.SharedRoster?.People.SelectMany(p=>p.Characters).SelectMany(c=>c.Houses).FirstOrDefault(h=>h.Id==stop.HouseId);
     if(house is not null){ImGui.SameLine();if(ImGui.SmallButton("GO SEE")){EnsureBidWorlds();var world=bidWorlds!.FirstOrDefault(w=>w.Name==house.World);if(world.Id>0)GoSeeBid(world.Id,house.District,house.Ward,house.Plot);}
      if(!string.IsNullOrEmpty(bidTravelMessage))ImGui.TextWrapped(bidTravelMessage);}
    }
-   ImGui.TextDisabled($"{stop.Tasks.Count(t=>t.Done)} / {stop.Tasks.Length} confirmed");
+   ImGui.ProgressBar(stop.Tasks.Length==0?0:(float)stop.Tasks.Count(t=>t.Done)/stop.Tasks.Length,new Vector2(-1,0),$"{stop.Tasks.Count(t=>t.Done)} / {stop.Tasks.Length} confirmed");
+   if(!string.IsNullOrEmpty(stop.HouseId))DrawAdventureGardens(stop.HouseId);
    foreach(var group in stop.Tasks.GroupBy(t=>t.Group)){
     ImGui.SetNextItemOpen(true,ImGuiCond.Once);
     if(!ImGui.CollapsingHeader(AdventureText(group.Key)))continue;

@@ -3,14 +3,15 @@ using System.Net.Http.Json;
 using System.Text.Json;
 namespace EquinoxCompanion;
 public sealed record AdventureTask(string Id,string Label,string Group,bool Done,bool CanCheck);
-public sealed record AdventureStop(string Title,string Subtitle,string HouseId,int Batch,AdventureTask[] Tasks,string World="",string[]? CharacterIds=null);
+public sealed record AdventurePortrait(string Id,string Hash);
+public sealed record AdventureStop(string Title,string Subtitle,string HouseId,int Batch,AdventureTask[] Tasks,string World="",string[]? CharacterIds=null,AdventurePortrait[]? Portraits=null);
 public sealed record AdventureIntent(string Id,string TaskId,bool Checked);
 public sealed record AdventureBoard(string Id,string Generation,string BuiltAt,string Kind,string Title,AdventureStop[] Stops,int Index,long Revision,AdventureIntent[]? Pending=null);
 public sealed record AdventureBoards(AdventureBoard[] Boards);
 public sealed record AdventureReply(AdventureBoard[]? Boards,string Status);
 public static class AdventurePolicy
 {
- public static bool Valid(AdventureBoard b)=>b is not null&&b.Id is {Length:>0 and <=160}&&b.Generation is {Length:>0 and <=100}&&b.Title is {Length:<=160}&&b.Kind is "garden" or "multi" or "solo"&&b.Stops is {Length:<=500}&&b.Index>=0&&b.Index<=b.Stops.Length&&b.Revision>0&&b.Stops.All(s=>s is not null&&s.Title is {Length:<=300}&&s.Subtitle is {Length:<=500}&&s.Tasks is not null&&s.Tasks.All(t=>t is not null&&t.Id is {Length:<=500}&&t.Label is {Length:<=500}&&t.Group is {Length:<=300}))&&b.Stops.Sum(s=>s.Tasks.Length)<=10000;
+ public static bool Valid(AdventureBoard b)=>b is not null&&b.Id is {Length:>0 and <=160}&&b.Generation is {Length:>0 and <=100}&&b.Title is {Length:<=160}&&b.Kind is "garden" or "multi" or "solo"&&b.Stops is {Length:<=500}&&b.Index>=0&&b.Index<=b.Stops.Length&&b.Revision>0&&b.Stops.All(s=>s is not null&&s.Title is {Length:<=300}&&s.Subtitle is {Length:<=500}&&(s.Portraits is null||s.Portraits.Length<=200&&s.Portraits.All(p=>p is not null&&p.Id is {Length:>0 and <=100}&&System.Text.RegularExpressions.Regex.IsMatch(p.Hash??"","^[a-f0-9]{64}$")))&&s.Tasks is not null&&s.Tasks.All(t=>t is not null&&t.Id is {Length:<=500}&&t.Label is {Length:<=500}&&t.Group is {Length:<=300}))&&b.Stops.Sum(s=>s.Tasks.Length)<=10000;
  public static int? FollowIndex(AdventureBoard board,string characterId,string world)
  {
   var matches=board.Stops.Select((s,i)=>(Stop:s,Index:i)).Where(x=>string.Equals(x.Stop.World,world,StringComparison.OrdinalIgnoreCase)).ToArray();

@@ -132,9 +132,7 @@ public sealed partial class Plugin
         }
         var source=house.FirstOrDefault(p=>p.Batch==plantingBatch);if(source is null)return;
         var plan=EffectiveGardenPlan(source);gardenActionsPlan=plan;
-        var sent=config.SentEvents.ToHashSet();
-        var queued=LocalGardenActions().Where(e=>!sent.Contains(e.Id)&&e.Address is not null&&SharedGardenLocation.Match(e.Address,[plan])==plan.HouseId&&e.Patch==(plan.PhysicalPatch>0?plan.PhysicalPatch:plan.Batch)).Select(e=>e.Bed).ToHashSet();
-        plan=plan with {Beds=plan.Beds.Select(b=>b with {Queued=queued.Contains(b.Bed)}).ToArray()};
+        plan=WithQueuedGardenBeds(plan);
         var planned=plan.Beds.Where(b=>b.Crop.Length>0).ToArray();
         var physicalPatch=plan.PhysicalPatch>0?plan.PhysicalPatch:plan.Batch;
         var visitorSetup=atOutdoorEstate&&GardenBedSyncSession.IsVisitor(config.SharedRoster,Player.CharacterName,WorldName(Player.HomeWorld.RowId)??"",plan.HouseId);
@@ -195,61 +193,7 @@ public sealed partial class Plugin
         else ImGui.TextWrapped(complete?"Planting complete · showing the actual synced garden":"Choose Start garden on the website to save a planting plan.");
         var totalSteps=planned.Sum(b=>b.ReplantOrder>0?2:1);var doneSteps=planned.Sum(b=>b.Status=="confirmed"?(b.ReplantOrder>0?2:1):b.Status is "starter" or "replant"?1:0);
         if(planned.Length>0)ImGui.TextWrapped($"{(complete?totalSteps:doneSteps)}/{totalSteps} planting steps complete · Goal: {plan.Target}");
-        var board=Math.Min(432,ImGui.GetContentRegionAvail().X);var origin=ImGui.GetCursorScreenPos();var tile=board*128/432;var margin=board*16/432;var stride=board*136/432;
-        GardenImage("assets/backgrounds/batch-base.png",origin,new(board));
-        if(config.SharedRoster?.GardenCornerTrim==true)GardenImage("assets/backgrounds/batch-corner-trim.png",origin,new(board));
-        int[] layout=[1,2,3,8,0,4,7,6,5];
-        for(var i=0;i<9;i++)
-        {
-            var at=origin+new Vector2(margin+i%3*stride,margin+i/3*stride);var n=layout[i];
-            if(n==0)
-            {
-                GardenImage("assets/centers/stone-emblem.png",at,new(tile));
-                if(gardenBedSync is {Complete:false} centerSync)
-                {
-                    var number=centerSync.NextBed.ToString();var numberSize=ImGui.CalcTextSize(number);var iconSize=tile*.28f;
-                    var iconAt=at+new Vector2((tile-iconSize)/2,tile*.42f);
-                    var numberAt=at+new Vector2((tile-numberSize.X)/2,tile*.42f-numberSize.Y-3);
-                    ImGui.GetWindowDrawList().AddRectFilled(numberAt-new Vector2(4,2),numberAt+numberSize+new Vector2(4,2),0xdd201710,3);
-                    ImGui.GetWindowDrawList().AddText(numberAt,0xffffffff,number);
-                    GardenImage("assets/icons/sync.png",iconAt,new Vector2(iconSize));
-                }
-                var centerLabel=complete?"Complete":showPlan?"Plan":"Garden";
-                var labelSize=ImGui.CalcTextSize(centerLabel);
-                var labelAt=at+new Vector2((tile-labelSize.X)/2,tile-labelSize.Y-8);
-                var centerDraw=ImGui.GetWindowDrawList();
-                centerDraw.PushClipRect(at,at+new Vector2(tile),true);
-                centerDraw.AddRectFilled(labelAt-new Vector2(4,2),labelAt+labelSize+new Vector2(4,2),0xdd201710,3);
-                centerDraw.AddText(labelAt,0xffffffff,centerLabel);
-                centerDraw.PopClipRect();
-                ImGui.SetCursorScreenPos(at);ImGui.InvisibleButton("garden-center",new Vector2(tile));
-                if(ImGui.IsItemHovered())ImGui.SetTooltip(gardenBedSync is {Complete:false} centerHelp?$"Bed sync · Touch Bed {centerHelp.NextBed} in game. Use the top-right sync button to restart.":$"Batch {plan.Batch} · {(complete?"Planting complete":showPlan?"Automatic planting guide":"Actual garden")}");
-                continue;
-            }
-            var wrong= gardenWrongBed is {} mismatch&&mismatch.House==plan.HouseId&&mismatch.Batch==plan.Batch&&mismatch.WrongBed==n;
-            ImGui.SetCursorScreenPos(at);
-            if(ImGui.InvisibleButton("Select garden bed##"+n,new Vector2(tile)))selectedGardenBed=(plan.HouseId,plan.Batch,n);
-            ImGui.SetItemAllowOverlap();
-            var selected=selectedGardenBed is {} pick&&pick.House==plan.HouseId&&pick.Batch==plan.Batch&&pick.Bed==n;
-            var b=plan.Beds.First(x=>x.Bed==n);DrawGardenTile(b,showPlan,at,tile,wrong,selected);
-            DrawGardenIdentity(b,showPlan,at,tile);
-            var draw=ImGui.GetWindowDrawList();
-            if(showPlan&&next?.Bed==n)GardenPlanOutline("next",at,tile);
-            if(gardenBedSync is {Complete:false} setup&&setup.NextBed==n)GardenImage("assets/borders/selected.png",at,new Vector2(tile));
-            if(wrong)GardenPlanOutline("different",at,tile);
-            var label=EquinoxCompanion.GardenVisualState.DisplayCrop(b,showPlan);
-            var captionInset=Math.Max(7,tile*8/128);
-            while(label.Length>1&&ImGui.CalcTextSize(label).X>tile-2*captionInset)label=label[..^2]+"…";
-            var bedLabelSize=ImGui.CalcTextSize(label);var bedLabelAt=at+new Vector2(Math.Max(4,(tile-bedLabelSize.X)/2),tile-bedLabelSize.Y-captionInset);
-            draw.PushClipRect(at,at+new Vector2(tile),true);
-            draw.AddRectFilled(new Vector2(at.X+captionInset,bedLabelAt.Y-1),at+new Vector2(tile-captionInset,tile-captionInset+1),0xdd201710);
-            draw.AddText(bedLabelAt,0xffffffff,label);draw.PopClipRect();
-            DrawGardenHoverTarget($"Planting plan##garden-plan-{n}", at+new Vector2(91,7)*tile/128, tile/4,
-                () => DrawGardenPlanTooltip(b, wrong));
-            DrawGardenHoverTarget($"Crop and care##garden-care-{n}", GardenCarePosition(at,tile), tile/4,
-                () => DrawGardenCareTooltip(b,showPlan,wrong));
-        }
-        ImGui.SetCursorScreenPos(origin+new Vector2(0,board));ImGui.Dummy(new Vector2(board,4));
+        DrawGardenBoard(plan,showPlan,complete);
         DrawGardenBatchMapping(plan);DrawSavedGardenPlans(plan);
         if(ImGui.CollapsingHeader("Tips, supplies and harvest potential")){
             DrawGardenInfoLabel("tips","Follow step numbers, not just bed numbers. Keep compatible mature neighbours. The first planting in an empty batch has no neighbour; the guide may return to that starter after the others are planted. Crossbred seeds are possible extras, not guaranteed harvests.");
@@ -275,6 +219,73 @@ public sealed partial class Plugin
         ImGui.PopTextWrapPos();
         ImGui.EndTooltip();
     }
+    private SharedGardenPlan WithQueuedGardenBeds(SharedGardenPlan plan)
+    {
+        var sent=config.SentEvents.ToHashSet();
+        var queued=LocalGardenActions().Where(e=>!sent.Contains(e.Id)&&e.Address is not null&&SharedGardenLocation.Match(e.Address,[plan])==plan.HouseId&&e.Patch==(plan.PhysicalPatch>0?plan.PhysicalPatch:plan.Batch)).Select(e=>e.Bed).ToHashSet();
+        return plan with {Beds=plan.Beds.Select(b=>b with {Queued=queued.Contains(b.Bed)}).ToArray()};
+    }
+    // Shared by the live Gardening guide and paired Adventure previews.
+    private void DrawGardenBoard(SharedGardenPlan plan,bool showPlan,bool complete,bool liveGuide=true)
+    {
+        var next=GardenGuidance.Next(plan);
+        var board=Math.Min(432,ImGui.GetContentRegionAvail().X);var origin=ImGui.GetCursorScreenPos();var tile=board*128/432;var margin=board*16/432;var stride=board*136/432;
+        GardenImage("assets/backgrounds/batch-base.png",origin,new(board));
+        if(config.SharedRoster?.GardenCornerTrim==true)GardenImage("assets/backgrounds/batch-corner-trim.png",origin,new(board));
+        int[] layout=[1,2,3,8,0,4,7,6,5];
+        for(var i=0;i<9;i++)
+        {
+            var at=origin+new Vector2(margin+i%3*stride,margin+i/3*stride);var n=layout[i];
+            if(n==0)
+            {
+                GardenImage("assets/centers/stone-emblem.png",at,new(tile));
+                if(liveGuide&&gardenBedSync is {Complete:false} centerSync)
+                {
+                    var number=centerSync.NextBed.ToString();var numberSize=ImGui.CalcTextSize(number);var iconSize=tile*.28f;
+                    var iconAt=at+new Vector2((tile-iconSize)/2,tile*.42f);
+                    var numberAt=at+new Vector2((tile-numberSize.X)/2,tile*.42f-numberSize.Y-3);
+                    ImGui.GetWindowDrawList().AddRectFilled(numberAt-new Vector2(4,2),numberAt+numberSize+new Vector2(4,2),0xdd201710,3);
+                    ImGui.GetWindowDrawList().AddText(numberAt,0xffffffff,number);
+                    GardenImage("assets/icons/sync.png",iconAt,new Vector2(iconSize));
+                }
+                var centerLabel=complete?"Complete":showPlan?"Plan":"Garden";
+                var labelSize=ImGui.CalcTextSize(centerLabel);
+                var labelAt=at+new Vector2((tile-labelSize.X)/2,tile-labelSize.Y-8);
+                var centerDraw=ImGui.GetWindowDrawList();
+                centerDraw.PushClipRect(at,at+new Vector2(tile),true);
+                centerDraw.AddRectFilled(labelAt-new Vector2(4,2),labelAt+labelSize+new Vector2(4,2),0xdd201710,3);
+                centerDraw.AddText(labelAt,0xffffffff,centerLabel);
+                centerDraw.PopClipRect();
+                ImGui.SetCursorScreenPos(at);ImGui.InvisibleButton("garden-center",new Vector2(tile));
+                if(ImGui.IsItemHovered())ImGui.SetTooltip(liveGuide&&gardenBedSync is {Complete:false} centerHelp?$"Bed sync · Touch Bed {centerHelp.NextBed} in game. Use the top-right sync button to restart.":$"Batch {plan.Batch} · {(complete?"Planting complete":showPlan?"Automatic planting guide":"Actual garden")}");
+                continue;
+            }
+            var wrong= liveGuide&&gardenWrongBed is {} mismatch&&mismatch.House==plan.HouseId&&mismatch.Batch==plan.Batch&&mismatch.WrongBed==n;
+            ImGui.SetCursorScreenPos(at);
+            if(ImGui.InvisibleButton("Select garden bed##"+n,new Vector2(tile)))selectedGardenBed=(plan.HouseId,plan.Batch,n);
+            ImGui.SetItemAllowOverlap();
+            var selected=selectedGardenBed is {} pick&&pick.House==plan.HouseId&&pick.Batch==plan.Batch&&pick.Bed==n;
+            var b=plan.Beds.First(x=>x.Bed==n);DrawGardenTile(b,showPlan,at,tile,wrong,selected);
+            DrawGardenIdentity(b,showPlan,at,tile);
+            var draw=ImGui.GetWindowDrawList();
+            if(showPlan&&next?.Bed==n)GardenPlanOutline("next",at,tile);
+            if(liveGuide&&gardenBedSync is {Complete:false} setup&&setup.NextBed==n)GardenImage("assets/borders/selected.png",at,new Vector2(tile));
+            if(wrong)GardenPlanOutline("different",at,tile);
+            var label=EquinoxCompanion.GardenVisualState.DisplayCrop(b,showPlan);
+            var captionInset=Math.Max(7,tile*8/128);
+            while(label.Length>1&&ImGui.CalcTextSize(label).X>tile-2*captionInset)label=label[..^2]+"…";
+            var bedLabelSize=ImGui.CalcTextSize(label);var bedLabelAt=at+new Vector2(Math.Max(4,(tile-bedLabelSize.X)/2),tile-bedLabelSize.Y-captionInset);
+            draw.PushClipRect(at,at+new Vector2(tile),true);
+            draw.AddRectFilled(new Vector2(at.X+captionInset,bedLabelAt.Y-1),at+new Vector2(tile-captionInset,tile-captionInset+1),0xdd201710);
+            draw.AddText(bedLabelAt,0xffffffff,label);draw.PopClipRect();
+            DrawGardenHoverTarget($"Planting plan##garden-plan-{n}", at+new Vector2(91,7)*tile/128, tile/4,
+                () => DrawGardenPlanTooltip(b, wrong));
+            DrawGardenHoverTarget($"Crop and care##garden-care-{n}", GardenCarePosition(at,tile), tile/4,
+                () => DrawGardenCareTooltip(b,showPlan,wrong));
+        }
+        ImGui.SetCursorScreenPos(origin+new Vector2(0,board));ImGui.Dummy(new Vector2(board,4));
+    }
+
     private void DrawGardenPlanTooltip(SharedGardenBed b, bool wrong)
     {
         ImGui.TextUnformatted($"Bed {b.Bed} · {(b.Crop.Length==0?"Bed overview":b.Status=="confirmed"?"Planting record":"Planting plan")}");
