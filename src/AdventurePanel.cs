@@ -16,7 +16,7 @@ public sealed partial class Plugin
  private Task<AdventureReply>? adventureRequest;private bool adventureMutation;private string adventureRequestKey="",adventureConnectionKey="",adventureMessage="Checking your paired Journal…";
  private string adventurePerson="",adventureAccount="";
  private AdventureBoard[] adventureBoards=[];private string adventureSelected="";private DateTimeOffset adventureNext,adventureFetched;private bool adventureFresh;
- private readonly Dictionary<string,bool> adventureCompletion=[];private string? adventurePrompt;private bool adventureFollow=true;private readonly BidWorldSession adventureFollowSession=new();
+ private readonly Dictionary<string,bool> adventureCompletion=[];private string? adventurePrompt;private bool adventureFollow=true;private readonly AdventureLocationSession adventureFollowSession=new();
  private static string AdventureText(string value)=>value.Replace("##","");
  private void InitializeAdventures(){adventureWindow=new(this);windows.AddWindow(adventureWindow);adventureCommand=Commands.AddHandler("/adventure",new CommandInfo((_,_)=>OpenAdventure()){HelpMessage="Open shared Garden and Character adventures from your paired Journal. /equinox adventure also works."});}
  private void DisposeAdventures(){if(adventureCommand)Commands.RemoveHandler("/adventure");windows.RemoveWindow(adventureWindow);adventureSync.Dispose();DisposeAdventurePortraits();}
@@ -162,12 +162,7 @@ public sealed partial class Plugin
    }ImGui.EndChild();return;
   }
   ImGui.TextUnformatted(board.Title);
-  if(ImGui.Checkbox("Follow my character / world",ref adventureFollow))adventureFollowSession.Reset();
-  if(adventureFollow&&adventureFresh&&adventureRequest is null){
-   var ready=Player.IsLoaded&&!Conditions[Dalamud.Game.ClientState.Conditions.ConditionFlag.BetweenAreas]&&!Conditions[Dalamud.Game.ClientState.Conditions.ConditionFlag.BetweenAreas51];
-   var observation=adventureFollowSession.Observe(ready,Player.ContentId,Player.CurrentWorld.RowId,DateTimeOffset.UtcNow);
-   if(observation.Changed&&observation.Ready){EnsureBidWorlds();var world=BidWorldName(observation.World);var actorId=Player.ContentId.ToString();var matches=(config.SharedRoster?.People??[]).SelectMany(p=>p.Characters).Where(c=>c.ContentId==actorId).Take(2).ToArray();var cid=matches.Length==1?matches[0].Id:"";var next=AdventurePolicy.FollowIndex(board,cid,world);if(next is {} n)AdventureAction(board,n);}
-  }
+  DrawAdventureLocation(board);
   ImGui.BeginDisabled(AdventureSaving||!adventureFresh);
   DrawAdventureNavigation(board);ImGui.EndDisabled();
   if(board.Protocol<2)ImGui.TextWrapped("This saved route still needs an upgrade. Reload Journal V7.11.177 or newer, sign in, and wait for Adventure pairing to finish. Then close it and press Refresh here.");

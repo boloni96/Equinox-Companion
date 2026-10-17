@@ -20,6 +20,22 @@ public static class AdventurePolicy
   if(matches.Any(x=>x.Index==board.Index&&!Complete(x.Stop)))return null;
   var next=matches.FirstOrDefault(x=>!Complete(x.Stop));return next.Stop is null||next.Index==board.Index?null:next.Index;
  }
+ public static string CurrentHouse(Address? address,uint currentWorld,IEnumerable<SharedHouse> houses)
+ {
+  if(address is null||address.Apartment||address.Room!=0&&!address.Workshop||address.Plot<1||address.WorldId!=currentWorld)return "";
+  static string Norm(string? text)=>(text??"").Trim().ToLowerInvariant();
+  static string District(string? text)=>Norm(text).StartsWith("the ")?Norm(text)[4..]:Norm(text);
+  var matches=houses.Where(h=>Norm(h.World)==Norm(address.WorldName)&&District(h.District)==District(address.DistrictName)&&h.Ward==address.Ward&&h.Plot==address.Plot).Select(h=>h.Id).Distinct().Take(2).ToArray();
+  return matches.Length==1?matches[0]:"";
+ }
+ public static int? HouseIndex(AdventureBoard board,string houseId,string world)
+ {
+  if(houseId.Length==0)return null;
+  var matches=board.Stops.Select((s,i)=>(Stop:s,Index:i)).Where(x=>string.Equals(x.Stop.World,world,StringComparison.OrdinalIgnoreCase)&&(x.Stop.HouseId==houseId||x.Stop.Tasks.Any(t=>TaskHouseId(t)==houseId))).ToArray();
+  if(matches.Any(x=>x.Index==board.Index))return board.Index;
+  var next=matches.FirstOrDefault(x=>!Complete(x.Stop));
+  return next.Stop is not null?next.Index:matches.Length>0?matches[0].Index:null;
+ }
  private static string LegacyTaskField(AdventureTask task,string field)
  {
   var start=task.Id.IndexOf('{');var end=task.Id.LastIndexOf('}');if(start<0||end<start)return "";
@@ -67,4 +83,19 @@ public sealed class AdventureSync:IDisposable
   }catch(OperationCanceledException){return new(null,"Adventure request timed out; your saved route is kept.");}catch(Exception){return new(null,"Adventure connection unavailable; retrying.");}
  }
  public void Dispose(){cancel.Cancel();client.Dispose();cancel.Dispose();}
+}
+
+// Follow changes in location, not server polling or checklist completion.
+public sealed class AdventureLocationSession
+{
+ private string candidate="",settled="",settledContext="";private DateTimeOffset since;
+ public void Reset(){candidate=settled=settledContext="";since=default;}
+ public (bool Changed,bool ContextChanged) Observe(bool ready,string context,string house,DateTimeOffset now)
+ {
+  if(!ready){Reset();return(false,false);}
+  var key=context+"|"+house;
+  if(candidate!=key){candidate=key;since=now;return(false,false);}
+  if(settled==key||now-since<TimeSpan.FromSeconds(1))return(false,false);
+  var changed=settledContext!=context;settled=key;settledContext=context;return(true,changed);
+ }
 }
