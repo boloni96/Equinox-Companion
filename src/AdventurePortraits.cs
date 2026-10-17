@@ -97,7 +97,11 @@ public sealed partial class Plugin
     ImGui.TableNextRow();ImGui.TableNextColumn();ImGui.TextWrapped(character.Name);
     ImGui.TableNextColumn();DrawCharacterHouseIcons(character,false);ImGui.EndTable();
    }
-   var scope=CharacterSwitchScope(character.Id);ImGui.TextWrapped(scope.PersonName+" · "+character.Account+" · "+character.World);
+   var scope=CharacterSwitchScope(character.Id);ImGui.TextWrapped(scope.PersonName+" · "+character.Account);
+   var here=Player.IsLoaded&&Player.ContentId.ToString(System.Globalization.CultureInfo.InvariantCulture)==character.ContentId;
+   var reported=adventureBoards.FirstOrDefault(b=>b.Id==adventureSelected)?.Locations?.GetValueOrDefault(character.Id);
+   ImGui.TextWrapped(here?"Now: "+CurrentAdventureArea():reported is not null&&!string.IsNullOrEmpty(reported.Area)?"Last reported: "+reported.Area:"Location not reported yet");
+   if(ImGui.IsItemHovered())ImGui.SetTooltip(here?"Current area · "+(WorldName(Player.CurrentWorld.RowId)??character.World):reported is not null?reported.World+" · Last location shared by this character’s Companion · "+(DateTimeOffset.TryParse(reported.At,out var observed)?observed.ToLocalTime().ToString("g"):"time unavailable"):"No current location reported in this adventure yet.");
    DrawCharacterTravel(character,false);details?.Invoke();ImGui.EndTable();
   }
   ImGui.Spacing();ImGui.PopID();

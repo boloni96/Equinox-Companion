@@ -7,7 +7,8 @@ public sealed record AdventureTaskRule(string Kind="",string HouseId="",int Batc
 public sealed record AdventurePortrait(string Id,string Hash);
 public sealed record AdventureStop(string Title,string Subtitle,string HouseId,int Batch,AdventureTask[] Tasks,string World="",string[]? CharacterIds=null,AdventurePortrait[]? Portraits=null);
 public sealed record AdventureIntent(string Id,string TaskId,bool Checked);
-public sealed record AdventureBoard(string Id,string Generation,string BuiltAt,string Kind,string Title,AdventureStop[] Stops,int Index,long Revision,AdventureIntent[]? Pending=null,int Protocol=1);
+public sealed record AdventurePresence(string World,string At,string Area="");
+public sealed record AdventureBoard(string Id,string Generation,string BuiltAt,string Kind,string Title,AdventureStop[] Stops,int Index,long Revision,AdventureIntent[]? Pending=null,int Protocol=1,bool TravelGrouping=false,Dictionary<string,AdventurePresence>? Locations=null);
 public sealed record AdventureBoards(AdventureBoard[] Boards);
 public sealed record AdventureReply(AdventureBoard[]? Boards,string Status);
 public static class AdventurePolicy
@@ -72,6 +73,7 @@ public sealed class AdventureSync:IDisposable
  private static readonly JsonSerializerOptions Json=new(JsonSerializerDefaults.Web);
  public async Task<AdventureReply> Read(string key)=>await Request(key,null);
  public async Task<AdventureReply> Move(string key,AdventureBoard b,int index)=>await Request(key,new{id=b.Id,generation=b.Generation,revision=b.Revision,action="move",index});
+ public async Task<AdventureReply> Travel(string key,AdventureBoard b,string cid,string world,string area)=>await Request(key,new{id=b.Id,generation=b.Generation,revision=b.Revision,action="travel",cid,world,area});
  public async Task<AdventureReply> Check(string key,AdventureBoard b,string taskId,bool value)=>await Request(key,new{id=b.Id,generation=b.Generation,revision=b.Revision,action="check",taskId,@checked=value});
  private async Task<AdventureReply> Request(string key,object? body)
  {
