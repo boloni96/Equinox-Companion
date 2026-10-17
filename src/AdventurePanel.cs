@@ -187,7 +187,8 @@ public sealed partial class Plugin
    var stop=board.Stops[board.Index];ImGui.PushID(board.Id+"|"+board.Generation+"|"+board.Index);ImGui.TextUnformatted(stop.Title);ImGui.TextWrapped(stop.Subtitle);
    if(ImGui.SmallButton("Copy stop"))ImGui.SetClipboardText(stop.Title+" · "+stop.Subtitle);
    var stepsOpen=false;
-   if(board.Kind!="multi"){
+   if(board.Kind!="multi"&&!string.IsNullOrEmpty(stop.HouseId))stepsOpen=DrawAdventureHouseOwner(stop);
+   else if(board.Kind!="multi"){
     var characters=(config.SharedRoster?.People??[]).SelectMany(p=>p.Characters).Where(c=>stop.CharacterIds?.Contains(c.Id)==true).ToArray();
     for(var i=0;i<characters.Length;i++){
      if(i==0)DrawAdventureCharacter(characters[i],stop,()=>{DrawAdventureHouseControls(stop);stepsOpen=DrawAdventureStepsHeader(stop.Tasks);});
@@ -205,7 +206,10 @@ public sealed partial class Plugin
     }
     if(adventureSharedTasks.Length>0){ImGui.Separator();ImGui.TextUnformatted("Shared tasks");DrawAdventureTaskSection(board,stop,adventureSharedTasks,true);}
    }else if(stepsOpen)DrawAdventureTaskList(board,stop,stop.Tasks);
-   if(!string.IsNullOrEmpty(stop.HouseId))DrawAdventureGardens(stop.HouseId);
+   if(!string.IsNullOrEmpty(stop.HouseId)){
+    if(board.Kind!="multi")DrawAdventureHouseMembers(stop);
+    DrawAdventureGardens(stop.HouseId);
+   }
    var stopKey=board.Id+"|"+board.Generation+"|"+board.Index;
    bool? previous=adventureCompletion.TryGetValue(stopKey,out var old)?old:null;
    if(AdventurePolicy.Prompt(previous,stop))adventurePrompt=stopKey;

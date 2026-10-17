@@ -6,6 +6,40 @@ using Dalamud.Interface.Textures.TextureWraps;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
+ private AdventureStop? houseCharacterStop;
+ private SharedRoster? houseCharacterRoster;
+ private SharedCharacter? adventureHouseOwner;
+ private SharedCharacter[] adventureHouseMembers=[];
+ private SharedHouse? adventurePortraitHouse;
+ private void PrepareAdventureHouseCharacters(AdventureStop stop)
+ {
+  if(ReferenceEquals(houseCharacterStop,stop)&&ReferenceEquals(houseCharacterRoster,config.SharedRoster))return;
+  houseCharacterStop=stop;houseCharacterRoster=config.SharedRoster;
+  var all=(config.SharedRoster?.People??[]).SelectMany(p=>p.Characters).ToArray();
+  adventurePortraitHouse=all.SelectMany(c=>c.Houses).FirstOrDefault(h=>h.Id==stop.HouseId);
+  adventureHouseOwner=adventurePortraitHouse is {} house?SharedHousePresentation.Owner(house,all):null;
+  adventureHouseMembers=all.Where(c=>stop.CharacterIds?.Contains(c.Id)==true&&c.Id!=adventureHouseOwner?.Id).ToArray();
+ }
+ private bool DrawAdventureHouseOwner(AdventureStop stop)
+ {
+  PrepareAdventureHouseCharacters(stop);var expanded=false;
+  if(adventureHouseOwner is {} owner)
+   DrawAdventureCharacter(owner,stop,()=>{DrawAdventureHouseControls(stop);expanded=DrawAdventureStepsHeader(stop.Tasks);});
+  else{
+   // Missing or ambiguous ownership must never promote the first tenant to owner.
+   var name=adventurePortraitHouse?.OwnerName;
+   ImGui.TextWrapped(string.IsNullOrWhiteSpace(name)?"Owner not recorded":"Owner · "+name);
+   DrawAdventureHouseControls(stop);expanded=DrawAdventureStepsHeader(stop.Tasks);
+  }
+  return expanded;
+ }
+ private void DrawAdventureHouseMembers(AdventureStop stop)
+ {
+  if(adventureHouseMembers.Length==0)return;
+  ImGui.SetNextItemOpen(false,ImGuiCond.Once);
+  if(ImGui.CollapsingHeader($"Tenants & FC members · {adventureHouseMembers.Length}###house-members"))
+   foreach(var character in adventureHouseMembers)DrawAdventureCharacter(character,stop);
+ }
  private sealed record PortraitFrame(float X=50,float Y=50,float Z=1);
  private sealed record PortraitPayload(string Image,PortraitFrame Frame);
  private sealed record LoadedPortrait(IDalamudTextureWrap Texture,PortraitFrame Frame);

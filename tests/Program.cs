@@ -1767,3 +1767,9 @@ var deniedInspection=cm.Drain(time.AddMilliseconds(2200),n=>n=="Old World Fig",t
 Check("denied harvest keeps observed mature crop",deniedInspection.Crop.Ready.ToString(),"True");
 Check("denied harvest never guesses bed",deniedInspection.Bed.ToString(),"0");
 Check("denied harvest retains crop identity",deniedInspection.Crop.CropName,"Old World Fig");
+
+var ownerHouse169=pairedHome with {OwnerName=houseOwner.Name,World=houseOwner.World};
+Check("house owner selection ignores tenant ordering",SharedHousePresentation.Owner(ownerHouse169,[houseTenant,houseOwner])?.Id,houseOwner.Id);
+Check("missing owner does not promote tenant",SharedHousePresentation.Owner(ownerHouse169 with {OwnerName="Missing Owner"},[houseTenant,houseOwner])?.Id,null);
+Check("same name on wrong world is not owner",SharedHousePresentation.Owner(ownerHouse169,[houseOwner with {World="Other World"}])?.Id,null);
+Check("ambiguous owner stays unknown",SharedHousePresentation.Owner(ownerHouse169,[houseOwner,houseOwner with {Id="duplicate169"}])?.Id,null);

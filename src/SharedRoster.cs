@@ -44,6 +44,14 @@ public static class SharedCharacterGrouping
 
 public static class SharedHousePresentation
 {
+    public static SharedCharacter? Owner(SharedHouse house,IEnumerable<SharedCharacter> characters)
+    {
+        if(string.IsNullOrWhiteSpace(house.OwnerName))return null;
+        var matches=characters.Where(c=>string.Equals(c.Name.Trim(),house.OwnerName.Trim(),StringComparison.OrdinalIgnoreCase)&&
+            string.Equals(c.World.Trim(),house.World.Trim(),StringComparison.OrdinalIgnoreCase)).DistinctBy(c=>c.Id).Take(2).ToArray();
+        return matches.Length==1?matches[0]:null;
+    }
+
     public static string Label(SharedCharacter character, SharedHouse house, bool privateOwner)
     {
         if (!string.Equals(character.World.Trim(), house.World.Trim(), StringComparison.OrdinalIgnoreCase)) return "Shared";
