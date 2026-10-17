@@ -34,22 +34,26 @@ public sealed partial class Plugin
    Chat.Print("[Equinox] "+characterTravelStatus);
   }catch(Exception){characterTravelStatus="Lifestream is unavailable. Install or enable it before switching.";}
  }
- private unsafe bool TryGoSeeOwnEstate(uint world,string district,int ward,int plot)
+ private DateTimeOffset goSeeNativeUntil;
+ private unsafe bool TryGoSeeEstateTeleport(uint world,string district,int ward,int plot)
  {
-  // Resolve ownership and available teleports from the currently logged-in game,
-  // never from a selected roster character or a stale Journal owner name.
-  if(world!=Player.HomeWorld.RowId)return false;
+  // Use the actual character's available Teleport destinations, including tenant estates.
+  // Exact address matching prevents a selected character's house from redirecting to ours.
+  if(world!=Player.HomeWorld.RowId||world!=Player.CurrentWorld.RowId)return false;
   var telepo=FFXIVClientStructs.FFXIV.Client.Game.UI.Telepo.Instance();if(telepo==null)return false;
   telepo->UpdateAetheryteList();
-  foreach(var type in new[]{FFXIVClientStructs.FFXIV.Client.Game.EstateType.PersonalEstate,FFXIVClientStructs.FFXIV.Client.Game.EstateType.FreeCompanyEstate}){
-   var owned=FFXIVClientStructs.FFXIV.Client.Game.HousingManager.GetOwnedHouseId(type);
-   if(!CharacterTravelPolicy.MatchesEstate(AddressOf(owned),world,district,ward,plot))continue;
-   foreach(var entry in telepo->TeleportList){
-    if(entry.HouseId.Id!=owned.Id)continue;
-    var command=type==FFXIVClientStructs.FFXIV.Client.Game.EstateType.PersonalEstate?"private":"fc";
-    Pi.GetIpcSubscriber<string,object>("Lifestream.ExecuteCommand").InvokeAction(command);
-    bidTravelMessage=$"GO SEE requested: your {(command=="private"?"private":"Free Company")} estate via /li {command}.";return true;
-   }
+  foreach(var entry in telepo->TeleportList){
+   if(entry.AetheryteId==0||!CharacterTravelPolicy.MatchesEstate(AddressOf(entry.HouseId),world,district,ward,plot))continue;
+   if(followSession.Armed){bidTravelMessage="Stop FollowThem before starting GO SEE travel.";return true;}
+   if(telepo->ActiveTeleportRequest){bidTravelMessage="A teleport is already in progress.";return true;}
+   usingSharedTravel=true;
+   try{
+    var accepted=telepo->Teleport(entry.AetheryteId,entry.SubIndex);
+    if(accepted)goSeeNativeUntil=DateTimeOffset.UtcNow.AddSeconds(10);
+    bidTravelMessage=accepted?$"GO SEE requested: {district} W{ward} P{plot} using your available estate teleport. Confirm any game prompt.":"The game refused this estate teleport. Check your current state and try again.";
+   }finally{usingSharedTravel=false;}
+   // Do not start another travel route when a matching native request was refused.
+   return true;
   }return false;
  }
  private void VisitSharedHouse(SharedHouse house)
