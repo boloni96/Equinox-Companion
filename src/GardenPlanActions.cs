@@ -56,7 +56,7 @@ public sealed partial class Plugin
         }
         ImGui.EndDisabled();
     }
-    private void DrawSavedGardenPlans(SharedGardenPlan plan)
+    private void DrawSavedGardenPlans(SharedGardenPlan plan,bool canApply=true)
     {
         ImGui.SetNextItemOpen(false,ImGuiCond.Once);
         if(!ImGui.CollapsingHeader("Saved plans###saved-garden-plans"))return;
@@ -70,11 +70,16 @@ public sealed partial class Plugin
             {
                 ImGui.PushID(favourite.PersonId+":"+favourite.Id);
                 var width=ImGui.GetContentRegionAvail().X;
+                ImGui.BeginDisabled(!canApply);
                 if(ImGui.Button(FitOverviewText(favourite.Label,Math.Max(20,width-24))+"###apply",new Vector2(width,0)))ChangeGardenPlan(plan,GardenPlanEditing.Build(favourite,plan));
-                if(ImGui.IsItemHovered())ImGui.SetTooltip(favourite.Label+"\nApply this layout to Batch "+plan.Batch+" immediately. Actual crops and care stay recorded.");
+                ImGui.EndDisabled();
+                if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))ImGui.SetTooltip(favourite.Label+"\nApply this layout to Batch "+plan.Batch+" immediately. Actual crops and care stay recorded.");
                 ImGui.PopID();
             }
         }
+        ImGui.Spacing();
+        if(ImGui.Button("Manage saved plans on website"))Dalamud.Utility.Util.OpenLink(GardenCareStatus.WebsiteUrl(plan.HouseId,plan.Batch)+"&plans=favourites");
+        if(ImGui.IsItemHovered())ImGui.SetTooltip("Open the Journal’s favourite seeds and recipes. Changes return through your paired sync.");
     }
     private void DrawGardenPlanActions(SharedGardenPlan plan)
     {

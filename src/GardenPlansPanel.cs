@@ -213,7 +213,7 @@ public sealed partial class Plugin
         }
         if(ImGui.CollapsingHeader("Waiting for a garden or house to connect?")){ImGui.TextWrapped($"During setup, each observed bed previews immediately. Repeated clicks cannot skip a step. A target more than {GardenBedSyncSession.MaxDistance} game units from the first bed resets to Bed 1; nearby wrong clicks may need a restart. All eight identities are saved together. Double-click Sync or use Cancel to discard unfinished setup and clear its number; single-click starts again at Bed 1. The house/moogle button opens this exact house and batch on the website.");ImGui.TextWrapped("Houses match by world, district, ward and plot. Numbered game batches and beds connect automatically. For a visitor without numbered menus, use Sync beds and inspect Beds 1–8 in the displayed order. Restart if you clicked the wrong bed; a repeated target cannot advance setup. Only observed empty/crop information is synced, and unidentified crops stay unknown. Open the estate placard if the house is missing. Keep the website open for new links and full garden reconciliation.");
             if(visitorSetup&&ImGui.SmallButton("Recalibrate beds 1–8")&&snapshot is {} restart&&currentAddress is {} restartAddress)
-                gardenBedSync=new(restart.Actor,restartAddress,physicalPatch,DateTimeOffset.UtcNow);gardenBedSyncHouse=plan.HouseId;
+                {gardenBedSync=new(restart.Actor,restartAddress,physicalPatch,DateTimeOffset.UtcNow);gardenBedSyncHouse=plan.HouseId;}
         }
         ImGui.EndChild();
     }
