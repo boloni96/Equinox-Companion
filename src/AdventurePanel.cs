@@ -103,6 +103,7 @@ public sealed partial class Plugin
   else{
    var stop=board.Stops[board.Index];ImGui.TextUnformatted(stop.Title);ImGui.TextWrapped(stop.Subtitle);
    if(ImGui.SmallButton("Copy stop"))ImGui.SetClipboardText(stop.Title+" · "+stop.Subtitle);
+   foreach(var character in (config.SharedRoster?.People??[]).SelectMany(p=>p.Characters).Where(c=>stop.CharacterIds?.Contains(c.Id)==true)){ImGui.PushID("travel-"+character.Id);ImGui.TextUnformatted(character.Name+" · "+character.Account);DrawCharacterTravel(character);ImGui.PopID();}
    if(!string.IsNullOrEmpty(stop.HouseId)){
     ImGui.SameLine();if(ImGui.SmallButton("Garden guide")){OnPlantingCommand("/gardening","");}
     var house=config.SharedRoster?.People.SelectMany(p=>p.Characters).SelectMany(c=>c.Houses).FirstOrDefault(h=>h.Id==stop.HouseId);

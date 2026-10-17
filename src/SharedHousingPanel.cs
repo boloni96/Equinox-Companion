@@ -141,6 +141,7 @@ public sealed partial class Plugin
                 ImGui.TextDisabled(c.World+" · "+c.Dc+" · "+c.Region+" · "+c.Account);
                 if (ImGui.SmallButton("Open character in Journal"))
                     Dalamud.Utility.Util.OpenLink("https://equinoxjournal.pages.dev/#character=" + Uri.EscapeDataString(c.Id));
+                DrawCharacterTravel(c);
                 if(c.Houses.Length==0)ImGui.TextDisabled("No house recorded in the shared Journal.");
                 var firstEstate = true;
                 foreach(var h in houses)
@@ -162,6 +163,7 @@ public sealed partial class Plugin
                         ImGui.TextUnformatted("Based on shared recorded entries, not the game's live countdown.");
                         ImGui.EndTooltip();
                     }
+                    ImGui.PushID(h.Id);ImGui.BeginDisabled(!Player.IsLoaded);if(ImGui.SmallButton("GO SEE"))VisitSharedHouse(h);ImGui.EndDisabled();ImGui.PopID();
                     ImGui.TextDisabled($"{h.District} · W{h.Ward} P{h.Plot} · {h.Size}");
                     ImGui.TextWrapped(h.Paused?"Demolition marked suspended in Journal.":h.LastEntry is null?"No eligible entry recorded.":$"Last eligible entry: {h.LastEntry.Value.ToLocalTime():g} · {Math.Max(0,(int)(now-h.LastEntry.Value).TotalDays)} days ago");
                     ImGui.Spacing();
