@@ -102,7 +102,7 @@ public sealed partial class Plugin
    if(ImGui.IsItemHovered())ImGui.SetTooltip(here?"Current area · "+(WorldName(Player.CurrentWorld.RowId)??character.World):reported is not null?reported.World+" · Last location shared by this character’s Companion · "+(DateTimeOffset.TryParse(reported.At,out var observed)?observed.ToLocalTime().ToString("g"):"time unavailable"):"No current location reported in this adventure yet.");
     ImGui.TableNextColumn();DrawCharacterHouseIcons(character,false);ImGui.EndTable();
    }
-   DrawCharacterTravel(character,false);DrawBringCharacter(character);details?.Invoke();ImGui.EndTable();
+   DrawCharacterTravel(character,false);details?.Invoke();ImGui.EndTable();
   }
   ImGui.Spacing();ImGui.PopID();
  }

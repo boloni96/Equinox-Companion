@@ -9,16 +9,19 @@ public sealed partial class Plugin
  private ulong bringOpenedActor;
  private string bringOpenedPairing="";
  private DateTimeOffset bringTick;
- private void DrawBringCharacter(SharedCharacter target)
+ private AdventurePresence? bringDestination;
+ private void DrawBringCharacter(bool ready,string world,string house)
  {
-  var report=adventureBoards.FirstOrDefault(b=>b.Id==adventureSelected)?.Locations?.GetValueOrDefault(target.Id);
-  if(ImGui.SmallButton("Bring a character here")){bringChoice=CurrentSharedCharacter()?.Id??"";bringOpenedActor=Player.ContentId;bringOpenedPairing=config.PairingKey;bringMessage="";ImGui.OpenPopup("Bring character");}
-  if(ImGui.IsItemHovered())ImGui.SetTooltip("Choose one of your paired characters, switch to them, then travel to this character’s reported area. Travel does not complete adventure tasks or add unselected characters to the route.");
+  ImGui.BeginDisabled(!ready||world.Length==0||bringTrip is not null);
+  if(ImGui.SmallButton("Bring a character here")){bringDestination=new AdventurePresence(world,DateTimeOffset.UtcNow.ToString("O"),CurrentAdventureArea(),(uint)Client.TerritoryType,house);bringChoice=CurrentSharedCharacter()?.Id??"";bringOpenedActor=Player.ContentId;bringOpenedPairing=config.PairingKey;bringMessage="";ImGui.OpenPopup("Bring character");}
+  ImGui.EndDisabled();
+  if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))ImGui.SetTooltip("Bring a paired character to your current in-game world and area or estate entrance. The destination is captured when you click, regardless of the stop you are viewing. Travel does not complete tasks or add characters to the route.");
   if(bringTrip is not null){ImGui.SameLine();if(ImGui.SmallButton("Cancel bring")){bringTrip=null;try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}characterSwitchUntil=default;bringMessage="Bring character cancelled.";}}
   if(!ImGui.BeginPopupModal("Bring character",ImGuiWindowFlags.AlwaysAutoResize))return;
-  ImGui.TextUnformatted("Meet "+target.Name);
-  ImGui.TextWrapped(report is null?"No location shared yet. Open Adventure on that character first.":report.Area+" · "+report.World);
-  if(report is not null)ImGui.TextWrapped("Uses the last reported destination; it will not chase later movements.");
+  var report=bringDestination;
+  ImGui.TextUnformatted("Bring a character to this location");
+  ImGui.TextWrapped(report is null?"Choose your current location again.":report.Area+" · "+report.World);
+  ImGui.TextWrapped("Destination captured where you clicked. Arrival uses the area aetheryte or estate entrance.");
   var people=config.SharedRoster?.People??[];
   ImGui.BeginChild("BringCharacterChoices",new System.Numerics.Vector2(480,240),true);
   foreach(var person in people){if(!ImGui.CollapsingHeader(person.Name))continue;
@@ -48,7 +51,7 @@ public sealed partial class Plugin
   EnsureBidWorlds();var world=bidWorlds!.FirstOrDefault(w=>w.Name==destination.World).Id;
   var house=(config.SharedRoster?.People??[]).SelectMany(p=>p.Characters).SelectMany(c=>c.Houses).FirstOrDefault(h=>h.Id==destination.HouseId&&h.World==destination.World);
   var aetheryte=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Aetheryte>().Where(a=>a.IsAetheryte&&a.Territory.RowId==destination.Territory).Select(a=>a.RowId).FirstOrDefault();
-  if(world==0||house is null&&aetheryte==0){bringMessage="No supported teleport destination for that reported area yet. Open Adventure there to update its location, or use GO SEE for its house.";return false;}
+  if(world==0||house is null&&aetheryte==0){bringMessage="No supported teleport destination for this location. Close this picker and try from an area with an aetheryte or an identified paired estate.";return false;}
   try{if(LifestreamBusy()||shoppingTravel is not null||goSeeHomeTrip is not null||goSeeFriendTrip is not null||DateTimeOffset.UtcNow<characterSwitchUntil||DateTimeOffset.UtcNow<goSeeNativeUntil){bringMessage="Wait for the current trip to finish first.";return false;}}
   catch{bringMessage="Enable Lifestream first.";return false;}
   var source=Player.ContentId;

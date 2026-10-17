@@ -57,6 +57,8 @@ public sealed partial class Plugin
   ImGui.EndDisabled();
   if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))ImGui.SetTooltip(target is null?"Your current house must be identified and included in this adventure.":"Open this house’s stop in the active adventure. This shares navigation with the Journal and does not mark tasks complete.");
   }
+  if(ready&&target is not null)ImGui.SameLine();
+  DrawBringCharacter(ready,world,house);
   if(!adventureFollow){adventureFollowSession.Reset();return;}
   // Observe loading even while a request is running; consume a move only when it can be sent.
   if(!ready){adventureFollowSession.Reset();return;}
