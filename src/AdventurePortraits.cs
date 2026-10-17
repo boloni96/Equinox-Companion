@@ -35,7 +35,7 @@ public sealed partial class Plugin
    if(cancel.IsCancellationRequested){texture.Dispose();return null;}return new(texture,frame);
   }catch{return null;}
  }
- private void DrawAdventureCharacter(SharedCharacter character,AdventureStop stop)
+ private void DrawAdventureCharacter(SharedCharacter character,AdventureStop stop,Action? details=null)
  {
   if(portraitPairing!=config.PairingKey){ClearAdventurePortraits();portraitPairing=config.PairingKey;}
   var reference=stop.Portraits?.FirstOrDefault(p=>p.Id==character.Id);LoadedPortrait? picture=null;
@@ -50,11 +50,22 @@ public sealed partial class Plugin
    picture=entry.Picture;
   }
   ImGui.PushID("travel-"+character.Id);var origin=ImGui.GetCursorScreenPos();var size=new Vector2(88,110);
-  ImGui.BeginGroup();
-  if(picture is {} p){var scale=Math.Max(size.X/p.Texture.Width,size.Y/p.Texture.Height)*p.Frame.Z;var full=new Vector2(p.Texture.Width,p.Texture.Height)*scale;var offset=(full-size)*new Vector2(p.Frame.X/100,p.Frame.Y/100);ImGui.Image(p.Texture.Handle,size,offset/full,(offset+size)/full);}
-  else{GardenImage("assets/category-icons/characters.png",origin,size);ImGui.Dummy(size);}
-  ImGui.EndGroup();ImGui.SameLine();ImGui.BeginGroup();
-  ImGui.TextUnformatted(character.Name);var scope=CharacterSwitchScope(character.Id);ImGui.TextWrapped(scope.PersonName+" · "+character.Account+" · "+character.World);
-  DrawCharacterTravel(character);ImGui.EndGroup();ImGui.Spacing();ImGui.PopID();
+  if(ImGui.BeginTable("portrait-header",2,ImGuiTableFlags.SizingFixedFit)){
+   ImGui.TableSetupColumn("Portrait",ImGuiTableColumnFlags.WidthFixed,size.X);
+   ImGui.TableSetupColumn("Character",ImGuiTableColumnFlags.WidthStretch);
+   ImGui.TableNextRow();ImGui.TableNextColumn();
+   if(picture is {} p){var scale=Math.Max(size.X/p.Texture.Width,size.Y/p.Texture.Height)*p.Frame.Z;var full=new Vector2(p.Texture.Width,p.Texture.Height)*scale;var offset=(full-size)*new Vector2(p.Frame.X/100,p.Frame.Y/100);ImGui.Image(p.Texture.Handle,size,offset/full,(offset+size)/full);}
+   else{GardenImage("assets/category-icons/characters.png",ImGui.GetCursorScreenPos(),size);ImGui.Dummy(size);}
+   ImGui.TableNextColumn();
+   if(ImGui.BeginTable("character-heading",2,ImGuiTableFlags.SizingFixedFit)){
+    ImGui.TableSetupColumn("Name",ImGuiTableColumnFlags.WidthStretch);
+    ImGui.TableSetupColumn("Houses",ImGuiTableColumnFlags.WidthFixed,2*Math.Max(28,ImGui.GetFrameHeight())+ImGui.GetStyle().ItemSpacing.X);
+    ImGui.TableNextRow();ImGui.TableNextColumn();ImGui.TextWrapped(character.Name);
+    ImGui.TableNextColumn();DrawCharacterHouseIcons(character,false);ImGui.EndTable();
+   }
+   var scope=CharacterSwitchScope(character.Id);ImGui.TextWrapped(scope.PersonName+" · "+character.Account+" · "+character.World);
+   DrawCharacterTravel(character,false);details?.Invoke();ImGui.EndTable();
+  }
+  ImGui.Spacing();ImGui.PopID();
  }
 }

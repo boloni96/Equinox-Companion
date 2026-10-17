@@ -71,7 +71,7 @@ public sealed partial class Plugin
   if(world.Id==0||house.Ward is <1 or >30||house.Plot is <1 or >60){characterTravelStatus="This house needs a valid world, ward and plot from the Journal.";return;}
   GoSeeBid(world.Id,house.District,house.Ward,house.Plot);characterTravelStatus=bidTravelMessage;
  }
- private void DrawCharacterTravel(SharedCharacter character)
+ private void DrawCharacterTravel(SharedCharacter character,bool showHouses=true)
  {
   if(characterSwitchUntil!=default&&Player.IsLoaded&&Player.ContentId!=characterSwitchFrom){characterSwitchUntil=default;characterTravelStatus="Character changed.";}
   var switching=DateTimeOffset.UtcNow<characterSwitchUntil;
@@ -101,9 +101,16 @@ public sealed partial class Plugin
    ImGui.EndDisabled();if(!unchanged)ImGui.TextUnformatted("The current character or pairing changed. Cancel and choose again.");
    ImGui.EndPopup();
   }
+  if(showHouses)DrawCharacterHouseIcons(character);
+  if(switching){ImGui.SameLine();if(ImGui.SmallButton("Stop switch")){try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}characterSwitchUntil=default;characterTravelStatus="Switch queue stopped. If already logged out, select a character in game.";}}
+  if(characterTravelStatusOwner==character.Id){if(characterTravelStatus.Length>0)ImGui.TextWrapped(characterTravelStatus);DrawGoSeeHomeStop();}
+ }
+ private void DrawCharacterHouseIcons(SharedCharacter character,bool inline=true)
+ {
+  var switching=DateTimeOffset.UtcNow<characterSwitchUntil;var first=true;
   foreach(var type in new[]{"Private house","Free Company house"}){
    var houses=character.Houses.Where(h=>h.Type==type).DistinctBy(h=>h.Id).ToArray();if(houses.Length==0)continue;
-   ImGui.SameLine();var size=Math.Max(28,ImGui.GetFrameHeight());var at=ImGui.GetCursorScreenPos();
+   if(inline||!first)ImGui.SameLine();first=false;var size=Math.Max(28,ImGui.GetFrameHeight());var at=ImGui.GetCursorScreenPos();
    ImGui.BeginDisabled(!Player.IsLoaded||switching);
    var clicked=ImGui.InvisibleButton("Visit "+type,new Vector2(size));
    GardenImage("assets/category-icons/"+(type=="Private house"?"private-house":"fc-house")+".png",at,new Vector2(size));
@@ -124,7 +131,6 @@ public sealed partial class Plugin
    if(clicked){characterTravelStatusOwner=character.Id;if(houses.Length==1)VisitSharedHouse(houses[0]);else ImGui.OpenPopup("Choose "+type);}
    if(ImGui.BeginPopup("Choose "+type)){foreach(var h in houses)if(ImGui.Selectable($"{h.Name} · {h.World} · {h.District} W{h.Ward} P{h.Plot}##{h.Id}"))VisitSharedHouse(h);ImGui.EndPopup();}
   }
-  if(switching){ImGui.SameLine();if(ImGui.SmallButton("Stop switch")){try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}characterSwitchUntil=default;characterTravelStatus="Switch queue stopped. If already logged out, select a character in game.";}}
-  if(characterTravelStatusOwner==character.Id){if(characterTravelStatus.Length>0)ImGui.TextWrapped(characterTravelStatus);DrawGoSeeHomeStop();}
  }
+
 }
