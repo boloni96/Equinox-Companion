@@ -5,7 +5,7 @@ using Dalamud.Bindings.ImGui;
 namespace EquinoxCompanion;
 internal sealed record UpgradeWatch(string HouseId,string World,string HouseName,string OwnerName,string Person,string Account,bool Enabled,string State);
 internal sealed record UpgradeMatch(string Key,string HouseId,string World,uint WorldId,string District,int Ward,int Plot,int Size,long Price,int? Entries,long PhaseUntil,double Updated,string OwnerName,string Person,string Account,string HouseName,string Reason);
-internal sealed record UpgradeFavourite(string District,int Plot,int[] Wards,bool BothDivisions=false);
+internal sealed record UpgradeFavourite(string District,int Plot,int[] Wards,bool BothDivisions=false,string Id="");
 internal sealed record UpgradeReply(UpgradeWatch[]? Watches,UpgradeMatch[]? Matches,string? Error=null,UpgradeFavourite[]? Favourites=null);
 public sealed partial class Plugin
 {
@@ -33,13 +33,14 @@ public sealed partial class Plugin
  }
  private void UpdateHousingUpgrades(DateTimeOffset now)
  {
-  if(upgradeKey!=config.PairingKey){upgradeKey=config.PairingKey;upgradeWorlds.Clear();upgradeMatches.Clear();upgradeShown=[];upgradeWatches=[];upgradeFavourites=[];bidDirty=true;upgradeNext=now;upgradeActor=0;}
+  if(upgradeKey!=config.PairingKey){upgradeKey=config.PairingKey;upgradeWorlds.Clear();upgradeMatches.Clear();upgradeShown=[];upgradeWatches=[];upgradeFavourites=[];bidDirty=true;upgradeNext=now;upgradeActor=0;favouriteRevision=0;favouriteNext=default;favouriteStatus="";}
+  UpdateHousingFavourites(now);
   if(upgradeRequest?.IsCompleted==true){
    var task=upgradeRequest;upgradeRequest=null;
    if(task.IsFaulted){_=task.Exception;upgradeStatus="Housing watch check unavailable. Deploy Journal V7.11.180; previous results may be outdated.";upgradeNext=now.AddMinutes(5);upgradeWorlds.Clear();}
    else if(task.IsCompletedSuccessfully&&upgradeRequestKey==config.PairingKey){
     var reply=task.Result;
-    if(upgradeRequestWorld.Length==0){upgradeWatches=reply.Watches??[];upgradeFavourites=reply.Favourites??[];bidDirty=true;var active=upgradeWatches.Where(w=>w.Enabled&&w.State=="Watching").Select(w=>w.World).Distinct().ToHashSet();foreach(var old in upgradeMatches.Keys.Where(w=>!active.Contains(w)).ToArray())upgradeMatches.Remove(old);foreach(var world in active)upgradeWorlds.Enqueue(world);upgradeStatus=active.Count==0?"No active watches. Configure Upgrade houses in the Journal.":"Checking watched worlds…";}
+    if(upgradeRequestWorld.Length==0){upgradeWatches=reply.Watches??[];if(favouriteRevision==0)upgradeFavourites=reply.Favourites??[];bidDirty=true;var active=upgradeWatches.Where(w=>w.Enabled&&w.State=="Watching").Select(w=>w.World).Distinct().ToHashSet();foreach(var old in upgradeMatches.Keys.Where(w=>!active.Contains(w)).ToArray())upgradeMatches.Remove(old);foreach(var world in active)upgradeWorlds.Enqueue(world);upgradeStatus=active.Count==0?"No active watches. Configure Upgrade houses in the Journal.":"Checking watched worlds…";}
     else{
      var matches=(reply.Matches??[]).Where(m=>m.PhaseUntil>now.ToUnixTimeSeconds()&&m.Size is >=0 and <=2&&m.Ward is >=1 and <=30&&m.Plot is >=1 and <=60).ToArray();upgradeMatches[upgradeRequestWorld]=matches;
      var hash=Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(config.PairingKey)));
@@ -61,7 +62,8 @@ public sealed partial class Plugin
  private void OpenUpgradeJournal(string house="",string district="",int plot=0)=>Dalamud.Utility.Util.OpenLink("https://equinoxjournal.pages.dev/#housing-upgrades="+Uri.EscapeDataString(house)+(district.Length>0?"&district="+Uri.EscapeDataString(district)+"&plot="+plot:""));
  private bool DrawHousingUpgrades()
  {
-  ImGui.Checkbox("Upgrade matches",ref upgradeOnly);ImGui.SameLine();if(ImGui.SmallButton("Upgrade houses / favourite plots"))OpenUpgradeJournal();
+  DrawHousingFavouritePlots();
+  ImGui.Checkbox("Upgrade matches",ref upgradeOnly);ImGui.SameLine();if(ImGui.SmallButton("Manage upgrade watches in Journal"))OpenUpgradeJournal();
   if(!upgradeOnly)return false;
   ImGui.TextWrapped(upgradeStatus);
   ImGui.BeginDisabled(upgradeRequest is not null);if(ImGui.SmallButton("Check watches")){upgradeWorlds.Clear();upgradeNext=default;}ImGui.EndDisabled();
@@ -74,7 +76,7 @@ public sealed partial class Plugin
    ImGui.TextWrapped(m.Reason+$" · Reported {DateTimeOffset.FromUnixTimeSeconds((long)m.Updated).ToLocalTime():g}");
    if(ImGui.SmallButton("GO SEE"))GoSeeBid(m.WorldId,m.District,m.Ward,m.Plot);ImGui.SameLine();if(ImGui.SmallButton("Copy"))ImGui.SetClipboardText($"{m.World} · {m.District} · Ward {m.Ward} · Plot {m.Plot}");ImGui.SameLine();
    var favourite=new BidFavorite(m.WorldId,m.District,m.Ward,m.Plot);if(DrawSavedPlotButton("SaveUpgrade",bidFavoriteKeys.Contains(favourite.Key)))ToggleBidFavorite(favourite);
-   ImGui.SameLine();if(ImGui.SmallButton("★"))OpenUpgradeJournal(m.HouseId,m.District,m.Plot);if(ImGui.IsItemHovered())ImGui.SetTooltip("Choose this favourite location and its ward rules in the Journal.");ImGui.PopID();
+   ImGui.SameLine();if(ImGui.SmallButton("★"))ChooseFavouriteLocation(m.District,m.Ward,m.Plot);if(ImGui.IsItemHovered())ImGui.SetTooltip("Save this favourite plot here; choose any ward or this ward only.");ImGui.PopID();
   }
   if(count==0)ImGui.TextWrapped("No matching opportunities reported. Watches check all configured property worlds, on any paired character.");
   if(bidTravelMessage.Length>0)ImGui.TextWrapped(bidTravelMessage);DrawGoSeeHomeStop();return true;
