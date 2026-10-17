@@ -7,7 +7,7 @@ public sealed partial class Plugin
  private GoSeeHomeTrip? goSeeHomeTrip;private DateTimeOffset goSeeHomeTick;
  private bool StartGoSeeHome(uint world,string district,int ward,int plot)
  {
-  if(!CharacterTravelPolicy.NeedsHomeReturn(world,Player.HomeWorld.RowId,Player.CurrentWorld.RowId))return false;
+  if(world==0||world==Player.CurrentWorld.RowId||!CharacterTravelPolicy.NeedsHomeReturn(world,Player.HomeWorld.RowId,Player.CurrentWorld.RowId)&&GoSeeFriendCandidates(world,district,ward,plot).Length==0)return false;
   if(followSession.Armed){bidTravelMessage="Stop FollowThem before starting GO SEE travel.";return true;}
   if(Conditions[ConditionFlag.BoundByDuty]){bidTravelMessage="Leave your duty before starting estate travel.";return true;}
   var trip=new GoSeeHomeTrip(Player.ContentId,world,district,ward,plot,DateTimeOffset.UtcNow,config.PairingKey);
@@ -15,7 +15,7 @@ public sealed partial class Plugin
    bidTravelMessage="Lifestream could not start the return to your home world. Check its travel settings, then try GO SEE again.";return true;
   }
   goSeeHomeTrip=trip;goSeeHomeTick=trip.Started.AddSeconds(2);
-  bidTravelMessage=$"Returning to {BidWorldName(world)} first, then checking your estate teleports for {district} W{ward} P{plot}.";return true;
+  bidTravelMessage=$"Traveling to {BidWorldName(world)} first, then checking available estate and friends-list teleports for {district} W{ward} P{plot}.";return true;
  }
  private void UpdateGoSeeHome(DateTimeOffset now)
  {

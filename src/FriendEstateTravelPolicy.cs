@@ -2,6 +2,9 @@ using System.Text.RegularExpressions;
 namespace EquinoxCompanion;
 public static class FriendEstateTravelPolicy
 {
+ // Linked houses may arrive before the optional FC identifiers. The native menu still verifies the exact address.
+ public static bool CanInspectFc(bool? member,string characterFc,string houseFc)=>member!=false&&(characterFc.Length==0||houseFc.Length==0||characterFc==houseFc);
+ public static bool MatchesFriend(ulong candidateId,string candidateName,uint world,ulong friendId,string friendName,uint homeWorld)=>friendId!=0&&(candidateId!=0?candidateId==friendId:world==homeWorld&&string.Equals(candidateName.Trim(),friendName.Trim(),StringComparison.OrdinalIgnoreCase));
  public static bool MatchesRow(IEnumerable<string> values,string district,int ward,int plot)
  {
   if(ward is <1 or >30||plot is <1 or >60||string.IsNullOrWhiteSpace(district))return false;
