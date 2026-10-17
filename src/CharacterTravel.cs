@@ -34,6 +34,24 @@ public sealed partial class Plugin
    Chat.Print("[Equinox] "+characterTravelStatus);
   }catch(Exception){characterTravelStatus="Lifestream is unavailable. Install or enable it before switching.";}
  }
+ private unsafe bool TryGoSeeOwnEstate(uint world,string district,int ward,int plot)
+ {
+  // Resolve ownership and available teleports from the currently logged-in game,
+  // never from a selected roster character or a stale Journal owner name.
+  if(world!=Player.HomeWorld.RowId)return false;
+  var telepo=FFXIVClientStructs.FFXIV.Client.Game.UI.Telepo.Instance();if(telepo==null)return false;
+  telepo->UpdateAetheryteList();
+  foreach(var type in new[]{FFXIVClientStructs.FFXIV.Client.Game.EstateType.PersonalEstate,FFXIVClientStructs.FFXIV.Client.Game.EstateType.FreeCompanyEstate}){
+   var owned=FFXIVClientStructs.FFXIV.Client.Game.HousingManager.GetOwnedHouseId(type);
+   if(!CharacterTravelPolicy.MatchesEstate(AddressOf(owned),world,district,ward,plot))continue;
+   foreach(var entry in telepo->TeleportList){
+    if(entry.HouseId.Id!=owned.Id)continue;
+    var command=type==FFXIVClientStructs.FFXIV.Client.Game.EstateType.PersonalEstate?"private":"fc";
+    Pi.GetIpcSubscriber<string,object>("Lifestream.ExecuteCommand").InvokeAction(command);
+    bidTravelMessage=$"GO SEE requested: your {(command=="private"?"private":"Free Company")} estate via /li {command}.";return true;
+   }
+  }return false;
+ }
  private void VisitSharedHouse(SharedHouse house)
  {
   if(DateTimeOffset.UtcNow<characterSwitchUntil){characterTravelStatus="Wait for the character switch or stop it first.";return;}
