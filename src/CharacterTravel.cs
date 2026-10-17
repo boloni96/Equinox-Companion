@@ -105,6 +105,18 @@ public sealed partial class Plugin
   if(switching){ImGui.SameLine();if(ImGui.SmallButton("Stop switch")){try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}characterSwitchUntil=default;characterTravelStatus="Switch queue stopped. If already logged out, select a character in game.";}}
   if(characterTravelStatusOwner==character.Id){if(characterTravelStatus.Length>0)ImGui.TextWrapped(characterTravelStatus);DrawGoSeeHomeStop();}
  }
+ private static string CharacterHouseRole(SharedCharacter character,SharedHouse house)
+ {
+  if(house.Type=="Private house"&&string.IsNullOrWhiteSpace(house.OwnerName))return "Private · owner unknown";
+  var owner=!string.IsNullOrWhiteSpace(house.OwnerName)&&string.Equals(character.Name.Trim(),house.OwnerName.Trim(),StringComparison.OrdinalIgnoreCase);
+  return SharedHousePresentation.Label(character,house,owner);
+ }
+ private static string CharacterHouseHeading(SharedCharacter character,SharedHouse house)
+ {
+  var role=CharacterHouseRole(character,house);
+  var owner=house.Type=="Free Company house"?house.FcName:house.OwnerName;
+  return role+" · "+(string.IsNullOrWhiteSpace(owner)?"Owner not recorded":owner);
+ }
  private void DrawCharacterHouseIcons(SharedCharacter character,bool inline=true)
  {
   var switching=DateTimeOffset.UtcNow<characterSwitchUntil;var first=true;
@@ -116,8 +128,11 @@ public sealed partial class Plugin
    GardenImage("assets/category-icons/"+(type=="Private house"?"private-house":"fc-house")+".png",at,new Vector2(size));
    if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled)){
     ImGui.BeginTooltip();ImGui.PushTextWrapPos(ImGui.GetFontSize()*28);
-    ImGui.TextUnformatted("GO SEE · "+type);
+    ImGui.TextUnformatted("GO SEE · "+(type=="Private house"?"Private & shared houses":"FC houses"));
+    ImGui.TextDisabled("For "+character.Name);
     foreach(var h in houses){
+     ImGui.Separator();
+     ImGui.TextUnformatted(CharacterHouseHeading(character,h));
      var band=h.Paused?HousingBand.Unknown:HousingStatus.Band(h.LastEntry,DateTimeOffset.UtcNow);
      ImGui.TextWrapped($"{h.Name} · {h.World} · {h.District} W{h.Ward} P{h.Plot}");
      ImGui.TextColored(BandColour(band),h.Paused?"Demolition marked suspended":BandLabel(band));
@@ -129,7 +144,7 @@ public sealed partial class Plugin
    }
    ImGui.EndDisabled();
    if(clicked){characterTravelStatusOwner=character.Id;if(houses.Length==1)VisitSharedHouse(houses[0]);else ImGui.OpenPopup("Choose "+type);}
-   if(ImGui.BeginPopup("Choose "+type)){foreach(var h in houses)if(ImGui.Selectable($"{h.Name} · {h.World} · {h.District} W{h.Ward} P{h.Plot}##{h.Id}"))VisitSharedHouse(h);ImGui.EndPopup();}
+   if(ImGui.BeginPopup("Choose "+type)){foreach(var h in houses)if(ImGui.Selectable($"{CharacterHouseHeading(character,h)} · {h.Name} · {h.World} · {h.District} W{h.Ward} P{h.Plot}##{h.Id}"))VisitSharedHouse(h);ImGui.EndPopup();}
   }
  }
 
