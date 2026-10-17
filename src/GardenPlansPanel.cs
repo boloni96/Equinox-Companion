@@ -41,7 +41,7 @@ public sealed partial class Plugin
         gardenSelectionFollow.Reset();
         plantingWindow.IsOpen=true;
     }
-    private readonly UiProjectionCache<SharedGardenPlan[]> gardenSourcesCache=new();
+    private readonly UiProjectionCache<SharedGardenPlan[]> gardenSourcesCache=new(maxAgeMs:0);
     private SharedGardenPlan[] GardenPlanSources()=>gardenSourcesCache.Get(config.SharedRoster,
         $"{config.Discoveries.Count}:{config.Discoveries.LastOrDefault()?.Id}",Environment.TickCount64,BuildGardenPlanSources);
     private SharedGardenPlan[] BuildGardenPlanSources()
@@ -219,12 +219,10 @@ public sealed partial class Plugin
         ImGui.PopTextWrapPos();
         ImGui.EndTooltip();
     }
-    private SharedGardenPlan WithQueuedGardenBeds(SharedGardenPlan plan)
-    {
-        var sent=config.SentEvents.ToHashSet();
-        var queued=LocalGardenActions().Where(e=>!sent.Contains(e.Id)&&e.Address is not null&&SharedGardenLocation.Match(e.Address,[plan])==plan.HouseId&&e.Patch==(plan.PhysicalPatch>0?plan.PhysicalPatch:plan.Batch)).Select(e=>e.Bed).ToHashSet();
-        return plan with {Beds=plan.Beds.Select(b=>b with {Queued=queued.Contains(b.Bed)}).ToArray()};
-    }
+    private readonly GardenPendingDisplay gardenPendingDisplay=new();
+    private SharedGardenPlan WithQueuedGardenBeds(SharedGardenPlan plan)=>gardenPendingDisplay.Get(plan,config.SharedRoster,
+        $"{config.SentEvents.Count}:{config.SentEvents.LastOrDefault()}:{config.Planting.Count}:{config.Planting.LastOrDefault()?.EventId}:{config.Tending.Count}:{config.Tending.LastOrDefault()?.EventId}:{config.Discoveries.Count}:{config.Discoveries.LastOrDefault()?.Id}:{gardenBedSync?.Mappings.Count()}:{gardenBedSync?.Mappings.LastOrDefault()?.Id}",
+        Environment.TickCount64,LocalGardenActions,()=>config.SentEvents);
     // Shared by the live Gardening guide and paired Adventure previews.
     private void DrawGardenBoard(SharedGardenPlan plan,bool showPlan,bool complete,bool liveGuide=true)
     {

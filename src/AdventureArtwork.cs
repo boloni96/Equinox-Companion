@@ -17,11 +17,12 @@ public sealed partial class Plugin
   ImGui.Checkbox("Show actual garden instead of planting steps",ref adventureShowActual);
   foreach(var source in sources){
    ImGui.PushID("adventure-garden-"+source.HouseId+"-"+source.Batch);
-   var plan=WithQueuedGardenBeds(EffectiveGardenPlan(source));
+   var plan=EffectiveGardenPlan(source);
    var planned=plan.Beds.Where(b=>b.Crop.Length>0).ToArray();
    var complete=plan.CompletedAt is not null||planned.Length>0&&planned.All(b=>b.Status=="confirmed");
    ImGui.SetNextItemOpen(sources.Length==1,ImGuiCond.Once);
    if(ImGui.CollapsingHeader($"{(complete?"✓ ":"")}Batch {plan.Batch}")){
+    plan=WithQueuedGardenBeds(plan);
     var showPlan=!adventureShowActual&&planned.Length>0&&!complete;
     ImGui.TextWrapped(GardenOverview.Summary([plan],DateTimeOffset.UtcNow));
     if(showPlan&&GardenGuidance.Next(plan) is {} next)ImGui.TextWrapped($"Next: Bed {next.Bed} · {next.Crop} · {GardenPlantRequirement.Soil(next)}");
