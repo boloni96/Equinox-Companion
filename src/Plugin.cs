@@ -1037,7 +1037,7 @@ public sealed partial class Plugin : IDalamudPlugin
         ImGui.SetCursorPosX(fashionX);ImGui.SetCursorPosY(secondRowY);DrawHeaderShortcut(false, shortcutSize);
         ImGui.EndTable();
         }
-            ImGui.BeginChild("CompanionContent",new Vector2(0,-ImGui.GetFrameHeightWithSpacing()),false);
+            ImGui.BeginChild("CompanionContent",new Vector2(0,-(Math.Max(32,ImGui.GetFrameHeight())+ImGui.GetStyle().ItemSpacing.Y)),false);
             DrawOrderedTabs();
             ImGui.EndChild();
             DrawWindowLauncher();

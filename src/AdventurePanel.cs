@@ -13,6 +13,7 @@ public sealed partial class Plugin
  }
  private AdventureWindow adventureWindow=null!;private readonly AdventureSync adventureSync=new();private bool adventureCommand;
  private Task<AdventureReply>? adventureRequest;private bool adventureMutation;private string adventureRequestKey="",adventureConnectionKey="",adventureMessage="Checking your paired Journal…";
+ private string adventurePerson="",adventureAccount="";
  private AdventureBoard[] adventureBoards=[];private string adventureSelected="";private DateTimeOffset adventureNext,adventureFetched;private bool adventureFresh;
  private readonly Dictionary<string,bool> adventureCompletion=[];private string? adventurePrompt;private bool adventureFollow=true;private readonly BidWorldSession adventureFollowSession=new();
  private static string AdventureText(string value)=>value.Replace("##","");
@@ -28,7 +29,7 @@ public sealed partial class Plugin
  private void UpdateAdventure()
  {
   var now=DateTimeOffset.UtcNow;
-  if(adventureConnectionKey!=config.PairingKey){adventureConnectionKey=config.PairingKey;adventureBoards=[];adventureSelected="";adventureCompletion.Clear();adventurePrompt=null;adventureFresh=false;adventureNext=default;}
+  if(adventureConnectionKey!=config.PairingKey){adventureConnectionKey=config.PairingKey;adventureBoards=[];adventureSelected="";adventurePerson="";adventureAccount="";adventureCompletion.Clear();adventurePrompt=null;adventureFresh=false;adventureNext=default;}
   if(adventureRequest?.IsCompleted==true){
    var reply=adventureRequest.IsCompletedSuccessfully?adventureRequest.Result:new AdventureReply(null,"Adventure request failed.");
    if(adventureRequest.IsFaulted)_=adventureRequest.Exception;
@@ -37,6 +38,30 @@ public sealed partial class Plugin
    }adventureRequest=null;adventureMutation=false;
   }
   if(adventureRequest is null&&config.SyncEnabled&&config.PairingKey.Length==64&&now>=adventureNext){adventureRequestKey=config.PairingKey;adventureRequest=adventureSync.Read(config.PairingKey);adventureNext=now.AddSeconds(3);}
+ }
+
+ private bool AdventureInScope(AdventureBoard board)
+ {
+  if(adventurePerson.Length==0&&adventureAccount.Length==0)return true;
+  var ids=(config.SharedRoster?.People??[]).Where(p=>adventurePerson.Length==0||p.Id==adventurePerson).SelectMany(p=>p.Characters).Where(c=>adventureAccount.Length==0||c.AccountId==adventureAccount).Select(c=>c.Id).ToHashSet();
+  return board.Stops.Any(s=>s.CharacterIds?.Any(ids.Contains)==true);
+ }
+ private void DrawAdventureFilters()
+ {
+  var people=config.SharedRoster?.People??[];
+  ImGui.SetNextItemWidth(180);
+  if(ImGui.BeginCombo("Person",people.FirstOrDefault(p=>p.Id==adventurePerson)?.Name??"All people")){
+   if(ImGui.Selectable("All people",adventurePerson.Length==0)){adventurePerson="";adventureAccount="";adventureSelected="";}
+   foreach(var p in people)if(ImGui.Selectable(AdventureText(p.Name)+"##"+p.Id,p.Id==adventurePerson)){adventurePerson=p.Id;adventureAccount="";adventureSelected="";}
+   ImGui.EndCombo();
+  }
+  var accounts=people.Where(p=>adventurePerson.Length==0||p.Id==adventurePerson).SelectMany(p=>(p.Accounts??[]).Select(a=>(Id:a.Id,Name:p.Name+" / "+a.Name))).ToArray();
+  ImGui.SetNextItemWidth(260);
+  if(ImGui.BeginCombo("Account",accounts.FirstOrDefault(a=>a.Id==adventureAccount).Name??"All accounts")){
+   if(ImGui.Selectable("All accounts",adventureAccount.Length==0)){adventureAccount="";adventureSelected="";}
+   foreach(var a in accounts)if(ImGui.Selectable(AdventureText(a.Name)+"##"+a.Id,a.Id==adventureAccount)){adventureAccount=a.Id;adventureSelected="";}
+   ImGui.EndCombo();
+  }
  }
  private void DrawAdventure()
  {
@@ -48,13 +73,14 @@ public sealed partial class Plugin
   ImGui.SameLine();ImGui.BeginDisabled(adventureRequest is not null);if(ImGui.Button("Refresh"))adventureNext=default;ImGui.EndDisabled();
   ImGui.TextWrapped(adventureMessage);
   if(adventureFetched!=default)ImGui.TextDisabled($"Last checked {adventureFetched.ToLocalTime():h:mm:ss tt} · same pairing key");
+  DrawAdventureFilters();
   ImGui.Separator();
   var board=adventureBoards.FirstOrDefault(b=>b.Id==adventureSelected);
   if(board is null){
    ImGui.BeginChild("AdventureChoices",new Vector2(0,0),false);
-   ImGui.TextWrapped("Build or edit a route in the Journal, then resume it here. Both windows share the current stop. Keep the Journal open for live checklist updates and manual check confirmation.");
-   if(adventureBoards.Length==0)ImGui.TextWrapped("No shared adventures yet. Open Adventure in the updated Journal and start or resume a route.");
-   foreach(var b in adventureBoards.OrderBy(b=>b.Kind).ThenBy(b=>b.Title)){
+   ImGui.TextWrapped("Current adventures from your Journal. Build or resume an individual route there to share it here. Both windows share the current stop. Keep the Journal open for live checklist updates and manual check confirmation.");
+   if(!adventureBoards.Any(AdventureInScope))ImGui.TextWrapped("No shared adventures yet. Open Adventure in the updated Journal and start or resume a route.");
+   foreach(var b in adventureBoards.Where(AdventureInScope).OrderBy(b=>b.Kind).ThenBy(b=>b.Title)){
     ImGui.PushID(b.Id);ImGui.Spacing();ImGui.Separator();ImGui.TextUnformatted(b.Title);
     ImGui.TextDisabled(b.Index>=b.Stops.Length?$"Round reviewed · {b.Stops.Length} stops":$"Stop {b.Index+1} of {b.Stops.Length} · {b.Stops[b.Index].Title}");
     if(ImGui.Button(b.Index>=b.Stops.Length?"Review adventure":"Resume adventure →")){adventureSelected=b.Id;adventurePrompt=null;adventureFollowSession.Reset();}
