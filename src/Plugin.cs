@@ -224,6 +224,7 @@ public sealed partial class Plugin : IDalamudPlugin
         if (!fashionCommandRegistered) Log.Warning("/fashionr is already registered by another plugin. Use /equinox fashion instead.");
         InitializeMarketSearch();
         InitializeBidSearch();
+        InitializeAdventures();
         itemSearchWindow=new ItemSearchWindow(this);windows.AddWindow(itemSearchWindow);
         mainWindow = new CompanionWindow(this); windows.AddWindow(mainWindow);
         welcomeWindow = new WelcomeWindow(this); windows.AddWindow(welcomeWindow);
@@ -254,6 +255,7 @@ public sealed partial class Plugin : IDalamudPlugin
     private readonly Dalamud.Game.Text.SeStringHandling.Payloads.DalamudLinkPayload fashionBrowserLink;
     private void OnCommand(string command, string args)
     {
+        if(args.Trim().Equals("adventure",StringComparison.OrdinalIgnoreCase)){OpenAdventure();return;}
         if(args.Trim().Equals("bid",StringComparison.OrdinalIgnoreCase)){OpenBidSearch();return;}
         if(args.Trim().Equals("cheap",StringComparison.OrdinalIgnoreCase) || args.Trim().StartsWith("cheap ",StringComparison.OrdinalIgnoreCase)){OpenMarketSearch(args.Trim()[5..].Trim());return;}
         if(args.Trim().StartsWith("travel ",StringComparison.OrdinalIgnoreCase)){StartSharedWorldTravel(args.Trim()[7..]);return;}
@@ -1032,12 +1034,13 @@ public sealed partial class Plugin : IDalamudPlugin
         var fashionX=ImGui.GetCursorPosX();
         DrawHeaderShortcut(true, shortcutSize);
         var secondRowY=ImGui.GetCursorPosY();
-        ImGui.SetCursorPosX(fashionX-2*shortcutPitch);DrawMarketSearchShortcut(shortcutSize);
-        ImGui.SameLine();ImGui.SetCursorPosX(fashionX-shortcutPitch);ImGui.SetCursorPosY(secondRowY);DrawItemSearchShortcut(shortcutSize);
-        ImGui.SameLine();ImGui.SetCursorPosX(fashionX);ImGui.SetCursorPosY(secondRowY);DrawHeaderShortcut(false, shortcutSize);
+        ImGui.SetCursorPosX(fashionX);ImGui.SetCursorPosY(secondRowY);DrawHeaderShortcut(false, shortcutSize);
         ImGui.EndTable();
         }
+            ImGui.BeginChild("CompanionContent",new Vector2(0,-ImGui.GetFrameHeightWithSpacing()),false);
             DrawOrderedTabs();
+            ImGui.EndChild();
+            DrawWindowLauncher();
     }
 
     private void DrawConnection()
@@ -1184,6 +1187,7 @@ public sealed partial class Plugin : IDalamudPlugin
         Pi.UiBuilder.Draw -= Draw;
         DisposeMarketSearch();
         DisposeBidSearch();
+        DisposeAdventures();
         windows.RemoveAllWindows();
         fashionWindow.Dispose();
         Pi.UiBuilder.OpenMainUi -= Open;
