@@ -30,6 +30,8 @@ public sealed partial class Plugin
         ImGui.PushStyleColor(ImGuiCol.HeaderHovered,colour*new Vector4(.8f,.8f,.8f,1));
         ImGui.PushStyleColor(ImGuiCol.HeaderActive,colour);
     }
+    private readonly UiProjectionCache<(SharedPerson[] People,GardenOverviewHouse[] Houses)> gardenOverviewDisplayCache=new();
+    private readonly UiProjectionCache<(Dictionary<string,string> Attention,string Summary)> gardenOverviewStatusCache=new(0);
     private void DrawPlantingOverview()
     {
         ImGui.TextUnformatted("Gardening · all shared gardens");
@@ -40,9 +42,15 @@ public sealed partial class Plugin
         ImGui.SameLine();ImGui.TextDisabled($"Journal updated {roster.Updated.ToLocalTime():g}");
         ImGui.InputText("Find person / character / house",ref plantingOverviewSearch,120);
         var now=DateTimeOffset.UtcNow;
-        var people=roster.People.Select(p=>p with {Characters=OrderedSharedCharacters(p)}).ToArray();
-        var houses=GardenOverview.Houses(people,GardenPlanSources().Select(EffectiveGardenPlan));
-        var houseAttention=houses.ToDictionary(h=>h.Batches[0].HouseId,h=>GardenOverview.Attention(h.Batches,now));
+        var display=gardenOverviewDisplayCache.Get(roster,
+            $"{Player.ContentId}:{config.HouseCharactersFirst}:{config.Planting.Count}:{config.Planting.LastOrDefault()?.EventId}:{config.Tending.Count}:{config.Tending.LastOrDefault()?.EventId}:{config.Discoveries.Count}:{config.Discoveries.LastOrDefault()?.Id}:{gardenBedSync?.Mappings.Count()}:{gardenBedSync?.Mappings.LastOrDefault()?.Id}",Environment.TickCount64,()=>{
+                var ordered=roster.People.Select(p=>p with {Characters=OrderedSharedCharacters(p)}).ToArray();
+                return (ordered,GardenOverview.Houses(ordered,GardenPlanSources().Select(EffectiveGardenPlan)));
+            });
+        var people=display.People;var houses=display.Houses;
+        var overviewStatus=gardenOverviewStatusCache.Get(houses,now.ToUnixTimeSeconds().ToString(),Environment.TickCount64,
+            ()=>(houses.ToDictionary(h=>h.Batches[0].HouseId,h=>GardenOverview.Attention(h.Batches,now)),GardenOverview.Summary(houses.SelectMany(h=>h.Batches),now)));
+        var houseAttention=overviewStatus.Attention;
         Vector4 GroupColour(IEnumerable<SharedCharacter> members)
         {
             var list=members.ToArray();var ids=list.Select(c=>c.Id).ToHashSet();
@@ -50,7 +58,7 @@ public sealed partial class Plugin
             var states=houses.Where(h=>ids.Contains(h.Character?.Id??"")||linked.Contains(h.Batches[0].HouseId)).Select(h=>houseAttention[h.Batches[0].HouseId]);
             return OverviewStateColour(GardenOverview.CombineAttention(states));
         }
-        ImGui.TextWrapped($"{houses.Length} houses · "+GardenOverview.Summary(houses.SelectMany(h=>h.Batches),now));
+        ImGui.TextWrapped($"{houses.Length} houses · "+overviewStatus.Summary);
         ImGui.Separator();
         var searching=!string.IsNullOrWhiteSpace(plantingOverviewSearch);
         bool Match(string text)=>!searching||text.Contains(plantingOverviewSearch,StringComparison.OrdinalIgnoreCase);

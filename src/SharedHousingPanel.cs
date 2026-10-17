@@ -76,8 +76,16 @@ public sealed partial class Plugin
         }
         return open;
     }
-    private bool CountsForCharacter(SharedCharacter c, SharedHouse h) =>
-        SharedHousingEligibility.CountsForCharacter(c, h, (config.SharedRoster?.People ?? []).SelectMany(p => p.Characters));
+    private SharedRoster? eligibilityRoster;
+    private readonly Dictionary<(string Character,string House),bool> housingEligibilityCache=[];
+    private bool CountsForCharacter(SharedCharacter c, SharedHouse h)
+    {
+        if(!ReferenceEquals(eligibilityRoster,config.SharedRoster)){eligibilityRoster=config.SharedRoster;housingEligibilityCache.Clear();}
+        var key=(c.Id,h.Id);
+        if(housingEligibilityCache.TryGetValue(key,out var eligible))return eligible;
+        eligible=SharedHousingEligibility.CountsForCharacter(c,h,(config.SharedRoster?.People??[]).SelectMany(p=>p.Characters));
+        housingEligibilityCache[key]=eligible;return eligible;
+    }
     private void DrawSharedPerson(SharedPerson person)
     {
         ImGui.PushID("shared-"+person.Id);
