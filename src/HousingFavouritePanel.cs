@@ -69,7 +69,7 @@ public sealed partial class Plugin
   foreach(var f in upgradeFavourites){ImGui.PushID(f.Id);ImGui.Separator();
    var plot=f.BothDivisions?$"Plots {(f.Plot-1)%30+1} / {(f.Plot-1)%30+31}":$"Plot {f.Plot}";
    var label=$"{f.District} · {plot} · {(f.Wards.Length==0?"Any ward":"Wards "+string.Join(", ",f.Wards))}";
-   ImGui.TextUnformatted(label);if(ImGui.SmallButton("Copy"))ImGui.SetClipboardText(label);ImGui.SameLine();
+   ImGui.TextUnformatted(label);CopyTextOnClick(label);
    ImGui.BeginDisabled(favouriteRequest is not null);if(ImGui.SmallButton("Remove"))WriteHousingFavourite(true,f.Id);ImGui.EndDisabled();ImGui.PopID();
   }
   if(upgradeFavourites.Length==0)ImGui.TextDisabled("In Find plots, click the star beside a plot to add a favourite here.");

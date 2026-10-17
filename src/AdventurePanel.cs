@@ -122,10 +122,18 @@ public sealed partial class Plugin
      ImGui.BeginDisabled(!AdventurePolicy.CanEdit(task)||(board.Protocol<2&&pending is not null)||AdventureSaving||!adventureFresh);
      if(ImGui.Checkbox("##done",ref check))AdventureAction(board,task:task,value:check);ImGui.EndDisabled();
      var hover=ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled);ImGui.SameLine();
-     if(ImGui.SmallButton("Copy"))ImGui.SetClipboardText(task.Group+" · "+label);ImGui.SameLine();ImGui.TextWrapped(label);
+     ImGui.TextWrapped(label);
      var bedLink=task.Rule is {Batch:>=1,Bed:>=1 and <=8} rule&&rule.HouseId==stop.HouseId&&stop.HouseId.Length>0;
-     if(bedLink&&ImGui.IsItemClicked()&&task.Rule is {} clicked)adventureOpenBed=(clicked.HouseId,clicked.Batch,clicked.Bed);
-     if(hover||ImGui.IsItemHovered()){ImGui.BeginTooltip();ImGui.PushTextWrapPos(ImGui.GetFontSize()*32);ImGui.TextUnformatted((bedLink?"Click to open this bed’s batch.\n":"")+(task.Status.Length>0?DisplayTime.InText(task.Status):task.Done?"Completion recorded in the Journal":"Waiting for completion")+(task.ServerConfirmed?"\nConfirmed automatically from game records. This check cannot be removed manually.":!task.CanCheck?"\nThis task updates automatically.":"\nManual completion can be changed here."));ImGui.PopTextWrapPos();ImGui.EndTooltip();}
+     if(ImGui.IsItemClicked()){if(bedLink&&task.Rule is {} clicked)adventureOpenBed=(clicked.HouseId,clicked.Batch,clicked.Bed);else ImGui.SetClipboardText(label);}
+     if(hover||ImGui.IsItemHovered()){ImGui.BeginTooltip();ImGui.PushTextWrapPos(ImGui.GetFontSize()*32);ImGui.TextUnformatted((bedLink?"Click to open this bed’s batch.\n":"Click to copy this label.\n")+(task.Status.Length>0?DisplayTime.InText(task.Status):task.Done?"Completion recorded in the Journal":"Waiting for completion")+(task.ServerConfirmed?"\nConfirmed automatically from game records. This check cannot be removed manually.":!task.CanCheck?"\nThis task updates automatically.":"\nManual completion can be changed here."));ImGui.PopTextWrapPos();ImGui.EndTooltip();}
+     if(house is not null&&!check){
+      var right=ImGui.GetItemRectMax().X+ImGui.GetStyle().ItemSpacing.X;
+      if(right+ImGui.CalcTextSize("Go").X+ImGui.GetStyle().FramePadding.X*2<ImGui.GetCursorScreenPos().X+ImGui.GetContentRegionAvail().X)ImGui.SameLine();
+      ImGui.BeginDisabled(!Player.IsLoaded);
+      if(ImGui.SmallButton("Go")){characterTravelStatusOwner=task.Rule?.Cid??"";VisitSharedHouse(house);}
+      ImGui.EndDisabled();
+      if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))ImGui.SetTooltip($"Go to {house.Name} · {house.World} · {house.District} W{house.Ward} P{house.Plot}.\nUses the current character. Enter the house to confirm the visit.");
+     }
      if(pending is not null&&!task.ServerConfirmed)ImGui.TextColored(new Vector4(1,.8f,.4f,1),board.Protocol>=2?"Saved · Journal will catch up":"Pending Journal confirmation");
      ImGui.PopID();
     }
@@ -184,8 +192,7 @@ public sealed partial class Plugin
   ImGui.BeginChild("AdventureChecklist",new Vector2(0,-footerHeight),false);
   if(board.Index>=board.Stops.Length){ImGui.TextWrapped("Round reviewed. Unconfirmed work stays unconfirmed. You can revisit any stop or build another adventure in the Journal.");}
   else{
-   var stop=board.Stops[board.Index];ImGui.PushID(board.Id+"|"+board.Generation+"|"+board.Index);ImGui.TextUnformatted(stop.Title);ImGui.TextWrapped(stop.Subtitle);
-   if(ImGui.SmallButton("Copy stop"))ImGui.SetClipboardText(stop.Title+" · "+stop.Subtitle);
+   var stop=board.Stops[board.Index];ImGui.PushID(board.Id+"|"+board.Generation+"|"+board.Index);ImGui.TextUnformatted(stop.Title);CopyTextOnClick(stop.Title);ImGui.TextWrapped(stop.Subtitle);CopyTextOnClick(stop.Title+" · "+stop.Subtitle);
    var stepsOpen=false;
    if(board.Kind!="multi"&&!string.IsNullOrEmpty(stop.HouseId))stepsOpen=DrawAdventureHouseOwner(stop);
    else if(board.Kind!="multi"){

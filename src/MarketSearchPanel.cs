@@ -182,7 +182,7 @@ public sealed partial class Plugin
             ImGui.BeginDisabled(marketTask is not null || DateTimeOffset.UtcNow < marketNextSearch);
             if(ImGui.Button("Refresh now")) StartMarketSearch(preserveResults: true, force: true);
             ImGui.EndDisabled(); ImGui.SameLine();
-            if(ImGui.Button("Copy item name")) ImGui.SetClipboardText(marketSelectedName);
+            ImGui.TextUnformatted(marketSelectedName); CopyTextOnClick(marketSelectedName);
             ImGui.SameLine();
             if(ImGui.Button("Sources")) ImGui.OpenPopup("MarketSourceDetails");
             if(ImGui.IsItemHovered()) ImGui.SetTooltip(MarketSourceLabel(marketSelectedId));
@@ -268,7 +268,7 @@ public sealed partial class Plugin
                 ImGui.TableNextColumn(); ImGui.TextUnformatted(MarketDataCenter(row.WorldId) + " / " + row.Region);
                 ImGui.TableNextColumn(); ImGui.TextUnformatted(MarketSearch.Age(row.Reviewed, now));
                 if(ImGui.IsItemHovered()) ImGui.SetTooltip("Last recorded listing review · Retainer: " + row.Retainer);
-                ImGui.TableNextColumn(); if(ImGui.SmallButton("Copy")) ImGui.SetClipboardText($"{itemName} · {row.World} ({MarketDataCenter(row.WorldId)}, {row.Region}) · {row.Price:N0} gil each · {row.Quantity} × {(row.Hq ? "HQ" : "NQ")} · {row.Retainer}");
+                ImGui.TableNextColumn(); ImGui.TextUnformatted(row.Retainer); CopyTextOnClick($"{itemName} · {row.World} ({MarketDataCenter(row.WorldId)}, {row.Region}) · {row.Price:N0} gil each · {row.Quantity} × {(row.Hq ? "HQ" : "NQ")} · {row.Retainer}");
                 ImGui.TableNextColumn();
                 var here = Player.IsLoaded && Player.CurrentWorld.RowId == row.WorldId;
                 ImGui.BeginDisabled(!Player.IsLoaded || shoppingTravel is not null || DateTimeOffset.UtcNow < marketTravelNext);

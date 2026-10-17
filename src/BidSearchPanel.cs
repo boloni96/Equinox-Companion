@@ -115,11 +115,9 @@ public sealed partial class Plugin
   foreach(var entry in bidRows){
    var b=entry.Bid;var address=$"{BidWorldName(b.WorldId)} · {b.District} W{b.Ward} P{b.Plot}";
    var details=$"{entry.Name} · {(b.Buyer=="fc"?"FC":b.Buyer=="private"?"Private":"Type unknown")} · Entry #{b.Entry} · {b.Status}";
-   ImGui.PushID(row++);ImGui.TableNextRow();ImGui.TableNextColumn();ImGui.TextUnformatted(entry.Owner);
-   ImGui.TableNextColumn();ImGui.TextUnformatted(address);ImGui.TableNextColumn();ImGui.TextUnformatted(details);
+   ImGui.PushID(row++);ImGui.TableNextRow();ImGui.TableNextColumn();ImGui.TextUnformatted(entry.Owner);CopyTextOnClick(entry.Owner);
+   ImGui.TableNextColumn();ImGui.TextUnformatted(address);CopyTextOnClick(address);ImGui.TableNextColumn();ImGui.TextUnformatted(details);CopyTextOnClick(entry.Name);
    ImGui.TableNextColumn();if(ImGui.SmallButton("GO SEE"))GoSeeBid(b.WorldId,b.District,b.Ward,b.Plot);
-   ImGui.SameLine();if(ImGui.SmallButton("Copy"))ImGui.SetClipboardText($"{entry.Owner} · {address} · {details}");
-   if(ImGui.IsItemHovered())ImGui.SetTooltip("Copy person, account, character, plot and entry details");
    ImGui.PopID();
   }
   ImGui.EndTable();
@@ -147,10 +145,9 @@ public sealed partial class Plugin
   foreach(var f in config.BidFavorites){
    ImGui.PushID(f.Key);if(DrawSavedPlotButton("RemoveSavedPlot",true))remove=f;
    if(ImGui.IsItemHovered())ImGui.SetTooltip("Remove from saved plots");
-   ImGui.SameLine();ImGui.TextUnformatted($"{BidWorldName(f.World)} · {f.District} W{f.Ward} P{f.Plot}");
+   ImGui.SameLine();ImGui.TextUnformatted($"{BidWorldName(f.World)} · {f.District} W{f.Ward} P{f.Plot}");CopyTextOnClick($"{BidWorldName(f.World)} · {f.District} · Ward {f.Ward} · Plot {f.Plot}");
    ImGui.SameLine();if(ImGui.SmallButton("Search world")){bidSection=0;bidWorld=f.World;bidRegion=bidWorlds!.FirstOrDefault(w=>w.Id==bidWorld).Region;StartBidSearch();}
    ImGui.SameLine();if(ImGui.SmallButton("GO SEE"))GoSeeBid(f.World,f.District,f.Ward,f.Plot);
-   ImGui.SameLine();if(ImGui.SmallButton("Copy"))ImGui.SetClipboardText($"{BidWorldName(f.World)} · {f.District} · Ward {f.Ward} · Plot {f.Plot}");
    ImGui.PopID();
   }
   ImGui.EndChild();if(remove is not null)ToggleBidFavorite(remove);

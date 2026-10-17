@@ -166,12 +166,11 @@ public sealed partial class Plugin
                 var best = entry.Plans.FirstOrDefault(x => x.Complete);
                 var summary = best is not null ? $" · est. {best.Cost:N0} gil · {best.World}" : entry.Plans.Length > 0 ? " · partial stock" : " · " + entry.Status;
                 if(entry.ItemId != 0) summary = " · " + MarketSourceLabel(entry.ItemId) + summary;
-                // Keep the copy action available even when the item is collapsed.
-                if(ImGui.SmallButton("Copy name")) ImGui.SetClipboardText(entry.Request.Name);
-                if(ImGui.IsItemHovered()) ImGui.SetTooltip("Copy item name for in-game search");
-                ImGui.SameLine();
                 if(marketShoppingExpand is {} expanded) ImGui.SetNextItemOpen(expanded, ImGuiCond.Always);
-                var open = ImGui.TreeNodeEx($"{entry.Request.Quantity:N0} × {entry.Request.Name}{summary}###ShoppingItem", ImGuiTreeNodeFlags.SpanAvailWidth);
+                var open = ImGui.TreeNodeEx("##ShoppingItem", ImGuiTreeNodeFlags.None);
+                if(ImGui.IsItemHovered()) ImGui.SetTooltip("Expand or collapse item details");
+                ImGui.SameLine(); ImGui.TextUnformatted($"{entry.Request.Quantity:N0} × {entry.Request.Name}{summary}");
+                CopyTextOnClick(entry.Request.Name);
                 if(open)
                 {
                     var quantity = entry.Request.Quantity; ImGui.SetNextItemWidth(140);
