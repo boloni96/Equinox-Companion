@@ -321,6 +321,7 @@ public sealed partial class Plugin : IDalamudPlugin
         UpdateSharedRoster(now);
         UpdateShoppingTravel(now);
         UpdateBidWorld(now);
+        UpdateHousingUpgrades(now);
         UpdateGoSeeHome(now);
         UpdateGoSeeFriend(now);
         UpdateCharacterRegistration(now);
@@ -898,6 +899,7 @@ public sealed partial class Plugin : IDalamudPlugin
                 WithWorldNames(observed.Target.Actor), WithAddressNames(observed.Target.Address!), observed.Patch, observed.Bed, Crop: observed.Crop, GardenTarget: GardenTargetOf(observed.Target)));
             cropChatStatus = $"{observed.Crop.CropName} · patch {observed.Patch}, bed {observed.Bed} · {observed.Crop.Status??"ready to harvest"}";
         }
+        DrainGardenCalibration(DateTimeOffset.UtcNow);
         while (menuMessages.TryDequeue(out var menu)) { gardenMessageJournal.Record(menu); if (recording) { menuObservations++; AddDiagnostic(menu); } }
         while(harvestedChats.TryDequeue(out var chatHarvest))
         {
@@ -1172,6 +1174,7 @@ public sealed partial class Plugin : IDalamudPlugin
         portalRelay.Dispose();
         quickLootBarEntry?.Remove();
         sync.Dispose();
+        upgradeHttp.Dispose();
         StopRecording();
         callbackHook?.Disable();
         callbackHook?.Dispose();

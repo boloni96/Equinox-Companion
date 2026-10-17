@@ -27,14 +27,27 @@ public sealed partial class Plugin
     private bool BedSyncMatches(SharedGardenPlan plan) => gardenBedSyncHouse==plan.HouseId && gardenBedSync?.Matches(Player.ContentId.ToString(System.Globalization.CultureInfo.InvariantCulture),currentAddress,plan.PhysicalPatch>0?plan.PhysicalPatch:plan.Batch)==true;
     private bool NeedsBedSync(SharedGardenPlan plan) => atOutdoorEstate && SharedGardenLocation.Match(currentAddress,[plan])==plan.HouseId && GardenBedSyncSession.CanCalibrate(config.SharedRoster,Player.CharacterName,WorldName(Player.HomeWorld.RowId)??"",plan.HouseId,unmatchedGardenHouses.Contains(plan.HouseId)) && (BedSyncMatches(plan)&&gardenBedSync is {Complete:false} || canceledBedSync==(plan.HouseId,plan.PhysicalPatch>0?plan.PhysicalPatch:plan.Batch) || config.GardenResyncBatches.Contains(GardenResyncKey(plan.HouseId,plan.PhysicalPatch>0?plan.PhysicalPatch:plan.Batch)) || unmatchedGardenHouses.Contains(plan.HouseId) || GardenBedSyncSession.NeedsSync(plan.Beds));
     private readonly HashSet<string> unmatchedGardenHouses=[];
-    // Called only on a new game observation, never from the drawing loop.
+    private readonly List<(GardenSnapshot Target,DateTimeOffset At)> pendingGardenCalibration=[];
     private void CheckGardenCalibration(GardenSnapshot target,DateTimeOffset at)
     {
-        if(target.Address is not {} address || GardenTargetOf(target) is not {} identity)return;
-        var observation=new SyncEvent("calibration-check","garden.unmapped",at,target.Actor,WithAddressNames(address),GardenTarget:identity);
-        if(GardenTargetMap.Resolve(observation,GardenMappings()).Patch is >0)return;
-        var house=SharedGardenLocation.Match(address,GardenPlanSources());
-        if(house is not null)unmatchedGardenHouses.Add(house);
+        if(pendingGardenCalibration.Count<128)pendingGardenCalibration.Add((target,at));
+    }
+    private DateTimeOffset nextGardenCalibrationCheck;
+    private void DrainGardenCalibration(DateTimeOffset now)
+    {
+        if(now<nextGardenCalibrationCheck||!pendingGardenCalibration.Any(x=>now-x.At>=TimeSpan.FromSeconds(2.5)))return;
+        nextGardenCalibrationCheck=now.AddSeconds(3);
+        unmatchedGardenHouses.Clear();
+        var resolve=GardenTargetMap.CreateResolver(GardenMappings());
+        for(var i=pendingGardenCalibration.Count-1;i>=0;i--){
+            var (target,at)=pendingGardenCalibration[i];if(now-at<TimeSpan.FromSeconds(2.5))continue;
+            if(now-at>TimeSpan.FromMinutes(10)){pendingGardenCalibration.RemoveAt(i);continue;}
+            if(target.Address is not {} address || GardenTargetOf(target) is not {} identity)continue;
+            var observation=new SyncEvent("calibration-check","garden.unmapped",at,target.Actor,WithAddressNames(address),GardenTarget:identity);
+            if(resolve(observation).Patch is >0){pendingGardenCalibration.RemoveAt(i);continue;}
+            var house=SharedGardenLocation.Match(address,GardenPlanSources());
+            if(house is not null)unmatchedGardenHouses.Add(house);
+        }
     }
     private bool atOutdoorEstate;
     private bool suppressSyncRelease;

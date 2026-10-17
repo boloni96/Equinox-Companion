@@ -67,6 +67,8 @@ public sealed class Configuration : IPluginConfiguration
     public int ShoppingArrival { get; set; }
     public int Version { get; set; } = 4;
     public bool SyncEnabled { get; set; }
+    public string HousingUpgradePairingHash { get; set; } = "";
+    public List<string> HousingUpgradeNotified { get; set; } = [];
     public string PairingKey { get; set; } = "";
     public List<string> SentEvents { get; set; } = [];
     public List<PlantingRecord> Planting { get; set; } = [];

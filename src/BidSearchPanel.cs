@@ -53,6 +53,7 @@ public sealed partial class Plugin
  }
  private void DrawBidSearch(){
   EnsureBidWorlds();var now=DateTimeOffset.UtcNow;
+  if(DrawHousingUpgrades())return;
   if(!bidSession.Ready){ImGui.TextDisabled("Waiting for character and current world…");DrawBidFavorites();return;}
   if(bidTask?.IsCompleted==true){if(bidTask.IsCompletedSuccessfully){bidPlots=bidTask.Result;bidFetched=now;bidMessage=$"{bidPlots.Length} reported open plots · Paissa";bidNext=now.AddSeconds(60);bidDirty=true;}else{_=bidTask.Exception;bidMessage="Paissa unavailable. Previous results kept; try Refresh.";bidNext=now.AddMinutes(2);}bidTask=null;}
   if(bidAuto&&bidWorld!=0&&bidTask is null&&bidFetched!=default&&now>=bidNext)RefreshBidSearch();
@@ -72,19 +73,20 @@ public sealed partial class Plugin
    }ImGui.EndChild();ImGui.EndPopup();
   }
   ImGui.SameLine();ImGui.BeginDisabled(bidTask is not null||bidWorld==0||now<bidRetry);if(ImGui.SmallButton("Refresh"))RefreshBidSearch();ImGui.EndDisabled();ImGui.SameLine();ImGui.Checkbox("Auto 60s",ref bidAuto);
-  ImGui.SameLine();if(ImGui.Checkbox("Favorites only",ref bidFavoritesOnly))bidDirty=true;
-  if(ImGui.SmallButton("Clear sort & filters")){bidFilters.Clear();bidFavoritesOnly=false;bidSort=-1;bidDescending=false;bidDirty=true;}
+  ImGui.SameLine();if(ImGui.Checkbox("Saved plots only",ref bidFavoritesOnly))bidDirty=true;
+  if(ImGui.Checkbox("★ Favourite locations only",ref bidLocationFavoritesOnly))bidDirty=true;
+  if(ImGui.SmallButton("Clear sort & filters")){bidFilters.Clear();bidFavoritesOnly=false;bidLocationFavoritesOnly=false;bidSort=-1;bidDescending=false;bidDirty=true;}
   ImGui.SameLine();ImGui.TextDisabled(bidMessage+(bidFetched==default?"":$" · checked {bidFetched.ToLocalTime():HH:mm:ss}"));
   if((config.SharedRoster?.ProtocolVersion??0)<20)ImGui.TextDisabled("Deploy Journal V7.11.166 and open it once to receive paired bids. Local bids are still shown.");
   DrawPairedBidRows();
   DrawBidFavorites();
   if(bidTravelMessage.Length>0)ImGui.TextWrapped(bidTravelMessage);
   DrawGoSeeHomeStop();
-  if(bidDirty){bidShown=BidSearch.Sort(bidPlots.Where(p=>bidFilters.Matches(p,now)&&(!bidFavoritesOnly||bidFavoriteKeys.Contains(p.Key))),bidSort,bidDescending);bidDirty=false;}
+  if(bidDirty){bidShown=BidSearch.Sort(bidPlots.Where(p=>bidFilters.Matches(p,now)&&(!bidLocationFavoritesOnly||IsFavouriteLocation(p.District,p.Ward,p.Plot))&&(!bidFavoritesOnly||bidFavoriteKeys.Contains(p.Key))),bidSort,bidDescending);bidDirty=false;}
   ImGui.TextDisabled($"{bidShown.Length} matching plots · Hover paired bids for entry numbers. Reports can be outdated; confirm at the placard.");
   if(ImGui.BeginTable("BidPlots",12,ImGuiTableFlags.ScrollY|ImGuiTableFlags.ScrollX|ImGuiTableFlags.RowBg|ImGuiTableFlags.BordersInnerH|ImGuiTableFlags.Resizable,new Vector2(0,0))){
    string[] headers=["District","Ward","Plot","Size","Price","Entries","Lottery Phase","Allowed Tenants","Last Updated","First Seen","Paired bids","Visit"];
-   float[] widths=[155,85,85,120,110,105,210,225,155,140,110,150];
+   float[] widths=[190,85,85,120,110,105,210,225,155,140,110,150];
    for(var i=0;i<headers.Length;i++)ImGui.TableSetupColumn(headers[i],ImGuiTableColumnFlags.WidthFixed,widths[i]);ImGui.TableSetupScrollFreeze(0,1);ImGui.TableNextRow(ImGuiTableRowFlags.Headers);
    for(var i=0;i<headers.Length;i++){
     ImGui.TableNextColumn();ImGui.PushID(i);
@@ -100,7 +102,7 @@ public sealed partial class Plugin
     }
     ImGui.PopID();
    }
-   var clip=ImGui.ImGuiListClipper();clip.Begin(bidShown.Length);while(clip.Step())for(var i=clip.DisplayStart;i<clip.DisplayEnd;i++){var p=bidShown[i];ImGui.PushID(p.Key);ImGui.TableNextRow();string[] values=[p.District,p.Ward.ToString(),p.Plot.ToString(),new[]{"Small","Medium","Large"}[p.Size],p.Price.ToString("N0"),p.Entries?.ToString()??"?",p.PhaseLabel(now),p.Tenants,MarketSearch.Age((long)p.Updated,now),MarketSearch.Age((long)p.FirstSeen,now)];for(var v=0;v<values.Length;v++){ImGui.TableNextColumn();if(v==0){var saved=bidFavoriteKeys.Contains(p.Key);if(ImGui.SmallButton(saved?"★##Favorite":"☆##Favorite"))ToggleBidFavorite(new(p.World,p.District,p.Ward,p.Plot));if(ImGui.IsItemHovered())ImGui.SetTooltip(saved?"Remove from favorites":"Save this plot for later");ImGui.SameLine();}ImGui.TextUnformatted(values[v]);}ImGui.TableNextColumn();if(bidMarkers.TryGetValue(p.Key,out var marker)){ImGui.TextColored(Green,$"Your bids ({bidByPlot[p.Key].Count})");if(ImGui.IsItemHovered())ImGui.SetTooltip(marker);}else ImGui.TextDisabled("—");ImGui.TableNextColumn();ImGui.BeginDisabled(!Player.IsLoaded);if(ImGui.SmallButton("GO SEE"))GoSeeBid(p.World,p.District,p.Ward,p.Plot);ImGui.EndDisabled();ImGui.SameLine();if(ImGui.SmallButton("Copy"))ImGui.SetClipboardText($"{BidWorldName(p.World)} · {p.District} · Ward {p.Ward} · Plot {p.Plot}");ImGui.PopID();}clip.End();clip.Destroy();ImGui.EndTable();}
+   var clip=ImGui.ImGuiListClipper();clip.Begin(bidShown.Length);while(clip.Step())for(var i=clip.DisplayStart;i<clip.DisplayEnd;i++){var p=bidShown[i];ImGui.PushID(p.Key);ImGui.TableNextRow();string[] values=[p.District,p.Ward.ToString(),p.Plot.ToString(),new[]{"Small","Medium","Large"}[p.Size],p.Price.ToString("N0"),p.Entries?.ToString()??"?",p.PhaseLabel(now),p.Tenants,MarketSearch.Age((long)p.Updated,now),MarketSearch.Age((long)p.FirstSeen,now)];for(var v=0;v<values.Length;v++){ImGui.TableNextColumn();if(v==0){var saved=bidFavoriteKeys.Contains(p.Key);if(DrawSavedPlotButton("SavePlot",saved))ToggleBidFavorite(new(p.World,p.District,p.Ward,p.Plot));if(ImGui.IsItemHovered())ImGui.SetTooltip(saved?"Remove from saved plots":"Save this plot for later");ImGui.SameLine();if(ImGui.SmallButton(IsFavouriteLocation(p.District,p.Ward,p.Plot)?"★##Location":"☆##Location"))OpenUpgradeJournal("",p.District,p.Plot);if(ImGui.IsItemHovered())ImGui.SetTooltip("Edit this favourite location and its ward rules in the Journal.");ImGui.SameLine();}ImGui.TextUnformatted(values[v]);}ImGui.TableNextColumn();if(bidMarkers.TryGetValue(p.Key,out var marker)){ImGui.TextColored(Green,$"Your bids ({bidByPlot[p.Key].Count})");if(ImGui.IsItemHovered())ImGui.SetTooltip(marker);}else ImGui.TextDisabled("—");ImGui.TableNextColumn();ImGui.BeginDisabled(!Player.IsLoaded);if(ImGui.SmallButton("GO SEE"))GoSeeBid(p.World,p.District,p.Ward,p.Plot);ImGui.EndDisabled();ImGui.SameLine();if(ImGui.SmallButton("Copy"))ImGui.SetClipboardText($"{BidWorldName(p.World)} · {p.District} · Ward {p.Ward} · Plot {p.Plot}");ImGui.PopID();}clip.End();clip.Destroy();ImGui.EndTable();}
  }
  private void DrawPairedBidRows(){
   var count=bidByPlot.Values.Sum(x=>x.Count);
@@ -122,20 +124,29 @@ public sealed partial class Plugin
   }
   ImGui.EndTable();
  }
+ private static bool DrawSavedPlotButton(string id,bool saved){
+  var size=ImGui.GetTextLineHeight();var at=ImGui.GetCursorScreenPos();
+  var clicked=ImGui.Button("##"+id,new Vector2(size+8,size+4));
+  var draw=ImGui.GetWindowDrawList();var ink=ImGui.GetColorU32(saved?ImGuiCol.CheckMark:ImGuiCol.Text);var a=at+new Vector2(4,2);var b=a+new Vector2(size);
+  draw.AddRect(a,b,ink,1,ImDrawFlags.None,1.5f);
+  draw.AddRectFilled(a+new Vector2(size*.23f,0),a+new Vector2(size*.72f,size*.34f),ink);
+  draw.AddRect(a+new Vector2(size*.2f,size*.55f),b-new Vector2(size*.2f,1),ink);
+  return clicked;
+ }
  private void ToggleBidFavorite(BidFavorite favorite){
   if(bidFavoriteKeys.Remove(favorite.Key))config.BidFavorites.RemoveAll(f=>f.Key==favorite.Key);
   else{bidFavoriteKeys.Add(favorite.Key);config.BidFavorites.Add(favorite);}
   bidDirty=true;SaveConfiguration();
  }
  private void DrawBidFavorites(){
-  if(!ImGui.CollapsingHeader($"Saved favorites · {config.BidFavorites.Count} plots###BidFavorites"))return;
-  ImGui.TextDisabled("Saved on this computer across characters. Favorites are reminders, not submitted bids.");
-  if(config.BidFavorites.Count==0){ImGui.TextDisabled("Click the star beside a district to save a plot for later.");return;}
+  if(!ImGui.CollapsingHeader($"Saved plots · {config.BidFavorites.Count} plots###BidFavorites"))return;
+  ImGui.TextDisabled("Saved on this computer across characters. Saved plots are reminders, not submitted bids.");
+  if(config.BidFavorites.Count==0){ImGui.TextDisabled("Click the save icon beside a district to save a plot for later.");return;}
   ImGui.BeginChild("SavedBidPlots",new Vector2(0,Math.Min(180,config.BidFavorites.Count*ImGui.GetFrameHeightWithSpacing()+8)),true);
   BidFavorite? remove=null;
   foreach(var f in config.BidFavorites){
-   ImGui.PushID(f.Key);if(ImGui.SmallButton("★##RemoveFavorite"))remove=f;
-   if(ImGui.IsItemHovered())ImGui.SetTooltip("Remove from favorites");
+   ImGui.PushID(f.Key);if(DrawSavedPlotButton("RemoveSavedPlot",true))remove=f;
+   if(ImGui.IsItemHovered())ImGui.SetTooltip("Remove from saved plots");
    ImGui.SameLine();ImGui.TextUnformatted($"{BidWorldName(f.World)} · {f.District} W{f.Ward} P{f.Plot}");
    ImGui.SameLine();if(ImGui.SmallButton("Search world")){bidWorld=f.World;bidRegion=bidWorlds!.FirstOrDefault(w=>w.Id==bidWorld).Region;StartBidSearch();}
    ImGui.SameLine();if(ImGui.SmallButton("GO SEE"))GoSeeBid(f.World,f.District,f.Ward,f.Plot);
