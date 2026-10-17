@@ -336,13 +336,13 @@ public sealed partial class Plugin : IDalamudPlugin
         if (!Player.IsLoaded || Player.ContentId == 0)
         {
             suppliesCharacter=0;suppliesReadyAt=default;
-            gardenBedSync=null;
+            gardenBedSync=null;sharedEstateGate.Reset();
             companyCandidate = null; character = 0; currentAddress = null; gate.Reset(); snapshot = null; StopRecording();
             status = "Waiting for your character."; return;
         }
         if (character != Player.ContentId)
         {
-            gardenBedSync=null;
+            gardenBedSync=null;sharedEstateGate.Reset();
             gate.Reset(); StopRecording(); character = Player.ContentId;
             discoveryStage = 0; nextDiscovery = default; nextCharacterRefresh = default; characterReadyAt = now.AddSeconds(15);
             fashionWindow.Tick(login: true);
@@ -351,7 +351,7 @@ public sealed partial class Plugin : IDalamudPlugin
         if (recording && now >= recordingUntil) StopRecording();
         if (Conditions[ConditionFlag.BetweenAreas] || Conditions[ConditionFlag.BetweenAreas51])
         {
-            gardenBedSync=null;
+            gardenBedSync=null;sharedEstateGate.Reset();
             companyCandidate = null; snapshot = null; currentAddress = null; Volatile.Write(ref pendingTend, null); Volatile.Write(ref pendingRemove, null); Volatile.Write(ref pendingHarvest, null); Volatile.Write(ref pendingPlant, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); messages.Clear(); menuMessages.Clear(); readyMenus.Clear(); cropChats.Clear(); cropMatcher.Clear(); harvestInspections.Clear(); harvestedChats.Clear(); status = "Waiting for the area to finish loading."; return;
         }
         ObserveSafely("company-profile", () => ObserveCompanyProfile(now));
@@ -417,7 +417,7 @@ public sealed partial class Plugin : IDalamudPlugin
                 if (obj != null) { objectId = obj->HousingObjectId.Id; furnitureIndex = obj->HousingFurnitureIndex; }
             }
             var target = Targets.Target;
-            if(plantingWindow.IsOpen&&atOutdoorEstate&&gardenBedSync is {Complete:false} setup&&target is not null&&
+            if(BedSyncWindowOpen&&atOutdoorEstate&&gardenBedSync is {Complete:false} setup&&target is not null&&
                 setup.Matches(actor.ContentId,address,setup.Patch))
                 setup.CheckDistance(target.Position.X,target.Position.Y,target.Position.Z);
             uint? eventArgument = null; ushort? timelineState = null;
@@ -672,14 +672,14 @@ public sealed partial class Plugin : IDalamudPlugin
         nextSync = SyncSchedule.Wake(DateTimeOffset.UtcNow, nextSync, lastSyncAttempt, syncFailures);
     }
 
-    private void KeepDiscovery(SyncEvent e, bool force = false)
+    private void KeepDiscovery(SyncEvent e, bool force = false, bool save = true)
     {
         if (!SyncValidation.CanSend(e, DateTimeOffset.UtcNow)) return;
         var last = config.Discoveries.LastOrDefault(x => x.Kind == e.Kind && x.Actor.ContentId == e.Actor.ContentId && x.Address?.HouseId == e.Address?.HouseId && x.Patch == e.Patch && x.Bed == e.Bed && x.Collection?.Category == e.Collection?.Category && x.Collection?.Segment == e.Collection?.Segment && x.Storage?.Key == e.Storage?.Key && x.GardenTarget?.Argument == e.GardenTarget?.Argument && x.Company?.Id == e.Company?.Id && x.Company?.Profile?.Source == e.Company?.Profile?.Source);
-        if (!force && last is not null && !GardenTargetMap.CanRepeatObservation(e.Kind, e.At - last.At) && !(e.GardenTarget is not null && e.At-last.At > TimeSpan.FromDays(30)) && !(e.Kind is "garden.ready" or "garden.observed" or "garden.status" or "garden.empty" or "garden.dead" && config.Planting.Any(p => p.Actor.ContentId == e.Actor.ContentId && p.Address.HouseId == e.Address?.HouseId && p.Patch == e.Patch && p.Bed == e.Bed && p.ConfirmedAt > last.At)) && JsonSerializer.Serialize(new { last.Actor, last.Address, last.House, last.Character, last.Crop, last.Collection, last.Fashion, last.Voyage, last.GardenTarget, last.Storage, last.Company, last.CachedVoyage, last.Supplies, last.Lottery, last.LotteryResult }) == JsonSerializer.Serialize(new { e.Actor, e.Address, e.House, e.Character, e.Crop, e.Collection, e.Fashion, e.Voyage, e.GardenTarget, e.Storage, e.Company, e.CachedVoyage, e.Supplies, e.Lottery, e.LotteryResult })) return;
+        if (!force && last is not null && !GardenTargetMap.CanRepeatObservation(e.Kind, e.At - last.At) && !(e.GardenTarget is not null && e.At-last.At > TimeSpan.FromDays(30)) && !(e.Kind is "garden.ready" or "garden.observed" or "garden.status" or "garden.empty" or "garden.dead" && config.Planting.Any(p => p.Actor.ContentId == e.Actor.ContentId && p.Address.HouseId == e.Address?.HouseId && p.Patch == e.Patch && p.Bed == e.Bed && p.ConfirmedAt > last.At)) && JsonSerializer.Serialize(new { last.Actor, last.Address, last.House, last.Character, last.Crop, last.Collection, last.Fashion, last.Voyage, last.GardenTarget, last.Storage, last.Company, last.CachedVoyage, last.Supplies, last.Lottery, last.LotteryResult, last.SharedEstates }) == JsonSerializer.Serialize(new { e.Actor, e.Address, e.House, e.Character, e.Crop, e.Collection, e.Fashion, e.Voyage, e.GardenTarget, e.Storage, e.Company, e.CachedVoyage, e.Supplies, e.Lottery, e.LotteryResult, e.SharedEstates })) return;
         config.Discoveries.Add(e);
         WakeObservationSync();
-        if(collectingStorage)storageChanged=true;else SaveConfiguration();
+        if(collectingStorage)storageChanged=true;else if(save)SaveConfiguration();
     }
 
     private unsafe void ObserveDetails(DateTimeOffset now)
@@ -732,6 +732,7 @@ public sealed partial class Plugin : IDalamudPlugin
         if (SyncValidation.CompanyReady(fc)) KeepDiscovery(new(Guid.NewGuid().ToString("N"), "company.observed", now, actor, null, Company: fc));
         var manager = HousingManager.Instance();
         if (manager == null) return;
+        ObserveSharedEstates(actor,now);
         var loaded = manager->CurrentTerritory != null && manager->CurrentTerritory->IsLoaded();
         foreach (var estate in new[] { EstateType.FreeCompanyEstate, EstateType.PersonalEstate })
         {

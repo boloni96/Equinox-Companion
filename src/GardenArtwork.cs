@@ -133,7 +133,7 @@ public sealed partial class Plugin
         if(!drawingGardenGuide)return ResolveLocalGardenActions();
         return gardenGuideActions??=ResolveLocalGardenActions().ToArray();
     }
-    private readonly UiProjectionCache<SyncEvent[]> gardenLocalActionsCache=new();
+    private readonly UiProjectionCache<SyncEvent[]> gardenLocalActionsCache=new(maxAgeMs:0);
     private IEnumerable<SyncEvent> ResolveLocalGardenActions()=>gardenLocalActionsCache.Get(config.SharedRoster,
         $"{config.Planting.Count}:{config.Planting.LastOrDefault()?.EventId}:{config.Tending.Count}:{config.Tending.LastOrDefault()?.EventId}:{config.Discoveries.Count}:{config.Discoveries.LastOrDefault()?.Id}:{gardenBedSync?.Mappings.Count()}:{gardenBedSync?.Mappings.LastOrDefault()?.Id}",
         Environment.TickCount64,()=>BuildLocalGardenActions().ToArray());

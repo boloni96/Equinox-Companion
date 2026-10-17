@@ -22,16 +22,46 @@ public sealed partial class Plugin
     private string? previousPlantingHouse;
     private (string House,int Batch,int Bed)? selectedGardenBed;
     private GardenBedSyncSession? gardenBedSync;
+    private string? gardenBedSyncHouse;
+    private bool BedSyncWindowOpen => plantingWindow.IsOpen || adventureWindow.IsOpen;
+    private bool BedSyncMatches(SharedGardenPlan plan) => gardenBedSyncHouse==plan.HouseId && gardenBedSync?.Matches(Player.ContentId.ToString(System.Globalization.CultureInfo.InvariantCulture),currentAddress,plan.PhysicalPatch>0?plan.PhysicalPatch:plan.Batch)==true;
+    private bool NeedsBedSync(SharedGardenPlan plan) => atOutdoorEstate && SharedGardenLocation.Match(currentAddress,[plan])==plan.HouseId && GardenBedSyncSession.IsVisitor(config.SharedRoster,Player.CharacterName,WorldName(Player.HomeWorld.RowId)??"",plan.HouseId) && (BedSyncMatches(plan)&&gardenBedSync is {Complete:false} || canceledBedSync==(plan.HouseId,plan.PhysicalPatch>0?plan.PhysicalPatch:plan.Batch) || config.GardenResyncBatches.Contains(GardenResyncKey(plan.HouseId,plan.PhysicalPatch>0?plan.PhysicalPatch:plan.Batch)) || GardenBedSyncSession.NeedsSync(plan.Beds));
     private bool atOutdoorEstate;
     private bool suppressSyncRelease;
     private (string House,int Patch)? canceledBedSync;
     private void ObserveBedSync(GardenSnapshot target, DateTimeOffset at, (int Patch,int Bed)? numbered = null)
     {
-        if (!plantingWindow.IsOpen || !atOutdoorEstate || gardenBedSync?.Observe(target,at,numbered)!=true || !gardenBedSync.Complete) return;
-        config.GardenResyncBatches.Remove(GardenResyncKey(plantingHouseId??"",gardenBedSync.Patch));
+        if (!BedSyncWindowOpen || !atOutdoorEstate || gardenBedSync?.Observe(target,at,numbered)!=true || !gardenBedSync.Complete) return;
+        config.GardenResyncBatches.Remove(GardenResyncKey(gardenBedSyncHouse??"",gardenBedSync.Patch));
         foreach (var e in gardenBedSync.Mappings)
-            KeepDiscovery(e with {Actor=WithWorldNames(e.Actor),Address=WithAddressNames(e.Address!)},force:true);
+            KeepDiscovery(e with {Actor=WithWorldNames(e.Actor),Address=WithAddressNames(e.Address!)},force:true,save:false);
+        SaveConfiguration();
         nextRosterRead=default;if(syncFailures==0)nextSync=default;
+    }
+    private void DrawBedSyncButton(SharedGardenPlan plan,float syncSize)
+    {
+        var physicalPatch=plan.PhysicalPatch>0?plan.PhysicalPatch:plan.Batch;
+        var syncAt=ImGui.GetCursorScreenPos();
+        var syncPressed=ImGui.Button("##Sync garden beds",new Vector2(syncSize));
+        var syncAction=GardenBedSyncSession.ButtonAction(syncPressed,ImGui.IsItemHovered()&&ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left),ImGui.IsMouseDown(ImGuiMouseButton.Left),ref suppressSyncRelease);
+        if(syncAction=="cancel"){gardenBedSync=null;canceledBedSync=(plan.HouseId,physicalPatch);}
+        else if(syncAction=="start"&&snapshot is {} start&&currentAddress is {} syncAddress){gardenBedSync=new(start.Actor,syncAddress,physicalPatch,DateTimeOffset.UtcNow);gardenBedSyncHouse=plan.HouseId;canceledBedSync=null;}
+        if(BedSyncMatches(plan)&&gardenBedSync is {Complete:false} syncing)
+        {
+            var number=syncing.NextBed.ToString();var numberSize=ImGui.CalcTextSize(number);
+            ImGui.GetWindowDrawList().AddText(syncAt+new Vector2((syncSize-numberSize.X)/2,2),0xffffffff,number);
+            var iconSize=Math.Max(16,syncSize-numberSize.Y-5);
+            GardenImage("assets/icons/sync.png",syncAt+new Vector2((syncSize-iconSize)/2,numberSize.Y+3),new Vector2(iconSize));
+        }
+        else GardenImage("assets/icons/sync.png",syncAt+new Vector2(4),new Vector2(syncSize-8));
+        if(ImGui.IsItemHovered()||ImGui.IsItemFocused()&&ImGui.GetIO().NavVisible)
+        {
+            ImGui.BeginTooltip();ImGui.PushTextWrapPos(ImGui.GetFontSize()*25);
+            ImGui.TextUnformatted(BedSyncMatches(plan)&&gardenBedSync is {Complete:false}?"Restart bed sync":"Sync beds");
+            ImGui.TextWrapped($"Batch {plan.Batch}: close the current bed menu, click once, then inspect Beds 1–8 clockwise. Follow the number. Click again to restart; double-click to cancel (no number).");
+            ImGui.TextWrapped("The eight bed identities are saved together and uploaded through your paired connection.");
+            ImGui.PopTextWrapPos();ImGui.EndTooltip();
+        }
     }
     private void OnPlantingCommand(string command,string args)
     {
@@ -136,9 +166,9 @@ public sealed partial class Plugin
         var planned=plan.Beds.Where(b=>b.Crop.Length>0).ToArray();
         var physicalPatch=plan.PhysicalPatch>0?plan.PhysicalPatch:plan.Batch;
         var visitorSetup=atOutdoorEstate&&GardenBedSyncSession.IsVisitor(config.SharedRoster,Player.CharacterName,WorldName(Player.HomeWorld.RowId)??"",plan.HouseId);
-        if(!visitorSetup||gardenBedSync is not null&&!gardenBedSync.Matches(Player.ContentId.ToString(System.Globalization.CultureInfo.InvariantCulture),currentAddress,physicalPatch))gardenBedSync=null;
+        if(gardenBedSync is not null&&!gardenBedSync.Matches(Player.ContentId.ToString(System.Globalization.CultureInfo.InvariantCulture),currentAddress,gardenBedSync.Patch))gardenBedSync=null;
         if(!visitorSetup||canceledBedSync is {} canceled&&(canceled.House!=plan.HouseId||canceled.Patch!=physicalPatch))canceledBedSync=null;
-        var showSync=visitorSetup&&(gardenBedSync is {Complete:false}||canceledBedSync is not null||config.GardenResyncBatches.Contains(GardenResyncKey(plan.HouseId,physicalPatch))||GardenBedSyncSession.NeedsSync(plan.Beds));
+        var showSync=NeedsBedSync(plan);
         var houseAt=new Vector2(tabsAt.X+Math.Max(0,tabsWidth-houseSize-(showSync?syncSize+ImGui.GetStyle().ItemSpacing.X:0)),tabsAt.Y);
         ImGui.SetCursorScreenPos(houseAt);
         var openHouse=ImGui.Button("##Open house gardening",new Vector2(houseSize));
@@ -150,32 +180,13 @@ public sealed partial class Plugin
         {
         var syncAt=new Vector2(tabsAt.X+Math.Max(0,tabsWidth-syncSize),tabsAt.Y);
         ImGui.SetCursorScreenPos(syncAt);
-        var syncPressed=ImGui.Button("##Sync garden beds",new Vector2(syncSize));
-        var syncAction=GardenBedSyncSession.ButtonAction(syncPressed,ImGui.IsItemHovered()&&ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left),ImGui.IsMouseDown(ImGuiMouseButton.Left),ref suppressSyncRelease);
-        if(syncAction=="cancel"){gardenBedSync=null;canceledBedSync=(plan.HouseId,physicalPatch);}
-        else if(syncAction=="start"&&snapshot is {} start&&currentAddress is {} syncAddress){gardenBedSync=new(start.Actor,syncAddress,physicalPatch,DateTimeOffset.UtcNow);canceledBedSync=null;}
-        if(gardenBedSync is {Complete:false} syncing)
-        {
-            var number=syncing.NextBed.ToString();var numberSize=ImGui.CalcTextSize(number);
-            ImGui.GetWindowDrawList().AddText(syncAt+new Vector2((syncSize-numberSize.X)/2,2),0xffffffff,number);
-            var iconSize=Math.Max(16,syncSize-numberSize.Y-5);
-            GardenImage("assets/icons/sync.png",syncAt+new Vector2((syncSize-iconSize)/2,numberSize.Y+3),new Vector2(iconSize));
-        }
-        else GardenImage("assets/icons/sync.png",syncAt+new Vector2(4),new Vector2(syncSize-8));
-        if(ImGui.IsItemHovered()||ImGui.IsItemFocused()&&ImGui.GetIO().NavVisible)
-        {
-            ImGui.BeginTooltip();ImGui.PushTextWrapPos(ImGui.GetFontSize()*25);
-            ImGui.TextUnformatted(gardenBedSync is {Complete:false}?"Restart bed sync":"Sync beds");
-            ImGui.TextWrapped($"Batch {plan.Batch}: close the current bed menu, click once, then inspect Beds 1–8 clockwise. Follow the number. Click again to restart; double-click to cancel (no number).");
-            ImGui.TextWrapped("Keep the website open to save new links. More details below under ‘Waiting for a garden or house to connect?’.");
-            ImGui.PopTextWrapPos();ImGui.EndTooltip();
-        }
+        DrawBedSyncButton(plan,syncSize);
         }
         ImGui.SetCursorScreenPos(tabsAt+new Vector2(0,rowHeight+ImGui.GetStyle().ItemSpacing.Y));
         var footerHeight=ImGui.GetFrameHeightWithSpacing()*3;
         var visible=ImGui.BeginChild("garden-guide-content",new Vector2(0,Math.Max(1,ImGui.GetContentRegionAvail().Y-footerHeight)));
         if(!visible){ImGui.EndChild();return;}
-        if(gardenBedSync is {Complete:false})
+        if(BedSyncMatches(plan)&&gardenBedSync is {Complete:false})
         {
             ImGui.TextWrapped(gardenBedSync.Status);
             if(ImGui.SmallButton("Cancel bed sync")){gardenBedSync=null;canceledBedSync=(plan.HouseId,physicalPatch);}
@@ -202,7 +213,7 @@ public sealed partial class Plugin
         }
         if(ImGui.CollapsingHeader("Waiting for a garden or house to connect?")){ImGui.TextWrapped($"During setup, each observed bed previews immediately. Repeated clicks cannot skip a step. A target more than {GardenBedSyncSession.MaxDistance} game units from the first bed resets to Bed 1; nearby wrong clicks may need a restart. All eight identities are saved together. Double-click Sync or use Cancel to discard unfinished setup and clear its number; single-click starts again at Bed 1. The house/moogle button opens this exact house and batch on the website.");ImGui.TextWrapped("Houses match by world, district, ward and plot. Numbered game batches and beds connect automatically. For a visitor without numbered menus, use Sync beds and inspect Beds 1–8 in the displayed order. Restart if you clicked the wrong bed; a repeated target cannot advance setup. Only observed empty/crop information is synced, and unidentified crops stay unknown. Open the estate placard if the house is missing. Keep the website open for new links and full garden reconciliation.");
             if(visitorSetup&&ImGui.SmallButton("Recalibrate beds 1–8")&&snapshot is {} restart&&currentAddress is {} restartAddress)
-                gardenBedSync=new(restart.Actor,restartAddress,physicalPatch,DateTimeOffset.UtcNow);
+                gardenBedSync=new(restart.Actor,restartAddress,physicalPatch,DateTimeOffset.UtcNow);gardenBedSyncHouse=plan.HouseId;
         }
         ImGui.EndChild();
     }
@@ -237,7 +248,7 @@ public sealed partial class Plugin
             if(n==0)
             {
                 GardenImage("assets/centers/stone-emblem.png",at,new(tile));
-                if(liveGuide&&gardenBedSync is {Complete:false} centerSync)
+                if(liveGuide&&BedSyncMatches(plan)&&gardenBedSync is {Complete:false} centerSync)
                 {
                     var number=centerSync.NextBed.ToString();var numberSize=ImGui.CalcTextSize(number);var iconSize=tile*.28f;
                     var iconAt=at+new Vector2((tile-iconSize)/2,tile*.42f);
@@ -255,7 +266,7 @@ public sealed partial class Plugin
                 centerDraw.AddText(labelAt,0xffffffff,centerLabel);
                 centerDraw.PopClipRect();
                 ImGui.SetCursorScreenPos(at);ImGui.InvisibleButton("garden-center",new Vector2(tile));
-                if(ImGui.IsItemHovered())ImGui.SetTooltip(liveGuide&&gardenBedSync is {Complete:false} centerHelp?$"Bed sync · Touch Bed {centerHelp.NextBed} in game. Use the top-right sync button to restart.":$"Batch {plan.Batch} · {(complete?"Planting complete":showPlan?"Automatic planting guide":"Actual garden")}");
+                if(ImGui.IsItemHovered())ImGui.SetTooltip(liveGuide&&BedSyncMatches(plan)&&gardenBedSync is {Complete:false} centerHelp?$"Bed sync · Touch Bed {centerHelp.NextBed} in game. Use the top-right sync button to restart.":$"Batch {plan.Batch} · {(complete?"Planting complete":showPlan?"Automatic planting guide":"Actual garden")}");
                 continue;
             }
             var wrong= liveGuide&&gardenWrongBed is {} mismatch&&mismatch.House==plan.HouseId&&mismatch.Batch==plan.Batch&&mismatch.WrongBed==n;
@@ -267,7 +278,7 @@ public sealed partial class Plugin
             DrawGardenIdentity(b,showPlan,at,tile);
             var draw=ImGui.GetWindowDrawList();
             if(showPlan&&next?.Bed==n)GardenPlanOutline("next",at,tile);
-            if(liveGuide&&gardenBedSync is {Complete:false} setup&&setup.NextBed==n)GardenImage("assets/borders/selected.png",at,new Vector2(tile));
+            if(liveGuide&&BedSyncMatches(plan)&&gardenBedSync is {Complete:false} setup&&setup.NextBed==n)GardenImage("assets/borders/selected.png",at,new Vector2(tile));
             if(wrong)GardenPlanOutline("different",at,tile);
             var label=EquinoxCompanion.GardenVisualState.DisplayCrop(b,showPlan);
             var captionInset=Math.Max(7,tile*8/128);

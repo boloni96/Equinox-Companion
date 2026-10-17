@@ -28,7 +28,14 @@ public sealed partial class Plugin
     var showPlan=!adventureShowActual&&planned.Length>0&&!complete;
     ImGui.TextWrapped(GardenOverview.Summary([plan],DateTimeOffset.UtcNow));
     if(showPlan&&GardenGuidance.Next(plan) is {} next)ImGui.TextWrapped($"Next: Bed {next.Bed} · {next.Crop} · {GardenPlantRequirement.Soil(next)}");
-    DrawGardenBoard(plan,showPlan,complete,false);
+    if(NeedsBedSync(plan)){
+     DrawBedSyncButton(plan,Math.Max(36,ImGui.GetFrameHeight()));ImGui.SameLine();ImGui.TextUnformatted("Sync beds");
+    }
+    if(BedSyncMatches(plan)&&gardenBedSync is {Complete:false} sync){
+     ImGui.TextWrapped(sync.Status);
+     if(ImGui.SmallButton("Cancel bed sync")){gardenBedSync=null;canceledBedSync=(plan.HouseId,plan.PhysicalPatch>0?plan.PhysicalPatch:plan.Batch);}
+    }
+    DrawGardenBoard(plan,showPlan,complete,BedSyncMatches(plan));
     if(selectedGardenBed is {} selected&&selected.House==plan.HouseId&&selected.Batch==plan.Batch&&plan.Beds.FirstOrDefault(b=>b.Bed==selected.Bed) is {} bed){
      DrawGardenPlanTooltip(bed,false);DrawGardenCareTooltip(bed,showPlan,false);
     }
