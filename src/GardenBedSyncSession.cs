@@ -19,6 +19,14 @@ public sealed class GardenBedSyncSession(Actor actor, Address address, int patch
             string.Equals(c.Name,name,StringComparison.OrdinalIgnoreCase)&&string.Equals(c.World,homeWorld,StringComparison.OrdinalIgnoreCase)).Take(2).ToArray();
         return matches.Length==1 && !matches[0].Houses.Any(h=>h.Id==houseId);
     }
+    // House membership does not grant FC gardening permissions. Fresh unmapped
+    // inspection evidence may therefore require calibration even for a linked member.
+    public static bool CanCalibrate(SharedRoster? roster,string name,string homeWorld,string houseId,bool unmatchedInspection)
+    {
+        var matches=(roster?.People??[]).SelectMany(p=>p.Characters).Where(c=>
+            string.Equals(c.Name,name,StringComparison.OrdinalIgnoreCase)&&string.Equals(c.World,homeWorld,StringComparison.OrdinalIgnoreCase)).Take(2).ToArray();
+        return matches.Length==1 && (unmatchedInspection || !matches[0].Houses.Any(h=>h.Id==houseId));
+    }
     private readonly List<SyncEvent> mappings = [];
     private GardenTargetDetails? anchor;
     public const float MaxDistance = 8;

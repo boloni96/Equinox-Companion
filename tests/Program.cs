@@ -1757,3 +1757,13 @@ await Market128Tests.Run();
 Market129Tests.Run();
 
 Maintenance133Tests.Run();
+
+var fcCalibrationRoster=visitorRoster with {People=[new("p","P",[houseTenant with {Houses=[pairedHome]}])]};
+Check("FC member with unmatched inspection can calibrate",GardenBedSyncSession.CanCalibrate(fcCalibrationRoster,houseTenant.Name,houseTenant.World,pairedHome.Id,true).ToString(),"True");
+Check("linked member without unmatched inspection remains automatic",GardenBedSyncSession.CanCalibrate(fcCalibrationRoster,houseTenant.Name,houseTenant.World,pairedHome.Id,false).ToString(),"False");
+Check("unmatched evidence does not register unknown character",GardenBedSyncSession.CanCalibrate(fcCalibrationRoster,"Unknown",houseTenant.World,pairedHome.Id,true).ToString(),"False");
+cm.Clear();cm.Add(new CropChat(time,unmappedTarget,"Old World Fig"));cm.Add(new CropChat(time.AddMilliseconds(100),unmappedTarget,CropChatMatcher.ReadyText));cm.Add(new CropChat(time.AddMilliseconds(150),unmappedTarget,"You are not authorized to harvest crops."));
+var deniedInspection=cm.Drain(time.AddMilliseconds(2200),n=>n=="Old World Fig",true).Single();
+Check("denied harvest keeps observed mature crop",deniedInspection.Crop.Ready.ToString(),"True");
+Check("denied harvest never guesses bed",deniedInspection.Bed.ToString(),"0");
+Check("denied harvest retains crop identity",deniedInspection.Crop.CropName,"Old World Fig");

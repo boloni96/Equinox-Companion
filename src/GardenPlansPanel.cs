@@ -25,13 +25,24 @@ public sealed partial class Plugin
     private string? gardenBedSyncHouse;
     private bool BedSyncWindowOpen => plantingWindow.IsOpen || adventureWindow.IsOpen;
     private bool BedSyncMatches(SharedGardenPlan plan) => gardenBedSyncHouse==plan.HouseId && gardenBedSync?.Matches(Player.ContentId.ToString(System.Globalization.CultureInfo.InvariantCulture),currentAddress,plan.PhysicalPatch>0?plan.PhysicalPatch:plan.Batch)==true;
-    private bool NeedsBedSync(SharedGardenPlan plan) => atOutdoorEstate && SharedGardenLocation.Match(currentAddress,[plan])==plan.HouseId && GardenBedSyncSession.IsVisitor(config.SharedRoster,Player.CharacterName,WorldName(Player.HomeWorld.RowId)??"",plan.HouseId) && (BedSyncMatches(plan)&&gardenBedSync is {Complete:false} || canceledBedSync==(plan.HouseId,plan.PhysicalPatch>0?plan.PhysicalPatch:plan.Batch) || config.GardenResyncBatches.Contains(GardenResyncKey(plan.HouseId,plan.PhysicalPatch>0?plan.PhysicalPatch:plan.Batch)) || GardenBedSyncSession.NeedsSync(plan.Beds));
+    private bool NeedsBedSync(SharedGardenPlan plan) => atOutdoorEstate && SharedGardenLocation.Match(currentAddress,[plan])==plan.HouseId && GardenBedSyncSession.CanCalibrate(config.SharedRoster,Player.CharacterName,WorldName(Player.HomeWorld.RowId)??"",plan.HouseId,unmatchedGardenHouses.Contains(plan.HouseId)) && (BedSyncMatches(plan)&&gardenBedSync is {Complete:false} || canceledBedSync==(plan.HouseId,plan.PhysicalPatch>0?plan.PhysicalPatch:plan.Batch) || config.GardenResyncBatches.Contains(GardenResyncKey(plan.HouseId,plan.PhysicalPatch>0?plan.PhysicalPatch:plan.Batch)) || unmatchedGardenHouses.Contains(plan.HouseId) || GardenBedSyncSession.NeedsSync(plan.Beds));
+    private readonly HashSet<string> unmatchedGardenHouses=[];
+    // Called only on a new game observation, never from the drawing loop.
+    private void CheckGardenCalibration(GardenSnapshot target,DateTimeOffset at)
+    {
+        if(target.Address is not {} address || GardenTargetOf(target) is not {} identity)return;
+        var observation=new SyncEvent("calibration-check","garden.unmapped",at,target.Actor,WithAddressNames(address),GardenTarget:identity);
+        if(GardenTargetMap.Resolve(observation,GardenMappings()).Patch is >0)return;
+        var house=SharedGardenLocation.Match(address,GardenPlanSources());
+        if(house is not null)unmatchedGardenHouses.Add(house);
+    }
     private bool atOutdoorEstate;
     private bool suppressSyncRelease;
     private (string House,int Patch)? canceledBedSync;
     private void ObserveBedSync(GardenSnapshot target, DateTimeOffset at, (int Patch,int Bed)? numbered = null)
     {
         if (!BedSyncWindowOpen || !atOutdoorEstate || gardenBedSync?.Observe(target,at,numbered)!=true || !gardenBedSync.Complete) return;
+        unmatchedGardenHouses.Remove(gardenBedSyncHouse??"");
         config.GardenResyncBatches.Remove(GardenResyncKey(gardenBedSyncHouse??"",gardenBedSync.Patch));
         foreach (var e in gardenBedSync.Mappings)
             KeepDiscovery(e with {Actor=WithWorldNames(e.Actor),Address=WithAddressNames(e.Address!)},force:true,save:false);
@@ -165,7 +176,7 @@ public sealed partial class Plugin
         plan=WithQueuedGardenBeds(plan);
         var planned=plan.Beds.Where(b=>b.Crop.Length>0).ToArray();
         var physicalPatch=plan.PhysicalPatch>0?plan.PhysicalPatch:plan.Batch;
-        var visitorSetup=atOutdoorEstate&&GardenBedSyncSession.IsVisitor(config.SharedRoster,Player.CharacterName,WorldName(Player.HomeWorld.RowId)??"",plan.HouseId);
+        var visitorSetup=atOutdoorEstate&&GardenBedSyncSession.CanCalibrate(config.SharedRoster,Player.CharacterName,WorldName(Player.HomeWorld.RowId)??"",plan.HouseId,unmatchedGardenHouses.Contains(plan.HouseId));
         if(gardenBedSync is not null&&!gardenBedSync.Matches(Player.ContentId.ToString(System.Globalization.CultureInfo.InvariantCulture),currentAddress,gardenBedSync.Patch))gardenBedSync=null;
         if(!visitorSetup||canceledBedSync is {} canceled&&(canceled.House!=plan.HouseId||canceled.Patch!=physicalPatch))canceledBedSync=null;
         var showSync=NeedsBedSync(plan);
@@ -211,7 +222,7 @@ public sealed partial class Plugin
             var y=config.SharedRoster?.GardenYields?.FirstOrDefault(y=>y.HouseId==plan.HouseId&&y.Batch==plan.Batch);if(y is not null){ImGui.TextWrapped("Recorded: "+y.Actual);ImGui.TextWrapped("Planned: "+y.Planned);ImGui.TextWrapped(y.Seeds);}
             var supplies=planned.SelectMany(b=>b.ReplantOrder>0?new[]{b.Crop+" seed",b.Crop+" seed",b.StarterSoil,b.Soil}:new[]{b.Crop+" seed",b.Soil}).GroupBy(x=>x);ImGui.TextUnformatted("Full plan supplies:");foreach(var supply in supplies)DrawGardenItem(supply.Key,true,$"{supply.Count()} × ");
         }
-        if(ImGui.CollapsingHeader("Waiting for a garden or house to connect?")){ImGui.TextWrapped($"During setup, each observed bed previews immediately. Repeated clicks cannot skip a step. A target more than {GardenBedSyncSession.MaxDistance} game units from the first bed resets to Bed 1; nearby wrong clicks may need a restart. All eight identities are saved together. Double-click Sync or use Cancel to discard unfinished setup and clear its number; single-click starts again at Bed 1. The house/moogle button opens this exact house and batch on the website.");ImGui.TextWrapped("Houses match by world, district, ward and plot. Numbered game batches and beds connect automatically. For a visitor without numbered menus, use Sync beds and inspect Beds 1–8 in the displayed order. Restart if you clicked the wrong bed; a repeated target cannot advance setup. Only observed empty/crop information is synced, and unidentified crops stay unknown. Open the estate placard if the house is missing. Keep the website open for new links and full garden reconciliation.");
+        if(ImGui.CollapsingHeader("Waiting for a garden or house to connect?")){ImGui.TextWrapped($"During setup, each observed bed previews immediately. Repeated clicks cannot skip a step. A target more than {GardenBedSyncSession.MaxDistance} game units from the first bed resets to Bed 1; nearby wrong clicks may need a restart. All eight identities are saved together. Double-click Sync or use Cancel to discard unfinished setup and clear its number; single-click starts again at Bed 1. The house/moogle button opens this exact house and batch on the website.");ImGui.TextWrapped("Houses match by world, district, ward and plot. Numbered game batches and beds connect automatically. Without numbered menus (including FC members without gardening permissions), use Sync beds and inspect Beds 1–8 in the displayed order. Restart if you clicked the wrong bed; a repeated target cannot advance setup. Only observed empty/crop information is synced, and unidentified crops stay unknown. Open the estate placard if the house is missing. Your paired connection uploads these observations even with the Journal closed.");
             if(visitorSetup&&ImGui.SmallButton("Recalibrate beds 1–8")&&snapshot is {} restart&&currentAddress is {} restartAddress)
                 {gardenBedSync=new(restart.Actor,restartAddress,physicalPatch,DateTimeOffset.UtcNow);gardenBedSyncHouse=plan.HouseId;}
         }

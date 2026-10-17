@@ -883,6 +883,7 @@ public sealed partial class Plugin : IDalamudPlugin
         {
             if(GardenTargetMap.IsEmptyChat(chat))
             {
+                CheckGardenCalibration(chat.Target,chat.At);
                 ObserveBedSync(chat.Target,chat.At);
                 KeepDiscovery(new(Guid.NewGuid().ToString("N"),"garden.empty.unmapped",chat.At,WithWorldNames(chat.Target.Actor),WithAddressNames(chat.Target.Address!),GardenTarget:GardenTargetOf(chat.Target)));
                 cropChatStatus="Empty bed observed · matching its recorded patch and bed identity.";
@@ -891,6 +892,7 @@ public sealed partial class Plugin : IDalamudPlugin
         }
         foreach (var observed in cropMatcher.Drain(DateTimeOffset.UtcNow, IsKnownCropItem, true))
         {
+            if(observed.Patch==0)CheckGardenCalibration(observed.Target,observed.At);
             ObserveBedSync(observed.Target,observed.At,observed.Patch>0?(observed.Patch,observed.Bed):null);
             KeepDiscovery(new(Guid.NewGuid().ToString("N"), observed.Crop.Status is not null?(observed.Patch==0?"garden.status.unmapped":"garden.status"):observed.Patch == 0 ? "garden.unmapped" : "garden.observed", observed.At,
                 WithWorldNames(observed.Target.Actor), WithAddressNames(observed.Target.Address!), observed.Patch, observed.Bed, Crop: observed.Crop, GardenTarget: GardenTargetOf(observed.Target)));
