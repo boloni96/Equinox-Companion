@@ -123,7 +123,7 @@ public sealed partial class Plugin
      if(ImGui.Checkbox("##done",ref check))AdventureAction(board,task:task,value:check);ImGui.EndDisabled();
      var hover=ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled);ImGui.SameLine();
      ImGui.TextWrapped(label);
-     var bedLink=task.Rule is {Batch:>=1,Bed:>=1 and <=8} rule&&rule.HouseId==stop.HouseId&&stop.HouseId.Length>0;
+     var bedLink=task.Rule is {Batch:>=1,Bed:>=1 and <=8} rule&&rule.HouseId.Length>0&&(rule.HouseId==stop.HouseId||AdventurePolicy.IsGardenTask(task));
      if(ImGui.IsItemClicked()){if(bedLink&&task.Rule is {} clicked)adventureOpenBed=(clicked.HouseId,clicked.Batch,clicked.Bed);else ImGui.SetClipboardText(label);}
      if(hover||ImGui.IsItemHovered()){ImGui.BeginTooltip();ImGui.PushTextWrapPos(ImGui.GetFontSize()*32);ImGui.TextUnformatted((bedLink?"Click to open this bed’s batch.\n":"Click to copy this label.\n")+(task.Status.Length>0?DisplayTime.InText(task.Status):task.Done?"Completion recorded in the Journal":"Waiting for completion")+(task.ServerConfirmed?"\nConfirmed automatically from game records. This check cannot be removed manually.":!task.CanCheck?"\nThis task updates automatically.":"\nManual completion can be changed here."));ImGui.PopTextWrapPos();ImGui.EndTooltip();}
      if(!check&&(house is not null||AdventurePolicy.IsFashion(task))){
@@ -209,6 +209,7 @@ public sealed partial class Plugin
      ImGui.PushID("tasks-"+section.Character.Id);ImGui.Separator();var characterStepsOpen=false;
      DrawAdventureCharacter(section.Character,stop,()=>{if(section.Tasks.Length>0)characterStepsOpen=DrawAdventureStepsHeader(section.Tasks);});
      if(characterStepsOpen)DrawAdventureTaskList(board,stop,section.Tasks);
+     DrawAdventureMultiGardens(section.Tasks);
      ImGui.PopID();
     }
     if(adventureSharedTasks.Length>0){ImGui.Separator();ImGui.TextUnformatted("Shared tasks");DrawAdventureTaskSection(board,stop,adventureSharedTasks,true);}

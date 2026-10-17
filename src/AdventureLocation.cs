@@ -15,7 +15,7 @@ public sealed partial class Plugin
   if(ImGui.Checkbox("Follow my character / world / house",ref adventureFollow))adventureFollowSession.Reset();
   if(ready&&target is not null){
   ImGui.BeginDisabled(AdventureSaving||!adventureFresh);
-  if(ImGui.SmallButton("Open current house")&&target is {} index&&index!=board.Index){adventurePrompt=null;AdventureAction(board,index);}
+  if(ImGui.SmallButton("Open current house")&&target is {} index){adventureFocusHouse=house;if(index!=board.Index){adventurePrompt=null;AdventureAction(board,index);}}
   ImGui.EndDisabled();
   if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))ImGui.SetTooltip(target is null?"Your current house must be identified and included in this adventure.":"Open this house’s stop in the active adventure. This shares navigation with the Journal and does not mark tasks complete.");
   }
@@ -25,6 +25,7 @@ public sealed partial class Plugin
   if(!adventureFresh||AdventureSaving||adventureRequest is not null)return;
   var observation=adventureFollowSession.Observe(true,$"{board.Id}:{board.Generation}:{config.PairingKey}:{Player.ContentId}:{Player.CurrentWorld.RowId}",house,DateTimeOffset.UtcNow);
   if(!observation.Changed)return;
+  if(target is not null&&house.Length>0)adventureFocusHouse=house;
   int? next=target;
   if(next is null&&observation.ContextChanged){
    var actorId=Player.ContentId.ToString(System.Globalization.CultureInfo.InvariantCulture);

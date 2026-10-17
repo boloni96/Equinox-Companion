@@ -12,6 +12,23 @@ public sealed partial class Plugin
   GardenImage("assets/category-icons/"+icon+".png",at,new Vector2(size));
   ImGui.Dummy(new Vector2(size));ImGui.SameLine();ImGui.TextWrapped(title);
  }
+ private string adventureFocusHouse="";
+ private void DrawAdventureMultiGardens(AdventureTask[] tasks)
+ {
+  foreach(var id in tasks.Where(t=>AdventurePolicy.IsGardenTask(t)).Select(t=>t.Rule!.HouseId).Where(id=>id.Length>0).Distinct()){
+   if(!adventureLayoutHouses.TryGetValue(id,out var house))continue;
+   ImGui.PushID("multi-garden-"+id);
+   var requested=adventureFocusHouse==id||adventureOpenBed is {} target&&target.House==id;
+   if(requested)ImGui.SetNextItemOpen(true,ImGuiCond.Always);else ImGui.SetNextItemOpen(false,ImGuiCond.Once);
+   if(ImGui.CollapsingHeader($"Gardening · {house.Name} · {house.District} W{house.Ward} P{house.Plot}")){
+    if(adventureFocusHouse==id){adventureFocusHouse="";ImGui.SetScrollHereY(.1f);}
+    if(ImGui.SmallButton("Go"))VisitSharedHouse(house);
+    if(ImGui.IsItemHovered())ImGui.SetTooltip("Travel to this house using the available estate, friend or ward route.");
+    DrawAdventureGardens(id);
+   }
+   ImGui.PopID();
+  }
+ }
  private void DrawAdventureGardens(string houseId)
  {
   var sources=GardenPlanSources().Where(p=>p.HouseId==houseId).OrderBy(p=>p.Batch).ToArray();

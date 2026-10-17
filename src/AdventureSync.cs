@@ -41,6 +41,7 @@ public static class AdventurePolicy
   var start=task.Id.IndexOf('{');var end=task.Id.LastIndexOf('}');if(start<0||end<start)return "";
   try{using var json=JsonDocument.Parse(task.Id.Substring(start,end-start+1));return json.RootElement.TryGetProperty(field,out var value)&&value.ValueKind==JsonValueKind.String?value.GetString()??"":"";}catch(JsonException){return "";}
  }
+ public static bool IsGardenTask(AdventureTask task)=>task.Rule?.Kind is "care" or "harvest" or "plant" or "inspect" or "inspecthouse" or "empty" or "garden";
  public static bool IsFashion(AdventureTask task)=>task.Rule?.Kind=="fashion"||(task.Rule is null&&LegacyTaskField(task,"multiFashion").Length>0);
  public static bool IsHouseVisit(AdventureTask task)=>task.Rule?.Kind=="visit"||(task.Rule is null&&LegacyTaskField(task,"multiHouse").Length>0);
  public static string TaskHouseId(AdventureTask task)=>!string.IsNullOrEmpty(task.Rule?.HouseId)?task.Rule.HouseId:LegacyTaskField(task,"multiHouse");
