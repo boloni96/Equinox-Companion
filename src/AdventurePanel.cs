@@ -41,7 +41,7 @@ public sealed partial class Plugin
   if(adventureRequest?.IsCompleted==true){
    var reply=adventureRequest.IsCompletedSuccessfully?adventureRequest.Result:new AdventureReply(null,"Adventure request failed.");
    if(adventureRequest.IsFaulted)_=adventureRequest.Exception;
-   if(adventureRequestKey==config.PairingKey){adventureMessage=reply.Status;adventureFresh=reply.Boards is not null;if(reply.Boards is null)adventureFollowSession.Reset();if(reply.Boards is {} boards){adventureBoards=AdventurePolicy.Reconcile(adventureBoards,boards,adventureMutation);adventureFetched=now;CacheAdventures();}
+   if(adventureRequestKey==config.PairingKey){adventureMessage=reply.Status;adventureFresh=reply.Boards is not null;if(reply.Boards is null){adventureFollowSession.Reset();adventurePresenceSession.Reset();}if(reply.Boards is {} boards){adventureBoards=AdventurePolicy.Reconcile(adventureBoards,boards,adventureMutation);adventureFetched=now;CacheAdventures();}
     adventureNext=now.AddSeconds(reply.Boards is null?5:3);
    }adventureRequest=null;adventureMutation=false;
   }
@@ -51,6 +51,7 @@ public sealed partial class Plugin
    var task=latest?.Stops.SelectMany(s=>s.Tasks).FirstOrDefault(t=>t.Id==queued.Task);
    if(adventureFresh&&latest is not null&&(queued.Index is {} index&&index>=0&&index<=latest.Stops.Length||task is not null&&AdventurePolicy.CanEdit(task)))AdventureAction(latest,queued.Index,task,queued.Value);
   }
+  UpdateAdventurePresence(now);
   if(adventureRequest is null&&config.SyncEnabled&&config.PairingKey.Length==64&&now>=adventureNext){adventureRequestKey=config.PairingKey;adventureRequest=adventureSync.Read(config.PairingKey);adventureNext=now.AddSeconds(3);}
  }
 
@@ -163,7 +164,6 @@ public sealed partial class Plugin
  private void DrawAdventureProgress(AdventureTask[] tasks)=>ImGui.ProgressBar(tasks.Length==0?0:(float)tasks.Count(t=>t.Done)/tasks.Length,new Vector2(-1,0),$"{tasks.Count(t=>t.Done)} / {tasks.Length} confirmed");
  private void DrawAdventure()
  {
-  UpdateAdventure();
   if(!config.SyncEnabled||config.PairingKey.Length!=64){ImGui.TextWrapped("Pair Companion with your Journal in Settings to open the same saved adventures here.");if(ImGui.Button("Open Companion settings"))visible=true;return;}
   ImGui.TextColored(new Vector4(.65f,.8f,1,1),"YOUR PEOPLE · YOUR WORLDS");
   if(ImGui.Button("Adventure home")){adventureSelected="";adventurePrompt=null;}
@@ -175,7 +175,7 @@ public sealed partial class Plugin
   var board=adventureBoards.FirstOrDefault(b=>b.Id==adventureSelected);
   if(board is null){
    ImGui.BeginChild("AdventureChoices",new Vector2(0,0),false);
-   ImGui.TextWrapped("Current adventures from your Journal. Build or resume an individual route there to share it here. Both windows share the current stop. Saved adventures update from Companion while the browser is closed. A connection to the paired service is required to save progress.");
+   ImGui.TextWrapped("Current adventures from your Journal. Build or resume a Character & Multi Adventure there to share it here. Both windows share the current stop. Saved adventures update from Companion while the browser is closed. A connection to the paired service is required to save progress.");
    if(!adventureBoards.Any(AdventureInScope))ImGui.TextWrapped("No shared adventures yet. Open Adventure in the updated Journal and start or resume a route.");
    foreach(var b in adventureBoards.Where(AdventureInScope).OrderBy(b=>b.Kind).ThenBy(b=>b.Title)){
     ImGui.PushID(b.Id);ImGui.Spacing();ImGui.Separator();DrawAdventureHeading(b.Kind=="garden"?"gardening":"adventure",b.Title);

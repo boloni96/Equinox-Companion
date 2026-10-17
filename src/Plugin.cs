@@ -319,6 +319,7 @@ public sealed partial class Plugin : IDalamudPlugin
         TrackPerformance("sync queue", perf);
         perf = System.Diagnostics.Stopwatch.GetTimestamp();
         UpdateSharedRoster(now);
+        UpdateAdventure();
         UpdateShoppingTravel(now);
         UpdateBringCharacter(now);
         UpdateBidWorld(now);

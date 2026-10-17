@@ -23,6 +23,26 @@ public sealed partial class Plugin
    return (house?.Type=="Free Company house"?"FC house":house?.Type=="Private house"?"Private house":"House")+" · "+district;
   });
  }
+ private readonly AdventureLocationSession adventurePresenceSession=new();
+ private DateTimeOffset adventurePresenceTick;
+ private void UpdateAdventurePresence(DateTimeOffset now)
+ {
+  if(now<adventurePresenceTick)return;adventurePresenceTick=now.AddMilliseconds(500);
+  if(!config.SyncEnabled||config.PairingKey.Length!=64||!Player.IsLoaded||Player.ContentId==0||Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]){adventurePresenceSession.Reset();return;}
+  if(!adventureFresh||adventureRequest is not null||AdventureSaving)return;
+  var character=CurrentSharedCharacter();if(character is null)return;
+  var world=WorldName(Player.CurrentWorld.RowId)??"";if(world.Length==0)return;
+  var area=CurrentAdventureArea();var territory=(uint)Client.TerritoryType;
+  var house=adventureLocationHouse.Get(config.SharedRoster,$"{Player.CurrentWorld.RowId}:{currentAddress}",Environment.TickCount64,
+   ()=>AdventurePolicy.CurrentHouse(currentAddress,Player.CurrentWorld.RowId,(config.SharedRoster?.People??[]).SelectMany(p=>p.Characters).SelectMany(c=>c.Houses)));
+  var board=adventureBoards.FirstOrDefault(b=>b.PresenceReporting&&b.Kind=="multi"&&b.Stops.Any(s=>s.CharacterIds?.Contains(character.Id)==true)&&
+   (b.Locations?.GetValueOrDefault(character.Id) is not {} location||location.World!=world||location.Area!=area||location.Territory!=territory||location.HouseId!=house));
+  if(board is null){adventurePresenceSession.Reset();return;}
+  var observation=adventurePresenceSession.Observe(true,$"{config.PairingKey}:{board.Id}:{board.Generation}:{Player.ContentId}:{world}:{territory}:{area}",house,now);
+  if(!observation.Changed)return;
+  adventureMutation=true;adventureRequestKey=config.PairingKey;
+  adventureRequest=adventureSync.Location(config.PairingKey,board,character.Id,world,area,territory,house);
+ }
  private void DrawAdventureLocation(AdventureBoard board)
  {
   var ready=Player.IsLoaded&&Player.ContentId!=0&&!Conditions[ConditionFlag.BetweenAreas]&&!Conditions[ConditionFlag.BetweenAreas51];
