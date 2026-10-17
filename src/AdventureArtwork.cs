@@ -33,14 +33,18 @@ public sealed partial class Plugin
     var showPlan=!adventureShowActual&&planned.Length>0&&!complete;
     ImGui.TextWrapped(GardenOverview.Summary([plan],DateTimeOffset.UtcNow));
     if(showPlan&&GardenGuidance.Next(plan) is {} next)ImGui.TextWrapped($"Next: Bed {next.Bed} · {next.Crop} · {GardenPlantRequirement.Soil(next)}");
-    if(NeedsBedSync(plan)){
-     DrawBedSyncButton(plan,Math.Max(36,ImGui.GetFrameHeight()));ImGui.SameLine();ImGui.TextUnformatted("Sync beds");
-    }
     if(BedSyncMatches(plan)&&gardenBedSync is {Complete:false} sync){
      ImGui.TextWrapped(sync.Status);
      if(ImGui.SmallButton("Cancel bed sync")){gardenBedSync=null;canceledBedSync=(plan.HouseId,plan.PhysicalPatch>0?plan.PhysicalPatch:plan.Batch);}
     }
-    DrawGardenBoard(plan,showPlan,complete,BedSyncMatches(plan));
+    var syncGutter=0f;
+    if(NeedsBedSync(plan)){
+     var origin=ImGui.GetCursorScreenPos();var size=Math.Max(36,ImGui.GetFrameHeight());syncGutter=size+ImGui.GetStyle().ItemSpacing.X;
+     var boardWidth=Math.Max(1,Math.Min(432,ImGui.GetContentRegionAvail().X-syncGutter));
+     ImGui.SetCursorScreenPos(origin+new Vector2(boardWidth+ImGui.GetStyle().ItemSpacing.X,0));
+     DrawBedSyncButton(plan,size);ImGui.SetCursorScreenPos(origin);
+    }
+    DrawGardenBoard(plan,showPlan,complete,BedSyncMatches(plan),syncGutter);
     var canPlan=Player.IsLoaded&&!Conditions[Dalamud.Game.ClientState.Conditions.ConditionFlag.BetweenAreas]&&!Conditions[Dalamud.Game.ClientState.Conditions.ConditionFlag.BetweenAreas51]&&SharedGardenLocation.Match(currentAddress,[plan])==plan.HouseId;
     DrawSavedGardenPlans(plan,canPlan);
     ImGui.BeginDisabled(!canPlan);DrawGardenPlanActions(plan);ImGui.EndDisabled();

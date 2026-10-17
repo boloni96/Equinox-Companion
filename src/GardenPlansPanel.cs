@@ -235,10 +235,10 @@ public sealed partial class Plugin
         $"{config.SentEvents.Count}:{config.SentEvents.LastOrDefault()}:{config.Planting.Count}:{config.Planting.LastOrDefault()?.EventId}:{config.Tending.Count}:{config.Tending.LastOrDefault()?.EventId}:{config.Discoveries.Count}:{config.Discoveries.LastOrDefault()?.Id}:{gardenBedSync?.Mappings.Count()}:{gardenBedSync?.Mappings.LastOrDefault()?.Id}",
         Environment.TickCount64,LocalGardenActions,()=>config.SentEvents);
     // Shared by the live Gardening guide and paired Adventure previews.
-    private void DrawGardenBoard(SharedGardenPlan plan,bool showPlan,bool complete,bool liveGuide=true)
+    private void DrawGardenBoard(SharedGardenPlan plan,bool showPlan,bool complete,bool liveGuide=true,float reserveRight=0)
     {
         var next=GardenGuidance.Next(plan);
-        var board=Math.Min(432,ImGui.GetContentRegionAvail().X);var origin=ImGui.GetCursorScreenPos();var tile=board*128/432;var margin=board*16/432;var stride=board*136/432;
+        var board=Math.Max(1,Math.Min(432,ImGui.GetContentRegionAvail().X-reserveRight));var origin=ImGui.GetCursorScreenPos();var tile=board*128/432;var margin=board*16/432;var stride=board*136/432;
         GardenImage("assets/backgrounds/batch-base.png",origin,new(board));
         if(config.SharedRoster?.GardenCornerTrim==true)GardenImage("assets/backgrounds/batch-corner-trim.png",origin,new(board));
         int[] layout=[1,2,3,8,0,4,7,6,5];
