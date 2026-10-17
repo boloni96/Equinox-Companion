@@ -17,7 +17,8 @@ public sealed partial class Plugin
  private readonly Dictionary<string,UpgradeMatch[]> upgradeMatches=new();
  private UpgradeWatch[] upgradeWatches=[];
  private ulong upgradeActor;
- private bool upgradeOnly,bidLocationFavoritesOnly;
+ private bool bidLocationFavoritesOnly;
+ private int bidSection;
  private UpgradeFavourite[] upgradeFavourites=[];
  private bool IsFavouriteLocation(string district,int ward,int plot)=>upgradeFavourites.Any(f=>f.District==district&&(f.Plot==plot||f.BothDivisions&&(f.Plot-1)%30==(plot-1)%30)&&(f.Wards.Length==0||f.Wards.Contains(ward)));
  private UpgradeMatch[] upgradeShown=[];
@@ -62,9 +63,16 @@ public sealed partial class Plugin
  private void OpenUpgradeJournal(string house="",string district="",int plot=0)=>Dalamud.Utility.Util.OpenLink("https://equinoxjournal.pages.dev/#housing-upgrades="+Uri.EscapeDataString(house)+(district.Length>0?"&district="+Uri.EscapeDataString(district)+"&plot="+plot:""));
  private bool DrawHousingUpgrades()
  {
+  if(ImGui.RadioButton("Find plots",bidSection==0))bidSection=0;ImGui.SameLine();
+  if(ImGui.RadioButton($"Saved plots ({config.BidFavorites.Count})",bidSection==1))bidSection=1;ImGui.SameLine();
+  if(ImGui.RadioButton($"Favourite plots ({upgradeFavourites.Length})",bidSection==2)){bidSection=2;favouriteNext=default;}ImGui.SameLine();
+  if(ImGui.RadioButton("Upgrade matches",bidSection==3))bidSection=3;
+  ImGui.Separator();
   DrawHousingFavouritePlots();
-  ImGui.Checkbox("Upgrade matches",ref upgradeOnly);ImGui.SameLine();if(ImGui.SmallButton("Manage upgrade watches in Journal"))OpenUpgradeJournal();
-  if(!upgradeOnly)return false;
+  if(bidSection==2)return true;
+  if(bidSection==1){DrawBidFavorites(true);if(bidTravelMessage.Length>0)ImGui.TextWrapped(bidTravelMessage);DrawGoSeeHomeStop();return true;}
+  if(bidSection!=3)return false;
+  if(ImGui.SmallButton("Set up upgrade watches in Journal"))OpenUpgradeJournal();
   ImGui.TextWrapped(upgradeStatus);
   ImGui.BeginDisabled(upgradeRequest is not null);if(ImGui.SmallButton("Check watches")){upgradeWorlds.Clear();upgradeNext=default;}ImGui.EndDisabled();
   foreach(var w in upgradeWatches.Where(w=>w.State!="Watching"))ImGui.TextDisabled(w.OwnerName+" · "+w.HouseName+" · "+w.State);

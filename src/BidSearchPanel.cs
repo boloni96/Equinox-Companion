@@ -54,7 +54,7 @@ public sealed partial class Plugin
  private void DrawBidSearch(){
   EnsureBidWorlds();var now=DateTimeOffset.UtcNow;
   if(DrawHousingUpgrades())return;
-  if(!bidSession.Ready){ImGui.TextDisabled("Waiting for character and current world…");DrawBidFavorites();return;}
+  if(!bidSession.Ready){ImGui.TextDisabled("Waiting for character and current world…");return;}
   if(bidTask?.IsCompleted==true){if(bidTask.IsCompletedSuccessfully){bidPlots=bidTask.Result;bidFetched=now;bidMessage=$"{bidPlots.Length} reported open plots · Paissa";bidNext=now.AddSeconds(60);bidDirty=true;}else{_=bidTask.Exception;bidMessage="Paissa unavailable. Previous results kept; try Refresh.";bidNext=now.AddMinutes(2);}bidTask=null;}
   if(bidAuto&&bidWorld!=0&&bidTask is null&&bidFetched!=default&&now>=bidNext)RefreshBidSearch();
   if(now>=bidAgeCheck){bidAgeCheck=now.AddSeconds(30);bidDirty=true;}RebuildBidMarkers(now);
@@ -79,7 +79,7 @@ public sealed partial class Plugin
   ImGui.SameLine();ImGui.TextDisabled(bidMessage+(bidFetched==default?"":$" · checked {bidFetched.ToLocalTime():HH:mm:ss}"));
   if((config.SharedRoster?.ProtocolVersion??0)<20)ImGui.TextDisabled("Deploy Journal V7.11.166 and open it once to receive paired bids. Local bids are still shown.");
   DrawPairedBidRows();
-  DrawBidFavorites();
+
   if(bidTravelMessage.Length>0)ImGui.TextWrapped(bidTravelMessage);
   DrawGoSeeHomeStop();
   if(bidDirty){bidShown=BidSearch.Sort(bidPlots.Where(p=>bidFilters.Matches(p,now)&&(!bidLocationFavoritesOnly||IsFavouriteLocation(p.District,p.Ward,p.Plot))&&(!bidFavoritesOnly||bidFavoriteKeys.Contains(p.Key))),bidSort,bidDescending);bidDirty=false;}
@@ -138,17 +138,17 @@ public sealed partial class Plugin
   else{bidFavoriteKeys.Add(favorite.Key);config.BidFavorites.Add(favorite);}
   bidDirty=true;SaveConfiguration();
  }
- private void DrawBidFavorites(){
-  if(!ImGui.CollapsingHeader($"Saved plots · {config.BidFavorites.Count} plots###BidFavorites"))return;
-  ImGui.TextDisabled("Saved on this computer across characters. Saved plots are reminders, not submitted bids.");
+ private void DrawBidFavorites(bool expanded=false){
+  if(!expanded&&!ImGui.CollapsingHeader($"Saved plots · {config.BidFavorites.Count} plots###BidFavorites"))return;
+  ImGui.TextDisabled("Exact houses saved for later: world, district, ward and plot. These reminders stay on this computer.");
   if(config.BidFavorites.Count==0){ImGui.TextDisabled("Click the save icon beside a district to save a plot for later.");return;}
-  ImGui.BeginChild("SavedBidPlots",new Vector2(0,Math.Min(180,config.BidFavorites.Count*ImGui.GetFrameHeightWithSpacing()+8)),true);
+  ImGui.BeginChild("SavedBidPlots",new Vector2(0,Math.Max(120,ImGui.GetContentRegionAvail().Y-70)),true);
   BidFavorite? remove=null;
   foreach(var f in config.BidFavorites){
    ImGui.PushID(f.Key);if(DrawSavedPlotButton("RemoveSavedPlot",true))remove=f;
    if(ImGui.IsItemHovered())ImGui.SetTooltip("Remove from saved plots");
    ImGui.SameLine();ImGui.TextUnformatted($"{BidWorldName(f.World)} · {f.District} W{f.Ward} P{f.Plot}");
-   ImGui.SameLine();if(ImGui.SmallButton("Search world")){bidWorld=f.World;bidRegion=bidWorlds!.FirstOrDefault(w=>w.Id==bidWorld).Region;StartBidSearch();}
+   ImGui.SameLine();if(ImGui.SmallButton("Search world")){bidSection=0;bidWorld=f.World;bidRegion=bidWorlds!.FirstOrDefault(w=>w.Id==bidWorld).Region;StartBidSearch();}
    ImGui.SameLine();if(ImGui.SmallButton("GO SEE"))GoSeeBid(f.World,f.District,f.Ward,f.Plot);
    ImGui.SameLine();if(ImGui.SmallButton("Copy"))ImGui.SetClipboardText($"{BidWorldName(f.World)} · {f.District} · Ward {f.Ward} · Plot {f.Plot}");
    ImGui.PopID();

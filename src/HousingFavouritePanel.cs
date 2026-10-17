@@ -12,7 +12,7 @@ public sealed partial class Plugin
  private int favouritePlot,favouriteWard;
  private bool favouritePopupPending,favouriteBoth=true,favouriteWriting;
  private long favouriteRevision;
- private DateTimeOffset favouriteNext;
+ private DateTimeOffset favouriteNext,favouriteNoticeUntil;
  private async Task<HousingFavouriteReply> RequestHousingFavourites(string key,object? action=null)
  {
   using var request=new HttpRequestMessage(action is null?HttpMethod.Get:HttpMethod.Post,"https://equinoxjournal.pages.dev/api/companion/housing-favourites");
@@ -30,6 +30,7 @@ public sealed partial class Plugin
     if(task.IsCompletedSuccessfully){favouriteRevision=task.Result.Revision;upgradeFavourites=task.Result.Favourites??[];bidDirty=true;favouriteStatus=favouriteWriting?"Favourite plots saved and shared.":"Favourite plots up to date.";favouriteNext=now.AddSeconds(bidWindow.IsOpen?30:300);}
     else{_=task.Exception;favouriteStatus=task.Exception?.GetBaseException().Message??"Favourite sync interrupted. Try again.";favouriteNext=now.AddSeconds(30);}
    }else{_=task.Exception;favouriteNext=default;}
+   if(favouriteWriting)favouriteNoticeUntil=now.AddSeconds(15);
    favouriteWriting=false;
   }
   if(!Player.IsLoaded||!config.SyncEnabled||config.PairingKey.Length!=64||favouriteRequest is not null||now<favouriteNext)return;
@@ -59,17 +60,19 @@ public sealed partial class Plugin
    if(ImGui.Button("Cancel"))ImGui.CloseCurrentPopup();
    if(favouriteStatus.Length>0)ImGui.TextWrapped(favouriteStatus);ImGui.EndPopup();
   }
+  if(bidSection!=2){if(favouriteWriting||DateTimeOffset.UtcNow<favouriteNoticeUntil)ImGui.TextDisabled(favouriteStatus);return;}
+  ImGui.TextWrapped("Favourite locations for your upgrade watches. Shared with the Journal and your paired plugins.");
   if(favouriteStatus.Length>0)ImGui.TextDisabled(favouriteStatus);
-  if(!ImGui.CollapsingHeader($"★ Favourite plots · {upgradeFavourites.Length}###HousingFavouriteList"))return;
-  ImGui.TextWrapped("District + plot locations shared with your paired Journal. Saved plots remain your shortlist of exact houses.");
-  ImGui.TextWrapped(favouriteStatus);
-  ImGui.BeginDisabled(favouriteRequest is not null);if(ImGui.SmallButton("Refresh favourites"))favouriteNext=default;ImGui.EndDisabled();
+  ImGui.BeginDisabled(favouriteRequest is not null);if(ImGui.SmallButton("Refresh favourites"))favouriteNext=default;ImGui.EndDisabled();ImGui.SameLine();if(ImGui.SmallButton("Set up upgrades in Journal"))OpenUpgradeJournal();
+  ImGui.TextDisabled("11 / 41 means the equivalent main and subdivision plots. Any ward includes every ward.");
+  ImGui.BeginChild("FavouriteLocationList",new System.Numerics.Vector2(0,Math.Max(120,ImGui.GetContentRegionAvail().Y-8)),true);
   foreach(var f in upgradeFavourites){ImGui.PushID(f.Id);ImGui.Separator();
    var plot=f.BothDivisions?$"Plots {(f.Plot-1)%30+1} / {(f.Plot-1)%30+31}":$"Plot {f.Plot}";
    var label=$"{f.District} · {plot} · {(f.Wards.Length==0?"Any ward":"Wards "+string.Join(", ",f.Wards))}";
    ImGui.TextUnformatted(label);if(ImGui.SmallButton("Copy"))ImGui.SetClipboardText(label);ImGui.SameLine();
    ImGui.BeginDisabled(favouriteRequest is not null);if(ImGui.SmallButton("Remove"))WriteHousingFavourite(true,f.Id);ImGui.EndDisabled();ImGui.PopID();
   }
-  if(upgradeFavourites.Length==0)ImGui.TextDisabled("Click a plot’s star to add a favourite here.");
+  if(upgradeFavourites.Length==0)ImGui.TextDisabled("In Find plots, click the star beside a plot to add a favourite here.");
+  ImGui.EndChild();
  }
 }
