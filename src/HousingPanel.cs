@@ -63,6 +63,8 @@ public sealed partial class Plugin
             if (expanded)
             {
                 ImGui.TextDisabled(location);
+                var sharedCharacter=(config.SharedRoster?.People??[]).SelectMany(p=>p.Characters).FirstOrDefault(c=>c.ContentId==actor.ContentId);
+                if(sharedCharacter is not null)DrawCharacterTravel(sharedCharacter);
                 if (estates.Length == 0) ImGui.TextWrapped("No owned estate confirmed yet. Open its placard and enter; FC details may need the member list opened once.");
                 var firstEstate = true;
                 foreach (var estateRow in estates)

@@ -21,25 +21,34 @@ public sealed partial class Plugin
  private void InitializeAdventures(){adventureWindow=new(this);windows.AddWindow(adventureWindow);adventureCommand=Commands.AddHandler("/adventure",new CommandInfo((_,_)=>OpenAdventure()){HelpMessage="Open shared Garden and Character adventures from your paired Journal. /equinox adventure also works."});}
  private void DisposeAdventures(){if(adventureCommand)Commands.RemoveHandler("/adventure");windows.RemoveWindow(adventureWindow);adventureSync.Dispose();DisposeAdventurePortraits();}
  private void OpenAdventure(){adventureWindow.IsOpen=true;adventureNext=default;nextRosterRead=default;}
+ private (string Id,string Generation,int? Index,string? Task,bool Value)? adventureQueuedAction;
+ private bool AdventureSaving=>adventureMutation||adventureQueuedAction is not null;
  private void AdventureAction(AdventureBoard b,int? index=null,AdventureTask? task=null,bool value=false)
  {
-  if(adventureRequest is not null||!adventureFresh)return;
+  if(AdventureSaving||!adventureFresh)return;
+  if(adventureRequest is not null){adventureQueuedAction=(b.Id,b.Generation,index,task?.Id,value);return;}
   adventureMutation=true;adventureRequestKey=config.PairingKey;
   adventureRequest=index is {} n?adventureSync.Move(config.PairingKey,b,n):adventureSync.Check(config.PairingKey,b,task!.Id,value);
  }
  private void UpdateAdventure()
  {
   var now=DateTimeOffset.UtcNow;
-  if(adventureConnectionKey!=config.PairingKey){adventureConnectionKey=config.PairingKey;adventureBoards=[];adventureSelected="";adventurePerson="";adventureAccount="";adventureCompletion.Clear();adventurePrompt=null;adventureFresh=false;adventureNext=default;
+  if(adventureConnectionKey!=config.PairingKey){adventureConnectionKey=config.PairingKey;adventureQueuedAction=null;adventureBoards=[];adventureSelected="";adventurePerson="";adventureAccount="";adventureCompletion.Clear();adventurePrompt=null;adventureFresh=false;adventureNext=default;
    var hash=Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(config.PairingKey)));
    if(config.AdventurePairingHash==hash){adventureBoards=config.CachedAdventures.Where(AdventurePolicy.Valid).ToArray();adventureSelected=config.SelectedAdventure;}
   }
   if(adventureRequest?.IsCompleted==true){
    var reply=adventureRequest.IsCompletedSuccessfully?adventureRequest.Result:new AdventureReply(null,"Adventure request failed.");
    if(adventureRequest.IsFaulted)_=adventureRequest.Exception;
-   if(adventureRequestKey==config.PairingKey){adventureMessage=reply.Status;adventureFresh=reply.Boards is not null;if(reply.Boards is {} boards){adventureBoards=adventureMutation?adventureBoards.Where(b=>boards.All(n=>n.Id!=b.Id)).Concat(boards).ToArray():boards;adventureFetched=now;CacheAdventures();}
+   if(adventureRequestKey==config.PairingKey){adventureMessage=reply.Status;adventureFresh=reply.Boards is not null;if(reply.Boards is {} boards){adventureBoards=AdventurePolicy.Reconcile(adventureBoards,boards,adventureMutation);adventureFetched=now;CacheAdventures();}
     adventureNext=now.AddSeconds(reply.Boards is null?5:3);
    }adventureRequest=null;adventureMutation=false;
+  }
+  if(adventureRequest is null&&adventureQueuedAction is {} queued){
+   adventureQueuedAction=null;
+   var latest=adventureBoards.FirstOrDefault(b=>b.Id==queued.Id&&b.Generation==queued.Generation);
+   var task=latest?.Stops.SelectMany(s=>s.Tasks).FirstOrDefault(t=>t.Id==queued.Task);
+   if(adventureFresh&&latest is not null&&(queued.Index is {} index&&index>=0&&index<=latest.Stops.Length||task is not null&&AdventurePolicy.CanEdit(task)))AdventureAction(latest,queued.Index,task,queued.Value);
   }
   if(adventureRequest is null&&config.SyncEnabled&&config.PairingKey.Length==64&&now>=adventureNext){adventureRequestKey=config.PairingKey;adventureRequest=adventureSync.Read(config.PairingKey);adventureNext=now.AddSeconds(3);}
  }
@@ -96,15 +105,24 @@ public sealed partial class Plugin
     foreach(var task in tasks){ImGui.PushID(task.Id);
      var house=AdventurePolicy.IsHouseVisit(task)?adventureLayoutHouses.GetValueOrDefault(AdventurePolicy.TaskHouseId(task)):null;
      var label=house is null?task.Label:$"{(task.Done?"Entered":"Enter")} · {house.Name} · {house.District} W{house.Ward} P{house.Plot}";var pending=board.Pending?.LastOrDefault(p=>p.TaskId==task.Id);var check=task.ServerConfirmed?task.Done:pending?.Checked??task.Done;
-     ImGui.BeginDisabled(!AdventurePolicy.CanEdit(task)||(board.Protocol<2&&pending is not null)||adventureRequest is not null||!adventureFresh);
+     ImGui.BeginDisabled(!AdventurePolicy.CanEdit(task)||(board.Protocol<2&&pending is not null)||AdventureSaving||!adventureFresh);
      if(ImGui.Checkbox("##done",ref check))AdventureAction(board,task:task,value:check);ImGui.EndDisabled();
-     var hover=ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled);ImGui.SameLine();ImGui.TextWrapped(label);
+     var hover=ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled);ImGui.SameLine();
+     if(ImGui.SmallButton("Copy"))ImGui.SetClipboardText(task.Group+" · "+label);ImGui.SameLine();ImGui.TextWrapped(label);
      var bedLink=task.Rule is {Batch:>=1,Bed:>=1 and <=8} rule&&rule.HouseId==stop.HouseId&&stop.HouseId.Length>0;
      if(bedLink&&ImGui.IsItemClicked()&&task.Rule is {} clicked)adventureOpenBed=(clicked.HouseId,clicked.Batch,clicked.Bed);
      if(hover||ImGui.IsItemHovered())ImGui.SetTooltip((bedLink?"Click to open this bed’s batch.\n":"")+(task.Status.Length>0?task.Status:task.Done?"Completion recorded in the Journal":"Waiting for completion")+(task.ServerConfirmed?"\nConfirmed automatically from game records. This check cannot be removed manually.":!task.CanCheck?"\nThis task updates automatically.":"\nManual completion can be changed here."));
      if(pending is not null&&!task.ServerConfirmed)ImGui.TextColored(new Vector4(1,.8f,.4f,1),board.Protocol>=2?"Saved · Journal will catch up":"Pending Journal confirmation");
-     if(ImGui.SmallButton("Copy"))ImGui.SetClipboardText(task.Group+" · "+label);ImGui.PopID();
+     ImGui.PopID();
     }
+ }
+ private void DrawAdventureTaskSection(AdventureBoard board,AdventureStop stop,AdventureTask[] tasks,bool collapse)
+ {
+  if(collapse){
+   ImGui.SetNextItemOpen(false,ImGuiCond.Once);
+   if(!ImGui.CollapsingHeader($"{(board.Kind=="garden"?"Bed tasks":"Tasks")} · {tasks.Count(t=>t.Done)}/{tasks.Length} confirmed###task-checklist"))return;
+  }
+  DrawAdventureTaskList(board,stop,tasks);
  }
  private AdventureStop? adventureLayoutStop;private SharedRoster? adventureLayoutRoster;
  private (SharedCharacter Character,AdventureTask[] Tasks)[] adventureCharacterTasks=[];
@@ -150,14 +168,14 @@ public sealed partial class Plugin
    var observation=adventureFollowSession.Observe(ready,Player.ContentId,Player.CurrentWorld.RowId,DateTimeOffset.UtcNow);
    if(observation.Changed&&observation.Ready){EnsureBidWorlds();var world=BidWorldName(observation.World);var actorId=Player.ContentId.ToString();var matches=(config.SharedRoster?.People??[]).SelectMany(p=>p.Characters).Where(c=>c.ContentId==actorId).Take(2).ToArray();var cid=matches.Length==1?matches[0].Id:"";var next=AdventurePolicy.FollowIndex(board,cid,world);if(next is {} n)AdventureAction(board,n);}
   }
-  ImGui.BeginDisabled(adventureRequest is not null||!adventureFresh);
+  ImGui.BeginDisabled(AdventureSaving||!adventureFresh);
   DrawAdventureNavigation(board);ImGui.EndDisabled();
   if(board.Protocol<2)ImGui.TextWrapped("This saved route still needs an upgrade. Reload Journal V7.11.177 or newer, sign in, and wait for Adventure pairing to finish. Then close it and press Refresh here.");
   var footerHeight=ImGui.GetFrameHeightWithSpacing()+ImGui.GetStyle().ItemSpacing.Y+2;
   ImGui.BeginChild("AdventureChecklist",new Vector2(0,-footerHeight),false);
   if(board.Index>=board.Stops.Length){ImGui.TextWrapped("Round reviewed. Unconfirmed work stays unconfirmed. You can revisit any stop or build another adventure in the Journal.");}
   else{
-   var stop=board.Stops[board.Index];ImGui.TextUnformatted(stop.Title);ImGui.TextWrapped(stop.Subtitle);
+   var stop=board.Stops[board.Index];ImGui.PushID(board.Id+"|"+board.Generation+"|"+board.Index);ImGui.TextUnformatted(stop.Title);ImGui.TextWrapped(stop.Subtitle);
    if(ImGui.SmallButton("Copy stop"))ImGui.SetClipboardText(stop.Title+" · "+stop.Subtitle);
    if(board.Kind!="multi")foreach(var character in (config.SharedRoster?.People??[]).SelectMany(p=>p.Characters).Where(c=>stop.CharacterIds?.Contains(c.Id)==true)){DrawAdventureCharacter(character,stop);}
    if(!string.IsNullOrEmpty(stop.HouseId)){
@@ -171,27 +189,29 @@ public sealed partial class Plugin
     PrepareAdventureLayout(stop);
     foreach(var section in adventureCharacterTasks){
      ImGui.PushID("tasks-"+section.Character.Id);ImGui.Separator();DrawAdventureCharacter(section.Character,stop);
-     if(section.Tasks.Length>0){DrawAdventureProgress(section.Tasks);DrawAdventureTaskList(board,stop,section.Tasks);}
+     if(section.Tasks.Length>0){DrawAdventureTaskSection(board,stop,section.Tasks,true);}
      ImGui.PopID();
     }
-    if(adventureSharedTasks.Length>0){ImGui.Separator();ImGui.TextUnformatted("Shared tasks");DrawAdventureTaskList(board,stop,adventureSharedTasks);}
-   }else DrawAdventureTaskList(board,stop,stop.Tasks);
+    if(adventureSharedTasks.Length>0){ImGui.Separator();ImGui.TextUnformatted("Shared tasks");DrawAdventureTaskSection(board,stop,adventureSharedTasks,true);}
+   }else DrawAdventureTaskSection(board,stop,stop.Tasks,stop.Tasks.Length>1);
    if(!string.IsNullOrEmpty(stop.HouseId))DrawAdventureGardens(stop.HouseId);
    var stopKey=board.Id+"|"+board.Generation+"|"+board.Index;
    bool? previous=adventureCompletion.TryGetValue(stopKey,out var old)?old:null;
    if(AdventurePolicy.Prompt(previous,stop))adventurePrompt=stopKey;
-   adventureCompletion[stopKey]=AdventurePolicy.Complete(stop);
-   if(adventurePrompt==stopKey&&!ImGui.IsPopupOpen("All done"))ImGui.OpenPopup("All done");
+   adventureCompletion[stopKey]=AdventurePolicy.Complete(stop);ImGui.PopID();
   }
-  ImGui.EndChild();ImGui.Separator();
-  ImGui.BeginDisabled(adventureRequest is not null||!adventureFresh||board.Index<=0);if(ImGui.Button("← Previous"))AdventureAction(board,Math.Max(0,board.Index-1));ImGui.EndDisabled();ImGui.SameLine();
-  ImGui.BeginDisabled(adventureRequest is not null||!adventureFresh||board.Index>=board.Stops.Length);if(ImGui.Button(board.Index==board.Stops.Length-1?"Review round":"Next stop →"))AdventureAction(board,board.Index+1);ImGui.EndDisabled();
+  ImGui.EndChild();
+  var visibleStopKey=board.Id+"|"+board.Generation+"|"+board.Index;
+  if(adventurePrompt==visibleStopKey&&!ImGui.IsPopupOpen("All done"))ImGui.OpenPopup("All done");
+  ImGui.Separator();
+  ImGui.BeginDisabled(AdventureSaving||!adventureFresh||board.Index<=0);if(ImGui.Button("← Previous"))AdventureAction(board,Math.Max(0,board.Index-1));ImGui.EndDisabled();ImGui.SameLine();
+  ImGui.BeginDisabled(AdventureSaving||!adventureFresh||board.Index>=board.Stops.Length);if(ImGui.Button(board.Index==board.Stops.Length-1?"Review round":"Next stop →"))AdventureAction(board,board.Index+1);ImGui.EndDisabled();
   if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))ImGui.SetTooltip("Navigation never marks tasks complete.");
   if(ImGui.BeginPopupModal("All done",ImGuiWindowFlags.AlwaysAutoResize)){
    ImGui.TextUnformatted("All done here. Go to the next stop?");
    if(ImGui.Button("Stay here")){adventurePrompt=null;ImGui.CloseCurrentPopup();}ImGui.SameLine();
    var currentKey=board.Id+"|"+board.Generation+"|"+board.Index;
-   ImGui.BeginDisabled(adventureRequest is not null||!adventureFresh||adventurePrompt!=currentKey||board.Index>=board.Stops.Length||!AdventurePolicy.Complete(board.Stops[board.Index]));
+   ImGui.BeginDisabled(AdventureSaving||!adventureFresh||adventurePrompt!=currentKey||board.Index>=board.Stops.Length||!AdventurePolicy.Complete(board.Stops[board.Index]));
    if(ImGui.Button("Next stop")){AdventureAction(board,board.Index+1);adventurePrompt=null;ImGui.CloseCurrentPopup();}ImGui.EndDisabled();ImGui.EndPopup();
   }
  }

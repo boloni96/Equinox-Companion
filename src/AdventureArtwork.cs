@@ -15,7 +15,6 @@ public sealed partial class Plugin
  {
   var sources=GardenPlanSources().Where(p=>p.HouseId==houseId).OrderBy(p=>p.Batch).ToArray();
   if(sources.Length==0){ImGui.TextWrapped("Waiting for this house’s garden records. Confirmed garden observations will appear after Companion syncs.");return;}
-  ImGui.Checkbox("Show actual garden instead of planting steps",ref adventureShowActual);
   foreach(var source in sources){
    ImGui.PushID("adventure-garden-"+source.HouseId+"-"+source.Batch);
    var plan=EffectiveGardenPlan(source);
@@ -35,5 +34,7 @@ public sealed partial class Plugin
     }
    }ImGui.PopID();
   }
+  ImGui.Checkbox("Show observed garden",ref adventureShowActual);
+  if(ImGui.IsItemHovered())ImGui.SetTooltip("On: show crops observed in game. Off: show planting guidance when an unfinished plan is available.");
  }
 }

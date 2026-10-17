@@ -4,7 +4,7 @@ using Dalamud.Game.ClientState.Conditions;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
- private string characterTravelStatus="";
+ private string characterTravelStatus="",characterTravelStatusOwner="";
  private DateTimeOffset characterSwitchUntil;
  private ulong characterSwitchFrom;
  private ulong characterSwitchConfirmFrom;
@@ -69,6 +69,7 @@ public sealed partial class Plugin
   var switching=DateTimeOffset.UtcNow<characterSwitchUntil;
   ImGui.BeginDisabled(!Player.IsLoaded||switching);
   if(ImGui.SmallButton("Switch to this Character")){
+   characterTravelStatusOwner=character.Id;
    var current=CurrentSharedCharacter();var from=CharacterSwitchScope(current?.Id??"");var to=CharacterSwitchScope(character.Id);
    if(CharacterTravelPolicy.NeedsConfirmation(from.PersonId,from.AccountId,to.PersonId,to.AccountId)){
     characterSwitchConfirmFrom=Player.ContentId;characterSwitchConfirmScope=SwitchScopeKey(from)+">"+SwitchScopeKey(to);ImGui.OpenPopup("Switch to another person or account?");
@@ -110,10 +111,10 @@ public sealed partial class Plugin
     ImGui.PopTextWrapPos();ImGui.EndTooltip();
    }
    ImGui.EndDisabled();
-   if(clicked){if(houses.Length==1)VisitSharedHouse(houses[0]);else ImGui.OpenPopup("Choose "+type);}
+   if(clicked){characterTravelStatusOwner=character.Id;if(houses.Length==1)VisitSharedHouse(houses[0]);else ImGui.OpenPopup("Choose "+type);}
    if(ImGui.BeginPopup("Choose "+type)){foreach(var h in houses)if(ImGui.Selectable($"{h.Name} · {h.World} · {h.District} W{h.Ward} P{h.Plot}##{h.Id}"))VisitSharedHouse(h);ImGui.EndPopup();}
   }
   if(switching){ImGui.SameLine();if(ImGui.SmallButton("Stop switch")){try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}characterSwitchUntil=default;characterTravelStatus="Switch queue stopped. If already logged out, select a character in game.";}}
-  if(characterTravelStatus.Length>0)ImGui.TextWrapped(characterTravelStatus);
+  if(characterTravelStatus.Length>0&&characterTravelStatusOwner==character.Id)ImGui.TextWrapped(characterTravelStatus);
  }
 }

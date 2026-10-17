@@ -178,6 +178,7 @@ public sealed partial class Plugin
         {
             ImGui.Indent();
             ImGui.TextDisabled(character.Account+" · "+SharedLocation(character));
+            DrawCharacterTravel(character);
             foreach(var house in assigned)DrawOverviewHouse(house,now);
             foreach(var house in shared)
             {

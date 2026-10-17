@@ -97,6 +97,7 @@ public sealed partial class Plugin
                     if(ImGui.IsItemHovered())ImGui.SetTooltip(SubmarineSupplyStatus.Summary(supply)+(supply is null?"":"\n"+SubmarineSupplyStatus.Freshness(supply,DateTimeOffset.UtcNow)));
                     if(expanded)
                     {
+                        DrawCharacterTravel(c);
                         ImGui.TextWrapped(status.Text);
                         ImGui.TextWrapped(SubmarineSupplyStatus.Summary(supply));
                         if(supply is not null)ImGui.TextWrapped(SubmarineSupplyStatus.Freshness(supply,DateTimeOffset.UtcNow));

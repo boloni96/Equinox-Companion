@@ -36,6 +36,13 @@ public static class AdventurePolicy
   if(houseId.Length>0){var eligible=characters.Where(c=>c.Houses.Any(h=>h.Id==houseId)).ToArray();var owner=eligible.FirstOrDefault(c=>c.Houses.Any(h=>h.Id==houseId&&string.Equals(h.OwnerName.Trim(),c.Name.Trim(),StringComparison.OrdinalIgnoreCase)));return owner?.Id??eligible.FirstOrDefault()?.Id??"";}
   return characters.FirstOrDefault(c=>task.Group.StartsWith(c.Name+" · ",StringComparison.Ordinal)||task.Group==c.Name)?.Id??"";
  }
+ public static AdventureBoard[] Reconcile(AdventureBoard[] current,AdventureBoard[] incoming,bool partial)
+ {
+  var old=current.ToDictionary(b=>b.Id);
+  var next=incoming.Select(b=>old.TryGetValue(b.Id,out var previous)&&previous.Generation==b.Generation&&previous.Revision==b.Revision&&previous.Protocol==b.Protocol?previous:b).ToArray();
+  if(partial){var updates=next.ToDictionary(b=>b.Id);return current.Select(b=>updates.GetValueOrDefault(b.Id)??b).Concat(next.Where(b=>!old.ContainsKey(b.Id))).ToArray();}
+  return current.Length==next.Length&&current.Zip(next).All(pair=>ReferenceEquals(pair.First,pair.Second))?current:next;
+ }
  public static bool CanEdit(AdventureTask task)=>task.CanCheck&&!task.ServerConfirmed;
  public static bool Complete(AdventureStop stop)=>stop.Tasks.Length>0&&stop.Tasks.All(t=>t.Done);
  public static bool Prompt(bool? previous,AdventureStop current)=>previous==false&&Complete(current);
