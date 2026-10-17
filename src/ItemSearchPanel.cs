@@ -27,7 +27,7 @@ public sealed partial class Plugin
             SizeConstraints=new(){MinimumSize=new(480,320),MaximumSize=new(float.MaxValue)};
             AllowPinning=true;AllowClickthrough=true;AllowBackgroundBlur=true;RespectCloseHotkey=false;
         }
-        public override void Draw()=>plugin.DrawItemSearch();
+        public override void Draw()=>plugin.DrawWindowWithLauncher(plugin.DrawItemSearch);
         public override void PostDraw()=>HandleNativeCollapse(this,()=>plugin.MinimizeLauncher("Do I already have it?"));
     }
     private readonly Dictionary<uint,string> searchItemNames=[];

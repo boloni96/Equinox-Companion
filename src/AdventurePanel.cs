@@ -9,7 +9,7 @@ public sealed partial class Plugin
  {
   private readonly Plugin p;
   public AdventureWindow(Plugin p):base("Adventure · Equinox###EquinoxAdventure"){this.p=p;RespectCloseHotkey=false;Size=new(740,590);SizeCondition=ImGuiCond.FirstUseEver;SizeConstraints=new(){MinimumSize=new(510,330),MaximumSize=new(float.MaxValue)};AllowPinning=true;}
-  public override void Draw()=>p.DrawAdventure();
+  public override void Draw()=>p.DrawWindowWithLauncher(p.DrawAdventure);
   public override void PostDraw()=>HandleNativeCollapse(this,()=>p.MinimizeLauncher("Adventure"));
  }
  private AdventureWindow adventureWindow=null!;private readonly AdventureSync adventureSync=new();private bool adventureCommand;

@@ -15,7 +15,7 @@ public sealed partial class Plugin
             AllowPinning=true;RespectCloseHotkey=false;AllowBackgroundBlur=true;
         }
         public override void PostDraw() => HandleNativeCollapse(this, () => plugin.MinimizeLauncher("Planting"));
-        public override void Draw() { plugin.DrawGardenPlansWindow(); }
+        public override void Draw() => plugin.DrawWindowWithLauncher(plugin.DrawGardenPlansWindow);
     }
     private string? plantingHouseId;
     private int plantingBatch=1;

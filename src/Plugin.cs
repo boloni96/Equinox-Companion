@@ -228,7 +228,7 @@ public sealed partial class Plugin : IDalamudPlugin
         itemSearchWindow=new ItemSearchWindow(this);windows.AddWindow(itemSearchWindow);
         mainWindow = new CompanionWindow(this); windows.AddWindow(mainWindow);
         welcomeWindow = new WelcomeWindow(this); windows.AddWindow(welcomeWindow);
-        fashionWindow = new FashionReportWindow(OpenFashionBrowser); windows.AddWindow(fashionWindow); fashionWindow.Minimize = () => MinimizeLauncher("Fashion Report");
+        fashionWindow = new FashionReportWindow(this,OpenFashionBrowser); windows.AddWindow(fashionWindow); fashionWindow.Minimize = () => MinimizeLauncher("Fashion Report");
         plantingWindow = new PlantingGuideWindow(this); windows.AddWindow(plantingWindow);
         registrationWindow = new NewCharacterWindow(this); windows.AddWindow(registrationWindow);
         Pi.UiBuilder.Draw += Draw;

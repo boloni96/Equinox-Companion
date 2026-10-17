@@ -27,9 +27,11 @@ public sealed partial class Plugin
         private bool dragged;
         private bool picturePressed;
         public Action? Minimize { get; set; }
+        private readonly Plugin plugin;
         private readonly Action openBrowser;
-        public FashionReportWindow(Action openBrowser) : base("Fashion Report###EquinoxFashion", ImGuiWindowFlags.None)
+        public FashionReportWindow(Plugin plugin,Action openBrowser) : base("Fashion Report###EquinoxFashion", ImGuiWindowFlags.None)
         {
+            this.plugin=plugin;
             this.openBrowser = openBrowser;
             Size = new Vector2(720, 490);
             SizeCondition = ImGuiCond.FirstUseEver;
@@ -93,6 +95,10 @@ public sealed partial class Plugin
                 ImGui.SetWindowSize(new Vector2(Math.Min(expanded ? 1500 : 720, display.X - 30), Math.Min(expanded ? 960 : 490, display.Y - 50)));
                 resize = false;
             }
+            plugin.DrawWindowWithLauncher(DrawContent);
+        }
+        private void DrawContent()
+        {
             ImGui.TextWrapped(title);
             ImGui.BeginDisabled(loading is not null);
             if (ImGui.Button("Refresh")) Refresh();

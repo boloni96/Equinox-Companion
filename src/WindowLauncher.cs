@@ -3,6 +3,17 @@ using Dalamud.Bindings.ImGui;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
+ // Reserve a separate footer so the launcher never covers content or scrolls away.
+ private void DrawWindowWithLauncher(Action content)
+ {
+  var height=Math.Max(32,ImGui.GetFrameHeight());
+  var start=ImGui.GetCursorPos();var available=ImGui.GetContentRegionAvail();
+  var contentHeight=Math.Max(1,available.Y-height-ImGui.GetStyle().ItemSpacing.Y);
+  var visible=ImGui.BeginChild("EquinoxWindowContent",new Vector2(0,contentHeight),false);
+  try{if(visible)content();}finally{ImGui.EndChild();}
+  ImGui.SetCursorPos(new Vector2(start.X,start.Y+contentHeight+ImGui.GetStyle().ItemSpacing.Y));
+  DrawWindowLauncher();
+ }
  private void DrawWindowLauncher()
  {
   var width=Math.Max(32,ImGui.GetFrameHeight());
@@ -13,19 +24,24 @@ public sealed partial class Plugin
   GardenImage("assets/category-icons/options.png",launcherAt,new Vector2(width));
   if(!ImGui.BeginPopup("EquinoxWindows"))return;
   ImGui.TextDisabled("OPEN A WINDOW");ImGui.Separator();
-  void Row(string name,string command,string icon,Action open){
+  void Row(string name,string command,string icon,Action open,bool isOpen=false){
+   if(isOpen)return;
    var size=ImGui.GetTextLineHeight()*1.65f;var at=ImGui.GetCursorScreenPos();ImGui.Dummy(new Vector2(size));
    GardenImage("assets/category-icons/"+icon+".png",at,new Vector2(size));
    ImGui.SameLine();if(ImGui.Selectable(name,false,ImGuiSelectableFlags.None,new Vector2(250,size))){open();ImGui.CloseCurrentPopup();}if(ImGui.IsItemHovered())ImGui.SetTooltip(command);
   }
-  Row("Adventure","/adventure","adventure",OpenAdventure);
-  Row("Where is it cheapest?","/whereischeap","market-search",()=>OpenMarketSearch(""));
-  Row("Do I already have it?","/doihaveit","item-search",()=>OpenItemSearch(""));
-  Row("Housing bids","/bid","housing-bids",OpenBidSearch);
+  Row("Companion","/equinox","characters",()=>{visible=true;mainWindow.IsOpen=true;},mainWindow.IsOpen);
+  Row("Adventure","/adventure","adventure",OpenAdventure,adventureWindow.IsOpen);
+  Row("Where is it cheapest?","/whereischeap","market-search",()=>OpenMarketSearch(""),marketWindow.IsOpen);
+  Row("Do I already have it?","/doihaveit","item-search",()=>OpenItemSearch(""),itemSearchWindow.IsOpen);
+  Row("Housing bids","/bid","housing-bids",OpenBidSearch,bidWindow.IsOpen);
   ImGui.Separator();
-  Row("Gardening guide","/gardening","gardening",()=>OnPlantingCommand("/gardening",""));
-  Row("Fashion Report","/fashionr","fashion-report",()=>OnFashionCommand("/fashionr",""));
+  Row("Gardening guide","/gardening","gardening",()=>OnPlantingCommand("/gardening",""),plantingWindow.IsOpen);
+  Row("Fashion Report","/fashionr","fashion-report",()=>OnFashionCommand("/fashionr",""),fashionWindow.IsOpen);
   Row("Journal · Adventure & Properties","Open the paired Journal in your browser","characters",()=>Dalamud.Utility.Util.OpenLink("https://equinoxjournal.pages.dev/#adventure"));
+  Row("Welcome & guide","Companion guide","characters",()=>welcomeWindow.IsOpen=true,welcomeWindow.IsOpen);
+  if(registrationSnapshot is {} snapshot && Player.IsLoaded && snapshot.Actor.ContentId==Player.ContentId.ToString())
+   Row("New character","/equinox register","characters",()=>registrationWindow.IsOpen=true,registrationWindow.IsOpen);
   ImGui.EndPopup();
  }
 }

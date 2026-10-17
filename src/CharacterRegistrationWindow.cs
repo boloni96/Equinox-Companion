@@ -50,10 +50,11 @@ public sealed partial class Plugin
     private sealed class NewCharacterWindow:Window
     {
         private readonly Plugin p;
-        public NewCharacterWindow(Plugin p):base("New Character Detected###EquinoxNewCharacter",ImGuiWindowFlags.AlwaysAutoResize){this.p=p;RespectCloseHotkey=false;SizeConstraints=new(){MinimumSize=new Vector2(430,200),MaximumSize=new Vector2(650,650)};}
+        public NewCharacterWindow(Plugin p):base("New Character Detected###EquinoxNewCharacter",ImGuiWindowFlags.None){Size=new Vector2(500,320);SizeCondition=ImGuiCond.FirstUseEver;this.p=p;RespectCloseHotkey=false;SizeConstraints=new(){MinimumSize=new Vector2(430,200),MaximumSize=new Vector2(650,650)};}
         public override void OnClose()=>p.registrationDeferred=true;
         public override void PostDraw()=>HandleNativeCollapse(this,()=>p.MinimizeLauncher("New Character"));
-        public override void Draw()
+        public override void Draw()=>p.DrawWindowWithLauncher(DrawContent);
+        private void DrawContent()
         {
             var snapshot=p.registrationSnapshot;var roster=p.config.SharedRoster;
             if(snapshot is null||roster is null||!Player.IsLoaded||snapshot.Actor.ContentId!=Player.ContentId.ToString()){IsOpen=false;return;}

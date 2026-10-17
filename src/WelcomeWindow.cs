@@ -24,7 +24,8 @@ public sealed partial class Plugin
         }
         public override void OnClose(){if(!plugin.minimizedLaunchers.Contains("Welcome"))plugin.DismissWelcome();}
         public override void PostDraw()=>HandleNativeCollapse(this,()=>plugin.MinimizeLauncher("Welcome"));
-        public override void Draw()
+        public override void Draw()=>plugin.DrawWindowWithLauncher(DrawContent);
+        private void DrawContent()
         {
             var icon=Textures.GetFromFile(Path.Combine(Pi.AssemblyLocation.DirectoryName!,"icon.png")).GetWrapOrDefault();
             if(icon is not null){ImGui.Image(icon.Handle,new Vector2(64,64));ImGui.SameLine();}
