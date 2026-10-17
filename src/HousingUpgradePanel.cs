@@ -40,7 +40,7 @@ public sealed partial class Plugin
   UpdateManualUpgradeCheck();
   if(upgradeRequest?.IsCompleted==true){
    var task=upgradeRequest;upgradeRequest=null;
-   if(task.IsFaulted){_=task.Exception;upgradeStatus="Housing watch check unavailable. Deploy Journal V7.11.180; previous results may be outdated.";upgradeNext=now.AddMinutes(5);upgradeWorlds.Clear();}
+   if(task.IsFaulted){_=task.Exception;if(upgradeRequestKey==config.PairingKey){upgradeStatus="Housing watch check unavailable; keeping previous results. Remaining worlds continue shortly, with another full check in five minutes.";upgradeNext=upgradeWorlds.Count>0?now.AddSeconds(30):now.AddMinutes(5);}}
    else if(task.IsCompletedSuccessfully&&upgradeRequestKey==config.PairingKey){
     var reply=task.Result;
     if(upgradeRequestWorld.Length==0){upgradeWatches=reply.Watches??[];if(favouriteRevision==0)upgradeFavourites=reply.Favourites??[];bidDirty=true;var active=upgradeWatches.Where(w=>w.Enabled&&w.State=="Watching").Select(w=>w.World).Distinct().ToHashSet();foreach(var old in upgradeMatches.Keys.Where(w=>!active.Contains(w)).ToArray())upgradeMatches.Remove(old);foreach(var world in active)upgradeWorlds.Enqueue(world);upgradeStatus=active.Count==0?"No active watches. Configure Upgrade houses in the Journal.":"Checking watched worlds…";}
