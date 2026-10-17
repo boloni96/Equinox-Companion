@@ -182,7 +182,7 @@ public sealed partial class Plugin
     ImGui.SameLine();if(ImGui.SmallButton("Garden guide")){OnPlantingCommand("/gardening","");}
     var house=config.SharedRoster?.People.SelectMany(p=>p.Characters).SelectMany(c=>c.Houses).FirstOrDefault(h=>h.Id==stop.HouseId);
     if(house is not null){ImGui.SameLine();if(ImGui.SmallButton("GO SEE")){EnsureBidWorlds();var world=bidWorlds!.FirstOrDefault(w=>w.Name==house.World);if(world.Id>0)GoSeeBid(world.Id,house.District,house.Ward,house.Plot);}
-     if(!string.IsNullOrEmpty(bidTravelMessage))ImGui.TextWrapped(bidTravelMessage);}
+     if(!string.IsNullOrEmpty(bidTravelMessage))ImGui.TextWrapped(bidTravelMessage);DrawGoSeeHomeStop();}
    }
    ImGui.ProgressBar(stop.Tasks.Length==0?0:(float)stop.Tasks.Count(t=>t.Done)/stop.Tasks.Length,new Vector2(-1,0),$"{stop.Tasks.Count(t=>t.Done)} / {stop.Tasks.Length} confirmed");
    if(board.Kind=="multi"){

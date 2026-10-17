@@ -79,6 +79,7 @@ public sealed partial class Plugin
   DrawPairedBidRows();
   DrawBidFavorites();
   if(bidTravelMessage.Length>0)ImGui.TextWrapped(bidTravelMessage);
+  DrawGoSeeHomeStop();
   if(bidDirty){bidShown=BidSearch.Sort(bidPlots.Where(p=>bidFilters.Matches(p,now)&&(!bidFavoritesOnly||bidFavoriteKeys.Contains(p.Key))),bidSort,bidDescending);bidDirty=false;}
   ImGui.TextDisabled($"{bidShown.Length} matching plots · Hover paired bids for entry numbers. Reports can be outdated; confirm at the placard.");
   if(ImGui.BeginTable("BidPlots",12,ImGuiTableFlags.ScrollY|ImGuiTableFlags.ScrollX|ImGuiTableFlags.RowBg|ImGuiTableFlags.BordersInnerH|ImGuiTableFlags.Resizable,new Vector2(0,0))){
@@ -164,6 +165,7 @@ public sealed partial class Plugin
   }
  }
  private void GoSeeBid(uint world,string district,int ward,int plot){
+  if(goSeeHomeTrip is not null){bidTravelMessage="Already returning home for estate travel. Use Stop GO SEE to cancel.";return;}
   if(DateTimeOffset.UtcNow<goSeeNativeUntil){bidTravelMessage="An estate teleport was just requested. Wait for it to finish.";return;}
   if(goSeeFriendTrip is not null){bidTravelMessage="Already checking a friend’s estate teleport.";return;}
   if(DateTimeOffset.UtcNow<characterSwitchUntil){bidTravelMessage="Wait for the character switch or stop it first.";return;}
@@ -171,7 +173,7 @@ public sealed partial class Plugin
   try{
    var lifestreamBusy=false;try{lifestreamBusy=LifestreamBusy();}catch{/* Native estate teleports do not require Lifestream. */}
    if(lifestreamBusy||shoppingTravel is not null){bidTravelMessage="Travel is already in progress.";return;}
-   if(TryGoSeeEstateTeleport(world,district,ward,plot)||StartGoSeeFriend(world,district,ward,plot))return;
+   if(StartGoSeeHome(world,district,ward,plot)||TryGoSeeEstateTeleport(world,district,ward,plot)||StartGoSeeFriend(world,district,ward,plot))return;
    GoSeeAddress(world,district,ward,plot);
   }catch(Exception){bidTravelMessage="Lifestream must be installed and enabled with housing travel support.";}
  }

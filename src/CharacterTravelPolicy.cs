@@ -2,6 +2,8 @@ using System.Text.RegularExpressions;
 namespace EquinoxCompanion;
 public static class CharacterTravelPolicy
 {
+ public static bool NeedsHomeReturn(uint target,uint home,uint current)=>target>0&&target==home&&current!=home;
+ public static bool SameHomeTraveler(ulong expected,ulong current)=>expected!=0&&expected==current;
  public static bool MatchesEstate(Address? estate,uint world,string district,int ward,int plot)
  {
   static string District(string? name)=>Regex.Replace((name??"").Trim(),"^the\\s+","",RegexOptions.IgnoreCase);
