@@ -2,11 +2,12 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 namespace EquinoxCompanion;
-public sealed record AdventureTask(string Id,string Label,string Group,bool Done,bool CanCheck);
+public sealed record AdventureTask(string Id,string Label,string Group,bool Done,bool CanCheck,string Status="",bool ServerConfirmed=false,AdventureTaskRule? Rule=null);
+public sealed record AdventureTaskRule(string Kind="",string HouseId="",int Batch=0,int Bed=0);
 public sealed record AdventurePortrait(string Id,string Hash);
 public sealed record AdventureStop(string Title,string Subtitle,string HouseId,int Batch,AdventureTask[] Tasks,string World="",string[]? CharacterIds=null,AdventurePortrait[]? Portraits=null);
 public sealed record AdventureIntent(string Id,string TaskId,bool Checked);
-public sealed record AdventureBoard(string Id,string Generation,string BuiltAt,string Kind,string Title,AdventureStop[] Stops,int Index,long Revision,AdventureIntent[]? Pending=null);
+public sealed record AdventureBoard(string Id,string Generation,string BuiltAt,string Kind,string Title,AdventureStop[] Stops,int Index,long Revision,AdventureIntent[]? Pending=null,int Protocol=1);
 public sealed record AdventureBoards(AdventureBoard[] Boards);
 public sealed record AdventureReply(AdventureBoard[]? Boards,string Status);
 public static class AdventurePolicy
@@ -19,6 +20,7 @@ public static class AdventurePolicy
   if(matches.Any(x=>x.Index==board.Index&&!Complete(x.Stop)))return null;
   var next=matches.FirstOrDefault(x=>!Complete(x.Stop));return next.Stop is null||next.Index==board.Index?null:next.Index;
  }
+ public static bool CanEdit(AdventureTask task)=>task.CanCheck&&!task.ServerConfirmed;
  public static bool Complete(AdventureStop stop)=>stop.Tasks.Length>0&&stop.Tasks.All(t=>t.Done);
  public static bool Prompt(bool? previous,AdventureStop current)=>previous==false&&Complete(current);
 }

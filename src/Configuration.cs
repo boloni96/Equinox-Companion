@@ -8,13 +8,16 @@ public sealed class Configuration : IPluginConfiguration
         // Published observation/roster records are immutable. Copy their mutable list
         // containers, but do not serialize the large history on the game's thread.
         var small=(Configuration)MemberwiseClone();
-        small.SharedRoster=null;small.Discoveries=[];small.Houses=[];
+        small.CachedAdventures=[];small.SharedRoster=null;small.Discoveries=[];small.Houses=[];
         small.Planting=[];small.Tending=[];small.SentEvents=[];
         var copy=System.Text.Json.JsonSerializer.Deserialize<Configuration>(System.Text.Json.JsonSerializer.Serialize(small))!;
-        copy.SharedRoster=SharedRoster;copy.Discoveries=[..Discoveries];copy.Houses=[..Houses];
+        copy.CachedAdventures=CachedAdventures;copy.SharedRoster=SharedRoster;copy.Discoveries=[..Discoveries];copy.Houses=[..Houses];
         copy.Planting=[..Planting];copy.Tending=[..Tending];copy.SentEvents=[..SentEvents];
         return copy;
     }
+    public AdventureBoard[] CachedAdventures { get; set; } = [];
+    public string AdventurePairingHash { get; set; } = "";
+    public string SelectedAdventure { get; set; } = "";
     public List<MarketShoppingRequest> MarketShoppingItems { get; set; } = [];
     public int MarketRefreshSeconds { get; set; } = 30;
     public int SubmarineFuelReserve { get; set; } = 50;
