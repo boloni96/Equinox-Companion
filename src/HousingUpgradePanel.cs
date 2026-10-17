@@ -5,7 +5,7 @@ using Dalamud.Bindings.ImGui;
 namespace EquinoxCompanion;
 internal sealed record UpgradeWatch(string HouseId,string World,string HouseName,string OwnerName,string Person,string Account,bool Enabled,string State);
 internal sealed record UpgradeMatch(string Key,string HouseId,string World,uint WorldId,string District,int Ward,int Plot,int Size,long Price,int? Entries,long PhaseUntil,double Updated,string OwnerName,string Person,string Account,string HouseName,string Reason);
-internal sealed record UpgradeFavourite(string District,int Plot,int[] Wards);
+internal sealed record UpgradeFavourite(string District,int Plot,int[] Wards,bool BothDivisions=false);
 internal sealed record UpgradeReply(UpgradeWatch[]? Watches,UpgradeMatch[]? Matches,string? Error=null,UpgradeFavourite[]? Favourites=null);
 public sealed partial class Plugin
 {
@@ -19,7 +19,7 @@ public sealed partial class Plugin
  private ulong upgradeActor;
  private bool upgradeOnly,bidLocationFavoritesOnly;
  private UpgradeFavourite[] upgradeFavourites=[];
- private bool IsFavouriteLocation(string district,int ward,int plot)=>upgradeFavourites.Any(f=>f.District==district&&f.Plot==plot&&(f.Wards.Length==0||f.Wards.Contains(ward)));
+ private bool IsFavouriteLocation(string district,int ward,int plot)=>upgradeFavourites.Any(f=>f.District==district&&(f.Plot==plot||f.BothDivisions&&(f.Plot-1)%30==(plot-1)%30)&&(f.Wards.Length==0||f.Wards.Contains(ward)));
  private UpgradeMatch[] upgradeShown=[];
  private int upgradePage;
  private void RebuildUpgradeRows(){upgradeShown=upgradeMatches.Values.SelectMany(x=>x).OrderBy(m=>m.OwnerName).ThenBy(m=>m.Entries??int.MaxValue).ToArray();upgradePage=0;}
