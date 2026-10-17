@@ -102,7 +102,7 @@ public sealed partial class Plugin
    ImGui.EndPopup();
   }
   if(showHouses)DrawCharacterHouseIcons(character);
-  if(switching){ImGui.SameLine();if(ImGui.SmallButton("Stop switch")){try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}characterSwitchUntil=default;characterTravelStatus="Switch queue stopped. If already logged out, select a character in game.";}}
+  if(switching){ImGui.SameLine();if(ImGui.SmallButton("Stop switch")){bringTrip=null;try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}characterSwitchUntil=default;characterTravelStatus="Switch queue stopped. If already logged out, select a character in game.";}}
   if(characterTravelStatusOwner==character.Id){if(characterTravelStatus.Length>0)ImGui.TextWrapped(characterTravelStatus);DrawGoSeeHomeStop();}
  }
  private static string CharacterHouseRole(SharedCharacter character,SharedHouse house)

@@ -320,6 +320,7 @@ public sealed partial class Plugin : IDalamudPlugin
         perf = System.Diagnostics.Stopwatch.GetTimestamp();
         UpdateSharedRoster(now);
         UpdateShoppingTravel(now);
+        UpdateBringCharacter(now);
         UpdateBidWorld(now);
         UpdateHousingUpgrades(now);
         UpdateGoSeeHome(now);

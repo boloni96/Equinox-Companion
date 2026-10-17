@@ -50,7 +50,7 @@ public sealed partial class Plugin
    var matches=(config.SharedRoster?.People??[]).SelectMany(p=>p.Characters).Where(c=>c.ContentId==actorId).Take(2).ToArray();
    if(board.TravelGrouping&&board.Kind=="multi"&&matches.Length==1&&world.Length>0&&board.Stops.Any(s=>s.CharacterIds?.Contains(matches[0].Id)==true)){
     adventureMutation=true;adventureRequestKey=config.PairingKey;
-    adventureRequest=adventureSync.Travel(config.PairingKey,board,matches[0].Id,world,CurrentAdventureArea());
+    adventureRequest=adventureSync.Travel(config.PairingKey,board,matches[0].Id,world,CurrentAdventureArea(),Client.TerritoryType,house);
     if(target is {} houseIndex&&houseIndex!=board.Index&&board.Stops.Any(s=>s.World==world&&s.CharacterIds?.Contains(matches[0].Id)==true))
      adventureQueuedAction=(board.Id,board.Generation,houseIndex,null,false);
     adventurePrompt=null;return;
