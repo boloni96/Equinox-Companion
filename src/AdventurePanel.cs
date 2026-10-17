@@ -12,14 +12,15 @@ public sealed partial class Plugin
   public override void Draw()=>p.DrawWindowWithLauncher(p.DrawAdventure);
   public override void PostDraw()=>HandleNativeCollapse(this,()=>p.MinimizeLauncher("Adventure"));
  }
+ private readonly WindowSystem adventureCutsceneWindows=new("EquinoxCompanion");
  private AdventureWindow adventureWindow=null!;private readonly AdventureSync adventureSync=new();private bool adventureCommand;
  private Task<AdventureReply>? adventureRequest;private bool adventureMutation;private string adventureRequestKey="",adventureConnectionKey="",adventureMessage="Checking your paired Journal…";
  private string adventurePerson="",adventureAccount="";
  private AdventureBoard[] adventureBoards=[];private string adventureSelected="";private DateTimeOffset adventureNext,adventureFetched;private bool adventureFresh;
  private readonly Dictionary<string,bool> adventureCompletion=[];private string? adventurePrompt;private bool adventureFollow=true;private readonly AdventureLocationSession adventureFollowSession=new();
  private static string AdventureText(string value)=>value.Replace("##","");
- private void InitializeAdventures(){adventureWindow=new(this);windows.AddWindow(adventureWindow);adventureCommand=Commands.AddHandler("/adventure",new CommandInfo((_,_)=>OpenAdventure()){HelpMessage="Open shared Garden and Character adventures from your paired Journal. /equinox adventure also works."});}
- private void DisposeAdventures(){if(adventureCommand)Commands.RemoveHandler("/adventure");windows.RemoveWindow(adventureWindow);adventureSync.Dispose();DisposeAdventurePortraits();}
+ private void InitializeAdventures(){adventureWindow=new(this);windows.AddWindow(adventureWindow);adventureCutsceneWindows.AddWindow(adventureWindow);Pi.UiBuilder.DisableCutsceneUiHide=true;adventureCommand=Commands.AddHandler("/adventure",new CommandInfo((_,_)=>OpenAdventure()){HelpMessage="Open shared Garden and Character adventures from your paired Journal. /equinox adventure also works."});}
+ private void DisposeAdventures(){if(adventureCommand)Commands.RemoveHandler("/adventure");windows.RemoveWindow(adventureWindow);adventureCutsceneWindows.RemoveAllWindows();Pi.UiBuilder.DisableCutsceneUiHide=false;adventureSync.Dispose();DisposeAdventurePortraits();}
  private void OpenAdventure(){adventureWindow.IsOpen=true;adventureNext=default;nextRosterRead=default;}
  private (string Id,string Generation,int? Index,string? Task,bool Value)? adventureQueuedAction;
  private bool AdventureSaving=>adventureMutation||adventureQueuedAction is not null;

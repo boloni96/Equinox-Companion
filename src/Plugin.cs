@@ -999,6 +999,15 @@ public sealed partial class Plugin : IDalamudPlugin
 
     private void DrawCore()
     {
+        // Dalamud's cutscene exception is plugin-wide; draw only Adventure here.
+        // Keep the same window instance/namespace, position and minimize behavior.
+        if (HelperInCutscene())
+        {
+            escapeRequested=false;
+            escapeWasDown=Keys[Dalamud.Game.ClientState.Keys.VirtualKey.ESCAPE];
+            adventureCutsceneWindows.Draw();
+            return;
+        }
         UpdateShortcuts();
         mainWindow.IsOpen = visible;
         escapePopupWasOpen=ImGui.IsPopupOpen("",ImGuiPopupFlags.AnyPopupId|ImGuiPopupFlags.AnyPopupLevel);
