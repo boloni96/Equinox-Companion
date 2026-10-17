@@ -126,13 +126,13 @@ public sealed partial class Plugin
      var bedLink=task.Rule is {Batch:>=1,Bed:>=1 and <=8} rule&&rule.HouseId==stop.HouseId&&stop.HouseId.Length>0;
      if(ImGui.IsItemClicked()){if(bedLink&&task.Rule is {} clicked)adventureOpenBed=(clicked.HouseId,clicked.Batch,clicked.Bed);else ImGui.SetClipboardText(label);}
      if(hover||ImGui.IsItemHovered()){ImGui.BeginTooltip();ImGui.PushTextWrapPos(ImGui.GetFontSize()*32);ImGui.TextUnformatted((bedLink?"Click to open this bed’s batch.\n":"Click to copy this label.\n")+(task.Status.Length>0?DisplayTime.InText(task.Status):task.Done?"Completion recorded in the Journal":"Waiting for completion")+(task.ServerConfirmed?"\nConfirmed automatically from game records. This check cannot be removed manually.":!task.CanCheck?"\nThis task updates automatically.":"\nManual completion can be changed here."));ImGui.PopTextWrapPos();ImGui.EndTooltip();}
-     if(house is not null&&!check){
+     if(!check&&(house is not null||AdventurePolicy.IsFashion(task))){
       var right=ImGui.GetItemRectMax().X+ImGui.GetStyle().ItemSpacing.X;
       if(right+ImGui.CalcTextSize("Go").X+ImGui.GetStyle().FramePadding.X*2<ImGui.GetCursorScreenPos().X+ImGui.GetContentRegionAvail().X)ImGui.SameLine();
       ImGui.BeginDisabled(!Player.IsLoaded);
-      if(ImGui.SmallButton("Go")){characterTravelStatusOwner=task.Rule?.Cid??"";VisitSharedHouse(house);}
+      if(ImGui.SmallButton("Go")){characterTravelStatusOwner=task.Rule?.Cid??"";if(house is not null)VisitSharedHouse(house);else GoToAdventureFashion();}
       ImGui.EndDisabled();
-      if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))ImGui.SetTooltip($"Go to {house.Name} · {house.World} · {house.District} W{house.Ward} P{house.Plot}.\nUses the current character. Enter the house to confirm the visit.");
+      if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))ImGui.SetTooltip(house is null?"Teleport your current character to the Gold Saucer for the Fashion Report. Requires an unlocked destination.":$"Go to {house.Name} · {house.World} · {house.District} W{house.Ward} P{house.Plot}.\nUses the current character. Enter the house to confirm the visit.");
      }
      if(pending is not null&&!task.ServerConfirmed)ImGui.TextColored(new Vector4(1,.8f,.4f,1),board.Protocol>=2?"Saved · Journal will catch up":"Pending Journal confirmation");
      ImGui.PopID();
