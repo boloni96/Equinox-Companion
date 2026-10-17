@@ -31,7 +31,7 @@ public sealed partial class Plugin
   ImGui.EndChild();
   var chosen=people.SelectMany(p=>p.Characters).FirstOrDefault(c=>c.Id==bringChoice);
   ImGui.TextUnformatted("Selected: "+(chosen?.Name??"Choose a character"));
-  var from=CharacterSwitchScope(CurrentSharedCharacter()?.Id??""),to=CharacterSwitchScope(chosen?.Id??"");
+  var from=CharacterSwitchScope(CurrentSharedCharacter()?.Id??"");var to=CharacterSwitchScope(chosen?.Id??"");
   var cross=CharacterTravelPolicy.NeedsConfirmation(from.PersonId,from.AccountId,to.PersonId,to.AccountId);
   if(cross)ImGui.TextWrapped("Different Person or account: this may log you out. Check Lifestream’s service-account settings; another game login may be needed.");
   if(bringMessage.Length>0)ImGui.TextWrapped(bringMessage);
@@ -53,7 +53,7 @@ public sealed partial class Plugin
   catch{bringMessage="Enable Lifestream first.";return false;}
   var source=Player.ContentId;
   if(source!=content){
-   var from=CharacterSwitchScope(CurrentSharedCharacter()?.Id??""),to=CharacterSwitchScope(chosen.Id);
+   var from=CharacterSwitchScope(CurrentSharedCharacter()?.Id??"");var to=CharacterSwitchScope(chosen.Id);
    if(confirmed){characterSwitchConfirmFrom=source;characterSwitchConfirmKey=config.PairingKey;characterSwitchConfirmTarget=chosen.Id;characterSwitchConfirmScope=SwitchScopeKey(from)+">"+SwitchScopeKey(to);}
    SwitchSharedCharacter(chosen,confirmed);characterSwitchConfirmTarget="";
    if(DateTimeOffset.UtcNow>=characterSwitchUntil){bringMessage=characterTravelStatus;return false;}
