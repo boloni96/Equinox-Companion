@@ -201,7 +201,7 @@ public sealed partial class Plugin
         ImGui.Separator();ImGui.TextWrapped(stack.Name+(location.Stacks is null?" · quality unknown":stack.Hq?" · HQ":" · NQ"));
         ImGui.TextWrapped(location.Name);
         ImGui.TextWrapped(stack.Positions is {Length:>0}?string.Join(" · ",stack.Positions.Select(p=>$"Slot {p.Slot} × {p.Quantity}")):"Slot not recorded");
-        ImGui.TextDisabled((location.Stacks is null?"Quantity not recorded":stack.Quantity+" recorded")+$" · Checked {location.At.LocalDateTime:g}");
+        ImGui.TextDisabled((location.Stacks is null?"Quantity not recorded":stack.Quantity+" recorded")+$" · Checked {DisplayTime.Local(location.At)}");
     }
     private static void DrawItemSearchIcon(Vector2 at,Vector2 size,float opacity=1)
     {

@@ -82,7 +82,7 @@ public sealed partial class Plugin
   foreach(var m in rows.Skip(upgradePage*50).Take(50).Where(m=>m.PhaseUntil>now.ToUnixTimeSeconds())){
    count++;ImGui.PushID(m.Key);ImGui.Separator();ImGui.TextUnformatted(m.OwnerName+" · "+m.HouseName);ImGui.TextDisabled(m.Person+" / "+m.Account);
    ImGui.TextWrapped($"{m.World} · {m.District} W{m.Ward} P{m.Plot} · {new[]{"Small","Medium","Large"}[m.Size]} · {m.Price:N0} gil · {m.Entries?.ToString()??"?"} entries");
-   ImGui.TextWrapped(m.Reason+$" · Reported {DateTimeOffset.FromUnixTimeSeconds((long)m.Updated).ToLocalTime():g}");
+   ImGui.TextWrapped(m.Reason+$" · Reported {DisplayTime.Local(DateTimeOffset.FromUnixTimeSeconds((long)m.Updated))}");
    if(ImGui.SmallButton("GO SEE"))GoSeeBid(m.WorldId,m.District,m.Ward,m.Plot);ImGui.SameLine();if(ImGui.SmallButton("Copy"))ImGui.SetClipboardText($"{m.World} · {m.District} · Ward {m.Ward} · Plot {m.Plot}");ImGui.SameLine();
    var favourite=new BidFavorite(m.WorldId,m.District,m.Ward,m.Plot);if(DrawSavedPlotButton("SaveUpgrade",bidFavoriteKeys.Contains(favourite.Key)))ToggleBidFavorite(favourite);
    ImGui.SameLine();if(ImGui.SmallButton("★"))ChooseFavouriteLocation(m.District,m.Ward,m.Plot);if(ImGui.IsItemHovered())ImGui.SetTooltip("Save this favourite plot here; choose any ward or this ward only.");ImGui.PopID();

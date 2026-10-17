@@ -26,8 +26,8 @@ public static class FashionCompletion
         return (!IsOpen(now)?"Fashion Report judging is closed":done?"Fashion Report completed for this event":"Fashion Report not completed for this event")+
             "\nCharacter: "+actor.Name+(string.IsNullOrWhiteSpace(actor.HomeWorldName)?"":" @ "+actor.HomeWorldName)+
             "\nFashion Points: "+(score is {} points?$"{points}/100":"Not recorded this week")+
-            (atTime is {} time?$"\nRecorded: {time.ToLocalTime():g}":"")+
-            $"\nJudging opens: {window.Start.ToLocalTime():g}\nEvent ends: {window.End.ToLocalTime():g}";
+            (atTime is {} time?$"\nRecorded: {DisplayTime.Local(time)}":"")+
+            $"\nJudging opens: {DisplayTime.Local(window.Start)}\nEvent ends: {DisplayTime.Local(window.End)}";
     }
 
     public static bool IsComplete(Actor? actor,IEnumerable<SyncEvent> observations,IEnumerable<SharedPerson> people,DateTimeOffset now)

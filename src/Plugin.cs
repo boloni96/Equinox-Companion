@@ -1101,7 +1101,7 @@ public sealed partial class Plugin : IDalamudPlugin
                     var entry = house.Where(h => h.Kind == "house.entered").OrderByDescending(h => h.ObservedAt).FirstOrDefault();
                     var a = WithAddressNames(last.Address);
                     ImGui.TextWrapped($"{last.Actor.Name} · {a.WorldName ?? a.WorldId.ToString()} · {a.DistrictName ?? a.TerritoryTypeId.ToString()} · W{a.Ward} P{a.Plot} · Room {a.Room}");
-                    ImGui.TextWrapped(entry is null ? $"Observed inside {last.ObservedAt.ToLocalTime():g}; entry time unknown" : $"Touched: {entry.ObservedAt.ToLocalTime():g}");
+                    ImGui.TextWrapped(entry is null ? $"Observed inside {DisplayTime.Local(last.ObservedAt)}; entry time unknown" : $"Touched: {DisplayTime.Local(entry.ObservedAt)}");
                 }
                 ImGui.TextWrapped("No recorded entry means unknown. Entry observations do not confirm a demolition timer reset.");
             }
@@ -1121,7 +1121,7 @@ public sealed partial class Plugin : IDalamudPlugin
             ImGui.TextWrapped("English garden menus supported. Confirmed tending is saved per house, patch and bed. Website matching preserves existing batches. Planting records include the selected seed and soil plus a successful game response. Confirmed Remove Crop responses clear the exact observed bed. Harvest Crop plus the matching crop reward clears that numbered bed automatically. Cancelled or failed harvests never clear a bed. If a response cannot be matched, reopening its empty menu confirms it.");
             ImGui.TextWrapped($"Saved tending records: {config.Tending.Count} (latest 10,000 retained)");
             foreach (var tend in config.Tending.TakeLast(6).Reverse())
-                ImGui.TextWrapped($"{tend.ConfirmedAt.ToLocalTime():g} · {tend.Actor.Name} · W{tend.Address.Ward} P{tend.Address.Plot} · Patch {tend.Patch}, bed {tend.Bed}: tended");
+                ImGui.TextWrapped($"{DisplayTime.Local(tend.ConfirmedAt)} · {tend.Actor.Name} · W{tend.Address.Ward} P{tend.Address.Plot} · Patch {tend.Patch}, bed {tend.Bed}: tended");
             ImGui.Separator();
             }
             ImGui.Separator();

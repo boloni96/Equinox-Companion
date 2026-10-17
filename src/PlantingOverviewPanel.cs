@@ -39,7 +39,7 @@ public sealed partial class Plugin
         ImGui.TextWrapped("Tend suggested every 12h. Harvest countdowns are estimates; Ready and Dead require game confirmation.");
         ImGui.TextDisabled("Name bars: T = next suggested tend · H = estimated harvest. Hover for every batch; click to expand.");
         if(ImGui.SmallButton("Refresh gardens"))nextRosterRead=default;
-        ImGui.SameLine();ImGui.TextDisabled($"Journal updated {roster.Updated.ToLocalTime():g}");
+        ImGui.SameLine();ImGui.TextDisabled($"Journal updated {DisplayTime.Local(roster.Updated)}");
         ImGui.InputText("Find person / character / house",ref plantingOverviewSearch,120);
         var now=DateTimeOffset.UtcNow;
         var display=gardenOverviewDisplayCache.Get(roster,
@@ -168,7 +168,7 @@ public sealed partial class Plugin
                 {
                     ImGui.TextWrapped($"Batch {batch.Batch}: "+GardenOverview.Summary([batch],now));
                     var last=batch.Beds.Where(b=>b.Watered is not null&&!GardenTiming.FirstTendDue(b.Planted,b.Watered,now)).MaxBy(b=>b.Watered);
-                    if(last?.Watered is {} at)ImGui.TextWrapped($"Last tended: {at.ToLocalTime():g} · {(last.TendedBy.Length>0?last.TendedBy:"Unknown gardener")}");
+                    if(last?.Watered is {} at)ImGui.TextWrapped($"Last tended: {DisplayTime.Local(at)} · {(last.TendedBy.Length>0?last.TendedBy:"Unknown gardener")}");
                 }
             }
             ImGui.TextDisabled("T: suggested every 12h · H: estimate; confirm maturity in game.");
@@ -250,16 +250,16 @@ public sealed partial class Plugin
                                 ImGui.BeginTooltip();
                                 if(bed.Crop.Length>0)ImGui.TextUnformatted("Plan: "+bed.Crop);
                                 if(bed.ActualSoil.Length>0)ImGui.TextUnformatted("Soil: "+bed.ActualSoil);
-                                if(bed.Planted is {} planted)ImGui.TextUnformatted($"Planted: {planted.ToLocalTime():g}");
-                                if(bed.Watered is {} watered&&!GardenTiming.FirstTendDue(bed.Planted,bed.Watered,now))ImGui.TextUnformatted($"Last tended: {watered.ToLocalTime():g} · {(bed.TendedBy.Length>0?bed.TendedBy:"Unknown gardener")}");
-                                if(bed.ObservedAt is {} seen)ImGui.TextUnformatted($"Last observed: {seen.ToLocalTime():g}");
+                                if(bed.Planted is {} planted)ImGui.TextUnformatted($"Planted: {DisplayTime.Local(planted)}");
+                                if(bed.Watered is {} watered&&!GardenTiming.FirstTendDue(bed.Planted,bed.Watered,now))ImGui.TextUnformatted($"Last tended: {DisplayTime.Local(watered)} · {(bed.TendedBy.Length>0?bed.TendedBy:"Unknown gardener")}");
+                                if(bed.ObservedAt is {} seen)ImGui.TextUnformatted($"Last observed: {DisplayTime.Local(seen)}");
                                 ImGui.EndTooltip();
                             }
                             ImGui.TableNextColumn();ImGui.PushStyleColor(ImGuiCol.Text,color);ImGui.TextWrapped(row.Status);ImGui.PopStyleColor();
                             ImGui.TableNextColumn();ImGui.TextWrapped(row.Care);
-                            if(ImGui.IsItemHovered()&&row.NextTend is {} tend)ImGui.SetTooltip($"Suggested tend: {tend.ToLocalTime():g}");
+                            if(ImGui.IsItemHovered()&&row.NextTend is {} tend)ImGui.SetTooltip($"Suggested tend: {DisplayTime.Local(tend)}");
                             ImGui.TableNextColumn();ImGui.TextWrapped(row.Harvest);
-                            if(ImGui.IsItemHovered()&&row.HarvestAt is {} harvest)ImGui.SetTooltip($"Estimated harvest: {harvest.ToLocalTime():g}");
+                            if(ImGui.IsItemHovered()&&row.HarvestAt is {} harvest)ImGui.SetTooltip($"Estimated harvest: {DisplayTime.Local(harvest)}");
                         }
                         ImGui.EndTable();
                     }

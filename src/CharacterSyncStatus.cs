@@ -32,7 +32,7 @@ public sealed partial class Plugin
         ImGui.Separator();
         ImGui.TextWrapped("Character sync: " + s.Character + (s.HomeWorld.Length > 0 ? " @ " + s.HomeWorld : ""));
         ImGui.TextWrapped(s.State);
-        if(s.ObservedAt is {} at) ImGui.TextWrapped("Last character record: " + at.ToLocalTime().ToString("g"));
+        if(s.ObservedAt is {} at) ImGui.TextWrapped("Last character record: " + DisplayTime.Local(at));
         if(s.GrandCompany.Length > 0) ImGui.TextWrapped("Recorded Grand Company / Rank: " + s.GrandCompany);
     }
 }

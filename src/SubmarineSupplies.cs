@@ -15,6 +15,6 @@ public static class SubmarineSupplyStatus
     }
     public static string Summary(SubmarineSupplyView? s) => s is null?"Supplies not recorded":$"Tanks: {s.Ceruleum?.ToString()??"?"} · Repairs: {s.RepairKits?.ToString()??"?"} · Bag space: {s.InventorySpace?.ToString()??"?"}"+(s.InventoryCapacity is {} cap?$"/{cap}":"");
     public static string Freshness(SubmarineSupplyView s,DateTimeOffset now) => s.Observed?
-        $"Supplies observed {s.At.ToLocalTime():g}"+(now-s.At>=TimeSpan.FromHours(24)?" · older reading; log in to refresh":" · last recorded reading"):
-        $"Cached supplies imported {s.At.ToLocalTime():g} · game observation time unknown";
+        $"Supplies observed {DisplayTime.Local(s.At)}"+(now-s.At>=TimeSpan.FromHours(24)?" · older reading; log in to refresh":" · last recorded reading"):
+        $"Cached supplies imported {DisplayTime.Local(s.At)} · game observation time unknown";
 }

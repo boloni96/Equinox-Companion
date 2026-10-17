@@ -136,7 +136,7 @@ public sealed partial class Plugin
      var band=h.Paused?HousingBand.Unknown:HousingStatus.Band(h.LastEntry,DateTimeOffset.UtcNow);
      ImGui.TextWrapped($"{h.Name} · {h.World} · {h.District} W{h.Ward} P{h.Plot}");
      ImGui.TextColored(BandColour(band),h.Paused?"Demolition marked suspended":BandLabel(band));
-     ImGui.TextWrapped(h.LastEntry is {} entry?$"Last qualifying entry: {entry.ToLocalTime():dd/MM/yyyy HH:mm}\n45-day estimate: {entry.AddDays(45).ToLocalTime():dd/MM/yyyy HH:mm}":"No qualifying entry recorded.");
+     ImGui.TextWrapped(h.LastEntry is {} entry?$"Last qualifying entry: {DisplayTime.Local(entry)}\n45-day estimate: {DisplayTime.Local(entry.AddDays(45))}":"No qualifying entry recorded.");
      ImGui.TextDisabled(type=="Private house"?"Entry must be by the private owner.":"Entry must be by an eligible FC member.");
     }
     ImGui.TextWrapped("Travel with your current character; does not switch characters.");

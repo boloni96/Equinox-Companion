@@ -21,7 +21,7 @@ public sealed partial class Plugin
             ImGui.TextWrapped(house.Name+" · "+house.World+" · "+house.District+$" W{house.Ward} P{house.Plot}");
             ImGui.TextColored(BandColour(band),BandLabel(band));
             ImGui.TextWrapped(HouseShortcutSelection.Checked(house,now)?"Checked · qualifying interior visit within the last 7 days":"Unchecked · no qualifying interior visit in the last 7 days");
-            ImGui.TextWrapped(house.LastEntry is {} last?$"Last qualifying entry: {last.ToLocalTime():g}\n45-day estimate: {last.AddDays(45).ToLocalTime():g}":"No qualifying entry recorded.");
+            ImGui.TextWrapped(house.LastEntry is {} last?$"Last qualifying entry: {DisplayTime.Local(last)}\n45-day estimate: {DisplayTime.Local(last.AddDays(45))}":"No qualifying entry recorded.");
             ImGui.TextWrapped(house.Paused?"Demolition marked suspended in Journal.":fc?"A linked FC member must enter the interior. Touching the placard does not reset the timer.":"The private owner must enter the interior. Touching the placard does not reset the timer.");
             ImGui.TextDisabled("Click to open this house in the Journal.");ImGui.PopTextWrapPos();ImGui.EndTooltip();}
         if(clicked)Dalamud.Utility.Util.OpenLink("https://equinoxjournal.pages.dev/#house="+Uri.EscapeDataString(house.Id));

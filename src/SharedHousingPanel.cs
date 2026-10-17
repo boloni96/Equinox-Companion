@@ -31,7 +31,7 @@ public sealed partial class Plugin
     private void DrawSharedStatus()
     {
         ImGui.TextDisabled(rosterStatus);
-        if (config.SharedRoster is { } r) ImGui.TextDisabled($"Shared journal saved: {r.Updated.ToLocalTime():g}");
+        if (config.SharedRoster is { } r) ImGui.TextDisabled($"Shared journal saved: {DisplayTime.Local(r.Updated)}");
         if (ImGui.SmallButton("Refresh shared profiles")) nextRosterRead = default;
         ImGui.SameLine(); ImGui.TextDisabled("Drag tabs to reorder");
     }
@@ -51,7 +51,7 @@ public sealed partial class Plugin
         HousingBand.Overdue => "DEMOLISHED? — estimate", HousingBand.Unknown => "Entry unknown / paused", _ => "No house recorded"
     };
     private static (string Text, HousingBand Band) EntryHover(string type, int ward, int plot, DateTimeOffset? entry, DateTimeOffset now, bool paused = false)
-        => ($"{(type == "Private house" ? "Private" : "FC")} · W{ward} P{plot} — Last eligible entry: {(entry is { } at ? at.ToLocalTime().ToString("dd MMM yyyy, HH:mm:ss") : "Unknown")}", paused ? HousingBand.Unknown : HousingStatus.Band(entry, now));
+        => ($"{(type == "Private house" ? "Private" : "FC")} · W{ward} P{plot} — Last eligible entry: {(entry is { } at ? DisplayTime.Local(at) : "Unknown")}", paused ? HousingBand.Unknown : HousingStatus.Band(entry, now));
     private static bool DrawSplitHeader(string label, HousingBand? privateBand, HousingBand? fcBand, IEnumerable<(string Text, HousingBand Band)> entryDetails)
     {
         var pos = ImGui.GetCursorScreenPos(); var width = Math.Max(1, ImGui.GetContentRegionAvail().X); var height = ImGui.GetFrameHeight();
@@ -167,13 +167,13 @@ public sealed partial class Plugin
                         ImGui.TextUnformatted($"Estate type: {h.Type}");
                         if (label == "Shared") ImGui.TextUnformatted(h.Type == "Private house" ? "Shared access / ownership unconfirmed. Only the owner resets the timer." : "Shared access / FC membership unconfirmed. Only FC members reset the timer.");
                         if(!string.IsNullOrWhiteSpace(h.FcName))ImGui.TextUnformatted($"FC: {h.FcName} <{h.FcTag}>");
-                        if(h.LastEntry is not null)ImGui.TextUnformatted($"45-day estimate: {h.LastEntry.Value.AddDays(45).ToLocalTime():g}");
+                        if(h.LastEntry is not null)ImGui.TextUnformatted($"45-day estimate: {DisplayTime.Local(h.LastEntry.Value.AddDays(45))}");
                         ImGui.TextUnformatted("Based on shared recorded entries, not the game's live countdown.");
                         ImGui.EndTooltip();
                     }
                     ImGui.PushID(h.Id);ImGui.BeginDisabled(!Player.IsLoaded);if(ImGui.SmallButton("GO SEE"))VisitSharedHouse(h);ImGui.EndDisabled();ImGui.PopID();
                     ImGui.TextDisabled($"{h.District} · W{h.Ward} P{h.Plot} · {h.Size}");
-                    ImGui.TextWrapped(h.Paused?"Demolition marked suspended in Journal.":h.LastEntry is null?"No eligible entry recorded.":$"Last eligible entry: {h.LastEntry.Value.ToLocalTime():g} · {Math.Max(0,(int)(now-h.LastEntry.Value).TotalDays)} days ago");
+                    ImGui.TextWrapped(h.Paused?"Demolition marked suspended in Journal.":h.LastEntry is null?"No eligible entry recorded.":$"Last eligible entry: {DisplayTime.Local(h.LastEntry.Value)} · {Math.Max(0,(int)(now-h.LastEntry.Value).TotalDays)} days ago");
                     ImGui.Spacing();
                 }
             }

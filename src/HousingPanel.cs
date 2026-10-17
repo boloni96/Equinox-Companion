@@ -92,9 +92,9 @@ public sealed partial class Plugin
                             ImGui.TextUnformatted($"FC master: {(string.IsNullOrWhiteSpace(fc.MasterName) ? "Unknown" : fc.MasterName)}");
                         }
                         else ImGui.TextUnformatted($"Owner: {actor.Name}");
-                        ImGui.TextUnformatted(ownEntry is null ? "This character: no entry recorded" : $"This character entered: {ownEntry.Value.ToLocalTime():g}");
-                        ImGui.TextUnformatted(entry is null ? "Eligible entry: unknown" : $"Last recorded eligible entry: {entry.Value.ToLocalTime():g}");
-                        if (entry is not null) ImGui.TextUnformatted($"45-day estimate: {entry.Value.AddDays(45).ToLocalTime():g}");
+                        ImGui.TextUnformatted(ownEntry is null ? "This character: no entry recorded" : $"This character entered: {DisplayTime.Local(ownEntry.Value)}");
+                        ImGui.TextUnformatted(entry is null ? "Eligible entry: unknown" : $"Last recorded eligible entry: {DisplayTime.Local(entry.Value)}");
+                        if (entry is not null) ImGui.TextUnformatted($"45-day estimate: {DisplayTime.Local(entry.Value.AddDays(45))}");
                         ImGui.TextUnformatted("Estimated—check in game. DEMOLISHED? does not confirm loss.");
                         ImGui.TextUnformatted("Only recorded owner / FC-member interior entries count.");
                         ImGui.EndTooltip();
@@ -104,7 +104,7 @@ public sealed partial class Plugin
                     {
                         var age = Math.Max(0, (now - entry.Value).TotalDays);
                         var elapsed = age < 1 ? $"{Math.Max(0, (int)(now - entry.Value).TotalHours)}h" : $"{(int)age}d";
-                        ImGui.TextWrapped($"Last eligible entry: {elapsed} ago · {entry.Value.ToLocalTime():g}");
+                        ImGui.TextWrapped($"Last eligible entry: {elapsed} ago · {DisplayTime.Local(entry.Value)}");
                         ImGui.TextColored(colour, age > 45 ? "45-day estimate passed—check in game" : $"About {Math.Max(0, (int)Math.Ceiling(45 - age))} days until the 45-day estimate");
                     }
                     else ImGui.TextWrapped("No eligible entry recorded. Countdown unknown.");
@@ -119,7 +119,7 @@ public sealed partial class Plugin
                         foreach (var v in other)
                         {
                             var a = WithAddressNames(v.Address);
-                            ImGui.TextWrapped($"{a.WorldName} · {a.DistrictName} · W{a.Ward} P{a.Plot} · {v.ObservedAt.ToLocalTime():g}");
+                            ImGui.TextWrapped($"{a.WorldName} · {a.DistrictName} · W{a.Ward} P{a.Plot} · {DisplayTime.Local(v.ObservedAt)}");
                         }
                     }
                     ImGui.EndChild();

@@ -114,9 +114,9 @@ public sealed partial class Plugin
                             var v=cache.Data;
                             ImGui.TextWrapped($"Submarine capacity: {v.Slots?.ToString()??"unknown"} slots");
                             if(supply?.Observed==true)ImGui.TextWrapped($"Cached supplies: {v.Ceruleum?.ToString()??"?"} tanks · {v.RepairKits?.ToString()??"?"} repairs · {v.InventorySpace?.ToString()??"?"} free inventory slots");
-                            ImGui.TextDisabled($"Cache imported {cache.ImportedAt.LocalDateTime:g}; game observation time unknown.");
+                            ImGui.TextDisabled($"Cache imported {DisplayTime.Local(cache.ImportedAt)}; game observation time unknown.");
                         }
-                        if(observed is not null)ImGui.TextDisabled($"Workshop observed {observed.At.LocalDateTime:g}");
+                        if(observed is not null)ImGui.TextDisabled($"Workshop observed {DisplayTime.Local(observed.At)}");
                         var names=(observed?.Submarines.Select(s=>s.Name)??cache?.Data.Submarines.Select(s=>s.Name)??[]).Distinct(StringComparer.OrdinalIgnoreCase);
                         foreach(var name in names)
                         {
@@ -157,7 +157,7 @@ public sealed partial class Plugin
         {
             shown++;
             if(!SubmarineBar($"{v.FcName} · character assignment pending###unassigned-{v.FcId}",SubmarineAttention.Evaluate(v.Submarines.Select(x=>x.ReturnTime).ToArray(),v.Submarines.Select(x=>x.NeedsRepair).ToArray(),null,null,now).Level))continue;
-            ImGui.TextDisabled($"Workshop observed {v.At.LocalDateTime:g}");
+            ImGui.TextDisabled($"Workshop observed {DisplayTime.Local(v.At)}");
             foreach(var sub in v.Submarines)if(SubmarineBar($"{sub.Name} · {VoyageTimer(sub.ReturnTime)}###unassigned-sub-{sub.Slot}",SubmarineAttention.Evaluate([sub.ReturnTime],[sub.NeedsRepair],null,null,now).Level)){ImGui.TextUnformatted($"Rank {sub.Rank} · Parts: {string.Join(", ",sub.Parts)}");ImGui.TextUnformatted("Route: "+string.Join(", ",sub.Route));ImGui.TreePop();}
             ImGui.TreePop();
         }

@@ -125,7 +125,7 @@ public sealed partial class Plugin
      if(ImGui.SmallButton("Copy"))ImGui.SetClipboardText(task.Group+" · "+label);ImGui.SameLine();ImGui.TextWrapped(label);
      var bedLink=task.Rule is {Batch:>=1,Bed:>=1 and <=8} rule&&rule.HouseId==stop.HouseId&&stop.HouseId.Length>0;
      if(bedLink&&ImGui.IsItemClicked()&&task.Rule is {} clicked)adventureOpenBed=(clicked.HouseId,clicked.Batch,clicked.Bed);
-     if(hover||ImGui.IsItemHovered())ImGui.SetTooltip((bedLink?"Click to open this bed’s batch.\n":"")+(task.Status.Length>0?task.Status:task.Done?"Completion recorded in the Journal":"Waiting for completion")+(task.ServerConfirmed?"\nConfirmed automatically from game records. This check cannot be removed manually.":!task.CanCheck?"\nThis task updates automatically.":"\nManual completion can be changed here."));
+     if(hover||ImGui.IsItemHovered()){ImGui.BeginTooltip();ImGui.PushTextWrapPos(ImGui.GetFontSize()*32);ImGui.TextUnformatted((bedLink?"Click to open this bed’s batch.\n":"")+(task.Status.Length>0?DisplayTime.InText(task.Status):task.Done?"Completion recorded in the Journal":"Waiting for completion")+(task.ServerConfirmed?"\nConfirmed automatically from game records. This check cannot be removed manually.":!task.CanCheck?"\nThis task updates automatically.":"\nManual completion can be changed here."));ImGui.PopTextWrapPos();ImGui.EndTooltip();}
      if(pending is not null&&!task.ServerConfirmed)ImGui.TextColored(new Vector4(1,.8f,.4f,1),board.Protocol>=2?"Saved · Journal will catch up":"Pending Journal confirmation");
      ImGui.PopID();
     }

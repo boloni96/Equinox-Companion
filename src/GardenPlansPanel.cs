@@ -369,8 +369,8 @@ public sealed partial class Plugin
         DrawGardenItem(b.ActualCrop, false, "Actual crop: ");
         if (b.ActualCrop == "Empty" && !b.Ready)
         {
-            if (b.LastClearedAt is {} cleared) DrawGardenInfoLabel("clock", $"Cleared: {cleared.ToLocalTime():g}");
-            if (b.ObservedAt is {} emptySeen) DrawGardenInfoLabel("sync", $"Last observed: {emptySeen.ToLocalTime():g}");
+            if (b.LastClearedAt is {} cleared) DrawGardenInfoLabel("clock", $"Cleared: {DisplayTime.Local(cleared)}");
+            if (b.ObservedAt is {} emptySeen) DrawGardenInfoLabel("sync", $"Last observed: {DisplayTime.Local(emptySeen)}");
             return;
         }
         if (b.ActualCrop is "" or "Not synced yet" or "Crop not identified")
@@ -379,17 +379,17 @@ public sealed partial class Plugin
         var state = GardenVisualState(b, false, DateTimeOffset.UtcNow);
         if (icon == "warning") DrawGardenInfoLabel("check-status", "Care state: " + state.Replace('-', ' '));
         if(!b.Ready&&b.DeadConfirmedAt is null&&EquinoxCompanion.GardenVisualState.GrowthPercent(b,DateTimeOffset.UtcNow) is {} percent)DrawGardenInfoLabel("clock",$"Estimated growth: {percent:0}% · {(percent>=100?"estimated ready · check in game":percent>=66?"late growth":percent>=33?"middle growth":"early growth")}. This is timing, not a confirmed game stage.");
-        if (b.Planted is {} planted) DrawGardenInfoLabel("seed", $"Planted: {planted.ToLocalTime():g}");
-        if (b.Watered is {} watered) DrawGardenInfoLabel("clock", $"Latest care: {watered.ToLocalTime():g}");
+        if (b.Planted is {} planted) DrawGardenInfoLabel("seed", $"Planted: {DisplayTime.Local(planted)}");
+        if (b.Watered is {} watered) DrawGardenInfoLabel("clock", $"Latest care: {DisplayTime.Local(watered)}");
         DrawGardenInfoLabel("actor", "Tended by: " + (b.TendedBy.Length > 0 ? b.TendedBy : "Gardener not recorded"));
-        if (b.LastFertilized is {} fed) {DrawGardenItem("Fishmeal",true,"Fertilizer: ");DrawGardenInfoLabel("fertilized", $"Last fertilized: {fed.ToLocalTime():g} · does not reset tending.");}
+        if (b.LastFertilized is {} fed) {DrawGardenItem("Fishmeal",true,"Fertilizer: ");DrawGardenInfoLabel("fertilized", $"Last fertilized: {DisplayTime.Local(fed)} · does not reset tending.");}
         if (!b.Ready && b.DeadConfirmedAt is null)
         {
-            if ((GardenTiming.FirstTendDue(b.Planted,b.Watered,DateTimeOffset.UtcNow)?b.Planted:b.NextTend) is {} tend) DrawGardenInfoLabel("tend", $"Tending suggested: {tend.ToLocalTime():g}");
-            if (b.HarvestAt is {} harvest) DrawGardenInfoLabel("check-maturity", $"Maturity estimate: {harvest.ToLocalTime():g}");
-            if (b.Watered is {} lastCare && b.WiltHours is >0) ImGui.TextWrapped($"Death estimate: {lastCare.AddHours(b.WiltHours.Value+24).ToLocalTime():g} · check in game");
+            if ((GardenTiming.FirstTendDue(b.Planted,b.Watered,DateTimeOffset.UtcNow)?b.Planted:b.NextTend) is {} tend) DrawGardenInfoLabel("tend", $"Tending suggested: {DisplayTime.Local(tend)}");
+            if (b.HarvestAt is {} harvest) DrawGardenInfoLabel("check-maturity", $"Maturity estimate: {DisplayTime.Local(harvest)}");
+            if (b.Watered is {} lastCare && b.WiltHours is >0) ImGui.TextWrapped($"Death estimate: {DisplayTime.Local(lastCare.AddHours(b.WiltHours.Value+24))} · check in game");
         }
-        if (b.ObservedAt is {} seen) DrawGardenInfoLabel("sync", $"Last observed: {seen.ToLocalTime():g}");
+        if (b.ObservedAt is {} seen) DrawGardenInfoLabel("sync", $"Last observed: {DisplayTime.Local(seen)}");
     }
 
 }
