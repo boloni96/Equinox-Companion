@@ -42,7 +42,7 @@ internal sealed class BidFilters
  private static void Reset(HashSet<int> set,int start,int count){set.Clear();set.UnionWith(Enumerable.Range(start,count));}
 }
 
-public sealed record BidFavorite(uint World,string District,int Ward,int Plot)
+public sealed record BidFavorite(uint World,string District,int Ward,int Plot,string Notes="",string WorldName="")
 {
  public string Key=>$"{World}|{District}|{Ward}|{Plot}";
 }

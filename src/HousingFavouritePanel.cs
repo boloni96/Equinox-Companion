@@ -10,6 +10,8 @@ public sealed partial class Plugin
  private Task<HousingFavouriteReply>? favouriteRequest;
  private string favouriteRequestKey="",favouriteStatus="",favouriteDistrict="",favouriteEditId="";
  private int favouritePlot,favouriteWard;
+ private string favouriteNotes="",favouriteNotesId="";
+ private bool favouriteNotesPopup;
  private bool favouritePopupPending,favouriteBoth=true,favouriteWriting;
  private long favouriteRevision;
  private DateTimeOffset favouriteNext,favouriteNoticeUntil;
@@ -28,7 +30,7 @@ public sealed partial class Plugin
   if(favouriteRequest?.IsCompleted==true){var task=favouriteRequest;favouriteRequest=null;
    if(favouriteRequestKey==config.PairingKey){
     if(task.IsCompletedSuccessfully){favouriteRevision=task.Result.Revision;upgradeFavourites=task.Result.Favourites??[];bidDirty=true;favouriteStatus=favouriteWriting?"Favourite plots saved and shared.":"Favourite plots up to date.";favouriteNext=now.AddSeconds(bidWindow.IsOpen?30:300);}
-    else{_=task.Exception;favouriteStatus=task.Exception?.GetBaseException().Message??"Favourite sync interrupted. Try again.";favouriteNext=now.AddSeconds(30);}
+    else{_=task.Exception;favouriteStatus=task.Exception?.GetBaseException().Message??"Favourite sync interrupted. Try again.";favouriteNext=now.AddSeconds(2);}
    }else{_=task.Exception;favouriteNext=default;}
    if(favouriteWriting)favouriteNoticeUntil=now.AddSeconds(15);
    favouriteWriting=false;
@@ -60,6 +62,13 @@ public sealed partial class Plugin
    if(ImGui.Button("Cancel"))ImGui.CloseCurrentPopup();
    if(favouriteStatus.Length>0)ImGui.TextWrapped(favouriteStatus);ImGui.EndPopup();
   }
+  if(favouriteNotesPopup){ImGui.OpenPopup("Favourite notes");favouriteNotesPopup=false;}
+  if(ImGui.BeginPopupModal("Favourite notes",ImGuiWindowFlags.AlwaysAutoResize)){
+   ImGui.InputTextMultiline("Notes",ref favouriteNotes,2001,new System.Numerics.Vector2(420,100));
+   ImGui.BeginDisabled(favouriteRequest is not null||favouriteRevision==0);
+   if(ImGui.Button("Save and share")){favouriteWriting=true;favouriteRequestKey=config.PairingKey;favouriteRequest=RequestHousingFavourites(favouriteRequestKey,new{revision=favouriteRevision,action="notes",id=favouriteNotesId,notes=favouriteNotes});}
+   ImGui.EndDisabled();ImGui.SameLine();if(ImGui.Button("Close"))ImGui.CloseCurrentPopup();ImGui.TextWrapped(favouriteStatus);ImGui.EndPopup();
+  }
   if(bidSection!=2){if(favouriteWriting||DateTimeOffset.UtcNow<favouriteNoticeUntil)ImGui.TextDisabled(favouriteStatus);return;}
   ImGui.TextWrapped("Favourite locations for your upgrade watches. Shared with the Journal and your paired plugins.");
   if(favouriteStatus.Length>0)ImGui.TextDisabled(favouriteStatus);
@@ -70,6 +79,8 @@ public sealed partial class Plugin
    var plot=f.BothDivisions?$"Plots {(f.Plot-1)%30+1} / {(f.Plot-1)%30+31}":$"Plot {f.Plot}";
    var label=$"{f.District} · {plot} · {(f.Wards.Length==0?"Any ward":"Wards "+string.Join(", ",f.Wards))}";
    ImGui.TextUnformatted(label);CopyTextOnClick(label);
+   if(f.Notes.Length>0)ImGui.TextWrapped(f.Notes);
+   if(ImGui.SmallButton("Notes")){favouriteNotes=f.Notes;favouriteNotesId=f.Id;favouriteNotesPopup=true;}ImGui.SameLine();
    ImGui.BeginDisabled(favouriteRequest is not null);if(ImGui.SmallButton("Remove"))WriteHousingFavourite(true,f.Id);ImGui.EndDisabled();ImGui.PopID();
   }
   if(upgradeFavourites.Length==0)ImGui.TextDisabled("In Find plots, click the star beside a plot to add a favourite here.");

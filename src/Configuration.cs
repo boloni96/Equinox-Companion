@@ -63,6 +63,8 @@ public sealed class Configuration : IPluginConfiguration
     public SharedRoster? SharedRoster { get; set; }
     public string WelcomeVersion { get; set; } = "";
     public List<BidFavorite> BidFavorites { get; set; } = [];
+    public bool SavedPlotsMigrated { get; set; }
+    public string SavedPlotsPairingHash { get; set; } = "";
     public int ShoppingCity { get; set; }
     public int ShoppingArrival { get; set; }
     public int Version { get; set; } = 4;

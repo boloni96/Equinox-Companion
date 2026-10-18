@@ -75,6 +75,7 @@ public sealed partial class Plugin
   ImGui.SameLine();ImGui.BeginDisabled(bidTask is not null||bidWorld==0||now<bidRetry);if(ImGui.SmallButton("Refresh"))RefreshBidSearch();ImGui.EndDisabled();ImGui.SameLine();ImGui.Checkbox("Auto 60s",ref bidAuto);
   ImGui.SameLine();if(ImGui.Checkbox("Saved plots only",ref bidFavoritesOnly))bidDirty=true;
   if(ImGui.Checkbox("★ Favourite locations only",ref bidLocationFavoritesOnly))bidDirty=true;
+  if(savedStatus.Length>0)ImGui.TextDisabled(savedStatus);
   if(ImGui.SmallButton("Clear sort & filters")){bidFilters.Clear();bidFavoritesOnly=false;bidLocationFavoritesOnly=false;bidSort=-1;bidDescending=false;bidDirty=true;}
   ImGui.SameLine();ImGui.TextDisabled(bidMessage+(bidFetched==default?"":$" · checked {bidFetched.ToLocalTime():HH:mm:ss}"));
   if((config.SharedRoster?.ProtocolVersion??0)<20)ImGui.TextDisabled("Deploy Journal V7.11.166 and open it once to receive paired bids. Local bids are still shown.");
@@ -130,27 +131,6 @@ public sealed partial class Plugin
   draw.AddRectFilled(a+new Vector2(size*.23f,0),a+new Vector2(size*.72f,size*.34f),ink);
   draw.AddRect(a+new Vector2(size*.2f,size*.55f),b-new Vector2(size*.2f,1),ink);
   return clicked;
- }
- private void ToggleBidFavorite(BidFavorite favorite){
-  if(bidFavoriteKeys.Remove(favorite.Key))config.BidFavorites.RemoveAll(f=>f.Key==favorite.Key);
-  else{bidFavoriteKeys.Add(favorite.Key);config.BidFavorites.Add(favorite);}
-  bidDirty=true;SaveConfiguration();
- }
- private void DrawBidFavorites(bool expanded=false){
-  if(!expanded&&!ImGui.CollapsingHeader($"Saved plots · {config.BidFavorites.Count} plots###BidFavorites"))return;
-  ImGui.TextDisabled("Exact houses saved for later: world, district, ward and plot. These reminders stay on this computer.");
-  if(config.BidFavorites.Count==0){ImGui.TextDisabled("Click the save icon beside a district to save a plot for later.");return;}
-  ImGui.BeginChild("SavedBidPlots",new Vector2(0,Math.Max(120,ImGui.GetContentRegionAvail().Y-70)),true);
-  BidFavorite? remove=null;
-  foreach(var f in config.BidFavorites){
-   ImGui.PushID(f.Key);if(DrawSavedPlotButton("RemoveSavedPlot",true))remove=f;
-   if(ImGui.IsItemHovered())ImGui.SetTooltip("Remove from saved plots");
-   ImGui.SameLine();ImGui.TextUnformatted($"{BidWorldName(f.World)} · {f.District} W{f.Ward} P{f.Plot}");CopyTextOnClick($"{BidWorldName(f.World)} · {f.District} · Ward {f.Ward} · Plot {f.Plot}");
-   ImGui.SameLine();if(ImGui.SmallButton("Search world")){bidSection=0;bidWorld=f.World;bidRegion=bidWorlds!.FirstOrDefault(w=>w.Id==bidWorld).Region;StartBidSearch();}
-   ImGui.SameLine();if(ImGui.SmallButton("GO SEE"))GoSeeBid(f.World,f.District,f.Ward,f.Plot);
-   ImGui.PopID();
-  }
-  ImGui.EndChild();if(remove is not null)ToggleBidFavorite(remove);
  }
  private static readonly string[] BidNumbers=Enumerable.Range(1,60).Select(n=>n.ToString()).ToArray(),BidSizes=["Small","Medium","Large"],BidTenants=["Free Company","Individual"];
  private void DrawBidColumnFilter(string title,HashSet<int> selected,string[] labels,int start=0,int step=1){

@@ -5,7 +5,7 @@ using Dalamud.Bindings.ImGui;
 namespace EquinoxCompanion;
 internal sealed record UpgradeWatch(string HouseId,string World,string HouseName,string OwnerName,string Person,string Account,bool Enabled,string State,string OwnerId="");
 internal sealed record UpgradeMatch(string Key,string HouseId,string World,uint WorldId,string District,int Ward,int Plot,int Size,long Price,int? Entries,long PhaseUntil,double Updated,string OwnerName,string Person,string Account,string HouseName,string Reason,string OwnerId="");
-internal sealed record UpgradeFavourite(string District,int Plot,int[] Wards,bool BothDivisions=false,string Id="");
+internal sealed record UpgradeFavourite(string District,int Plot,int[] Wards,bool BothDivisions=false,string Id="",string Notes="");
 internal sealed record UpgradeReply(UpgradeWatch[]? Watches,UpgradeMatch[]? Matches,string? Error=null,UpgradeFavourite[]? Favourites=null,string[]? Worlds=null);
 public sealed partial class Plugin
 {
@@ -37,6 +37,7 @@ public sealed partial class Plugin
  {
   if(upgradeKey!=config.PairingKey){upgradeKey=config.PairingKey;upgradeWorlds.Clear();upgradeMatches.Clear();upgradeShown=[];upgradeWatches=[];upgradeFavourites=[];bidDirty=true;upgradeNext=now;upgradeActor=0;favouriteRevision=0;favouriteNext=default;favouriteStatus="";}
   UpdateHousingFavourites(now);
+  UpdateSavedPlots(now);
   UpdateManualUpgradeCheck();
   if(upgradeRequest?.IsCompleted==true){
    var task=upgradeRequest;upgradeRequest=null;
