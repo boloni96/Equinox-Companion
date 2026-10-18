@@ -1001,6 +1001,13 @@ public sealed partial class Plugin : IDalamudPlugin
 
     private void DrawCore()
     {
+        if(YieldToPluginItemMenu())
+        {
+            // Escape dismisses the native menu; it must not also minimize us.
+            escapeRequested=false;
+            escapeWasDown=Keys[Dalamud.Game.ClientState.Keys.VirtualKey.ESCAPE];
+            return;
+        }
         // Dalamud's cutscene exception is plugin-wide; draw only Adventure here.
         // Keep the same window instance/namespace, position and minimize behavior.
         if (HelperInCutscene())

@@ -6,6 +6,19 @@ namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
  private uint openingPluginItem;
+ private bool pluginItemMenuPending,pluginItemMenuSeen;
+ private long pluginItemMenuRequestedAt;
+ private bool YieldToPluginItemMenu(){
+  if(!pluginItemMenuPending)return false;
+  if(!Player.IsLoaded||Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]){pluginItemMenuPending=false;return false;}
+  // Native game addons are below the ImGui overlay. Yield rendering without
+  // closing any Companion window or altering its selection/scroll state.
+  if(VisibleFollowAddon("ContextMenu")||VisibleFollowAddon("ContextSub")){
+   pluginItemMenuSeen=true;return true;
+  }
+  if(!pluginItemMenuSeen&&Environment.TickCount64-pluginItemMenuRequestedAt<500)return true;
+  pluginItemMenuPending=false;return false;
+ }
  private byte[]? pluginItemMenuName;
  private void ItemRightClick(uint id){
   if(id!=0&&ImGui.IsItemClicked(ImGuiMouseButton.Right))OpenPluginItemMenu(id);
@@ -25,8 +38,11 @@ public sealed partial class Plugin
    context->ClearMenu();context->OwnerAddon=0;context->TargetContentId=0;context->TargetAccountId=0;context->TargetObjectId=default;
    openingPluginItem=id;GameGui.HoveredItem=id;item->ResultItemId=id;
    fixed(byte* name=pluginItemMenuName)item->AddItemContextMenuEntries(id,2,name);
+   context->OpenAtPosition=0;
    context->OpenContextMenu(false);
-  }catch(Exception ex){Log.Warning(ex,"Could not open item context menu");Chat.Print("[Equinox] Item menu unavailable. Try again after closing the current game menu.");}
+   pluginItemMenuRequestedAt=Environment.TickCount64;
+   pluginItemMenuSeen=false;pluginItemMenuPending=true;
+  }catch(Exception ex){pluginItemMenuPending=false;Log.Warning(ex,"Could not open item context menu");Chat.Print("[Equinox] Item menu unavailable. Try again after closing the current game menu.");}
   finally{openingPluginItem=0;GameGui.HoveredItem=oldHovered;}
  }
  private void GardenItemRightClick(string label,bool seed){
