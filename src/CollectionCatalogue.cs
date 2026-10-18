@@ -67,7 +67,7 @@ public sealed partial class Plugin
     private void AddCatalogueQuest(Lumina.Excel.Sheets.Quest q)
     {
                 if(q.Festival.RowId==0)return;
-                var name=q.Name.ToString();var festival=q.Festival.Value.Name.ToString();
+                var name=q.Name.ToString();var festival=EventQuestPolicy.FestivalLabel(q.Festival.RowId,q.Festival.Value.Name.ToString());
                 if(string.IsNullOrWhiteSpace(name)||name.Length>100||name.Any(char.IsControl)||
                    string.IsNullOrWhiteSpace(festival)||festival.Length>100||festival.Any(char.IsControl))return;
                 var rewards = new List<EventQuestReward>();

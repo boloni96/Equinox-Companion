@@ -1787,3 +1787,12 @@ CameraHeight194Tests.Run();
 
 var eventRule195=JsonSerializer.Deserialize<AdventureTaskRule>("""{"Kind":"event","Quests":[71004]}""");
 Check("saved adventure quest IDs retained for priority scanning",eventRule195?.Quests?.Single().ToString(),"71004");
+
+// Regression: the actual Festival.csv row 176 has a blank Name.
+Check("unnamed All Saints festival retains quest", EventQuestPolicy.FestivalLabel(176, ""), "All Saints' Wake");
+Check("unnamed future festival retains quest", EventQuestPolicy.FestivalLabel(999, "  "), "Seasonal festival 999");
+Check("named festival is preserved", EventQuestPolicy.FestivalLabel(176, "Game festival"), "Game festival");
+var blankFestivalQuest196 = new EventQuestDefinition(71004, "Grim and Grisly Games", 176,
+    EventQuestPolicy.FestivalLabel(176, ""), 15, [71003], [new(52402, "Grisly Bear Head"), new(52403, "Grisly Bear Suit")]);
+Check("blank festival quest observation passes upload validation", EventQuestPolicy.Valid(new CollectionDetails(
+    "quest", [71004], [71004], [], 1, [blankFestivalQuest196], [])).ToString(), "True");

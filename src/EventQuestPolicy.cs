@@ -3,6 +3,12 @@ namespace EquinoxCompanion;
 public static class EventQuestPolicy
 {
     private static bool Text(string? s) => !string.IsNullOrWhiteSpace(s) && s.Length<=100 && !s.Any(char.IsControl);
+    // Some valid festival rows (including All Saints' Wake 2026, row 176)
+    // have no display name. Missing metadata must not suppress quest observations.
+    public static string FestivalLabel(uint festivalId, string? name) =>
+        string.IsNullOrWhiteSpace(name)
+            ? festivalId == 176 ? "All Saints' Wake" : $"Seasonal festival {festivalId}"
+            : name;
     public static bool Valid(CollectionDetails c) =>
         c.Segment is >=0 and <=1000 &&
         (c.QuestDefinitions is null || c.Category=="quest" && c.QuestDefinitions.Length<=8 &&
