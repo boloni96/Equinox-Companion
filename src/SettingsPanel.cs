@@ -23,6 +23,7 @@ public sealed partial class Plugin
     {
         if (!ImGui.BeginTabBar("SettingsSections")) return;
         if (ImGui.BeginTabItem("Features")) { DrawFeatureSettings(); ImGui.EndTabItem(); }
+        if (ImGui.BeginTabItem("Camera")) { DrawCameraHeightSettings(); ImGui.EndTabItem(); }
         if (ImGui.BeginTabItem("Tracking"))
         {
             DrawGeneralSettings();

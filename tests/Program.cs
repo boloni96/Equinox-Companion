@@ -1782,3 +1782,5 @@ var nullSaved=SavedPlotRecovery.Read("""{"PairingKey":"not-uploaded","BidFavorit
 Check("null legacy fields safe",nullSaved[0].Notes+nullSaved[0].WorldName,"");
 Check("empty import response must not erase local saves",SavedPlotRecovery.ContainsAll(legacySaved,[]).ToString(),"False");
 Check("import acknowledgement required",SavedPlotRecovery.ContainsAll(legacySaved,nullSaved).ToString(),"True");
+
+CameraHeight194Tests.Run();

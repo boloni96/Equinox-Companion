@@ -3,6 +3,8 @@ namespace EquinoxCompanion;
 [Serializable]
 public sealed class Configuration : IPluginConfiguration
 {
+    public bool RememberCameraHeight { get; set; }
+    public float PreferredCameraHeight { get; set; }
     public Configuration Snapshot()
     {
         // Published observation/roster records are immutable. Copy their mutable list

@@ -300,6 +300,7 @@ public sealed partial class Plugin : IDalamudPlugin
     private int discoveryStage;
     private unsafe void UpdateCore(IFramework framework)
     {
+        UpdateCameraHeight();
         var now = DateTimeOffset.UtcNow;
         UpdateMaintenanceNotices(now);
         UpdateLottery(now);
