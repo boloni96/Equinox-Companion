@@ -8,7 +8,7 @@ public sealed partial class Plugin
  private uint pluginPopupItem;
  private string pluginPopupName="";
  private bool pluginPopupRequested,pluginPopupActive,pluginPopupArtisan;
- private (ushort Id,string Label)[] pluginPopupRecipes=[];
+ private bool pluginPopupHasRecipe;
  private void ItemRightClick(uint id){
   if(id!=0&&ImGui.IsItemClicked(ImGuiMouseButton.Right))OpenPluginItemMenu(id);
  }
@@ -19,9 +19,8 @@ public sealed partial class Plugin
   if(row is null||row.Value.Name.IsEmpty)return;
   pluginPopupItem=id;pluginPopupName=row.Value.Name.ToString();
   // Resolve once per click, never scan sheets on every rendered frame.
-  pluginPopupRecipes=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Recipe>()
-   .Where(r=>r.ItemResult.RowId==id&&r.RowId<=ushort.MaxValue)
-   .Select(r=>((ushort)r.RowId,$"{r.CraftType.Value.Name} · level {r.RecipeLevelTable.Value.ClassJobLevel}##{r.RowId}")).ToArray();
+  pluginPopupHasRecipe=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Recipe>()
+   .Any(r=>r.ItemResult.RowId==id);
   pluginPopupArtisan=Pi.InstalledPlugins.Any(p=>p.IsLoaded&&p.InternalName=="Artisan");
   pluginPopupRequested=true;
  }
@@ -45,20 +44,13 @@ public sealed partial class Plugin
    if(ImGui.MenuItem("Do I already have it?"))PluginItemAction(()=>OpenItemSearch(id.ToString()));
    if(ImGui.MenuItem("Copy item name"))ImGui.SetClipboardText(name);
    var ready=Player.IsLoaded&&!Conditions[ConditionFlag.BetweenAreas]&&!Conditions[ConditionFlag.BetweenAreas51];
-   if(pluginPopupRecipes.Length>0){
+   if(pluginPopupHasRecipe){
     ImGui.Separator();ImGui.BeginDisabled(!ready);
     if(ImGui.MenuItem("Search crafting recipes"))PluginItemAction(()=>OpenPluginRecipe(id));
     ImGui.EndDisabled();
    }
    if(pluginPopupArtisan&&ImGui.BeginMenu("Artisan")){
     if(ImGui.MenuItem("Open crafting lists"))PluginItemAction(()=>Commands.ProcessCommand("/artisan lists"));
-    if(pluginPopupRecipes.Length>0&&ImGui.BeginMenu("Craft one",ready)){
-     foreach(var recipe in pluginPopupRecipes)if(ImGui.MenuItem(recipe.Label))PluginItemAction(()=>{
-      if(Pi.GetIpcSubscriber<bool>("Artisan.IsBusy").InvokeFunc()){Chat.Print("[Equinox] Artisan is already busy.");return;}
-      Pi.GetIpcSubscriber<ushort,int,object>("Artisan.CraftItem").InvokeAction(recipe.Id,1);
-     });
-     ImGui.EndMenu();
-    }
     ImGui.EndMenu();
    }
    ImGui.EndPopup();
