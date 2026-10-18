@@ -131,12 +131,17 @@ public sealed partial class Plugin
   ImGui.BeginChild("SavedBidPlots",new Vector2(0,Math.Max(120,ImGui.GetContentRegionAvail().Y-8)),true);
   foreach(var f in config.BidFavorites){
    ImGui.PushID(f.Key);ImGui.Separator();
-   ImGui.TextUnformatted($"{BidWorldName(f.World)} · {f.District} W{f.Ward} P{f.Plot}");CopyTextOnClick($"{BidWorldName(f.World)} · {f.District} · Ward {f.Ward} · Plot {f.Plot}");
-   if(!string.IsNullOrEmpty(f.Notes))ImGui.TextWrapped(f.Notes);
-   if(ImGui.SmallButton("Notes / edit"))EditSavedPlot(f);
+   var expanded=ImGui.TreeNodeEx("##details",ImGuiTreeNodeFlags.None," ");
+   ImGui.SameLine();ImGui.TextUnformatted($"{BidWorldName(f.World)} · {f.District} W{f.Ward} P{f.Plot}");CopyTextOnClick($"{BidWorldName(f.World)} · {f.District} · Ward {f.Ward} · Plot {f.Plot}");
+   if(ImGui.IsItemHovered()&&!string.IsNullOrEmpty(f.Notes)){ImGui.BeginTooltip();ImGui.PushTextWrapPos(ImGui.GetFontSize()*30);ImGui.TextUnformatted(f.Notes);ImGui.PopTextWrapPos();ImGui.EndTooltip();}
    ImGui.SameLine();if(ImGui.SmallButton("GO SEE"))GoSeeBid(f.World,f.District,f.Ward,f.Plot);
-   ImGui.SameLine();if(ImGui.SmallButton("Search world")){bidSection=0;bidWorld=f.World;bidRegion=bidWorlds!.FirstOrDefault(w=>w.Id==bidWorld).Region;StartBidSearch();}
-   ImGui.SameLine();ImGui.BeginDisabled(savedRequest is not null||savedRevision==0);if(ImGui.SmallButton("Remove"))WriteSavedPlot(f,true);ImGui.EndDisabled();ImGui.PopID();
+   if(expanded){
+    if(!string.IsNullOrEmpty(f.Notes))ImGui.TextWrapped(f.Notes);
+    if(ImGui.SmallButton("Notes / edit"))EditSavedPlot(f);
+    ImGui.SameLine();if(ImGui.SmallButton("Search world")){bidSection=0;bidWorld=f.World;bidRegion=bidWorlds!.FirstOrDefault(w=>w.Id==bidWorld).Region;StartBidSearch();}
+    ImGui.SameLine();ImGui.BeginDisabled(savedRequest is not null||savedRevision==0);if(ImGui.SmallButton("Remove"))WriteSavedPlot(f,true);ImGui.EndDisabled();ImGui.TreePop();
+   }
+   ImGui.PopID();
   }
   if(config.BidFavorites.Count==0)ImGui.TextDisabled("Save any house address above, or click a save icon in Find plots.");
   ImGui.EndChild();

@@ -41,6 +41,7 @@ public sealed partial class Plugin
     }
     private unsafe uint ContextSearchItem(IMenuOpenedArgs args)
     {
+        if(openingPluginItem!=0)return openingPluginItem;
         if(args.Target is MenuTargetInventory inventory)
             return ItemContextPolicy.Normalize(inventory.TargetItem?.ItemId ?? 0);
         // Character menus must never inherit an unrelated hovered item.
@@ -71,6 +72,7 @@ public sealed partial class Plugin
     {
         var id = ContextSearchItem(args);
         if(id == 0 || DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>().GetRowOrDefault(id) is not {} row || row.Name.IsEmpty) return;
+        if(openingPluginItem!=0)args.AddMenuItem(new MenuItem{Name="Copy item name",OnClicked=_=>ImGui.SetClipboardText(SearchItemName(id))});
         args.AddMenuItem(new MenuItem{PrefixChar='E',Name=new SeStringBuilder().AddText("Where is it cheapest?").Build(),OnClicked=_=>OpenMarketItem(id)});
         args.AddMenuItem(new MenuItem{PrefixChar='E',Name=new SeStringBuilder().AddText("Do I already have it?").Build(),OnClicked=_=>OpenItemSearch(id.ToString())});
     }
@@ -196,9 +198,10 @@ public sealed partial class Plugin
         }
         ImGui.EndTabBar();
     }
-    private static void DrawItemLocation(SharedItemLocation location,StorageStack stack)
+    private void DrawItemLocation(SharedItemLocation location,StorageStack stack)
     {
         ImGui.Separator();ImGui.TextWrapped(stack.Name+(location.Stacks is null?" · quality unknown":stack.Hq?" · HQ":" · NQ"));
+        ItemRightClick(stack.ItemId);
         ImGui.TextWrapped(location.Name);
         ImGui.TextWrapped(stack.Positions is {Length:>0}?string.Join(" · ",stack.Positions.Select(p=>$"Slot {p.Slot} × {p.Quantity}")):"Slot not recorded");
         ImGui.TextDisabled((location.Stacks is null?"Quantity not recorded":stack.Quantity+" recorded")+$" · Checked {DisplayTime.Local(location.At)}");

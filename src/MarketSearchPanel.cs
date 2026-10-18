@@ -182,7 +182,7 @@ public sealed partial class Plugin
             ImGui.BeginDisabled(marketTask is not null || DateTimeOffset.UtcNow < marketNextSearch);
             if(ImGui.Button("Refresh now")) StartMarketSearch(preserveResults: true, force: true);
             ImGui.EndDisabled(); ImGui.SameLine();
-            ImGui.TextUnformatted(marketSelectedName); CopyTextOnClick(marketSelectedName);
+            ImGui.TextUnformatted(marketSelectedName); CopyTextOnClick(marketSelectedName);ItemRightClick(marketSelectedId);
             ImGui.SameLine();
             if(ImGui.Button("Sources")) ImGui.OpenPopup("MarketSourceDetails");
             if(ImGui.IsItemHovered()) ImGui.SetTooltip(MarketSourceLabel(marketSelectedId));
@@ -207,7 +207,7 @@ public sealed partial class Plugin
         if(marketMatches.Length > 0)
         {
             if(ImGui.BeginChild("MarketMatches", new Vector2(0, 0), true))
-                foreach(var item in marketMatches) if(ImGui.Selectable(item.Name + "##" + item.Id)) { SelectMarketItem(item); break; }
+                foreach(var item in marketMatches){var chosen=ImGui.Selectable(item.Name + "##" + item.Id);ItemRightClick(item.Id);if(chosen){SelectMarketItem(item);break;}}
             ImGui.EndChild(); return;
         }
         if(marketResult is null) return;

@@ -123,8 +123,8 @@ public sealed partial class Plugin
         LoadGardenPictures();var name=label.Trim();string? path=null;
         if(gardenSupplies.TryGetValue(name,out var supply))path=supply;
         else if(gardenPictures!.TryGetValue(GardenCropName(name.EndsWith(" seed",StringComparison.OrdinalIgnoreCase)?name[..^5]:name),out var picture))path=picture.GetProperty(seed?"seedIcon":"produceIcon").GetString();
-        if(path is not null){var texture=Textures.GetFromFile(Path.Combine(Pi.AssemblyLocation.DirectoryName!,"garden-art",path)).GetWrapOrDefault();if(texture is not null){ImGui.Image(texture.Handle,new Vector2(ImGui.GetTextLineHeight()));ImGui.SameLine();}}
-        ImGui.TextWrapped(prefix+label);
+        if(path is not null){var texture=Textures.GetFromFile(Path.Combine(Pi.AssemblyLocation.DirectoryName!,"garden-art",path)).GetWrapOrDefault();if(texture is not null){ImGui.Image(texture.Handle,new Vector2(ImGui.GetTextLineHeight()));GardenItemRightClick(label,seed);ImGui.SameLine();}}
+        ImGui.TextWrapped(prefix+label);GardenItemRightClick(label,seed);
     }
     private bool drawingGardenGuide;
     private SyncEvent[]? gardenGuideActions;

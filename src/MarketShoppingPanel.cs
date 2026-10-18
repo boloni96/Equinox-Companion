@@ -170,7 +170,7 @@ public sealed partial class Plugin
                 var open = ImGui.TreeNodeEx("##ShoppingItem", ImGuiTreeNodeFlags.None);
                 if(ImGui.IsItemHovered()) ImGui.SetTooltip("Expand or collapse item details");
                 ImGui.SameLine(); ImGui.TextUnformatted($"{entry.Request.Quantity:N0} × {entry.Request.Name}{summary}");
-                CopyTextOnClick(entry.Request.Name);
+                CopyTextOnClick(entry.Request.Name);ItemRightClick(entry.ItemId);
                 if(open)
                 {
                     var quantity = entry.Request.Quantity; ImGui.SetNextItemWidth(140);
