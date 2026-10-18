@@ -1773,3 +1773,12 @@ Check("house owner selection ignores tenant ordering",SharedHousePresentation.Ow
 Check("missing owner does not promote tenant",SharedHousePresentation.Owner(ownerHouse169 with {OwnerName="Missing Owner"},[houseTenant,houseOwner])?.Id,null);
 Check("same name on wrong world is not owner",SharedHousePresentation.Owner(ownerHouse169,[houseOwner with {World="Other World"}])?.Id,null);
 Check("ambiguous owner stays unknown",SharedHousePresentation.Owner(ownerHouse169,[houseOwner,houseOwner with {Id="duplicate169"}])?.Id,null);
+
+var legacySaved=SavedPlotRecovery.Read("""[{"World":91,"District":"Lavender Beds","Ward":11,"Plot":35}]""");
+Check("legacy saved house retained",legacySaved.Length.ToString(),"1");
+Check("legacy saved notes normalized",legacySaved[0].Notes,"");
+Check("legacy saved world name normalized",legacySaved[0].WorldName,"");
+var nullSaved=SavedPlotRecovery.Read("""{"PairingKey":"not-uploaded","BidFavorites":[{"World":91,"District":"Lavender Beds","Ward":11,"Plot":35,"Notes":null,"WorldName":null}]}""");
+Check("null legacy fields safe",nullSaved[0].Notes+nullSaved[0].WorldName,"");
+Check("empty import response must not erase local saves",SavedPlotRecovery.ContainsAll(legacySaved,[]).ToString(),"False");
+Check("import acknowledgement required",SavedPlotRecovery.ContainsAll(legacySaved,nullSaved).ToString(),"True");
