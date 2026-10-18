@@ -6,6 +6,7 @@ public sealed partial class Plugin
  // Reserve a separate footer so the launcher never covers content or scrolls away.
  private void DrawWindowWithLauncher(Action content)
  {
+  RememberItemMenuWindow();
   var height=Math.Max(32,ImGui.GetFrameHeight());
   var start=ImGui.GetCursorPos();var available=ImGui.GetContentRegionAvail();
   var contentHeight=Math.Max(1,available.Y-height-ImGui.GetStyle().ItemSpacing.Y);

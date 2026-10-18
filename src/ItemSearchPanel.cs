@@ -41,6 +41,7 @@ public sealed partial class Plugin
     }
     private unsafe uint ContextSearchItem(IMenuOpenedArgs args)
     {
+        if(openingPluginItem!=0)return openingPluginItem;
         if(args.Target is MenuTargetInventory inventory)
             return ItemContextPolicy.Normalize(inventory.TargetItem?.ItemId ?? 0);
         // Character menus must never inherit an unrelated hovered item.

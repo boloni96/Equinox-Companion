@@ -1032,6 +1032,7 @@ public sealed partial class Plugin : IDalamudPlugin
 
     private void DrawContents()
     {
+        RememberItemMenuWindow();
         if(configurationError.Length>0)ImGui.TextWrapped(configurationError);
         if (ImGui.BeginTable("companion-header", 2, ImGuiTableFlags.SizingStretchProp))
         {
