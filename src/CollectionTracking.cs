@@ -10,6 +10,8 @@ public sealed partial class Plugin
     private sealed record CatalogueEntry(string Category, uint Id, uint ItemId, EventQuestDefinition? Quest = null);
     private CatalogueEntry[][]? collectionGroups;
     private int nextCollectionGroup;
+    private int priorityCollectionTurn;
+    private int nextPriorityCollection;
     private Dictionary<uint, uint[]>? hairstyleUnlocks;
     private DateTimeOffset collectionReadyAt;
     private ulong collectionCharacter;
@@ -25,13 +27,25 @@ public sealed partial class Plugin
         {
             collectionCharacter = Player.ContentId;
             collectionReadyAt = now.AddSeconds(15);
-            nextCollectionGroup = 0;
+            nextCollectionGroup = 0; priorityCollectionTurn = 0; nextPriorityCollection = 0;
             return;
         }
         if (now < collectionReadyAt) return;
         if (collectionGroups is null) return;
         if (collectionGroups.Length == 0) return;
         var segmentIndex = nextCollectionGroup++ % collectionGroups.Length;
+        // Interleave saved adventure quests with the full catalogue. A seasonal
+        // quest must not wait for every historical festival segment to cycle.
+        var watched = config.CachedAdventures.SelectMany(b => b.Stops).SelectMany(s => s.Tasks)
+            .Where(t => t.Rule?.Kind == "event").SelectMany(t => t.Rule?.Quests ?? [])
+            .Append(71004u).ToHashSet(); // All Saints' Wake 2026 final quest, game sheet.
+        var priority = collectionGroups.Select((g, i) => (g, i))
+            .Where(x => x.g.Any(e => e.Category == "quest" && watched.Contains(e.Id))).Select(x => x.i).ToArray();
+        if (priority.Length > 0 && priorityCollectionTurn++ % 2 == 0)
+        {
+            nextCollectionGroup--;
+            segmentIndex = priority[nextPriorityCollection++ % priority.Length];
+        }
         var group = collectionGroups[segmentIndex];
         var unlocked = new List<uint>(); var obtained = new List<uint>(); var known = new List<uint>();
         var inventory = InventoryManager.Instance();

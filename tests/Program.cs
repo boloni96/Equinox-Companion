@@ -1784,3 +1784,6 @@ Check("empty import response must not erase local saves",SavedPlotRecovery.Conta
 Check("import acknowledgement required",SavedPlotRecovery.ContainsAll(legacySaved,nullSaved).ToString(),"True");
 
 CameraHeight194Tests.Run();
+
+var eventRule195=JsonSerializer.Deserialize<AdventureTaskRule>("""{"Kind":"event","Quests":[71004]}""");
+Check("saved adventure quest IDs retained for priority scanning",eventRule195?.Quests?.Single().ToString(),"71004");
