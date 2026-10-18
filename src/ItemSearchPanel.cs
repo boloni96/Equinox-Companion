@@ -41,7 +41,6 @@ public sealed partial class Plugin
     }
     private unsafe uint ContextSearchItem(IMenuOpenedArgs args)
     {
-        if(openingPluginItem!=0)return openingPluginItem;
         if(args.Target is MenuTargetInventory inventory)
             return ItemContextPolicy.Normalize(inventory.TargetItem?.ItemId ?? 0);
         // Character menus must never inherit an unrelated hovered item.
@@ -72,7 +71,6 @@ public sealed partial class Plugin
     {
         var id = ContextSearchItem(args);
         if(id == 0 || DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>().GetRowOrDefault(id) is not {} row || row.Name.IsEmpty) return;
-        if(openingPluginItem!=0)args.AddMenuItem(new MenuItem{Name="Copy item name",OnClicked=_=>ImGui.SetClipboardText(SearchItemName(id))});
         args.AddMenuItem(new MenuItem{PrefixChar='E',Name=new SeStringBuilder().AddText("Where is it cheapest?").Build(),OnClicked=_=>OpenMarketItem(id)});
         args.AddMenuItem(new MenuItem{PrefixChar='E',Name=new SeStringBuilder().AddText("Do I already have it?").Build(),OnClicked=_=>OpenItemSearch(id.ToString())});
     }

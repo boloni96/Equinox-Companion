@@ -1001,13 +1001,6 @@ public sealed partial class Plugin : IDalamudPlugin
 
     private void DrawCore()
     {
-        if(YieldToPluginItemMenu())
-        {
-            // Escape dismisses the native menu; it must not also minimize us.
-            escapeRequested=false;
-            escapeWasDown=Keys[Dalamud.Game.ClientState.Keys.VirtualKey.ESCAPE];
-            return;
-        }
         // Dalamud's cutscene exception is plugin-wide; draw only Adventure here.
         // Keep the same window instance/namespace, position and minimize behavior.
         if (HelperInCutscene())
@@ -1015,6 +1008,7 @@ public sealed partial class Plugin : IDalamudPlugin
             escapeRequested=false;
             escapeWasDown=Keys[Dalamud.Game.ClientState.Keys.VirtualKey.ESCAPE];
             adventureCutsceneWindows.Draw();
+            DrawPluginItemPopup();
             return;
         }
         UpdateShortcuts();
@@ -1024,6 +1018,7 @@ public sealed partial class Plugin : IDalamudPlugin
         escapeRequested=escapeDown&&!escapeWasDown;escapeWasDown=escapeDown;
         var perf = System.Diagnostics.Stopwatch.GetTimestamp();
         windows.Draw();
+        DrawPluginItemPopup();
         TrackPerformance("window drawing", perf);
         perf = System.Diagnostics.Stopwatch.GetTimestamp();
         visible = mainWindow.IsOpen;
