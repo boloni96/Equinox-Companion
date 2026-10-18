@@ -21,7 +21,7 @@ public sealed partial class Plugin
   request.Headers.Authorization=new AuthenticationHeaderValue("Bearer",key);
   if(action is not null)request.Content=new StringContent(JsonSerializer.Serialize(action),Encoding.UTF8,"application/json");
   using var response=await upgradeHttp.SendAsync(request,HttpCompletionOption.ResponseHeadersRead);
-  await response.Content.LoadIntoBufferAsync(200000);
+  await response.Content.LoadIntoBufferAsync(2000000);
   if(!response.IsSuccessStatusCode)throw new HttpRequestException(response.StatusCode==System.Net.HttpStatusCode.Conflict?"Favourite plots changed on another device. Refresh and try again.":"Favourite save unavailable. Check pairing and deploy Journal V7.11.182.");
   return JsonSerializer.Deserialize<HousingFavouriteReply>(await response.Content.ReadAsStringAsync(),new JsonSerializerOptions{PropertyNameCaseInsensitive=true})??throw new JsonException("Empty favourite response");
  }

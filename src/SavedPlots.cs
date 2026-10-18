@@ -21,7 +21,7 @@ public sealed partial class Plugin
   request.Headers.Authorization=new AuthenticationHeaderValue("Bearer",key);
   if(body is not null)request.Content=new StringContent(JsonSerializer.Serialize(body),Encoding.UTF8,"application/json");
   using var response=await upgradeHttp.SendAsync(request,HttpCompletionOption.ResponseHeadersRead);
-  await response.Content.LoadIntoBufferAsync(2000000);
+  await response.Content.LoadIntoBufferAsync(4000000);
   if(!response.IsSuccessStatusCode)throw new HttpRequestException(response.StatusCode==System.Net.HttpStatusCode.Conflict?"Saved plots changed. Refresh, then save your draft again.":"Saved plots unavailable. Check pairing and deploy Journal V7.11.194.");
   return JsonSerializer.Deserialize<SavedPlotsReply>(await response.Content.ReadAsStringAsync(),new JsonSerializerOptions{PropertyNameCaseInsensitive=true})??throw new JsonException("Empty saved plots response");
  }
@@ -70,7 +70,7 @@ public sealed partial class Plugin
   if(ImGui.SmallButton("Add house address"))EditSavedPlot();
   ImGui.SameLine();
   var a=currentAddress;
-  var canSave=Player.IsLoaded&&a is not null&&!a.Apartment&&a.Ward is >=1 and <=30&&a.Plot is >=1 and <=60&&!Conditions[Dalamud.Game.ClientState.Conditions.ConditionFlag.BetweenAreas]&&!Conditions[Dalamud.Game.ClientState.Conditions.ConditionFlag.BetweenAreas51];
+  var canSave=Player.IsLoaded&&a is not null&&a.WorldId==Player.CurrentWorld.RowId&&HousingLottery.District(a.DistrictName??"") is not null&&!a.Apartment&&a.Ward is >=1 and <=30&&a.Plot is >=1 and <=60&&!Conditions[Dalamud.Game.ClientState.Conditions.ConditionFlag.BetweenAreas]&&!Conditions[Dalamud.Game.ClientState.Conditions.ConditionFlag.BetweenAreas51];
   ImGui.BeginDisabled(!canSave);
   if(ImGui.SmallButton("Save current house")&&a is not null){var district=HousingLottery.District(a.DistrictName??"")??"Mist";var p=new BidFavorite(a.WorldId,district,a.Ward,a.Plot);EditSavedPlot(config.BidFavorites.FirstOrDefault(f=>f.Key==p.Key)??p);}
   ImGui.EndDisabled();if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))ImGui.SetTooltip("Use the detected estate address. If outside a known plot, use Add house address.");
