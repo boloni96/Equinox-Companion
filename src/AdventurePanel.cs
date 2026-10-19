@@ -115,19 +115,37 @@ public sealed partial class Plugin
   ImGui.SameLine();if(ImGui.SmallButton("GO SEE")){EnsureBidWorlds();var world=bidWorlds!.FirstOrDefault(w=>w.Name==house.World);if(world.Id>0)GoSeeBid(world.Id,house.District,house.Ward,house.Plot);}
   if(!string.IsNullOrEmpty(bidTravelMessage))ImGui.TextWrapped(bidTravelMessage);DrawGoSeeHomeStop();
  }
+ // Presentation only: retain the original task, IDs and confirmation state for syncing.
+ private static string AdventureTaskLabel(AdventureTask task)
+ {
+  var suffixes=task.Rule?.Kind switch {
+   "event"=>new[]{" · Complete event activity"," · Activity completed"},
+   "reward"=>new[]{" · Collect reward"," · obtained"},
+   _=>Array.Empty<string>()
+  };
+  foreach(var suffix in suffixes)
+   if(task.Label.EndsWith(suffix,StringComparison.Ordinal)&&task.Label.Length>suffix.Length)
+    return task.Label[..^suffix.Length];
+  return task.Label;
+ }
+ private static string AdventureTaskHint(AdventureTask task)=>task.Rule?.Kind switch {
+  "event"=>"Complete event activity.",
+  "reward"=>"Collect reward.",
+  _=>""
+ };
  private void DrawAdventureTaskList(AdventureBoard board,AdventureStop stop,AdventureTask[] tasks)
  {
     PrepareAdventureLayout(stop);
     foreach(var task in tasks){ImGui.PushID(task.Id);
      var house=AdventurePolicy.IsHouseVisit(task)?adventureLayoutHouses.GetValueOrDefault(AdventurePolicy.TaskHouseId(task)):null;
-     var label=house is null?task.Label:$"{(task.Done?"Entered":"Enter")} · {house.Name} · {house.District} W{house.Ward} P{house.Plot}";var pending=board.Pending?.LastOrDefault(p=>p.TaskId==task.Id);var check=task.ServerConfirmed?task.Done:pending?.Checked??task.Done;
+     var label=house is null?AdventureTaskLabel(task):$"{(task.Done?"Entered":"Enter")} · {house.Name} · {house.District} W{house.Ward} P{house.Plot}";var pending=board.Pending?.LastOrDefault(p=>p.TaskId==task.Id);var check=task.ServerConfirmed?task.Done:pending?.Checked??task.Done;
      ImGui.BeginDisabled(!AdventurePolicy.CanEdit(task)||(board.Protocol<2&&pending is not null)||AdventureSaving||!adventureFresh);
      if(ImGui.Checkbox("##done",ref check))AdventureAction(board,task:task,value:check);ImGui.EndDisabled();
      var hover=ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled);ImGui.SameLine();
      ImGui.TextWrapped(label);
      var bedLink=task.Rule is {Batch:>=1,Bed:>=1 and <=8} rule&&rule.HouseId.Length>0&&(rule.HouseId==stop.HouseId||AdventurePolicy.IsGardenTask(task));
      if(ImGui.IsItemClicked()){if(bedLink&&task.Rule is {} clicked)adventureOpenBed=(clicked.HouseId,clicked.Batch,clicked.Bed);else ImGui.SetClipboardText(label);}
-     if(hover||ImGui.IsItemHovered()){ImGui.BeginTooltip();ImGui.PushTextWrapPos(ImGui.GetFontSize()*32);ImGui.TextUnformatted((bedLink?"Click to open this bed’s batch.\n":"Click to copy this label.\n")+(task.Status.Length>0?DisplayTime.InText(task.Status):task.Done?"Completion recorded in the Journal":"Waiting for completion")+(task.ServerConfirmed?"\nConfirmed automatically from game records. This check cannot be removed manually.":!task.CanCheck?"\nThis task updates automatically.":"\nManual completion can be changed here."));ImGui.PopTextWrapPos();ImGui.EndTooltip();}
+     if(hover||ImGui.IsItemHovered()){ImGui.BeginTooltip();ImGui.PushTextWrapPos(ImGui.GetFontSize()*32);ImGui.TextUnformatted((bedLink?"Click to open this bed’s batch.\n":"Click to copy this label.\n")+(AdventureTaskHint(task) is {Length:>0} hint?hint+"\n":"")+(task.Status.Length>0?DisplayTime.InText(task.Status):task.Done?"Completion recorded in the Journal":"Waiting for completion")+(task.ServerConfirmed?"\nConfirmed automatically from game records. This check cannot be removed manually.":!task.CanCheck?"\nThis task updates automatically.":"\nManual completion can be changed here."));ImGui.PopTextWrapPos();ImGui.EndTooltip();}
      if(!check&&(house is not null||AdventurePolicy.IsFashion(task))){
       var right=ImGui.GetItemRectMax().X+ImGui.GetStyle().ItemSpacing.X;
       if(right+ImGui.CalcTextSize("Go").X+ImGui.GetStyle().FramePadding.X*2<ImGui.GetCursorScreenPos().X+ImGui.GetContentRegionAvail().X)ImGui.SameLine();
