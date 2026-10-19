@@ -79,26 +79,38 @@ public sealed partial class Plugin
                 lotteryPendingBuyer=HousingLottery.Buyer(LotteryText(addon,0));
                 lotteryPendingAt=now;lotteryPendingCharacter=Player.ContentId;lotteryPendingWorld=Player.CurrentWorld.RowId;
             }
-            else if(ObservePublicLotteryResult(addon,now)){}
-            else if(HousingLottery.Result(LotteryText(addon,0)) is {} result)
+            if(args.AddonName is "HousingSignBoard" or "SelectYesno" or "SelectOk" or "SelectString" or "Talk" or "SelectYesNoTextScroll")
+                ObservePublicLotteryResult(addon,now);
+            if(args.AddonName is "SelectYesno" or "SelectOk" or "SelectString" or "Talk" or "SelectYesNoTextScroll" && HousingLottery.Result(LotteryVisibleText(addon)) is {} result)
             {
                 // Only connect a personal result dialog to a previously observed entry
                 // at the exact targeted plot. Never infer a result from a public winner.
                 var target=Targets.Target;
                 if(target is null||lotteryPlacard is not {} plot||plot.Character!=Player.ContentId||plot.Target!=target.GameObjectId||plot.World!=Player.CurrentWorld.RowId||now-plot.At>TimeSpan.FromMinutes(1))return;
-                var matches=config.Discoveries.Where(e=>e.Kind=="housing.lottery"&&e.Actor.ContentId==Player.ContentId.ToString()&&e.Lottery is {} b&&b.District==plot.Bid.District&&b.Ward==plot.Bid.Ward&&b.Plot==plot.Bid.Plot&&e.Actor.HomeWorldId==plot.World).GroupBy(e=>(e.Lottery!.CycleStart,e.Lottery.Entry)).Select(g=>g.MaxBy(e=>e.At)!).Where(e=>e.Lottery!.Status=="entered").ToArray();
+                var matches=HousingLotteryNotices.WithShared(config.Discoveries,config.SharedRoster).Where(e=>e.Kind=="housing.lottery"&&e.Actor.ContentId==Player.ContentId.ToString()&&e.Lottery is {} b&&b.District==plot.Bid.District&&b.Ward==plot.Bid.Ward&&b.Plot==plot.Bid.Plot&&e.Actor.HomeWorldId==plot.World&&DateTimeOffset.TryParse(b.CycleStart,out var cycle)&&cycle==HousingLottery.Period(now).Start&&!HousingLottery.Period(now).Entry).GroupBy(e=>(e.Lottery!.CycleStart,e.Lottery.Entry)).Select(g=>g.MaxBy(e=>e.At)!).Where(e=>e.Lottery!.Status=="entered").ToArray();
                 if(matches.Length==1)RecordLottery(matches[0].Lottery! with {Status=result,Evidence="result-dialog"},now);
             }
         }
         catch(Exception ex){errorJournal.Record("housing-lottery","Lottery view could not be read; existing entries kept.",exceptionType:ex.GetType().Name);}
     }
+    private static unsafe string LotteryVisibleText(AtkUnitBase* addon)
+    {
+        var texts=new List<string>();
+        for(var i=0;i<Math.Min((int)addon->AtkValuesCount,256);i++)
+        { var text=LotteryText(addon,i);if(text.Length>0)texts.Add(text); }
+        if(addon->UldManager.NodeList!=null&&addon->UldManager.NodeListCount<=512)
+            for(var i=0;i<addon->UldManager.NodeListCount;i++)
+            {
+                var node=addon->UldManager.NodeList[i];
+                if(node!=null&&node->Type==NodeType.Text&&node->IsVisible())texts.Add(((AtkTextNode*)node)->NodeText.ToString());
+            }
+        return string.Join("\n",texts.Distinct());
+    }
     private unsafe bool ObservePublicLotteryResult(AtkUnitBase* addon,DateTimeOffset now)
     {
         var period=HousingLottery.Period(now);
         if(period.Entry||lotteryPlacard is not {} plot||plot.Character!=Player.ContentId||plot.World!=Player.CurrentWorld.RowId||Targets.Target?.GameObjectId!=plot.Target||now-plot.At>TimeSpan.FromMinutes(1))return false;
-        int? winner=null;
-        for(var i=0;i<Math.Min((int)addon->AtkValuesCount,64);i++)
-            if(HousingLottery.WinningNumber(LotteryText(addon,i)) is {} number){winner=number;break;}
+        var winner=HousingLottery.WinningNumber(LotteryVisibleText(addon));
         if(winner is null)return false;
         var actor=ReadActor();if(!SyncValidation.ActorReady(actor))return false;
         var result=new LotteryResult(plot.Bid.District,plot.Bid.Ward,plot.Bid.Plot,plot.World,winner.Value,period.Start.ToString("O"));

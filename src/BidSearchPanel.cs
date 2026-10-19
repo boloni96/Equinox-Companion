@@ -47,9 +47,10 @@ public sealed partial class Plugin
    var match=matches.Length==1?matches[0]:default;
    var identity=match.Character is not null?(match.Character.ContentId.Length>0?match.Character.ContentId:match.Character.Name+"@"+match.Character.World):e.Actor.ContentId;
    add(identity,e.Actor.Name,match.Character is not null?owner(match.Person,match.Character):"Person / account pending sync",new(b.District,b.Ward,b.Plot,b.Entry,b.Buyer,b.FcId,b.Status,b.CycleStart,b.Evidence,e.Actor.HomeWorldId,e.Actor.HomeWorldName??"",e.At));}
-  foreach(var v in merged.Values){var b=v.Bid;var key=$"{b.WorldId}|{b.District}|{b.Ward}|{b.Plot}";if(!bidByPlot.TryGetValue(key,out var list))bidByPlot[key]=list=[];list.Add(v);}
+  var observedResults=config.Discoveries.Where(e=>e.Kind=="housing.lottery-result"&&e.LotteryResult is not null).Select(e=>e.LotteryResult!).ToArray();
+  foreach(var original in merged.Values){var v=(Name:original.Name,Owner:original.Owner,Bid:original.Bid with {Status=HousingLottery.ObservedStatus(original.Bid,observedResults)});var b=v.Bid;var key=$"{b.WorldId}|{b.District}|{b.Ward}|{b.Plot}";if(!bidByPlot.TryGetValue(key,out var list))bidByPlot[key]=list=[];list.Add(v);}
   bidRows=bidByPlot.Values.SelectMany(x=>x).OrderBy(x=>x.Owner).ThenBy(x=>x.Name).ThenBy(x=>x.Bid.WorldId).ThenBy(x=>x.Bid.District).ThenBy(x=>x.Bid.Ward).ThenBy(x=>x.Bid.Plot).ThenBy(x=>x.Bid.Entry).ToArray();
-  foreach(var (key,list) in bidByPlot)bidMarkers[key]=string.Join("\n",list.Select(x=>$"{x.Owner} · {x.Name} · {(x.Bid.Buyer=="fc"?"FC":x.Bid.Buyer=="private"?"Private":"Type unknown")} · Entry #{x.Bid.Entry} · {x.Bid.Status}"));
+  foreach(var (key,list) in bidByPlot)bidMarkers[key]=string.Join("\n",list.Select(x=>$"{x.Owner} · {x.Name} · {HousingLottery.BuyerLabel(x.Bid.Buyer)} · Entry #{x.Bid.Entry} · {HousingLottery.StatusLabel(x.Bid.Status)}"));
  }
  private void DrawBidSearch(){
   EnsureBidWorlds();var now=DateTimeOffset.UtcNow;
@@ -115,7 +116,7 @@ public sealed partial class Plugin
   var row=0;
   foreach(var entry in bidRows){
    var b=entry.Bid;var address=$"{BidWorldName(b.WorldId)} · {b.District} W{b.Ward} P{b.Plot}";
-   var details=$"{entry.Name} · {(b.Buyer=="fc"?"FC":b.Buyer=="private"?"Private":"Type unknown")} · Entry #{b.Entry} · {b.Status}";
+   var details=$"{entry.Name} · {HousingLottery.BuyerLabel(b.Buyer)} · Entry #{b.Entry} · {HousingLottery.StatusLabel(b.Status)}";
    ImGui.PushID(row++);ImGui.TableNextRow();ImGui.TableNextColumn();ImGui.TextUnformatted(entry.Owner);CopyTextOnClick(entry.Owner);
    ImGui.TableNextColumn();ImGui.TextUnformatted(address);CopyTextOnClick(address);ImGui.TableNextColumn();ImGui.TextUnformatted(details);CopyTextOnClick(entry.Name);
    ImGui.TableNextColumn();if(ImGui.SmallButton("GO SEE"))GoSeeBid(b.WorldId,b.District,b.Ward,b.Plot);
