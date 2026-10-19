@@ -65,9 +65,9 @@ public sealed partial class Plugin
  private void DrawAdventureNavigation(AdventureBoard board)
  {
   if(board.Kind!="garden"){
-   if(ImGui.BeginCombo("World / character",board.Index>=board.Stops.Length?"Round reviewed":AdventureText(board.Stops[board.Index].Title))){
+   if(ImGui.BeginCombo("##WorldCharacter",board.Index>=board.Stops.Length?"Round reviewed":AdventureText(board.Stops[board.Index].Title))){
     for(var i=0;i<board.Stops.Length;i++){var s=board.Stops[i];if(ImGui.Selectable($"{s.Tasks.Count(t=>t.Done)}/{s.Tasks.Length} · {AdventureText(s.Title)}##stop{i}",i==board.Index))AdventureAction(board,i);}ImGui.EndCombo();
-   }return;
+   }if(ImGui.IsItemHovered())ImGui.SetTooltip("World / character · destination for Bring a character here");return;
   }
   var current=board.Index<board.Stops.Length?board.Stops[board.Index]:board.Stops.FirstOrDefault();if(current is null)return;
   var worlds=board.Stops.Select(s=>s.World).Distinct().ToArray();
@@ -186,9 +186,8 @@ public sealed partial class Plugin
   ImGui.TextColored(new Vector4(.65f,.8f,1,1),"YOUR PEOPLE · YOUR WORLDS");
   if(ImGui.Button("Adventure home")){adventureSelected="";adventurePrompt=null;}
   ImGui.SameLine();if(ImGui.Button("Open Journal"))Dalamud.Utility.Util.OpenLink("https://equinoxjournal.pages.dev/#adventure");
-  ImGui.SameLine();ImGui.BeginDisabled(adventureRequest is not null);if(ImGui.Button("Refresh"))adventureNext=default;ImGui.EndDisabled();
   if(!adventureFresh)ImGui.TextWrapped(adventureMessage);
-  if(ImGui.CollapsingHeader("People, accounts & connection")){DrawAdventureFilters();ImGui.TextWrapped(adventureMessage);if(adventureFetched!=default)ImGui.TextDisabled($"Last checked {adventureFetched.ToLocalTime():h:mm:ss tt}");}
+  if(ImGui.CollapsingHeader("People, accounts & connection")){ImGui.BeginDisabled(adventureRequest is not null);if(ImGui.SmallButton("Refresh"))adventureNext=default;ImGui.EndDisabled();DrawAdventureFilters();ImGui.TextWrapped(adventureMessage);if(adventureFetched!=default)ImGui.TextDisabled($"Last checked {adventureFetched.ToLocalTime():h:mm:ss tt}");}
   ImGui.Separator();
   var board=adventureBoards.FirstOrDefault(b=>b.Id==adventureSelected);
   if(board is null){
@@ -203,15 +202,12 @@ public sealed partial class Plugin
    }ImGui.EndChild();return;
   }
   ImGui.TextUnformatted(board.Title);
-  DrawAdventureLocation(board);
-  ImGui.BeginDisabled(AdventureSaving||!adventureFresh);
-  DrawAdventureNavigation(board);ImGui.EndDisabled();
+  ImGui.SameLine();DrawAdventureLocation(board);
   if(board.Protocol<2)ImGui.TextWrapped("This saved route still needs an upgrade. Reload Journal V7.11.177 or newer, sign in, and wait for Adventure pairing to finish. Then close it and press Refresh here.");
-  var footerHeight=ImGui.GetFrameHeightWithSpacing()+ImGui.GetStyle().ItemSpacing.Y+2;
-  ImGui.BeginChild("AdventureChecklist",new Vector2(0,-footerHeight),false);
+  ImGui.BeginChild("AdventureChecklist",new Vector2(0,0),false);
   if(board.Index>=board.Stops.Length){ImGui.TextWrapped("Round reviewed. Unconfirmed work stays unconfirmed. You can revisit any stop or build another adventure in the Journal.");}
   else{
-   var stop=board.Stops[board.Index];ImGui.PushID(board.Id+"|"+board.Generation+"|"+board.Index);ImGui.TextUnformatted(stop.Title);CopyTextOnClick(stop.Title);ImGui.TextWrapped(stop.Subtitle);CopyTextOnClick(stop.Title+" · "+stop.Subtitle);
+   var stop=board.Stops[board.Index];ImGui.PushID(board.Id+"|"+board.Generation+"|"+board.Index);ImGui.TextWrapped(stop.Title+(stop.Subtitle.Length>0?" · "+stop.Subtitle:""));CopyTextOnClick(stop.Title+" · "+stop.Subtitle);
    var stepsOpen=false;
    if(board.Kind!="multi"&&!string.IsNullOrEmpty(stop.HouseId))stepsOpen=DrawAdventureHouseOwner(stop);
    else if(board.Kind!="multi"){
@@ -245,10 +241,12 @@ public sealed partial class Plugin
   ImGui.EndChild();
   var visibleStopKey=board.Id+"|"+board.Generation+"|"+board.Index;
   if(adventurePrompt==visibleStopKey&&!ImGui.IsPopupOpen("All done"))ImGui.OpenPopup("All done");
-  ImGui.Separator();
+  windowStatus=bringMessage.Length>0?bringMessage:adventureMessage;
+  windowFooter=()=>{
   ImGui.BeginDisabled(AdventureSaving||!adventureFresh||board.Index<=0);if(ImGui.Button("← Previous"))AdventureAction(board,Math.Max(0,board.Index-1));ImGui.EndDisabled();ImGui.SameLine();
   ImGui.BeginDisabled(AdventureSaving||!adventureFresh||board.Index>=board.Stops.Length);if(ImGui.Button(board.Index==board.Stops.Length-1?"Review round":"Next stop →"))AdventureAction(board,board.Index+1);ImGui.EndDisabled();
   if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))ImGui.SetTooltip("Navigation never marks tasks complete.");
+  };
   if(ImGui.BeginPopupModal("All done",ImGuiWindowFlags.AlwaysAutoResize)){
    ImGui.TextUnformatted("All done here. Go to the next stop?");
    if(ImGui.Button("Stay here")){adventurePrompt=null;ImGui.CloseCurrentPopup();}ImGui.SameLine();

@@ -211,6 +211,7 @@ public sealed partial class Plugin : IDalamudPlugin
         if (config.TrackGardens) { callbackHook?.Enable(); callbackIntHook?.Enable(); plantHook?.Enable(); }
         ContextMenu.OnMenuOpened += OnItemSearchMenu;
         itemSearchCommandRegistered=Commands.AddHandler("/doihaveit",new CommandInfo((_,args)=>OpenItemSearch(args)){HelpMessage="Search recorded item locations across paired characters."});
+        InitializeCameraCommand();
         Commands.AddHandler("/equinox", new CommandInfo(OnCommand) { HelpMessage = "Open Equinox Companion, shared profiles, housing and settings." });
         shortTravelCommandRegistered = Commands.AddHandler("/et", new CommandInfo((command,args)=>StartSharedWorldTravel(args)) { HelpMessage = "Alias for /equinox travel: /et sir, /et raff, or a full World name." });
         if(!shortTravelCommandRegistered)Log.Warning("/et is already registered; use /eqtravel or /equinox travel.");
@@ -268,7 +269,7 @@ public sealed partial class Plugin : IDalamudPlugin
     private void OnFashionCommand(string command, string args)
     {
         fashionWindow.OpenReport();
-        if(config.NotifyFashionLink) Chat.Print(new Dalamud.Game.Text.SeStringHandling.SeStringBuilder()
+        if(config.NotifyFashionLink) PrintEquinox(new Dalamud.Game.Text.SeStringHandling.SeStringBuilder()
             .AddText("[Equinox] ").Add(fashionBrowserLink).AddUiForeground(45)
             .AddText("Click here to open Fashion Report in your browser")
             .AddUiForegroundOff().Add(Dalamud.Game.Text.SeStringHandling.Payloads.RawPayload.LinkTerminator).Build());
@@ -276,7 +277,7 @@ public sealed partial class Plugin : IDalamudPlugin
     private void OpenFashionBrowser()
     {
         try { Dalamud.Utility.Util.OpenLink("https://fashionreportxiv.com/hint.png?equinox=" + DateTimeOffset.UtcNow.ToUnixTimeSeconds()); }
-        catch (Exception ex) { Log.Error(ex, "Could not open Fashion Report in the browser."); if(config.NotifyBrowserErrors) Chat.PrintError("[Equinox] Could not open the browser. Visit https://fashionreportxiv.com/hint.png"); }
+        catch (Exception ex) { Log.Error(ex, "Could not open Fashion Report in the browser."); if(config.NotifyBrowserErrors) PrintEquinoxError("[Equinox] Could not open the browser. Visit https://fashionreportxiv.com/hint.png"); }
     }
 
     private Actor ReadActor() => new(Player.ContentId.ToString(CultureInfo.InvariantCulture),
@@ -1217,6 +1218,7 @@ public sealed partial class Plugin : IDalamudPlugin
         Pi.UiBuilder.OpenConfigUi -= Open;
         ContextMenu.OnMenuOpened -= OnItemSearchMenu;
         if(itemSearchCommandRegistered)Commands.RemoveHandler("/doihaveit");
+        DisposeCameraCommand();
         Commands.RemoveHandler("/equinox");
         if(travelCommandRegistered)Commands.RemoveHandler("/eqtravel");
         if(shortTravelCommandRegistered)Commands.RemoveHandler("/et");

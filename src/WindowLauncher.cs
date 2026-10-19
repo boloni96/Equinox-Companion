@@ -3,16 +3,23 @@ using Dalamud.Bindings.ImGui;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
- // Reserve a separate footer so the launcher never covers content or scrolls away.
+ private Action? windowFooter;
+ private string windowStatus="";
+ // One shared footer: actions and status on the left, launcher on the right.
  private void DrawWindowWithLauncher(Action content)
  {
-  RememberItemMenuWindow();
+  RememberItemMenuWindow();windowFooter=null;windowStatus="";
   var height=Math.Max(32,ImGui.GetFrameHeight());
   var start=ImGui.GetCursorPos();var available=ImGui.GetContentRegionAvail();
   var contentHeight=Math.Max(1,available.Y-height-ImGui.GetStyle().ItemSpacing.Y);
   var visible=ImGui.BeginChild("EquinoxWindowContent",new Vector2(0,contentHeight),false);
   try{if(visible)content();}finally{ImGui.EndChild();}
   ImGui.SetCursorPos(new Vector2(start.X,start.Y+contentHeight+ImGui.GetStyle().ItemSpacing.Y));
+  if(windowFooter is {} footer){footer();ImGui.SameLine();}
+  if(windowStatus.Length>0){
+   var remaining=ImGui.GetContentRegionAvail().X-height-ImGui.GetStyle().ItemSpacing.X;
+   if(remaining>12){var full=windowStatus.Replace("\n"," ");var shown=full;while(shown.Length>0&&ImGui.CalcTextSize(shown+"…").X>remaining)shown=shown[..^1];if(shown!=full)shown+="…";ImGui.TextUnformatted(shown);if(ImGui.IsItemHovered())ImGui.SetTooltip(windowStatus);ImGui.SameLine();}
+  }
   DrawWindowLauncher();
  }
  private void DrawWindowLauncher()

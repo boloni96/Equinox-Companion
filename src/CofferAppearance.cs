@@ -15,7 +15,7 @@ public sealed partial class Plugin
             if(ImGui.Selectable((selected?"Selected: ":"")+CofferStyles.Names[i],selected,ImGuiSelectableFlags.None,new Vector2(180,30)))
             {
                 RestoreCofferTints();config.CofferStyle=i;SaveConfiguration();
-                Chat.Print("[Equinox] Coffer style saved: "+CofferStyles.Names[i]+".");
+                PrintEquinox("[Equinox] Coffer style saved: "+CofferStyles.Names[i]+".");
             }
             ImGui.SameLine();
             var at=ImGui.GetCursorScreenPos();var draw=ImGui.GetWindowDrawList();

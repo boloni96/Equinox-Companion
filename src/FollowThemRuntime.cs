@@ -39,7 +39,7 @@ public sealed partial class Plugin
         {
             followStatusText = value;
             if (followNotices.Changed(value) && config.FollowThem.ChatMessages)
-                Chat.Print("[FollowThem] " + value);
+                PrintEquinox("[FollowThem] " + value);
         }
     }
     private bool FollowTransitionBusy() =>
@@ -87,7 +87,7 @@ public sealed partial class Plugin
     }
     private void FollowChatNotice(string message)
     {
-        if (config.FollowThem.ChatMessages) Chat.Print("[FollowThem] " + message);
+        if (config.FollowThem.ChatMessages) PrintEquinox("[FollowThem] " + message);
     }
     private void ToggleFollowThem()
     {

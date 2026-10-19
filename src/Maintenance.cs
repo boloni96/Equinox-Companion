@@ -33,7 +33,7 @@ public sealed partial class Plugin
         {
             if (h.Paused || h.LastEntry is not {} at || at > now || now-at < TimeSpan.FromDays(30)) continue;
             if (config.HousingWarnings.TryGetValue(h.Id,out var warned) && now-warned < TimeSpan.FromDays(1)) continue;
-            Chat.Print(new SeStringBuilder().AddUiForeground(17).AddText($"[Equinox] Housing reminder: {h.Name} · {h.World} {h.District} W{h.Ward} P{h.Plot} — {(int)(now-at).TotalDays} days since the last eligible recorded entry. Enter with the private owner or an FC member; confirm the timer in game.").AddUiForegroundOff().Build());
+            PrintEquinox(new SeStringBuilder().AddUiForeground(17).AddText($"[Equinox] Housing reminder: {h.Name} · {h.World} {h.District} W{h.Ward} P{h.Plot} — {(int)(now-at).TotalDays} days since the last eligible recorded entry. Enter with the private owner or an FC member; confirm the timer in game.").AddUiForegroundOff().Build());
             config.HousingWarnings[h.Id]=now;
             SaveConfiguration();
         }

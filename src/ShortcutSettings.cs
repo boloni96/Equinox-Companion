@@ -4,7 +4,7 @@ namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
     private static readonly string[] ShortcutKeys = ["None", .. Enumerable.Range('A',26).Select(x=>((char)x).ToString()), .. Enumerable.Range(1,24).Select(x=>"F"+x), .. Enumerable.Range(0,10).Select(x=>"Key"+x), "Space", "Tab", "Backspace", "Insert", "Delete", "Home", "End", "PageUp", "PageDown", "LeftArrow", "RightArrow", "UpArrow", "DownArrow", .. Enumerable.Range(0,10).Select(x=>"Keypad"+x)];
-    private (string Name, Shortcut Binding)[] Shortcuts() => [("/equinox",config.EquinoxShortcut),("/gardening",config.PlantingShortcut),("/fashionr",config.FashionShortcut)];
+    private (string Name, Shortcut Binding)[] Shortcuts() => [("/equinox",config.EquinoxShortcut),("/gardening",config.PlantingShortcut),("/fashionr",config.FashionShortcut),("/cam",config.CameraShortcut)];
     private string? capturingShortcut;
     private ShortcutCapture? shortcutCapture;
     private string shortcutCaptureStatus = "";
@@ -45,6 +45,7 @@ public sealed partial class Plugin
             if(bindings.Count(x=>x.Binding.Matches(binding.Key,binding.Ctrl,binding.Alt,binding.Shift))!=1)continue;
             if(name=="/equinox")OnCommand(name,"");
             else if(name=="/gardening")OnPlantingCommand(name,"");
+            else if(name=="/cam")SetCameraHeightEnabled(!config.RememberCameraHeight);
             else OnFashionCommand(name,"");
             break;
         }

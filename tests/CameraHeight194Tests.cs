@@ -9,8 +9,9 @@ internal static class CameraHeight194Tests
         Check(!p.Restore(true, 0, -.62f, 1), "do not apply while settling");
         Check(p.Restore(true, 0, -.62f, 1.5), "restore settled reset");
         Check(!p.Restore(true, -.62f, -.62f, 2), "no repeated write when correct");
-        Check(!p.Restore(true, .4f, -.62f, 3), "leave manual nonzero change alone");
-        p.Restore(true, 0, -.62f, 4);
+        Check(!p.Restore(true, .4f, -.62f, 3), "wait for nonzero reset to settle");
+        Check(p.Restore(true, .4f, -.62f, 4.5), "restore nonzero game reset while enabled");
+        p.Restore(true, 0, -.62f, 5);
         Check(!p.Restore(false, 0, -.62f, 6), "special camera cannot restore");
         Check(!p.Restore(true, 0, -.62f, 7), "settle again after cutscene");
         p.Reset();

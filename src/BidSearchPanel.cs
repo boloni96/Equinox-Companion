@@ -81,7 +81,7 @@ public sealed partial class Plugin
   if((config.SharedRoster?.ProtocolVersion??0)<20)ImGui.TextDisabled("Deploy Journal V7.11.166 and open it once to receive paired bids. Local bids are still shown.");
   DrawPairedBidRows();
 
-  if(bidTravelMessage.Length>0)ImGui.TextWrapped(bidTravelMessage);
+  windowStatus=bidTravelMessage.Length>0?bidTravelMessage:bidMessage;
   DrawGoSeeHomeStop();
   if(bidDirty){bidShown=BidSearch.Sort(bidPlots.Where(p=>bidFilters.Matches(p,now)&&(!bidLocationFavoritesOnly||IsFavouriteLocation(p.District,p.Ward,p.Plot))&&(!bidFavoritesOnly||bidFavoriteKeys.Contains(p.Key))),bidSort,bidDescending);bidDirty=false;}
   ImGui.TextDisabled($"{bidShown.Length} matching plots · Hover paired bids for entry numbers. Reports can be outdated; confirm at the placard.");

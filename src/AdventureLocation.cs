@@ -3,6 +3,7 @@ using Dalamud.Game.ClientState.Conditions;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
+ private string PublicAdventureWorld(){var world=Player.CurrentWorld.Value;return world.IsPublic?world.Name.ToString():"";}
  private readonly UiProjectionCache<int?> adventureLocationStop=new(maxAgeMs:0);
  private readonly UiProjectionCache<string> adventureLocationHouse=new(maxAgeMs:0);
  private readonly UiProjectionCache<string> adventureAreaLabel=new(maxAgeMs:0);
@@ -31,7 +32,7 @@ public sealed partial class Plugin
   if(!config.SyncEnabled||config.PairingKey.Length!=64||!Player.IsLoaded||Player.ContentId==0||Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]){adventurePresenceSession.Reset();return;}
   if(!adventureFresh||adventureRequest is not null||AdventureSaving)return;
   var character=CurrentSharedCharacter();if(character is null)return;
-  var world=WorldName(Player.CurrentWorld.RowId)??"";if(world.Length==0)return;
+  var world=PublicAdventureWorld();if(world.Length==0)return;
   var area=CurrentAdventureArea();var territory=(uint)Client.TerritoryType;
   var house=adventureLocationHouse.Get(config.SharedRoster,$"{Player.CurrentWorld.RowId}:{currentAddress}",Environment.TickCount64,
    ()=>AdventurePolicy.CurrentHouse(currentAddress,Player.CurrentWorld.RowId,(config.SharedRoster?.People??[]).SelectMany(p=>p.Characters).SelectMany(c=>c.Houses)));
@@ -46,7 +47,7 @@ public sealed partial class Plugin
  private void DrawAdventureLocation(AdventureBoard board)
  {
   var ready=Player.IsLoaded&&Player.ContentId!=0&&!Conditions[ConditionFlag.BetweenAreas]&&!Conditions[ConditionFlag.BetweenAreas51];
-  var world=WorldName(Player.CurrentWorld.RowId)??"";
+  var world=PublicAdventureWorld();ready=ready&&world.Length>0;
   var house=ready?adventureLocationHouse.Get(config.SharedRoster,$"{Player.CurrentWorld.RowId}:{currentAddress}",Environment.TickCount64,
    ()=>AdventurePolicy.CurrentHouse(currentAddress,Player.CurrentWorld.RowId,(config.SharedRoster?.People??[]).SelectMany(p=>p.Characters).SelectMany(c=>c.Houses))):"";
   var target=adventureLocationStop.Get(board,world+"|"+house,Environment.TickCount64,()=>AdventurePolicy.HouseIndex(board,house,world));
@@ -57,8 +58,9 @@ public sealed partial class Plugin
   ImGui.EndDisabled();
   if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))ImGui.SetTooltip(target is null?"Your current house must be identified and included in this adventure.":"Open this house’s stop in the active adventure. This shares navigation with the Journal and does not mark tasks complete.");
   }
-  if(ready&&target is not null)ImGui.SameLine();
-  DrawBringCharacter(ready,world,house);
+  ImGui.BeginDisabled(AdventureSaving||!adventureFresh);ImGui.SetNextItemWidth(Math.Max(160,ImGui.GetContentRegionAvail().X-180));DrawAdventureNavigation(board);ImGui.EndDisabled();ImGui.SameLine();
+  var selected=board.Stops.ElementAtOrDefault(board.Index);
+  DrawBringCharacter(ready,selected?.World??world,selected?.World==world?house:"");
   if(!adventureFollow){adventureFollowSession.Reset();return;}
   // Observe loading even while a request is running; consume a move only when it can be sent.
   if(!ready){adventureFollowSession.Reset();return;}

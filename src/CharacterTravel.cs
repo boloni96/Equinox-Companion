@@ -39,7 +39,7 @@ public sealed partial class Plugin
    Pi.GetIpcSubscriber<string,object>("Lifestream.ExecuteCommand").InvokeAction(name+"@"+world);
    characterSwitchFrom=Player.ContentId;characterSwitchUntil=DateTimeOffset.UtcNow.AddMinutes(5);
    characterTravelStatus=$"Switch requested: {name} @ {world}. Lifestream handles logout and login. The character must be accessible through this game login.";
-   Chat.Print("[Equinox] "+characterTravelStatus);
+   PrintEquinox("[Equinox] "+characterTravelStatus);
   }catch(Exception){characterTravelStatus="Lifestream is unavailable. Install or enable it before switching.";}
  }
  private DateTimeOffset goSeeNativeUntil;

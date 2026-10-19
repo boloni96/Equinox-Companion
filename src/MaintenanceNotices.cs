@@ -46,7 +46,7 @@ public sealed partial class Plugin
    var link=Chat.AddChatLinkHandler(id,(_,_)=>{try{Dalamud.Utility.Util.OpenLink(url);}catch(Exception ex){Log.Warning(ex,"Could not open maintenance notice");}});
    maintenanceLinks[url]=entry=(id,link);
   }
-  Chat.Print(new SeStringBuilder().AddText("[Equinox] "+message+" ").Add(entry.Link).AddUiForeground(45).AddText("[Official Lodestone notice]").AddUiForegroundOff().Add(RawPayload.LinkTerminator).Build());
+  PrintEquinox(new SeStringBuilder().AddUiForeground(561).AddText(message+" ").AddUiForegroundOff().Add(entry.Link).AddUiForeground(45).AddText("[Official Lodestone notice]").AddUiForegroundOff().Add(RawPayload.LinkTerminator).Build());
  }
  private void DisposeMaintenanceNotices(){maintenanceStop.Cancel();maintenanceStop.Dispose();maintenanceService.Dispose();foreach(var link in maintenanceLinks.Values)Chat.RemoveChatLinkHandler(link.Id);}
 }

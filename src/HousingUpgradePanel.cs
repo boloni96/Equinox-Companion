@@ -50,7 +50,7 @@ public sealed partial class Plugin
      var hash=Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(config.PairingKey)));
      if(config.HousingUpgradePairingHash!=hash){config.HousingUpgradePairingHash=hash;config.HousingUpgradeNotified=[];}
      var seen=config.HousingUpgradeNotified.ToHashSet();var fresh=matches.Where(m=>!seen.Contains(m.Key)).ToArray();
-     if(fresh.Length>0){foreach(var group in fresh.GroupBy(m=>new{m.OwnerName,m.HouseName}).Take(8)){var first=group.First();Chat.Print($"[Equinox] Housing upgrade · {first.OwnerName} · {first.HouseName}: {group.Count()} options, including {first.World} · {first.District} W{first.Ward} P{first.Plot}. /bid → Upgrade matches.");}config.HousingUpgradeNotified=seen.Concat(fresh.Select(m=>m.Key)).Distinct().TakeLast(2000).ToList();SaveConfiguration();}
+     if(fresh.Length>0){foreach(var group in fresh.GroupBy(m=>new{m.OwnerName,m.HouseName}).Take(8)){var first=group.First();PrintEquinox($"[Equinox] Housing upgrade · {first.OwnerName} · {first.HouseName}: {group.Count()} options, including {first.World} · {first.District} W{first.Ward} P{first.Plot}. /bid → Upgrade matches.");}config.HousingUpgradeNotified=seen.Concat(fresh.Select(m=>m.Key)).Distinct().TakeLast(2000).ToList();SaveConfiguration();}
      upgradeStatus=$"Checked {now.ToLocalTime():HH:mm} · Paissa reports; verify at the placard.";
     }
     RebuildUpgradeRows();

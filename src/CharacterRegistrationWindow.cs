@@ -25,7 +25,7 @@ public sealed partial class Plugin
         var pending=config.Discoveries.LastOrDefault(e=>e.Kind=="character.registered"&&e.Actor.ContentId==actor.ContentId&&e.Registration?.PairingScope==RegistrationScope);
         if(CharacterRegistrationPolicy.Find(roster,actor) is {} known){
             registrationWindow.IsOpen=false;minimizedLaunchers.Remove("New Character");
-            if(pending is not null&&registrationNotified.Add(pending.Id))Chat.Print($"[Equinox] {known.Name} added to the Journal · {roster.People.First(p=>p.Characters.Contains(known)).Name} / {known.Account}.");
+            if(pending is not null&&registrationNotified.Add(pending.Id))PrintEquinox($"[Equinox] {known.Name} added to the Journal · {roster.People.First(p=>p.Characters.Contains(known)).Name} / {known.Account}.");
             return;
         }
         if(pending is not null){registrationWindow.IsOpen=false;minimizedLaunchers.Remove("New Character");return;}
@@ -45,7 +45,7 @@ public sealed partial class Plugin
         if(!CharacterRegistrationPolicy.Valid(registration))return;
         KeepDiscovery(snapshot with {Id=Guid.NewGuid().ToString("N"),Kind="character.registered",At=DateTimeOffset.UtcNow,Registration=registration},true);
         nextSync=default;nextRosterRead=default;registrationWindow.IsOpen=false;minimizedLaunchers.Remove("New Character");
-        Chat.Print($"[Equinox] Sending {snapshot.Actor.Name} to your Journal. It will retry automatically if the connection is unavailable.");
+        PrintEquinox($"[Equinox] Sending {snapshot.Actor.Name} to your Journal. It will retry automatically if the connection is unavailable.");
     }
     private sealed class NewCharacterWindow:Window
     {

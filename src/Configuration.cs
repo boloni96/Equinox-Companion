@@ -4,6 +4,7 @@ namespace EquinoxCompanion;
 public sealed class Configuration : IPluginConfiguration
 {
     public bool RememberCameraHeight { get; set; }
+    public Shortcut CameraShortcut { get; set; } = new();
     public float PreferredCameraHeight { get; set; }
     public Configuration Snapshot()
     {

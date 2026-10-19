@@ -32,12 +32,12 @@ public sealed partial class Plugin
         if(lotteryLogin.Due(id,now,config.NotifyHousingLottery,!LotteryLoaded))
         {
             var p=HousingLottery.Period(now);var left=p.End-now;
-            Chat.Print($"[Equinox] Housing lottery · scheduled {(p.Entry?"entry period":"results period (entries closed)")} · ends {HousingLotteryNotices.LocalTime(p.End)} (local time; {(int)left.TotalDays}d {left.Hours}h {left.Minutes}m). {(p.Entry?"Place bids at the plot placard.":"Check your bid's placard for the result and claim any win.")} Duty → Timers → Estate confirms the game status.");
+            PrintEquinox($"[Equinox] Housing lottery · scheduled {(p.Entry?"entry period":"results period (entries closed)")} · ends {HousingLotteryNotices.LocalTime(p.End)} (local time; {(int)left.TotalDays}d {left.Hours}h {left.Minutes}m). {(p.Entry?"Place bids at the plot placard.":"Check your bid's placard for the result and claim any win.")} Duty → Timers → Estate confirms the game status.");
         }
         if(!config.NotifyHousingLottery||!LotteryLoaded||now<nextLotteryReminderCheck)return;
         nextLotteryReminderCheck=now.AddSeconds(15);
         foreach(var notice in HousingLotteryNotices.Messages(HousingLotteryNotices.WithShared(config.Discoveries,config.SharedRoster),id.ToString(),now))
-            if(lotteryBidNotices.Due(id,notice.Key,now))Chat.Print(notice.Text);
+            if(lotteryBidNotices.Due(id,notice.Key,now))PrintEquinox(notice.Text);
     }
 
     private static unsafe string LotteryText(AtkUnitBase* addon,int i)

@@ -64,7 +64,7 @@ public sealed partial class Plugin
             catch(Exception e)
             {
                 cofferAutoFault=true;cofferAutoStatus="Auto-open paused after an error. Use Retry or open the chest manually.";
-                Chat.PrintError("[Equinox] "+cofferAutoStatus);
+                PrintEquinoxError("[Equinox] "+cofferAutoStatus);
                 errorJournal.Record("coffer-auto-open",cofferAutoStatus,exceptionType:e.GetType().Name);
             }
             finally

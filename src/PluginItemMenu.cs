@@ -31,7 +31,7 @@ public sealed partial class Plugin
   pluginPopupRequested=true;
  }
  private void PluginItemAction(Action action){
-  try{action();}catch(Exception ex){Log.Warning(ex,"Item menu action unavailable");Chat.Print("[Equinox] That item action is unavailable right now.");}
+  try{action();}catch(Exception ex){Log.Warning(ex,"Item menu action unavailable");PrintEquinox("[Equinox] That item action is unavailable right now.");}
  }
  private unsafe void OpenPluginRecipe(uint id){
   var agent=AgentRecipeNote.Instance();if(agent!=null)agent->SearchRecipeByItemId(id);
@@ -50,7 +50,7 @@ public sealed partial class Plugin
   else if(local.X>=menuWidth+gap){x=local.X-menuWidth-gap;y=local.Y;}
   else if(local.Y+size.Y+gap+menuHeight<=area.Y){x=local.X;y=local.Y+size.Y+gap;}
   else if(local.Y>=menuHeight+gap){x=local.X;y=local.Y-menuHeight-gap;}
-  else {Chat.Print("[Equinox] Move or resize this window to leave room beside it for the game/plugin menu, then try again.");return;}
+  else {PrintEquinox("[Equinox] Move or resize this window to leave room beside it for the game/plugin menu, then try again.");return;}
   x=Math.Clamp(x,0,Math.Max(0,area.X-menuWidth));y=Math.Clamp(y,0,Math.Max(0,area.Y-menuHeight));
   var bytes=Encoding.UTF8.GetBytes(pluginPopupName+"\0");
   pluginItemMenuName=GC.AllocateArray<byte>(bytes.Length,pinned:true);bytes.CopyTo(pluginItemMenuName,0);

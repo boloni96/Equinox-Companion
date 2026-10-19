@@ -196,7 +196,7 @@ public sealed partial class Plugin
             ImGui.SameLine();
             ImGui.TextDisabled(marketTask is not null ? "Checking…" : $"Refresh in {Math.Max(0, (int)Math.Ceiling((marketAutoRefreshAt - DateTimeOffset.UtcNow).TotalSeconds))}s");
         }
-        ImGui.TextWrapped(marketMessage);
+        windowStatus=marketMessage;
         if(ImGui.IsItemHovered() && marketResult is {} checkedResult)
             ImGui.SetTooltip($"Last check {checkedResult.FetchedAt.LocalDateTime:HH:mm:ss} · up to 100 listings per queried world/region");
         if(marketResult is {} result)
@@ -211,7 +211,7 @@ public sealed partial class Plugin
             ImGui.EndChild(); return;
         }
         if(marketResult is null) return;
-        if(marketTravelStatus.Length > 0) ImGui.TextWrapped(marketTravelStatus);
+        if(marketTravelStatus.Length > 0) windowStatus=marketTravelStatus;
         DrawMarketListings(marketResult, marketSelectedName, "MarketListings");
     }
     private bool DrawMarketFilters()

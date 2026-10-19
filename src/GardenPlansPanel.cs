@@ -91,7 +91,7 @@ public sealed partial class Plugin
     {
         nextRosterRead=default;
         plantingHouseId=config.SyncEnabled&&config.PairingKey.Length==64?SharedGardenLocation.Match(currentAddress,GardenPlanSources()):null;
-        if(plantingHouseId is null){if(config.NotifyPlantingUnavailable)Chat.Print("[Equinox] /gardening is available only at an identified paired house. Open its placard and allow sync, then try again.");return;}
+        if(plantingHouseId is null){if(config.NotifyPlantingUnavailable)PrintEquinox("[Equinox] /gardening is available only at an identified paired house. Open its placard and allow sync, then try again.");return;}
         gardenSelectionFollow.Reset();
         plantingWindow.IsOpen=true;
     }

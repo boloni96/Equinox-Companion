@@ -43,8 +43,8 @@ public sealed partial class Plugin
    var planned=plan.Beds.Where(b=>b.Crop.Length>0).ToArray();
    var complete=plan.CompletedAt is not null||planned.Length>0&&planned.All(b=>b.Status=="confirmed");
    var requested=adventureOpenBed is {} target&&target.House==plan.HouseId&&target.Batch==plan.Batch;
-   ImGui.SetNextItemOpen(requested||sources.Length==1,requested?ImGuiCond.Always:ImGuiCond.Once);
-   if(ImGui.CollapsingHeader($"{(complete?"✓ ":"")}Batch {plan.Batch}")){
+   ImGui.TextUnformatted($"{(complete?"✓ ":"")}Batch {plan.Batch}");
+   {
     if(requested&&adventureOpenBed is {} focus){selectedGardenBed=(focus.House,focus.Batch,focus.Bed);ImGui.SetScrollHereY(.15f);adventureOpenBed=null;}
     plan=WithQueuedGardenBeds(plan);
     var showPlan=!adventureShowActual&&planned.Length>0&&!complete;

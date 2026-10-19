@@ -51,6 +51,6 @@ public sealed partial class Plugin
             }
         }
         foreach(var message in GardenLoginSummary.Messages(notices))
-            Chat.Print(new SeStringBuilder().AddText("[Equinox] ").AddUiForeground(message.Color).AddText(message.Text).AddUiForegroundOff().Build());
+            PrintEquinox(new SeStringBuilder().AddText("[Equinox] ").AddUiForeground(message.Color).AddText(message.Text).AddUiForegroundOff().Build());
     }
 }

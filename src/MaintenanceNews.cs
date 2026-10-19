@@ -10,13 +10,14 @@ internal sealed record MaintenanceNotice(string Title,string Url,DateTimeOffset?
  internal string Identity=>$"{Url}/{Start:O}/{End:O}/{Completed}";
  internal string Message(DateTimeOffset now,TimeZoneInfo zone)
  {
+  var title=Regex.Replace(Title,@"\s*\([A-Za-z]{3,9}\.?\s+\d{1,2}(?:,?\s+\d{4})?\)","");
   string Local(DateTimeOffset at)=>TimeZoneInfo.ConvertTime(at,zone).ToString("MMM d, h:mm tt",CultureInfo.InvariantCulture);
   string Left(DateTimeOffset at){var span=at-now;var minutes=Math.Max(0,(int)Math.Ceiling(span.TotalMinutes));return $"{minutes/1440}d {minutes%1440/60}h {minutes%60}m";}
-  if(Completed)return Title+" · Completion announced. Check the official notice.";
-  if(Start is not {} start||End is not {} end)return Title+" · Schedule not confirmed automatically; check the official notice.";
-  if(now<start)return $"{Title} · Starts {Local(start)} ({zone.Id}) · in {Left(start)}. Estimated end {Local(end)}; subject to change.";
-  if(now<end)return $"{Title} · Within the scheduled maintenance window. Estimated return {Local(end)} ({zone.Id}) · in {Left(end)}; subject to change.";
-  return $"{Title} · Scheduled end {Local(end)} ({zone.Id}) has passed; completion is unconfirmed. Check official updates.";
+  if(Completed)return title+" · Completion announced. Check the official notice.";
+  if(Start is not {} start||End is not {} end)return title+" · Schedule not confirmed automatically; check the official notice.";
+  if(now<start)return $"{title} · Starts {Local(start)} ({zone.Id}) · in {Left(start)}. Estimated end {Local(end)}; subject to change.";
+  if(now<end)return $"{title} · Within the scheduled maintenance window. Estimated return {Local(end)} ({zone.Id}) · in {Left(end)}; subject to change.";
+  return $"{title} · Scheduled end {Local(end)} ({zone.Id}) has passed; completion is unconfirmed. Check official updates.";
  }
 }
 internal sealed class MaintenanceSession

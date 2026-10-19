@@ -121,20 +121,20 @@ public sealed partial class Plugin
         quickLootStatus=text;quickLootHistory.Enqueue(DateTimeOffset.Now.ToString("HH:mm:ss")+" · "+text);
         while(quickLootHistory.Count>80)quickLootHistory.Dequeue();
         var s=CurrentQuickLoot;
-        if(s.Chat)Chat.Print("[QuickLoot] "+text);
+        if(s.Chat)PrintEquinox("[QuickLoot] "+text);
         if(error&&s.ErrorToast)QuickLootToasts.ShowError(text);
         else if(!error){if(s.NormalToast)QuickLootToasts.ShowNormal(text);if(s.QuestToast)QuickLootToasts.ShowQuest(text);}
     }
     private bool QuickLootConflict()=>Pi.InstalledPlugins.Any(p=>p.IsLoaded&&p.InternalName=="LazyLoot");
     private unsafe void OnQuickLootCommand(string args)
     {
-        if(!config.EnableQuickLoot){Chat.Print("[QuickLoot] Enable QuickLoot in Settings → Tracking first.");return;}
+        if(!config.EnableQuickLoot){PrintEquinox("[QuickLoot] Enable QuickLoot in Settings → Tracking first.");return;}
         var value=args.ToLowerInvariant();var s=CurrentQuickLoot;
         if(value is "need" or "greed" or "pass"){QueueQuickLoot(Enum.Parse<QuickLootRoll>(value,true));return;}
         if(value is "on" or "off" or "toggle")
         {s.Automatic=value=="on"||value=="toggle"&&!s.Automatic;StopQuickLoot(s.Automatic?"Automatic rolling enabled.":"Automatic rolling disabled.");SaveQuickLoot(s);return;}
         if(value.StartsWith("test ")&&uint.TryParse(value[5..],out var id)&&Player.IsLoaded)
-        {var game=GameMain.Instance();var facts=QuickLootReadFacts(id,game==null?0u:game->CurrentContentFinderConditionId,true,true,false);var decision=QuickLootPolicy.Decide(s,facts,s.Mode);Chat.Print($"[QuickLoot] Preview {id}: {decision.Roll} · {decision.Reason}. Assumes normal roll permissions; no roll sent.");return;}
+        {var game=GameMain.Instance();var facts=QuickLootReadFacts(id,game==null?0u:game->CurrentContentFinderConditionId,true,true,false);var decision=QuickLootPolicy.Decide(s,facts,s.Mode);PrintEquinox($"[QuickLoot] Preview {id}: {decision.Roll} · {decision.Reason}. Assumes normal roll permissions; no roll sent.");return;}
         visible=true;quickLootSelectTab=true;
     }
     private void QueueQuickLoot(QuickLootRoll roll)
