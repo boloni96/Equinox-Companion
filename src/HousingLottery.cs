@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 namespace EquinoxCompanion;
-public sealed record LotteryBid(string District, int Ward, int Plot, int Entry, string Buyer, string FcId, string Status, string CycleStart, string Evidence);
+public sealed record LotteryBid(string District, int Ward, int Plot, int Entry, string Buyer, string FcId, string Status, string CycleStart, string Evidence, string FcName="");
 public sealed record LotteryResult(string District,int Ward,int Plot,uint WorldId,int Winner,string CycleStart);
 public static class HousingLottery
 {
@@ -34,7 +34,7 @@ public static class HousingLottery
         var type=Regex.Match(text,@"Type of Entry:\s*([^\r\n]+)",RegexOptions.IgnoreCase);
         return Parse(text,text,type.Success?Buyer(type.Groups[1].Value):"unknown",now,"timers");
     }
-    public static bool Valid(LotteryBid? b) => b is not null && District(b.District) is not null && b.Ward is >=1 and <=60 && b.Plot is >=1 and <=60 && b.Entry is >=1 and <=100000 && b.Buyer is "private" or "fc" or "unknown" && (b.FcId==""||CompanyProfileIdentity.ValidId(b.FcId)) && b.Status is "entered" or "won" or "lost" or "forfeited" && DateTimeOffset.TryParse(b.CycleStart,out var at)&&at>=Epoch && b.Evidence is "timers" or "submission" or "result-dialog";
+    public static bool Valid(LotteryBid? b) => b is not null && District(b.District) is not null && b.Ward is >=1 and <=60 && b.Plot is >=1 and <=60 && b.Entry is >=1 and <=100000 && b.Buyer is "private" or "fc" or "unknown" && (b.FcId==""||CompanyProfileIdentity.ValidId(b.FcId)) && b.Status is "entered" or "won" or "lost" or "forfeited" && DateTimeOffset.TryParse(b.CycleStart,out var at)&&at>=Epoch && (b.Evidence is "timers" or "submission" or "result-dialog" || b.Evidence=="manual-refund"&&b.Status=="lost");
     public static int? WinningNumber(string text)
     {
         var m=Regex.Match(text,@"\bThe\s+winning\s+number\s+(?:for\s+this\s+plot\s+is|is)\s*(?:\.{3}|…)?\s*(\d+)(?=[.!\s]|$)",RegexOptions.IgnoreCase);

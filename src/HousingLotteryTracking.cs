@@ -136,6 +136,7 @@ public sealed partial class Plugin
         if(prior?.Lottery is {} old && bid.Evidence=="timers")bid=bid with {CycleStart=old.CycleStart,Status=old.Status,Buyer=bid.Buyer=="unknown"?old.Buyer:bid.Buyer,FcId=old.FcId.Length>0?old.FcId:bid.FcId};
         if(prior?.Lottery is {} known && bid.Buyer=="unknown" && known.Buyer!="unknown")bid=bid with {Buyer=known.Buyer,FcId=known.FcId};
         if(bid.Buyer=="fc"&&bid.FcId=="")bid=bid with {FcId=config.Discoveries.LastOrDefault(e=>e.Actor.ContentId==actor.ContentId&&e.Kind=="character.updated")?.Character is {FcMember: not false,FreeCompany: {} company}?company.Id:""};
+        if(bid.Buyer=="fc"&&bid.FcName.Length==0)bid=bid with {FcName=prior?.Lottery?.FcName is {Length:>0} name?name:config.Discoveries.LastOrDefault(e=>e.Actor.ContentId==actor.ContentId&&e.Kind=="character.updated")?.Character?.FreeCompany?.Name??""};
         if(prior?.Lottery is {} previous && (previous with {Evidence=bid.Evidence})==bid)return;
         KeepDiscovery(new(Guid.NewGuid().ToString("N"),"housing.lottery",now,WithWorldNames(actor),null,Lottery:bid));
     }

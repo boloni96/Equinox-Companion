@@ -18,7 +18,7 @@ public sealed partial class Plugin
             : faulted ? "Observation paused after an error; see Diagnostics."
             : last is null ? "Waiting for a complete character observation."
             : !SyncValidation.CanSend(last, DateTimeOffset.UtcNow) ? SyncValidation.HoldReason(last, DateTimeOffset.UtcNow)
-            : acknowledged ? "Server acknowledged this record. Journal application is separate."
+            : acknowledged ? "Uploaded to Cloudflare; shared-state receipt is shown below."
             : "Recorded locally; waiting for upload.";
         return new(Player.CharacterName, last?.Actor.HomeWorldName ?? "", enabled, last?.At,
             last?.Character?.GrandCompany ?? "", acknowledged, state);
@@ -32,6 +32,7 @@ public sealed partial class Plugin
         ImGui.Separator();
         ImGui.TextWrapped("Character sync: " + s.Character + (s.HomeWorld.Length > 0 ? " @ " + s.HomeWorld : ""));
         ImGui.TextWrapped(s.State);
+        if(ImGui.IsItemHovered())ImGui.SetTooltip($"Uploaded: {lastSyncReceiptAt?.ToLocalTime().ToString("g")??"not acknowledged this session"}\nCloudflare shared revision: {config.SharedRoster?.Revision.ToString()??"not received"}\nShared revision updated: {config.SharedRoster?.Updated.ToLocalTime().ToString("g")??"unknown"}\nReceived by this plugin: {rosterReceivedAt?.ToLocalTime().ToString("g")??"not received this session"}\nAnother paired plugin's receipt is not reported.\nGameplay uploads and pairing do not wait for Lodestone or Paissa lookups.");
         if(s.ObservedAt is {} at) ImGui.TextWrapped("Last character record: " + DisplayTime.Local(at));
         if(s.GrandCompany.Length > 0) ImGui.TextWrapped("Recorded Grand Company / Rank: " + s.GrandCompany);
     }

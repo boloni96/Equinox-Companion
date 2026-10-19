@@ -12,7 +12,7 @@ public static class HousingLotteryNotices
             bool Match(SyncEvent e)=>e.Kind=="housing.lottery"&&e.Actor.ContentId==c.ContentId&&e.Actor.HomeWorldId==b.WorldId&&e.Lottery is {} x&&x.District==b.District&&x.Ward==b.Ward&&x.Plot==b.Plot&&x.Entry==b.Entry&&DateTimeOffset.Parse(x.CycleStart)==DateTimeOffset.Parse(b.CycleStart);
             var old=all.Where(Match).MaxBy(e=>e.At);if(old is not null&&old.At>b.At&&b.Status=="entered")continue;
             all.RemoveAll(e=>Match(e)&&(b.Status!="entered"||e.At<=b.At));
-            if(b.Status=="claimed")continue;
+            if(b.Status=="claimed"||b.RefundedAt is not null)continue;
             all.Add(new("shared-bid","housing.lottery",b.ResultAt??b.At,new(c.ContentId,c.Name,b.WorldId,b.WorldId,c.World,c.World),null,Lottery:new(b.District,b.Ward,b.Plot,b.Entry,b.Buyer,b.FcId,b.Status,b.CycleStart,b.Evidence)));
         }
         return all;

@@ -4,9 +4,10 @@ namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
     private Task<RosterResult>? rosterTask;
+    private DateTimeOffset? rosterReceivedAt;
     private string rosterTaskKey = "";
     private DateTimeOffset nextRosterRead;
-    private string rosterStatus = "Open the updated website to share its profiles here.";
+    private string rosterStatus = "Waiting for paired Cloudflare profiles.";
     private string sharedSearch = "";
     private void UpdateSharedRoster(DateTimeOffset now)
     {
@@ -15,6 +16,7 @@ public sealed partial class Plugin
             if (rosterTaskKey == config.PairingKey && rosterTask.IsCompletedSuccessfully)
             {
                 var r = rosterTask.Result; rosterStatus = r.Status;
+                if(r.Roster is not null||r.NotModified)rosterReceivedAt=now;
                 if(r.Roster is not null||r.NotModified)registrationFreshKey=rosterTaskKey;
                 if (r.Roster is null && !r.NotModified) { errorJournal.Record("shared-roster", r.Status); nextRosterRead=now.AddSeconds(30); }
                 if (r.Roster is not null) { if((config.SharedRoster?.ProtocolVersion??0)<13&&r.Roster.ProtocolVersion>=13){autoRetainerForceRead=true;autoRetainerCharacters.Clear();nextAutoRetainerRead=default;} config.SharedRoster = r.Roster; SaveConfiguration(); }
