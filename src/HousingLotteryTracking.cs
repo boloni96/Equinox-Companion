@@ -121,7 +121,7 @@ public sealed partial class Plugin
     {
         var actor=ReadActor();if(!SyncValidation.ActorReady(actor)||actor.HomeWorldId!=actor.CurrentWorldId)return;
         var prior=config.Discoveries.LastOrDefault(e=>e.Kind=="housing.lottery"&&e.Actor.ContentId==actor.ContentId&&e.Lottery is {} b&&b.District==bid.District&&b.Ward==bid.Ward&&b.Plot==bid.Plot&&b.Entry==bid.Entry&&b.CycleStart==bid.CycleStart);
-        if(prior?.Lottery is {} old && bid.Evidence=="timers")bid=bid with {CycleStart=old.CycleStart,Status=old.Status,Buyer=bid.Buyer=="unknown"?old.Buyer:bid.Buyer,FcId=old.FcId};
+        if(prior?.Lottery is {} old && bid.Evidence=="timers")bid=bid with {CycleStart=old.CycleStart,Status=old.Status,Buyer=bid.Buyer=="unknown"?old.Buyer:bid.Buyer,FcId=old.FcId.Length>0?old.FcId:bid.FcId};
         if(prior?.Lottery is {} known && bid.Buyer=="unknown" && known.Buyer!="unknown")bid=bid with {Buyer=known.Buyer,FcId=known.FcId};
         if(bid.Buyer=="fc"&&bid.FcId=="")bid=bid with {FcId=config.Discoveries.LastOrDefault(e=>e.Actor.ContentId==actor.ContentId&&e.Kind=="character.updated")?.Character is {FcMember: not false,FreeCompany: {} company}?company.Id:""};
         if(prior?.Lottery is {} previous && (previous with {Evidence=bid.Evidence})==bid)return;

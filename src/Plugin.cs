@@ -707,6 +707,7 @@ public sealed partial class Plugin : IDalamudPlugin
             errorJournal.Record("character-details", "Incomplete optional FC details deferred; character/job/rank observations continue.");
             fc = null;
         }
+        RefreshOwnedCompany(actor, fc is not null, now);
         // The company profile may describe a different FC. Use it for that placard only;
         // it never proves that the visiting character is a member.
         foreach (var sign in estateNames.Values.Where(s => s.CharacterId == actor.ContentId && now - s.At < TimeSpan.FromMinutes(2)))
@@ -756,6 +757,16 @@ public sealed partial class Plugin : IDalamudPlugin
             if (sign is not null) size = sign.Size;
             var estateName = sign?.Name ?? config.Discoveries.LastOrDefault(x => x.Kind == "house.discovered" && x.Actor.ContentId == actor.ContentId && x.Address?.HouseId == current.HouseId)?.House?.EstateName ?? "";
             var house = new HouseDetails(estate == EstateType.FreeCompanyEstate ? "Free Company house" : "Private house", size, "owned-estate-id", estate == EstateType.FreeCompanyEstate ? fc : null, estateName);
+            if (estate == EstateType.FreeCompanyEstate && fc is not null)
+            {
+                // Repair only this actor's FC bid at the game-confirmed owned plot.
+                // The cloud links the resulting ownership event to the same round.
+                var bids = config.Discoveries.Where(e => e.Kind == "housing.lottery" && e.Actor.ContentId == actor.ContentId)
+                    .GroupBy(e => (e.Lottery?.CycleStart, e.Lottery?.District, e.Lottery?.Ward, e.Lottery?.Plot, e.Lottery?.Entry))
+                    .Select(g => g.MaxBy(e => e.At)!).ToArray();
+                foreach (var observation in bids)
+                    if (OwnedLotteryIdentity.Resolve(observation, actor, current, fc, now) is { } bid) RecordLottery(bid, now);
+            }
             KeepDiscovery(new(Guid.NewGuid().ToString("N"), "house.discovered", now, actor, current, House: house));
             discoveryStatus = estate == EstateType.FreeCompanyEstate ? $"FC estate detected: {fc!.Name} · W{current.Ward} P{current.Plot}" : $"Private estate detected: W{current.Ward} P{current.Plot}";
         }
@@ -1229,5 +1240,3 @@ public sealed partial class Plugin : IDalamudPlugin
         FlushConfiguration();
     }
 }
-
-

@@ -1796,3 +1796,5 @@ var blankFestivalQuest196 = new EventQuestDefinition(71004, "Grim and Grisly Gam
     EventQuestPolicy.FestivalLabel(176, ""), 15, [71003], [new(52402, "Grisly Bear Head"), new(52403, "Grisly Bear Suit")]);
 Check("blank festival quest observation passes upload validation", EventQuestPolicy.Valid(new CollectionDetails(
     "quest", [71004], [71004], [], 1, [blankFestivalQuest196], [])).ToString(), "True");
+
+OwnedCompany200Tests.Run();
