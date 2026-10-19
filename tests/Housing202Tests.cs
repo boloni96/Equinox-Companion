@@ -13,6 +13,9 @@ internal static class Housing202Tests
   Check(!HousingLottery.Valid(bid with {Status="entered"}),"Unresolved ticket cannot use refund recovery");
   var shared=new SharedHousingBid("Lavender Beds",19,17,5,"fc","","entered",bid.CycleStart,"timers",35,"Famfrit",DateTimeOffset.UtcNow,FcClaimedAt:DateTimeOffset.UtcNow,FcClaimedOwner:"Hot Pink Haze");
   Check(HousingLottery.BidStatusLabel(shared)=="FC estate claimed · ticket result unknown","Claimed FC is the primary status without guessing ticket winner");
+  Check(!HousingLottery.BidActive(shared),"Confirmed FC estate moves into history without inventing ticket win");
+  Check(HousingLottery.BidActive(shared with {Status="lost"}),"Known lost ticket still needs refund even after FC claimed");
+  Check(HousingLottery.BidActive(shared with {FcClaimedAt=null}),"Unresolved bid stays active");
   Check(HousingLottery.BidEvidence(shared).Contains("Hot Pink Haze"),"Claim evidence available on hover");
   Check(AdventurePolicy.IsGardenTask(new("plan","Plan & plant","Garden",false,false,Rule:new(Kind:"planplant"))),"Unified job uses existing garden tools");
  }

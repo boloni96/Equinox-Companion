@@ -129,7 +129,7 @@ public sealed partial class Plugin
   }
   ImGui.EndTable();
  }
- private static bool HousingBidActive(SharedHousingBid b)=>b.Status is not ("claimed" or "forfeited")&&(b.Status!="lost"||b.RefundedAt is null);
+ private static bool HousingBidActive(SharedHousingBid b)=>HousingLottery.BidActive(b);
  private void RecordManualRefund(string name,SharedHousingBid b){
   var matches=(config.SharedRoster?.People??[]).SelectMany(p=>p.Characters).Where(c=>c.Name==name&&c.HousingBids?.Any(x=>x.WorldId==b.WorldId&&x.District==b.District&&x.Ward==b.Ward&&x.Plot==b.Plot&&x.Entry==b.Entry&&x.CycleStart==b.CycleStart)==true).Take(2).ToArray();
   if(matches.Length!=1||matches[0].ContentId.Length==0)return;var c=matches[0];var now=DateTimeOffset.UtcNow;
