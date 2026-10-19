@@ -4,6 +4,18 @@ namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
     private FreeCompanyDetails? companyCandidate, observedCompany;
+    private object? companyProfileDiagnostic;
+    private readonly Queue<object> companyProfileHistory = new();
+    private string companyProfileDiagnosticKey = "";
+    private void RecordCompanyProfileDiagnostic(DateTimeOffset now, long requestId, FreeCompanyDetails company, FreeCompanyDetails? proxy, string state)
+    {
+        var key = System.Text.Json.JsonSerializer.Serialize(new { requestId, company, proxy, state });
+        companyProfileDiagnostic = new { at = now, requestId = unchecked((ulong)requestId).ToString(), company, proxy, state };
+        if (key == companyProfileDiagnosticKey) return;
+        companyProfileDiagnosticKey = key;
+        companyProfileHistory.Enqueue(companyProfileDiagnostic);
+        while (companyProfileHistory.Count > 12) companyProfileHistory.Dequeue();
+    }
     private DateTimeOffset companyCandidateAt, nextCompanySample, observedCompanyAt;
     private static string CompanyGrandName(byte id) => id switch {1=>"Maelstrom",2=>"Order of the Twin Adder",3=>"Immortal Flames",_=>""};
     private unsafe void ObserveCompanyProfile(DateTimeOffset now)
@@ -23,11 +35,17 @@ public sealed partial class Plugin
         var identity = proxy == null ? null : new FreeCompanyDetails(proxy->Id.ToString(System.Globalization.CultureInfo.InvariantCulture), proxy->NameString, "", proxy->HomeWorldId, proxy->MasterString);
         var id = CompanyProfileIdentity.Resolve(profile->RequestId, profile->Name.ToString(), profile->World, profile->Master.ToString(), identity);
         var company=new FreeCompanyDetails(id,profile->Name.ToString(),profile->Tag.ToString(),profile->World,profile->Master.ToString(),details);
-        if(!SyncValidation.CompanyReady(company)){companyCandidate=null;observedCompany=null;return;}
+        var reason = !CompanyProfileIdentity.ValidId(company.Id) ? "FC ID unavailable or conflicting; profile not uploaded" :
+            company.WorldId == 0 || string.IsNullOrWhiteSpace(world) ? "Profile world unavailable" :
+            !SyncValidation.CompanyReady(company) ? "Profile fields failed validation; see captured fields" : "Valid profile; waiting for a stable second sample";
+        if (companyCandidate != company || !SyncValidation.CompanyReady(company))
+            RecordCompanyProfileDiagnostic(now, profile->RequestId, company, identity, reason);
+        if(!SyncValidation.CompanyReady(company)){companyCandidate=null;observedCompany=null;discoveryStatus=reason;return;}
         if(companyCandidate!=company){companyCandidate=company;companyCandidateAt=now;observedCompany=null;return;}
         // Two matching snapshots allow the asynchronous window to finish loading.
         if(now-companyCandidateAt<TimeSpan.FromSeconds(1))return;
         observedCompany=company;observedCompanyAt=now;
+        RecordCompanyProfileDiagnostic(now, profile->RequestId, company, identity, "Stable profile captured");
         KeepDiscovery(new(Guid.NewGuid().ToString("N"),"company.observed",now,actor,null,Company:company));
         discoveryStatus=$"Company Profile read: {company.Name} · master {company.MasterName}";
     }
