@@ -720,7 +720,7 @@ public sealed partial class Plugin : IDalamudPlugin
                 placardFc = new(proxy->Id.ToString(CultureInfo.InvariantCulture), proxy->NameString, sign.FcTag, proxy->HomeWorldId, proxy->MasterString);
             if (isFc && observedCompany is { } viewed && now - observedCompanyAt < TimeSpan.FromSeconds(10) && CompanyProfileIdentity.MatchesPlacard(viewed, sign)) placardFc = viewed;
             KeepDiscovery(new(Guid.NewGuid().ToString("N"), "house.placard", now, actor, sign.Address,
-                House: new(isFc ? "Free Company house" : "Private house", sign.Size, "observed-placard", placardFc, sign.Name, sign.OwnerName)));
+                House: new(isFc ? "Free Company house" : "Private house", sign.Size, "observed-placard", placardFc, sign.Name, sign.OwnerName)), force: !config.Discoveries.Any(e=>e.Kind=="house.placard"&&e.Actor.ContentId==actor.ContentId&&e.Address?.HouseId==sign.Address.HouseId&&e.At>=sign.At));
         }
         var jobs = DataManager.GetExcelSheet<Lumina.Excel.Sheets.ClassJob>(Dalamud.Game.ClientLanguage.English)
             .Where(j => j.RowId > 0 && j.ExpArrayIndex >= 0 && !string.IsNullOrWhiteSpace(j.Abbreviation.ToString()))

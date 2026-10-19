@@ -43,6 +43,19 @@ public static class HousingLottery
     public static bool ValidResult(LotteryResult? r,DateTimeOffset at) => r is not null&&District(r.District) is not null&&r.Ward is >=1 and <=60&&r.Plot is >=1 and <=60&&r.WorldId is >=1 and <=65535&&r.Winner is >=1 and <=100000&&!Period(at).Entry&&DateTimeOffset.TryParse(r.CycleStart,out var start)&&start==Period(at).Start;
     public static string BuyerLabel(string buyer) => buyer switch { "fc"=>"FC house", "private"=>"Private house", _=>"Type unknown" };
     public static string StatusLabel(string status) => status switch { "won"=>"Won", "lost"=>"Lost", "claimed"=>"Claimed", "forfeited"=>"Forfeited", _=>"Result not observed" };
+    public static string BidStatusLabel(SharedHousingBid b)=>b.Status=="entered"&&b.FcClaimedAt is not null?"FC estate claimed · ticket result unknown":StatusLabel(b.Status);
+    public static string BidEvidence(SharedHousingBid b)
+    {
+        var lines=new List<string>{$"Entry #{b.Entry} · {BuyerLabel(b.Buyer)}"};
+        if(b.Winner is {} winner)lines.Add($"Winning number #{winner}"+(b.CheckedBy.Length>0?$" · checked by {b.CheckedBy}":""));
+        else if(b.ResultEvidence=="current-round-owner")lines.Add("Result inferred from this round's estate owner: "+b.ObservedOwner);
+        else if(b.Evidence=="result-dialog")lines.Add("Personal lottery result dialogue observed.");
+        else lines.Add("Winning-number / result evidence not included in this record.");
+        if(b.ResultAt is {} at)lines.Add("Result observed: "+at.ToLocalTime().ToString("g"));
+        if(b.FcClaimedAt is {} claim)lines.Add("FC estate confirmed: "+claim.ToLocalTime().ToString("g")+(b.FcClaimedOwner.Length>0?" · "+b.FcClaimedOwner:"")+"\nFC ownership does not identify the individual winning ticket.");
+        if(b.RefundedAt is {} refund)lines.Add("Refund collection recorded: "+refund.ToLocalTime().ToString("g"));
+        return string.Join("\n",lines);
+    }
     public static string ObservedStatus(SharedHousingBid bid, IEnumerable<LotteryResult> results)
     {
         if(bid.Status!="entered")return bid.Status;

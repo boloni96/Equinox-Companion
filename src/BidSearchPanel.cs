@@ -118,11 +118,11 @@ public sealed partial class Plugin
   var row=0;
   foreach(var entry in bidRows.Where(x=>bidHistory?!HousingBidActive(x.Bid):HousingBidActive(x.Bid))){
    var b=entry.Bid;var address=$"{BidWorldName(b.WorldId)} · {b.District} W{b.Ward} P{b.Plot}";
-   var details=$"{entry.Name} · {HousingLottery.BuyerLabel(b.Buyer)} · Entry #{b.Entry} · {HousingLottery.StatusLabel(b.Status)}";
+   var details=$"{entry.Name} · {HousingLottery.BuyerLabel(b.Buyer)} · Entry #{b.Entry} · {HousingLottery.BidStatusLabel(b)}";
    if(b.RefundedAt is not null)details+=" · refund collected";else if(b.Status=="lost")details+=" · refund not confirmed";
-   if(b.FcClaimedAt is not null&&b.Status!="claimed")details+=" · FC estate claimed";
+   if(b.FcClaimedAt is not null&&b.Status is not ("claimed" or "entered"))details+=" · FC estate claimed";
    ImGui.PushID(row++);ImGui.TableNextRow();ImGui.TableNextColumn();ImGui.TextUnformatted(entry.Owner);CopyTextOnClick(entry.Owner);
-   ImGui.TableNextColumn();ImGui.TextUnformatted(address);CopyTextOnClick(address);ImGui.TableNextColumn();ImGui.TextUnformatted(details);CopyTextOnClick(entry.Name);
+   ImGui.TableNextColumn();ImGui.TextUnformatted(address);CopyTextOnClick(address);ImGui.TableNextColumn();ImGui.TextUnformatted(details);if(ImGui.IsItemHovered())ImGui.SetTooltip(HousingLottery.BidEvidence(b)+"\nClick to copy character name.");if(ImGui.IsItemClicked())ImGui.SetClipboardText(entry.Name);
    ImGui.TableNextColumn();if(ImGui.SmallButton("GO SEE"))GoSeeBid(b.WorldId,b.District,b.Ward,b.Plot);
    if(b.Status=="lost"&&b.RefundedAt is null){ImGui.SameLine();ImGui.BeginDisabled((config.SharedRoster?.ProtocolVersion??0)<22);if(ImGui.SmallButton("I collected the refund"))RecordManualRefund(entry.Name,b);ImGui.EndDisabled();}
    ImGui.PopID();

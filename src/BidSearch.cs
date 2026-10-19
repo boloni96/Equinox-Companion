@@ -32,7 +32,7 @@ internal sealed class BidSearch:IDisposable
  internal static readonly string[] HousingLotteryDistricts=["Mist","Lavender Beds","Goblet","Shirogane","Empyreum"];
  public void Dispose()=>http.Dispose();
 }
-public sealed record SharedHousingBid(string District,int Ward,int Plot,int Entry,string Buyer,string FcId,string Status,string CycleStart,string Evidence,uint WorldId,string World,DateTimeOffset At,int? Winner=null,DateTimeOffset? ResultAt=null,string CheckedBy="",DateTimeOffset? ClaimedAt=null,string FcName="",DateTimeOffset? FcClaimedAt=null,DateTimeOffset? RefundedAt=null,string RefundEvidence="");
+public sealed record SharedHousingBid(string District,int Ward,int Plot,int Entry,string Buyer,string FcId,string Status,string CycleStart,string Evidence,uint WorldId,string World,DateTimeOffset At,int? Winner=null,DateTimeOffset? ResultAt=null,string CheckedBy="",DateTimeOffset? ClaimedAt=null,string FcName="",DateTimeOffset? FcClaimedAt=null,DateTimeOffset? RefundedAt=null,string RefundEvidence="",string FcClaimedOwner="",string ResultEvidence="",string ObservedOwner="");
 
 internal sealed class BidFilters
 {
