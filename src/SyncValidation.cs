@@ -21,7 +21,8 @@ public static class SyncValidation
     private static bool FC(FreeCompanyDetails? f) => f is not null && CompanyProfileIdentity.ValidId(f.Id) && Regex.IsMatch(f.Id ?? "", @"^[1-9]\d{0,19}$") && Text(f.Name) && f.Tag is not null && f.Tag.Length <= 10 && f.WorldId > 0;
     // Incomplete optional FC data must not veto a valid character snapshot.
     public static FreeCompanyDetails? CompleteCompany(FreeCompanyDetails? company) => FC(company) ? company : null;
-    public static bool CompanyReady(FreeCompanyDetails? f) => FC(f) && f!.MasterName.Length <= 80 && f.Profile is { Rank: >= 1 and <= 30, ActiveMembers: >= 1 and <= 512 } p &&
+    public static bool CompanyReady(FreeCompanyDetails? f) => FC(f) && CompanyProfileReady(f);
+    public static bool CompanyProfileReady(FreeCompanyDetails? f) => f is not null && Text(f.Name) && Text(f.MasterName) && f.MasterName.Length <= 80 && f.Tag is not null && f.Tag.Length <= 10 && f.WorldId > 0 && f.Profile is { Rank: >= 1 and <= 30, ActiveMembers: >= 1 and <= 512 } p &&
         p.Source is "company-profile" or "member-list" && Text(p.HomeWorld) &&
         new[] {p.Slogan,p.GrandCompany,p.Recruitment,p.Active,p.Focus,p.Seeking,p.EstateName}.All(x=>x is null || x.Length<=500 && !x.Any(char.IsControl)) &&
         (p.FormedAt is null || DateTimeOffset.TryParse(p.FormedAt,out var formed) && formed.Year>=2010 && formed<=DateTimeOffset.UtcNow);
@@ -72,7 +73,7 @@ public static class SyncValidation
         if (e.Kind == "house.placard") return h.Plot > 0 && h.Room == 0 && !h.Apartment && !h.Workshop &&
             e.House is { Evidence: "observed-placard" } placard && Text(placard.OwnerName) &&
             placard.Type is "Private house" or "Free Company house" && placard.Size is "Small" or "Medium" or "Large" &&
-            (placard.FreeCompany is null || FC(placard.FreeCompany) && placard.FreeCompany.WorldId == h.WorldId);
+            (placard.FreeCompany is null || (FC(placard.FreeCompany) || placard.FreeCompany.Id == "" && CompanyProfileReady(placard.FreeCompany) && placard.FreeCompany.Profile?.Source == "company-profile" && string.Equals(placard.FreeCompany.Name.Trim(), placard.OwnerName.Trim(), StringComparison.OrdinalIgnoreCase) && string.Equals(placard.FreeCompany.Profile.EstateName?.Trim(), placard.EstateName.Trim(), StringComparison.OrdinalIgnoreCase) && Text(placard.EstateName)) && placard.FreeCompany.WorldId == h.WorldId);
         if (e.Kind == "house.discovered") return h.Plot > 0 && h.Room == 0 && !h.Apartment && !h.Workshop && h.WorldId == e.Actor.HomeWorldId &&
             e.House is { Evidence: "owned-estate-id" } d && d.Size is "" or "Small" or "Medium" or "Large" &&
             (d.Type == "Private house" || d.Type == "Free Company house" && FC(d.FreeCompany) && d.FreeCompany!.WorldId == h.WorldId);

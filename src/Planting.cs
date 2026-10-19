@@ -27,7 +27,7 @@ public static class CompanyProfileIdentity
 {
     public static string Flags(int bits, string[] labels) => bits == 0 ? "Not specified" : string.Join(", ", labels.Where((_,i)=>(bits & (1<<i))!=0));
     // Native RequestId is signed, while FC/Lodestone IDs use the entire unsigned 64-bit value.
-    public static bool ValidId(string? value) => ulong.TryParse(value, out var id) && id != 0 && id != ulong.MaxValue && id != 0xE000000000000000UL && id != 0xE0000000UL;
+    public static bool ValidId(string? value) => ulong.TryParse(value, out var id) && id != 0 && id != ulong.MaxValue && (id >> 32) != 0xE0000000UL && id != 0xE0000000UL;
     public static string Id(long requestId)
     {
         var value = unchecked((ulong)requestId).ToString(System.Globalization.CultureInfo.InvariantCulture);
