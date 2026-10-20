@@ -35,7 +35,7 @@ public sealed partial class Plugin
     }
     private void DrawSubmarinesContents()
     {
-        ImGui.TextWrapped("Open the FC workshop voyage panel to refresh timers. Character and account order follows your Persons tabs.");
+        SettingsHelp("Open the FC workshop voyage panel to refresh timers. Character and account order follows your Persons tabs.",false);
         ImGui.TextWrapped(config.SyncAutoRetainer?autoRetainerStatus:"Background submarine sync is off. Enable it in Settings > Tracking.");
         if(ImGui.TreeNode("Colour rules / reserve reminders")){
             ImGui.TextWrapped("Green: voyaging or Voyage Complete. Yellow: dispatch or a confirmed unlocked empty slot. Orange: repairs or low reserves for a recorded fleet. Grey: no fleet evidence; stock alone never creates maintenance warnings. Counts are last recorded values.");
@@ -153,6 +153,7 @@ public sealed partial class Plugin
             ImGui.EndChild();ImGui.PopID();ImGui.EndTabItem();
         }
         if(direct.Values.Any(v=>!represented.Contains(v.FcId))&&ImGui.BeginTabItem("Other fleets###submarine-unassigned")){
+        ImGui.BeginChild("UnassignedFleetsBody",System.Numerics.Vector2.Zero,false);
         foreach(var v in direct.Values.Where(v=>!represented.Contains(v.FcId)))
         {
             shown++;
@@ -161,7 +162,7 @@ public sealed partial class Plugin
             foreach(var sub in v.Submarines)if(SubmarineBar($"{sub.Name} · {VoyageTimer(sub.ReturnTime)}###unassigned-sub-{sub.Slot}",SubmarineAttention.Evaluate([sub.ReturnTime],[sub.NeedsRepair],null,null,now).Level)){ImGui.TextUnformatted($"Rank {sub.Rank} · Parts: {string.Join(", ",sub.Parts)}");ImGui.TextUnformatted("Route: "+string.Join(", ",sub.Route));ImGui.TreePop();}
             ImGui.TreePop();
         }
-        ImGui.EndTabItem();}
+        ImGui.EndChild();ImGui.EndTabItem();}
         ImGui.EndTabBar();
     }
 }

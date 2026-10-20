@@ -20,14 +20,15 @@ public sealed partial class Plugin
     private void DrawHelperPanel()
     {
         if(ImGui.BeginTabBar("helper-sections")){
-            if(ImGui.BeginTabItem("FollowThem")){DrawFollowThem();ImGui.EndTabItem();}
+            if(ImGui.BeginTabItem("FollowThem")){if(ImGui.BeginChild("FollowThemBody",Vector2.Zero,false))DrawFollowThem();ImGui.EndChild();ImGui.EndTabItem();}
             if(ImGui.BeginTabItem("Quest Helper")){
-                ImGui.TextWrapped("Mirror only the followed character's quest conversations during an active session. Ordinary vendor dialogue and NPC chatter are ignored. Event purchases require the explicit Follower will buy the same button. Both characters need Journal V7.11.87 on Cloudflare and the same pairing key.");
+                ImGui.BeginChild("QuestHelperBody",Vector2.Zero,false);
+                SettingsHelp("Mirror only the followed character's quest conversations during an active session. Ordinary vendor dialogue and NPC chatter are ignored. Event purchases require the explicit Follower will buy the same button. Both characters need Journal V7.11.87 on Cloudflare and the same pairing key.",false);
                 MessageToggle("Share my NPC and dialogue actions with active followers",config.FollowThem.ShareQuestActions,v=>config.FollowThem.ShareQuestActions=v);
                 MessageToggle("Enable Quest Helper for my next follow session",config.FollowThem.QuestHelper,v=>config.FollowThem.QuestHelper=v);
                 if(ImGui.IsItemHovered())ImGui.SetTooltip("Only the follower grants permission when pressing Start. Stop revokes it. Only the leader can pause/resume. Follower Stop ends permission; the leader cannot restart it.");
                 MessageToggle("Mirror the leader's cutscene skips (next session)",config.FollowThem.VerifiedCutsceneSkip,v=>config.FollowThem.VerifiedCutsceneSkip=v);
-                ImGui.TextWrapped("Quest Helper starts disabled. Changes apply to your next session. Match NPC and response text; differing quest progress blocks assistance. Accepts the same quest only after the leader accepts it. Mirrors verified quest completion; optional reward choices and general Yes/No prompts remain manual. Journal V7.11.91 enables explicit Ironworks hand token exchanges and matching solo quest battle Proceed actions. Mirrors a new leader FATE Level Sync in the same FATE, with right-side direct approach when Lifestream is enabled. No combat automation or obstacle navigation.");
+                SettingsHelp("Quest Helper starts disabled. Changes apply to your next session. Match NPC and response text; differing quest progress blocks assistance. Accepts the same quest only after the leader accepts it. Mirrors verified quest completion; optional reward choices and general Yes/No prompts remain manual. Journal V7.11.91 enables explicit Ironworks hand token exchanges and matching solo quest battle Proceed actions. Mirrors a new leader FATE Level Sync in the same FATE, with right-side direct approach when Lifestream is enabled. No combat automation or obstacle navigation.",false);
                 MessageToggle("Use TextAdvance instead of Companion (optional; next session)",config.FollowThem.UseTextAdvanceCutsceneSkip,v=>config.FollowThem.UseTextAdvanceCutsceneSkip=v);
                 ImGui.TextWrapped(config.FollowThem.UseTextAdvanceCutsceneSkip
                     ?"TextAdvance must be installed and loaded. Companion requests only matching cutscene skips and releases control afterward. Stop other plugins controlling TextAdvance first."
@@ -48,7 +49,7 @@ public sealed partial class Plugin
                     ImGui.TextWrapped("Thanks to TextAdvance/ECommons and YesAlready for their public dialogue and cutscene research, and FFXIVClientStructs for the game interfaces. Equinox adds session controls and matching leader actions.");
                     if(ImGui.SmallButton("TextAdvance"))Dalamud.Utility.Util.OpenLink("https://github.com/NightmareXIV/TextAdvance");ImGui.SameLine();if(ImGui.SmallButton("YesAlready"))Dalamud.Utility.Util.OpenLink("https://github.com/PunishXIV/YesAlready");
                 }
-                ImGui.EndTabItem();
+                ImGui.EndChild();ImGui.EndTabItem();
             }
             ImGui.EndTabBar();
         }

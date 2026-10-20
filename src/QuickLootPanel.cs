@@ -33,7 +33,12 @@ public sealed partial class Plugin
     private static void QTabs(string id,params (string Name,System.Action Draw)[] tabs)
     {
         if(!ImGui.BeginTabBar(id))return;
-        foreach(var tab in tabs)if(ImGui.BeginTabItem(tab.Name)){tab.Draw();ImGui.EndTabItem();}
+        foreach(var tab in tabs)if(ImGui.BeginTabItem(tab.Name)){
+            // Reserve the outer status footer; nested tabs use their full body.
+            var footer=id=="QuickLootSections"?ImGui.GetTextLineHeightWithSpacing()*3:0;
+            if(ImGui.BeginChild("TabBody##"+id+"/"+tab.Name,new Vector2(0,-footer),false))tab.Draw();
+            ImGui.EndChild();ImGui.EndTabItem();
+        }
         ImGui.EndTabBar();
     }
     private void DrawQuickLoot()

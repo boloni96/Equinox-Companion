@@ -39,14 +39,13 @@ public sealed partial class Plugin
     }
     private void DrawHousingContents()
     {
-        ImGui.TextWrapped("My Empire");
         ImGui.TextColored(Green, "0–7 days"); ImGui.SameLine();
         ImGui.TextColored(Orange, "8–30"); ImGui.SameLine();
         ImGui.TextColored(Red, "31–45"); ImGui.SameLine();
         ImGui.TextColored(Purple, "45+ DEMOLISHED?");
-        ImGui.TextWrapped("Based on recorded eligible entries. Hover an estate for details. Other players' visits and demolition suspensions may change the actual deadline.");
-        ImGui.TextDisabled("Name bar: left = Private | right = FC. Character order: Settings.");
+        SettingsHelp("Based on recorded eligible entries. Other players' visits and demolition suspensions may change the actual deadline. Name bar: left = Private, right = FC. Character order: Settings.");
         ImGui.InputText("Find character / server", ref housingSearch, 100);
+        ImGui.BeginChild("EmpireCharacters",Vector2.Zero,false);
         var actors = localHousingCache.Get(config,$"{configurationRevision}:{config.Discoveries.Count}:{config.Houses.Count}:{config.Tending.Count}:{config.Planting.Count}:{(Player.IsLoaded?Player.ContentId:0)}",Environment.TickCount64,BuildLocalHousingRows);
         if (actors.Length == 0) ImGui.TextWrapped("No visible characters. Log in to record them, or restore hidden characters in Settings.");
         var now = DateTimeOffset.UtcNow;
@@ -129,6 +128,7 @@ public sealed partial class Plugin
             ImGui.PopID();
         }
         ImGui.Separator();
-        ImGui.TextDisabled("Local plugin records only. Website-only characters are not downloaded.");
+        SettingsHelp("Local plugin records. Paired characters are in their Person tabs.",false);
+        ImGui.EndChild();
     }
 }

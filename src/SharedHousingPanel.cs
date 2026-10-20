@@ -91,9 +91,9 @@ public sealed partial class Plugin
     private void DrawSharedPerson(SharedPerson person)
     {
         ImGui.PushID("shared-"+person.Id);
-        ImGui.TextWrapped(person.Name+" · shared Journal characters");
-        ImGui.TextDisabled("Name bar: left = Private | right = FC");
         ImGui.InputText("Find character / server",ref sharedSearch,100);
+        SettingsHelp("Shared Journal characters. Name bar: left = Private, right = FC. Hover an estate for entry details.");
+        ImGui.BeginChild("SharedCharacters",Vector2.Zero,false);
         var now=DateTimeOffset.UtcNow;
         var characters = OrderedSharedCharacters(person);
         var searching = !string.IsNullOrWhiteSpace(sharedSearch);
@@ -188,7 +188,7 @@ public sealed partial class Plugin
         }
         if (characters.Length > 0 && visibleCharacters.Length == 0) ImGui.TextDisabled("No characters match this search.");
         if(characters.Length==0)ImGui.TextDisabled("No visible characters in this profile. Check Settings for hidden characters.");
-        ImGui.TextWrapped("Shared view refreshes every 15 seconds while open, or also in the background if enabled in Settings. Keep the website open to process new game events and publish the updated Journal. Saved copies remain available offline.");
+        ImGui.EndChild();
         ImGui.PopID();
     }
 }

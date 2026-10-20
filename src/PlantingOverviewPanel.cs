@@ -34,12 +34,9 @@ public sealed partial class Plugin
     private readonly UiProjectionCache<(Dictionary<string,string> Attention,string Summary)> gardenOverviewStatusCache=new(0);
     private void DrawPlantingOverview()
     {
-        ImGui.TextUnformatted("Gardening · all shared gardens");
         if(config.SharedRoster is not {} roster){ImGui.TextWrapped("Connect your shared Journal in Settings to see everyone's houses and garden timers.");return;}
-        ImGui.TextWrapped("Tend suggested every 12h. Harvest countdowns are estimates; Ready and Dead require game confirmation.");
-        ImGui.TextDisabled("Name bars: T = next suggested tend · H = estimated harvest. Hover for every batch; click to expand.");
         if(ImGui.SmallButton("Refresh gardens"))nextRosterRead=default;
-        ImGui.SameLine();ImGui.TextDisabled($"Journal updated {DisplayTime.Local(roster.Updated)}");
+        SettingsHelp($"Journal updated {DisplayTime.Local(roster.Updated)}. Tend suggested every 12h. Harvest countdowns are estimates; Ready and Dead require game confirmation. T = next suggested tend; H = estimated harvest. Hover for every batch; click to expand. Blue: tend. Green: ready / cared for. Orange: check / risk. Mixed icons show together.");
         ImGui.InputText("Find person / character / house",ref plantingOverviewSearch,120);
         var now=DateTimeOffset.UtcNow;
         var display=gardenOverviewDisplayCache.Get(roster,
@@ -63,7 +60,6 @@ public sealed partial class Plugin
         var searching=!string.IsNullOrWhiteSpace(plantingOverviewSearch);
         bool Match(string text)=>!searching||text.Contains(plantingOverviewSearch,StringComparison.OrdinalIgnoreCase);
         int PersonRank(SharedPerson p){var i=config.TabOrder.IndexOf("person:"+p.Id);return i<0?int.MaxValue:i;}
-        ImGui.TextColored(new Vector4(.4f,.75f,1,1),"Blue: tend");ImGui.SameLine();ImGui.TextColored(Green,"Green: ready / cared for");ImGui.SameLine();ImGui.TextColored(Orange,"Orange: check / risk · mixed icons show together");
         if(!ImGui.BeginTabBar("planting-persons"))return;
         foreach(var person in people.OrderBy(PersonRank))
         {

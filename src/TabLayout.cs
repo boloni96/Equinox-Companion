@@ -38,7 +38,8 @@ public sealed partial class Plugin
             var active=ImGui.BeginTabItem(label,flags);
             if(category is not null){var at=ImGui.GetItemRectMin();var max=ImGui.GetItemRectMax();var size=Math.Min(ImGui.GetFontSize()+2,max.Y-at.Y-2);var draw=ImGui.GetWindowDrawList();draw.PushClipRect(at,max,true);GardenImage("assets/category-icons/"+category+".png",at+new Vector2(ImGui.GetStyle().FramePadding.X,(max.Y-at.Y-size)/2),new Vector2(size));draw.PopClipRect();}
             if(!active)continue;
-            tab.Draw();
+            if(ImGui.BeginChild("TabContent##"+tab.Id,Vector2.Zero,false))tab.Draw();
+            ImGui.EndChild();
             ImGui.EndTabItem();
         }
         // ImGui reordering is transient: persist its actual visual order in plugin config.
