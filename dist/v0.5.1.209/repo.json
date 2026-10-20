@@ -1,0 +1,30 @@
+[
+  {
+    "Author": "Boloni",
+    "Name": "Equinox Companion",
+    "InternalName": "EquinoxCompanion",
+    "AssemblyVersion": "0.5.1.209",
+    "Description": "Your paired FFXIV characters, properties, gardens and adventures in one place. Track event rewards, Fashion Report, housing bids, collections and submarines. Includes item searches and travel shortcuts. Connect to Equinox Journal to share progress across your paired accounts.",
+    "ApplicableVersion": "any",
+    "RepoUrl": "https://github.com/boloni96/Equinox-Companion",
+    "Tags": [
+      "housing",
+      "gardening",
+      "journal"
+    ],
+    "DalamudApiLevel": 15,
+    "LoadRequiredState": 0,
+    "LoadSync": false,
+    "CanUnloadAsync": false,
+    "LoadPriority": 0,
+    "IconUrl": "https://raw.githubusercontent.com/boloni96/Equinox-Companion/main/dist/v0.5.1.209/icon.png",
+    "Punchline": "Your shared characters, estates, collections and timers.",
+    "AcceptsFeedback": true,
+    "IsHide": false,
+    "IsTestingExclusive": false,
+    "DownloadLinkInstall": "https://raw.githubusercontent.com/boloni96/Equinox-Companion/main/dist/v0.5.1.209/EquinoxCompanion.zip",
+    "DownloadLinkUpdate": "https://raw.githubusercontent.com/boloni96/Equinox-Companion/main/dist/v0.5.1.209/EquinoxCompanion.zip",
+    "DownloadLinkTesting": "https://raw.githubusercontent.com/boloni96/Equinox-Companion/main/dist/v0.5.1.209/EquinoxCompanion.zip",
+    "LastUpdate": 1792467043
+  }
+]
