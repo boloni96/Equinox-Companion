@@ -48,7 +48,7 @@ public sealed partial class Plugin
         var values=new List<object>();var source=menu->AtkValuesSpan;
         for(var i=0;i<Math.Min(source.Length,1200);i++){
             var value=source[i];
-            if(value.Type is AtkValueType.String or AtkValueType.ManagedString){var label=value.String.ToString();values.Add(new {index=i,type=value.Type.ToString(),text=label.Length>300?label[..300]:label});}
+            if(value.Type is AtkValueType.String or AtkValueType.ManagedString){var label=GardenMenuText.Read(value.String);values.Add(new {index=i,type=value.Type.ToString(),text=label.Length>300?label[..300]:label});}
             else if(value.Type==AtkValueType.UInt)values.Add(new {index=i,type="UInt",number=(long)value.UInt});
             else if(value.Type==AtkValueType.Int)values.Add(new {index=i,type="Int",number=(long)value.Int});
             else values.Add(new {index=i,type=value.Type.ToString()});

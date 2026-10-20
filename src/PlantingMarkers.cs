@@ -143,7 +143,7 @@ public sealed partial class Plugin
     {
         if(info==null)return 0;
         if(info->Type==AtkTooltipType.Text)
-            return GardenPlantRequirement.TooltipItem(info->AtkTooltipArgs.TextArgs.Text.ToString(),offered.Select(x=>(x.Id,x.Name)));
+            return GardenPlantRequirement.TooltipItem(GardenMenuText.Read(info->AtkTooltipArgs.TextArgs.Text),offered.Select(x=>(x.Id,x.Name)));
         if((info->Type&AtkTooltipType.Item)==0)return 0;
         var item=info->AtkTooltipArgs.ItemArgs;
         if(item.Kind==DetailKind.InventoryItem)
@@ -194,7 +194,7 @@ public sealed partial class Plugin
             for(var i=0;i<count;i++){
                 var value=values[13+i*stride];
                 if(value.Type is not (AtkValueType.String or AtkValueType.ManagedString)){valid=false;break;}
-                candidate[i]=GardenPlantRequirement.TooltipItem(value.String.ToString(),items.Select(x=>(x.Id,x.Name)));
+                candidate[i]=GardenPlantRequirement.TooltipItem(GardenMenuText.Read(value.String),items.Select(x=>(x.Id,x.Name)));
                 if(candidate[i]==0){valid=false;break;}
             }
             if(!valid)continue;
