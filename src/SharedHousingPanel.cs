@@ -13,6 +13,8 @@ public sealed partial class Plugin
     private string sharedSearch = "";
     private void UpdateSharedRoster(DateTimeOffset now)
     {
+        sync.InstallationId=config.InstallationId;
+        UpdateDeliveryStatus(now);
         if(rosterStatusKey!=config.PairingKey)
         {
             rosterStatusKey=config.PairingKey;rosterReceivedAt=null;rosterReadFailed=false;
@@ -29,6 +31,8 @@ public sealed partial class Plugin
                 if (r.Roster is null && !r.NotModified) { errorJournal.Record("shared-roster", r.Status); nextRosterRead=now.AddSeconds(30); }
                 if (r.Roster is not null) { if((config.SharedRoster?.ProtocolVersion??0)<13&&r.Roster.ProtocolVersion>=13){autoRetainerForceRead=true;autoRetainerCharacters.Clear();nextAutoRetainerRead=default;} config.SharedRoster = r.Roster; SaveConfiguration(); }
                 if (r.Unauthorized) { config.SharedRoster = null; SaveConfiguration(); }
+                QueueRosterReceipt(r);
+                if(r.DeliveryError.Length>0)deliveryError=r.DeliveryError;
             }
             if (rosterTask.IsFaulted) errorJournal.Record("shared-roster", "Shared roster task failed.", exceptionType: rosterTask.Exception?.GetBaseException().GetType().Name);
             if(rosterTaskKey==config.PairingKey&&(rosterTask.IsFaulted||rosterTask.IsCanceled))
@@ -56,7 +60,7 @@ public sealed partial class Plugin
             ImGui.TextUnformatted(rosterStatus);
             ImGui.TextUnformatted("Journal server: "+(string.IsNullOrEmpty(config.SharedRoster?.ServerVersion)?"version not reported":config.SharedRoster.ServerVersion));
             ImGui.TextUnformatted("Received by this plugin: "+(rosterReceivedAt is {} received?DisplayTime.Local(received):"not yet this session"));
-            ImGui.TextUnformatted("Another paired plugin's receipt is not reported. Sync active does not claim that every action has been applied.");
+            DrawDeliveryDetails();
             if(heldSyncRecords>0)ImGui.TextUnformatted("Some incomplete observations need review; valid actions continue uploading. Open Diagnostics for details.");
             ImGui.PopTextWrapPos();ImGui.EndTooltip();
         }

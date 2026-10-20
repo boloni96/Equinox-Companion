@@ -5,6 +5,7 @@ namespace EquinoxCompanion;
 
 public sealed partial class Plugin
 {
+    private readonly Dictionary<string,string> tabPerformanceLabels=[];
     private void DrawOrderedTabs()
     {
         var tabs = new List<(string Id, string Label, Action Draw)>
@@ -38,7 +39,12 @@ public sealed partial class Plugin
             var active=ImGui.BeginTabItem(label,flags);
             if(category is not null){var at=ImGui.GetItemRectMin();var max=ImGui.GetItemRectMax();var size=Math.Min(ImGui.GetFontSize()+2,max.Y-at.Y-2);var draw=ImGui.GetWindowDrawList();draw.PushClipRect(at,max,true);GardenImage("assets/category-icons/"+category+".png",at+new Vector2(ImGui.GetStyle().FramePadding.X,(max.Y-at.Y-size)/2),new Vector2(size));draw.PopClipRect();}
             if(!active)continue;
-            if(ImGui.BeginChild("TabContent##"+tab.Id,Vector2.Zero,false))tab.Draw();
+            if(ImGui.BeginChild("TabContent##"+tab.Id,Vector2.Zero,false))
+            {
+                if(!tabPerformanceLabels.TryGetValue(tab.Id,out var stage))tabPerformanceLabels[tab.Id]=stage="Tab: "+tab.Label.Split("###")[0];
+                var started=System.Diagnostics.Stopwatch.GetTimestamp();
+                try{tab.Draw();}finally{RecordPerformanceElapsed(stage,started);}
+            }
             ImGui.EndChild();
             ImGui.EndTabItem();
         }

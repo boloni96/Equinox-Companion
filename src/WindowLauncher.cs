@@ -5,6 +5,7 @@ public sealed partial class Plugin
 {
  private Action? windowFooter;
  private string windowStatus="";
+ private readonly Dictionary<System.Reflection.MethodInfo,string> windowPerformanceLabels=[];
  // One shared footer: actions and status on the left, launcher on the right.
  private void DrawWindowWithLauncher(Action content)
  {
@@ -13,7 +14,21 @@ public sealed partial class Plugin
   var start=ImGui.GetCursorPos();var available=ImGui.GetContentRegionAvail();
   var contentHeight=Math.Max(1,available.Y-height-ImGui.GetStyle().ItemSpacing.Y);
   var visible=ImGui.BeginChild("EquinoxWindowContent",new Vector2(0,contentHeight),false);
-  try{if(visible)content();}finally{ImGui.EndChild();}
+  try
+  {
+   if(visible)
+   {
+    if(!windowPerformanceLabels.TryGetValue(content.Method,out var stage))windowPerformanceLabels[content.Method]=stage="Window: "+(content.Method.Name switch
+    {
+     "DrawAdventure"=>"Adventure","DrawGardenPlansWindow"=>"Gardening","DrawBidSearch"=>"Housing bids",
+     "DrawMarketSearch"=>"Where is it cheapest?","DrawItemSearch"=>"Do I already have it?",
+     "DrawContent"=>content.Target?.GetType().Name switch {"FashionReportWindow"=>"Fashion Report","WelcomeWindow"=>"Welcome","NewCharacterWindow"=>"New character",var type=>type??"Content"},var name=>name
+    });
+    var started=System.Diagnostics.Stopwatch.GetTimestamp();
+    try{content();}finally{RecordPerformanceElapsed(stage,started);}
+   }
+  }
+  finally{ImGui.EndChild();}
   ImGui.SetCursorPos(new Vector2(start.X,start.Y+contentHeight+ImGui.GetStyle().ItemSpacing.Y));
   if(windowFooter is {} footer){footer();ImGui.SameLine();}
   if(windowStatus.Length>0){

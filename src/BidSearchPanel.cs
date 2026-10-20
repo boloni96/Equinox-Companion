@@ -38,12 +38,14 @@ public sealed partial class Plugin
  private void RefreshBidSearch(){if(bidTask is not null||DateTimeOffset.UtcNow<bidRetry)return;bidCancel?.Dispose();bidCancel=new();bidTask=bidSearch.Search(bidWorld,bidCancel.Token);bidMessage="Refreshing Paissa…";bidRetry=DateTimeOffset.UtcNow.AddSeconds(10);}
  private string BidWorldName(uint id)=>bidWorlds?.FirstOrDefault(w=>w.Id==id).Name??id.ToString();
  private void RebuildBidMarkers(DateTimeOffset now){
+  PollBidHistory();
   var round=HousingLottery.Period(now).Start;if(ReferenceEquals(bidLastRoster,config.SharedRoster)&&bidLastLocalCount==config.Discoveries.Count&&bidRound==round)return;
   bidLastRoster=config.SharedRoster;bidLastLocalCount=config.Discoveries.Count;bidRound=round;bidByPlot.Clear();bidMarkers.Clear();
   var merged=new Dictionary<string,PairedBidRow>();
-  void add(string identity,string name,string owner,SharedHousingBid b,SharedPerson? person=null,SharedCharacter? character=null){if(!DateTimeOffset.TryParse(b.CycleStart,out var start))return;var id=$"{identity}|{b.WorldId}|{b.District}|{b.Ward}|{b.Plot}|{b.Entry}|{b.CycleStart}";if(!merged.TryGetValue(id,out var old)||b.At>old.Bid.At&&old.Bid.Status=="entered")merged[id]=new(name,owner,b,person?.Id??"pending",person?.Name??"Pending sync",character?.AccountId??"pending",character?.Account??"Account unknown");}
+  void add(string identity,string name,string owner,SharedHousingBid b,SharedPerson? person=null,SharedCharacter? character=null){if(!DateTimeOffset.TryParse(b.CycleStart,out var start))return;var id=$"{identity}|{b.WorldId}|{b.District}|{b.Ward}|{b.Plot}|{b.Entry}|{b.CycleStart}";if(!merged.TryGetValue(id,out var old)||ReferenceEquals(BidHistoryPolicy.Prefer(old.Bid,b,character is not null&&(character.HousingBids??[]).Contains(b)),b))merged[id]=new(name,owner,b,person?.Id??"pending",person?.Name??"Pending sync",character?.AccountId??"pending",character?.Account??"Account unknown");}
   var characters=(config.SharedRoster?.People??[]).SelectMany(p=>p.Characters.Select(c=>(Person:p,Character:c))).ToArray();
   string owner(SharedPerson p,SharedCharacter c)=>$"{p.Name} · {(string.IsNullOrWhiteSpace(c.Account)?p.Accounts?.FirstOrDefault(a=>a.Id==c.AccountId)?.Name??"Account unknown":c.Account)}";
+  foreach(var (p,c) in characters)if(olderBidHistory.TryGetValue(c.Id,out var older))foreach(var b in older.Bids.Values)add(c.ContentId.Length>0?c.ContentId:c.Name+"@"+c.World,c.Name,owner(p,c),b,p,c);
   foreach(var (p,c) in characters)foreach(var b in c.HousingBids??[])add(c.ContentId.Length>0?c.ContentId:c.Name+"@"+c.World,c.Name,owner(p,c),b,p,c);
   foreach(var e in config.Discoveries.Where(e=>e.Kind=="housing.lottery"&&e.Lottery is not null).OrderBy(e=>e.At)){var b=e.Lottery!;
    var matches=characters.Where(x=>!string.IsNullOrEmpty(x.Character.ContentId)?x.Character.ContentId==e.Actor.ContentId:x.Character.Name==e.Actor.Name&&x.Character.World==e.Actor.HomeWorldName).Take(2).ToArray();
@@ -113,7 +115,7 @@ public sealed partial class Plugin
  private void DrawPairedBidRows(bool history=false){
   var rows=bidRows.Where(x=>history?!HousingBidActive(x.Bid):HousingBidActive(x.Bid)).ToArray();
   if(history){
-   ImGui.TextDisabled("Recent bid history");SettingsHelp("Paired history includes up to 40 bids per character. The Journal retains older bids. Local observations may add records not yet received from Cloudflare.");
+   ImGui.TextDisabled("Bid history");SettingsHelp("Recent bids arrive automatically. Load older history by character below; current server records take priority over older pages. Local observations may add records not yet received from Cloudflare.");
    ImGui.SetNextItemWidth(150);
    if(ImGui.BeginCombo("##HistoryPerson",bidRows.FirstOrDefault(x=>x.PersonId==bidHistoryPerson)?.Person??"All persons")){
     if(ImGui.Selectable("All persons",bidHistoryPerson=="")){bidHistoryPerson="";bidHistoryAccount="";}
@@ -131,6 +133,7 @@ public sealed partial class Plugin
    }
    ImGui.SameLine();ImGui.SetNextItemWidth(170);
    if(ImGui.BeginCombo("##HistoryResult",bidHistoryResult)){foreach(var result in new[]{"All","WON","LOST","FORFEITED","FC claimed / unknown"})if(ImGui.Selectable(result,bidHistoryResult==result))bidHistoryResult=result;ImGui.EndCombo();}
+   DrawOlderBidHistoryControls();
    rows=rows.Where(x=>(bidHistoryPerson==""||x.PersonId==bidHistoryPerson)&&(bidHistoryAccount==""||x.PersonId+":"+x.AccountId==bidHistoryAccount)&&(bidHistoryResult=="All"||BidOutcome(x.Bid)==bidHistoryResult||bidHistoryResult=="FC claimed / unknown"&&x.Bid.Status=="entered"&&x.Bid.FcClaimedAt is not null)).OrderByDescending(x=>x.Bid.CycleStart).ToArray();
   }
   var count=rows.Length;
@@ -139,20 +142,21 @@ public sealed partial class Plugin
   var height=history?Math.Max(100,ImGui.GetContentRegionAvail().Y-8):Math.Min(6,count)*ImGui.GetFrameHeightWithSpacing()+ImGui.GetStyle().ScrollbarSize+8;
   if(!ImGui.BeginTable("MyBids",5,ImGuiTableFlags.ScrollY|ImGuiTableFlags.ScrollX|ImGuiTableFlags.RowBg|ImGuiTableFlags.SizingFixedFit,new Vector2(0,height)))return;
   ImGui.TableSetupColumn("Person / account");ImGui.TableSetupColumn("Plot");ImGui.TableSetupColumn("Entry");ImGui.TableSetupColumn("Result");ImGui.TableSetupColumn("Actions");ImGui.TableSetupScrollFreeze(0,1);ImGui.TableHeadersRow();
-  var row=0;
-  foreach(var entry in rows){
+  var historyClip=ImGui.ImGuiListClipper();historyClip.Begin(rows.Length);
+  while(historyClip.Step())for(var row=historyClip.DisplayStart;row<historyClip.DisplayEnd;row++){
+   var entry=rows[row];
    var b=entry.Bid;var address=$"{BidWorldName(b.WorldId)} · {b.District} W{b.Ward} P{b.Plot}";
    var details=$"{entry.Name} · {HousingLottery.BuyerLabel(b.Buyer)} · Entry #{b.Entry}";
    if(b.RefundedAt is not null)details+=" · refund collected";else if(b.Status=="lost")details+=" · refund not confirmed";
    if(b.FcClaimedAt is not null&&b.Status is not ("claimed" or "entered"))details+=" · FC estate claimed";
-   ImGui.PushID(row++);ImGui.TableNextRow();ImGui.TableNextColumn();ImGui.TextUnformatted(entry.Owner);CopyTextOnClick(entry.Owner);
+   ImGui.PushID(row);ImGui.TableNextRow();ImGui.TableNextColumn();ImGui.TextUnformatted(entry.Owner);CopyTextOnClick(entry.Owner);
    ImGui.TableNextColumn();ImGui.TextUnformatted(address);CopyTextOnClick(address);ImGui.TableNextColumn();ImGui.TextUnformatted(details);if(ImGui.IsItemHovered())ImGui.SetTooltip(HousingLottery.BidEvidence(b)+"\nClick to copy character name.");if(ImGui.IsItemClicked())ImGui.SetClipboardText(entry.Name);
    ImGui.TableNextColumn();ImGui.TextColored(b.Status is "won" or "claimed"?Green:b.Status=="lost"?Red:Orange,BidOutcome(b));if(ImGui.IsItemHovered())ImGui.SetTooltip(HousingLottery.BidEvidence(b));
    ImGui.TableNextColumn();if(ImGui.SmallButton("GO SEE"))GoSeeBid(b.WorldId,b.District,b.Ward,b.Plot);
    if(b.Status=="lost"&&b.RefundedAt is null){ImGui.SameLine();ImGui.BeginDisabled((config.SharedRoster?.ProtocolVersion??0)<22);if(ImGui.SmallButton("I collected the refund"))RecordManualRefund(entry.Name,b);ImGui.EndDisabled();}
    ImGui.PopID();
   }
-  ImGui.EndTable();
+  historyClip.End();historyClip.Destroy();ImGui.EndTable();
  }
  private static bool HousingBidActive(SharedHousingBid b)=>HousingLottery.BidActive(b);
  private void RecordManualRefund(string name,SharedHousingBid b){

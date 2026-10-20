@@ -116,17 +116,25 @@ public sealed partial class Plugin : IDalamudPlugin
 
     private readonly HashSet<string> reportedHeldRecords = [];
     private readonly SyncIdleQueueCache idleSyncQueue = new();
+    private string syncTaskKey="";
+    private readonly ObservationIndex observations = new();
+    private void RefreshObservationIndex()=>observations.Refresh(config.Houses,config.Tending,config.Planting,config.Discoveries,config.SentEvents,config.PairingKey);
     private void UpdateSync(DateTimeOffset now)
     {
+        if (syncTask?.IsCompleted == true && syncTaskKey!=config.PairingKey)
+        {
+            _=syncTask.Exception;syncTask=null;nextSync=now;syncFailures=0;
+            syncStatus="Pairing changed; previous upload receipt was kept separate.";
+        }
         if (syncTask?.IsCompleted == true)
         {
             if (syncTask.IsCompletedSuccessfully)
             {
                 var result = syncTask.Result;
-                var ids = config.SentEvents.ToHashSet();
-                foreach (var id in result.Accepted) if (ids.Add(id)) config.SentEvents.Add(id);
-                var retained = config.Houses.Select(h => h.EventId).Concat(config.Tending.Select(t => t.EventId)).Concat(config.Planting.Select(t => t.EventId)).Concat(config.Discoveries.Select(e => e.Id)).ToHashSet();
-                config.SentEvents.RemoveAll(id => !retained.Contains(id));
+                RefreshObservationIndex();
+                foreach (var id in result.Accepted.Distinct()) if (!observations.Acknowledged(id)) config.SentEvents.Add(id);
+                RefreshObservationIndex();
+                lastUploadedCursor=Math.Max(lastUploadedCursor,result.UploadedCursor??0);
                 SaveConfiguration();
                 syncStatus = result.Status;
                 if (!result.Retry) lastSyncReceiptAt = now;
@@ -143,13 +151,12 @@ public sealed partial class Plugin : IDalamudPlugin
         var idleStamp=new SyncIdleQueueStamp(configurationRevision,config.Houses.Count,config.Tending.Count,config.Planting.Count,config.Discoveries.Count,config.SentEvents.Count,config.SharedRoster?.ProtocolVersion??1,config.PairingKey,RegistrationScope,config.TrackGardens,config.SyncCharacterDetails,config.SyncCollections,config.SyncAutoRetainer,config.SyncActivities,config.SyncHouseDetails);
         if(idleSyncQueue.Unchanged(idleStamp,now)){nextSync=now.AddSeconds(FastGardenSync?1:30);return;}
         idleSyncQueue.Invalidate();
-        var sent = config.SentEvents.ToHashSet();
-        var pending = config.Houses.Where(h => h.Kind == "house.entered" && !sent.Contains(h.EventId))
-            .Select(h => new SyncEvent(h.EventId, h.Kind, h.ObservedAt, WithWorldNames(h.Actor), WithAddressNames(h.Address)))
-            .Concat(config.Tending.Where(t => !sent.Contains(t.EventId)).Select(t => new SyncEvent(t.EventId, "garden.tended", t.ConfirmedAt, WithWorldNames(t.Actor), WithAddressNames(t.Address), t.Patch, t.Bed)))
-            .Concat(config.Planting.Where(t => !sent.Contains(t.EventId)).Select(t => new SyncEvent(t.EventId, "garden.planted", t.ConfirmedAt, WithWorldNames(t.Actor), WithAddressNames(t.Address), t.Patch, t.Bed, t.Plant)))
-            .Concat(config.Discoveries.Where(e => !sent.Contains(e.Id) && (e.Kind is "garden.ready" or "garden.observed" or "garden.unmapped" or "garden.empty.unmapped" or "garden.status" or "garden.status.unmapped" or "garden.mapped" or "garden.empty" or "garden.dead" or "garden.fertilized" ? config.TrackGardens : e.Kind == "character.registered" ? config.SyncCharacterDetails && e.Registration?.PairingScope == RegistrationScope : e.Kind == "character.updated" ? config.SyncCharacterDetails : e.Kind is "collection.observed" or "storage.observed" ? config.SyncCollections : e.Kind == "submarines.cached" ? config.SyncAutoRetainer : e.Kind is "fashion.observed" or "submarines.observed" or "submarines.supplies" ? config.SyncActivities : config.SyncHouseDetails)))
-            .Where(e => !SyncValidation.SupersededIncompleteCharacter(e, config.Discoveries, now))
+        RefreshObservationIndex();
+        var pending = observations.Pending
+            .Where(e => e.Kind is "house.entered" or "garden.tended" or "garden.planted" ||
+                (e.Kind is "garden.ready" or "garden.observed" or "garden.unmapped" or "garden.empty.unmapped" or "garden.status" or "garden.status.unmapped" or "garden.mapped" or "garden.empty" or "garden.dead" or "garden.fertilized" ? config.TrackGardens : e.Kind == "character.registered" ? config.SyncCharacterDetails && e.Registration?.PairingScope == RegistrationScope : e.Kind == "character.updated" ? config.SyncCharacterDetails : e.Kind is "collection.observed" or "storage.observed" ? config.SyncCollections : e.Kind == "submarines.cached" ? config.SyncAutoRetainer : e.Kind is "fashion.observed" or "submarines.observed" or "submarines.supplies" ? config.SyncActivities : config.SyncHouseDetails))
+            .Select(e=>e.Kind is "house.entered" or "garden.tended" or "garden.planted" ? e with {Actor=WithWorldNames(e.Actor),Address=WithAddressNames(e.Address!)} : e)
+            .Where(e => !SyncValidation.SupersededIncompleteCharacter(e, observations.CharacterUpdates(e.Actor.ContentId), now))
             .OrderBy(e => e.Kind == "character.registered" ? 0 : 1).ThenBy(e => e.At).ToArray();
         pendingSyncRecords = pending.Length;
         var held = pending.Where(e => !SyncValidation.CanSend(e, now)).ToArray();
@@ -172,7 +179,8 @@ public sealed partial class Plugin : IDalamudPlugin
         lastSyncBatchOldest = events.Min(e => e.At); lastSyncBatchNewest = events.Max(e => e.At);
         syncStatus = $"Sending {events.Length} events · recent actions and history recovery…";
         lastSyncAttempt = now;
-        syncTask = sync.Send(config.PairingKey, events);
+        syncTaskKey=config.PairingKey;
+        syncTask = sync.Send(syncTaskKey, events);
     }
 
     public unsafe Plugin()
@@ -211,6 +219,8 @@ public sealed partial class Plugin : IDalamudPlugin
         configurationWriter = new(snapshot => Pi.SavePluginConfig(snapshot));
         config.FollowThem ??= new();
         config.PairingKey = config.PairingKey.Trim().ToLowerInvariant();
+        if(!System.Text.RegularExpressions.Regex.IsMatch(config.InstallationId??"", "^[a-f0-9]{32}$")){config.InstallationId=Guid.NewGuid().ToString("N");SaveConfiguration();}
+        sync.InstallationId=config.InstallationId;
         syncStatus = config.PairingKey.Length == 64 ? "Saved pairing key loaded. Waiting to sync." : "Not paired. Local records only.";
         if (config.Version < 5) { config.RefreshSharedInBackground = true; config.Version = 5; SaveConfiguration(); }
         try { plantHook = Interop.HookFromAddress<ConfirmPlantDelegate>(AgentHousingPlant.MemberFunctionPointers.ConfirmSeedAndSoilSelection, ObservePlantSelection); }
@@ -692,8 +702,9 @@ public sealed partial class Plugin : IDalamudPlugin
     private void KeepDiscovery(SyncEvent e, bool force = false, bool save = true)
     {
         if (!SyncValidation.CanSend(e, DateTimeOffset.UtcNow)) return;
-        var last = config.Discoveries.LastOrDefault(x => x.Kind == e.Kind && x.Actor.ContentId == e.Actor.ContentId && x.Address?.HouseId == e.Address?.HouseId && x.Patch == e.Patch && x.Bed == e.Bed && x.Collection?.Category == e.Collection?.Category && x.Collection?.Segment == e.Collection?.Segment && x.Storage?.Key == e.Storage?.Key && x.GardenTarget?.Argument == e.GardenTarget?.Argument && x.Company?.Id == e.Company?.Id && x.Company?.Profile?.Source == e.Company?.Profile?.Source);
-        if (!force && last is not null && !GardenTargetMap.CanRepeatObservation(e.Kind, e.At - last.At) && !(e.GardenTarget is not null && e.At-last.At > TimeSpan.FromDays(30)) && !(e.Kind is "garden.ready" or "garden.observed" or "garden.status" or "garden.empty" or "garden.dead" && config.Planting.Any(p => p.Actor.ContentId == e.Actor.ContentId && p.Address.HouseId == e.Address?.HouseId && p.Patch == e.Patch && p.Bed == e.Bed && p.ConfirmedAt > last.At)) && JsonSerializer.Serialize(new { last.Actor, last.Address, last.House, last.Character, last.Crop, last.Collection, last.Fashion, last.Voyage, last.GardenTarget, last.Storage, last.Company, last.CachedVoyage, last.Supplies, last.Lottery, last.LotteryResult, last.SharedEstates }) == JsonSerializer.Serialize(new { e.Actor, e.Address, e.House, e.Character, e.Crop, e.Collection, e.Fashion, e.Voyage, e.GardenTarget, e.Storage, e.Company, e.CachedVoyage, e.Supplies, e.Lottery, e.LotteryResult, e.SharedEstates })) return;
+        RefreshObservationIndex();
+        var last = observations.LastDiscovery(e);
+        if (!force && last is not null && !GardenTargetMap.CanRepeatObservation(e.Kind, e.At - last.At) && !(e.GardenTarget is not null && e.At-last.At > TimeSpan.FromDays(30)) && !(e.Kind is "garden.ready" or "garden.observed" or "garden.status" or "garden.empty" or "garden.dead" && observations.PlantedAfter(e,last.At)) && JsonSerializer.Serialize(new { last.Actor, last.Address, last.House, last.Character, last.Crop, last.Collection, last.Fashion, last.Voyage, last.GardenTarget, last.Storage, last.Company, last.CachedVoyage, last.Supplies, last.Lottery, last.LotteryResult, last.SharedEstates }) == JsonSerializer.Serialize(new { e.Actor, e.Address, e.House, e.Character, e.Crop, e.Collection, e.Fashion, e.Voyage, e.GardenTarget, e.Storage, e.Company, e.CachedVoyage, e.Supplies, e.Lottery, e.LotteryResult, e.SharedEstates })) return;
         config.Discoveries.Add(e);
         WakeObservationSync();
         if(collectingStorage)storageChanged=true;else if(save)SaveConfiguration();
@@ -1022,7 +1033,7 @@ public sealed partial class Plugin : IDalamudPlugin
                 eventExchangeDiagnostics=HelperExchangeDiagnostic(),
                 lotteryDiagnostics = lotteryDiagnostic,
                 companyProfileDiagnostics = new { latest = companyProfileDiagnostic, history = companyProfileHistory.ToArray(), status = discoveryStatus },
-                mode = "local-diagnostics", gardeningConfirmed = false, performance = new { maxDrawMs,maxUpdateMs,maxSnapshotMs, configurationError, stages=performanceStages.ToDictionary(x=>x.Key,x=>x.Value), optionalTools=optionalToolFailures.ToDictionary(x=>x.Key,x=>x.Value) },
+                mode = "local-diagnostics", gardeningConfirmed = false, performance = new { maxDrawMs,maxUpdateMs,maxSnapshotMs, configurationError, stages=performanceStages.ToDictionary(x=>x.Key,x=>x.Value), recent=rollingPerformance.Snapshot(PerformanceClock), optionalTools=optionalToolFailures.ToDictionary(x=>x.Key,x=>x.Value) },
                 houseObservations = config.Houses.ToArray(), confirmedTending = config.Tending.ToArray(), confirmedPlanting = config.Planting.ToArray(), observedDetails = config.Discoveries.ToArray(), diagnostics=diagnostics.ToArray()
             };
             diagnosticExportTask=DiagnosticExportWriter.Start(path,snapshot,json,errorJournal.Snapshot,gardenMessageJournal.Snapshot);

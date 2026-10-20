@@ -4,27 +4,39 @@ namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
     private DateTimeOffset nextMaintenance;
+    private Task<ObservationPrunePlan>? retentionTask;
+    private string retentionPairing="";
     private void MaintainRecords(DateTimeOffset now)
     {
+        if(retentionTask?.IsCompleted==true)
+        {
+            if(retentionTask.IsCompletedSuccessfully&&retentionPairing==config.PairingKey)
+            {
+                var plan=retentionTask.Result;
+                RefreshObservationIndex();
+                // A receipt reset while cleanup ran must keep those actions for replay.
+                plan.Houses.RemoveWhere(id=>!observations.Acknowledged(id));plan.Tending.RemoveWhere(id=>!observations.Acknowledged(id));
+                plan.Planting.RemoveWhere(id=>!observations.Acknowledged(id));plan.Discoveries.RemoveWhere(id=>!observations.Acknowledged(id));
+                if(plan.Count>0)
+                {
+                    config.Houses.RemoveAll(x=>plan.Houses.Contains(x.EventId));
+                    config.Tending.RemoveAll(x=>plan.Tending.Contains(x.EventId));
+                    config.Planting.RemoveAll(x=>plan.Planting.Contains(x.EventId));
+                    config.Discoveries.RemoveAll(x=>plan.Discoveries.Contains(x.Id));
+                    var removed=plan.Houses.Concat(plan.Tending).Concat(plan.Planting).Concat(plan.Discoveries).ToHashSet();
+                    config.SentEvents.RemoveAll(removed.Contains);observations.Invalidate();SaveConfiguration();
+                }
+            }
+            else if(retentionTask.IsFaulted)errorJournal.Record("retention","History cleanup deferred; all records retained.",exceptionType:retentionTask.Exception?.GetBaseException().GetType().Name);
+            retentionTask=null;
+        }
         if (now < nextMaintenance) return;
         nextMaintenance = now.AddMinutes(5);
-        var cutoff = now.AddDays(-60);
-        var sent = config.SentEvents.ToHashSet();
-        // Preserve current state for each entity and every unsent action, regardless of age.
-        var latestHouse = config.Houses.GroupBy(x => (x.Actor.ContentId,x.Address.HouseId,x.Kind)).Select(g => g.MaxBy(x=>x.ObservedAt)!.EventId).ToHashSet();
-        var latestTend = config.Tending.GroupBy(x => (x.Actor.ContentId,x.Address.HouseId,x.Patch,x.Bed)).Select(g => g.MaxBy(x=>x.ConfirmedAt)!.EventId).ToHashSet();
-        var latestPlant = config.Planting.GroupBy(x => (x.Actor.ContentId,x.Address.HouseId,x.Patch,x.Bed)).Select(g => g.MaxBy(x=>x.ConfirmedAt)!.EventId).ToHashSet();
-        var latestDetail = config.Discoveries.GroupBy(x => (x.Actor.ContentId,x.Kind,x.Address?.HouseId,x.Patch,x.Bed,x.Collection?.Category,x.GardenTarget?.Argument,x.Storage?.Key,x.Company?.Id,x.Company?.Profile?.Source)).Select(g => g.MaxBy(x=>x.At)!.Id).ToHashSet();
-        var removed = config.Houses.RemoveAll(x => x.ObservedAt < cutoff && sent.Contains(x.EventId) && !latestHouse.Contains(x.EventId));
-        removed += config.Tending.RemoveAll(x => x.ConfirmedAt < cutoff && sent.Contains(x.EventId) && !latestTend.Contains(x.EventId));
-        removed += config.Planting.RemoveAll(x => x.ConfirmedAt < cutoff && sent.Contains(x.EventId) && !latestPlant.Contains(x.EventId));
-        removed += config.Discoveries.RemoveAll(x => x.At < cutoff && sent.Contains(x.Id) && !latestDetail.Contains(x.Id));
-        if (removed > 0)
+        if(retentionTask is null)
         {
-            var retained = config.Houses.Select(x => x.EventId).Concat(config.Tending.Select(x => x.EventId))
-                .Concat(config.Planting.Select(x => x.EventId)).Concat(config.Discoveries.Select(x => x.Id)).ToHashSet();
-            config.SentEvents.RemoveAll(id => !retained.Contains(id));
-            SaveConfiguration();
+            var houses=config.Houses.ToArray();var tends=config.Tending.ToArray();var plants=config.Planting.ToArray();var discoveries=config.Discoveries.ToArray();var sent=config.SentEvents.ToArray();
+            retentionPairing=config.PairingKey;
+            retentionTask=Task.Run(()=>ObservationRetention.Plan(houses,tends,plants,discoveries,sent,now.AddDays(-60)));
         }
         if (!config.NotifyHousingWarnings || !Player.IsLoaded || config.SharedRoster is null) return;
         var chars=config.SharedRoster.People.SelectMany(x=>x.Characters).ToArray();

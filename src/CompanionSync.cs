@@ -20,8 +20,8 @@ public sealed record CollectionDetails(string Category, uint[] Known, uint[] Unl
 public sealed record FashionDetails(int Score, int Remaining, int ThemeId, string Cycle);
 public sealed record SubmarineDetails(int Slot, string Name, int Rank, long ReturnTime, uint RegisterTime, ushort[] Parts, [property: System.Text.Json.Serialization.JsonConverter(typeof(SubmarineRouteJson))] byte[] Route, bool? NeedsRepair = null, int[]? Stains = null);
 public sealed record VoyageDetails(string FcId, SubmarineDetails[] Submarines, int? Slots = null);
-public sealed record SyncResult(string[] Accepted, string Status, bool Retry);
-public sealed class CompanionSync : IDisposable
+public sealed record SyncResult(string[] Accepted, string Status, bool Retry, long? UploadedCursor = null);
+public sealed partial class CompanionSync : IDisposable
 {
     private readonly HttpClient client = new(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(20) };
     private readonly CancellationTokenSource cancel = new();
@@ -32,6 +32,7 @@ public sealed class CompanionSync : IDisposable
         {
             using var request = new HttpRequestMessage(HttpMethod.Post, "https://equinoxjournal.pages.dev/api/companion/events");
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
+            AddInstallationHeader(request);
             request.Content = JsonContent.Create(new { events, sentAt = DateTimeOffset.UtcNow }, options: Json);
             using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancel.Token);
             if (!response.IsSuccessStatusCode)
@@ -56,12 +57,13 @@ public sealed class CompanionSync : IDisposable
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, "https://equinoxjournal.pages.dev/api/companion/roster");
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
+            AddInstallationHeader(request);
             if (revision is not null && rosterETagKey == key && rosterETag is not null)
                 request.Headers.TryAddWithoutValidation("If-None-Match", rosterETag);
             using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancel.Token);
-            if (response.StatusCode == HttpStatusCode.NotModified) return new(null, "Shared profiles up to date.", true);
+            if (response.StatusCode == HttpStatusCode.NotModified) return WithRosterReceipt(new(null, "Shared profiles up to date.", true),response);
             if (response.StatusCode == HttpStatusCode.Unauthorized) return new(null, "Shared profiles: pairing key invalid or revoked.", Unauthorized: true);
-            if (response.StatusCode == HttpStatusCode.NotFound) return new(null, "Shared profiles need Journal V7.10.2 and a new website save.");
+            if (response.StatusCode == HttpStatusCode.NotFound) return new(null, "Shared profiles are not available on this server yet. Check the Journal deployment.");
             if (!response.IsSuccessStatusCode) return new(null, $"Shared profiles unavailable (HTTP {(int)response.StatusCode}); showing saved copy.");
             await response.Content.LoadIntoBufferAsync(1000000);
             var roster = JsonSerializer.Deserialize<SharedRoster>(await response.Content.ReadAsStringAsync(cancel.Token), Json);
@@ -83,7 +85,7 @@ public sealed class CompanionSync : IDisposable
                 return new(null,"Invalid submarine supply response; showing saved copy.");
             rosterETag = response.Headers.ETag?.ToString();
             rosterETagKey = key;
-            return new(roster, "Shared profiles updated.");
+            return WithRosterReceipt(new(roster, "Shared profiles updated."),response);
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException or InvalidOperationException)
         { return new(null, "Shared profiles unavailable; showing saved copy."); }

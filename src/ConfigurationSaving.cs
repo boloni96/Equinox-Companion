@@ -14,6 +14,7 @@ public sealed partial class Plugin
     {
         var ms = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
         performanceStages[stage] = Math.Max(performanceStages.GetValueOrDefault(stage), ms);
+        rollingPerformance.Record(stage,ms,PerformanceClock);
     }
     private long configurationRevision;
     private void SaveConfiguration()
@@ -35,7 +36,7 @@ public sealed partial class Plugin
         var started=Stopwatch.GetTimestamp();
         try{var snapshot=config.Snapshot();configurationWriter.Enqueue(snapshot);configurationDirty=false;}
         catch(Exception e){configurationDue=DateTimeOffset.UtcNow.AddSeconds(5);configurationError="Local snapshot failed: "+e.GetType().Name;}
-        finally{maxSnapshotMs=Math.Max(maxSnapshotMs,Stopwatch.GetElapsedTime(started).TotalMilliseconds);}
+        finally{maxSnapshotMs=Math.Max(maxSnapshotMs,Stopwatch.GetElapsedTime(started).TotalMilliseconds);RecordPerformanceElapsed("Save snapshot",started); }
     }
     private void FlushConfiguration()
     {
@@ -46,13 +47,13 @@ public sealed partial class Plugin
     {
         var started=Stopwatch.GetTimestamp();
         try{UpdateCore(framework);PumpConfiguration();}
-        finally{maxUpdateMs=Math.Max(maxUpdateMs,Stopwatch.GetElapsedTime(started).TotalMilliseconds);}
+        finally{maxUpdateMs=Math.Max(maxUpdateMs,Stopwatch.GetElapsedTime(started).TotalMilliseconds);RecordPerformanceElapsed("Update",started); }
     }
     private void Draw()
     {
         var started=Stopwatch.GetTimestamp();
         try{DrawCore();}
-        finally{maxDrawMs=Math.Max(maxDrawMs,Stopwatch.GetElapsedTime(started).TotalMilliseconds);}
+        finally{maxDrawMs=Math.Max(maxDrawMs,Stopwatch.GetElapsedTime(started).TotalMilliseconds);RecordPerformanceElapsed("Draw",started); }
     }
     private void DrawPerformanceDiagnostics()
     {
