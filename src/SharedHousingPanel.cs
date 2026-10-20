@@ -50,7 +50,7 @@ public sealed partial class Plugin
     private void DrawSharedStatus(bool showRefresh=true)
     {
         var incompatible=unsupportedSyncRecords>0;
-        var attention=rosterReadFailed||faulted||syncFailures>0||configurationError.Length>0||incompatible||heldSyncRecords>0;
+        var attention=rosterReadFailed||faulted||syncFailures>0||configurationError.Length>0||incompatible||SyncValidation.ActionableHeld(heldSyncRecords,historicalHeldSyncRecords)>0;
         var label=!config.SyncEnabled?"Sync off":config.PairingKey.Length!=64?"Not paired":attention?"Needs attention":syncTask is not null||readySyncRecords>0?"Saving…":rosterReceivedAt is null?"Checking shared data…":"Sync active";
         ImGui.TextColored(attention?Orange:Grey,label);
         if(ImGui.IsItemHovered()){
@@ -61,7 +61,8 @@ public sealed partial class Plugin
             ImGui.TextUnformatted("Journal server: "+(string.IsNullOrEmpty(config.SharedRoster?.ServerVersion)?"version not reported":config.SharedRoster.ServerVersion));
             ImGui.TextUnformatted("Received by this plugin: "+(rosterReceivedAt is {} received?DisplayTime.Local(received):"not yet this session"));
             DrawDeliveryDetails();
-            if(heldSyncRecords>0)ImGui.TextUnformatted("Some incomplete observations need review; valid actions continue uploading. Open Diagnostics for details.");
+            if(SyncValidation.ActionableHeld(heldSyncRecords,historicalHeldSyncRecords)>0)ImGui.TextUnformatted("Some incomplete observations need review; valid actions continue uploading. Open Diagnostics for details.");
+            if(historicalHeldSyncRecords>0)ImGui.TextUnformatted($"{historicalHeldSyncRecords} historical FC/placard captures have an invalid placeholder FC ID. Retained locally in Diagnostics; they do not block current sync.");
             ImGui.PopTextWrapPos();ImGui.EndTooltip();
         }
         if(showRefresh)

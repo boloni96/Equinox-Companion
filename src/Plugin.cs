@@ -106,11 +106,12 @@ public sealed partial class Plugin : IDalamudPlugin
     private string pairingInput = "";
     private int syncFailures;
     private int heldSyncRecords;
+    private int historicalHeldSyncRecords;
     private int unsupportedSyncRecords;
     private bool syncHistoryFirst;
     private int pendingSyncRecords, readySyncRecords, lastSyncBatchSize;
     private DateTimeOffset? lastSyncReceiptAt, lastSyncBatchOldest, lastSyncBatchNewest;
-    private string SyncQueueStatus => $"Queue: {pendingSyncRecords} pending · {readySyncRecords} eligible · {heldSyncRecords} held. Last receipt: {lastSyncReceiptAt?.ToLocalTime().ToString("HH:mm:ss") ?? "none this session"}.";
+    private string SyncQueueStatus => $"Queue: {readySyncRecords} ready to upload · {SyncValidation.ActionableHeld(heldSyncRecords,historicalHeldSyncRecords)} held · {historicalHeldSyncRecords} historical held"+(unsupportedSyncRecords>0?$" · {unsupportedSyncRecords} need a server update":"")+$". Last receipt: {lastSyncReceiptAt?.ToLocalTime().ToString("HH:mm:ss") ?? "none this session"}.";
     private ErrorJournal errorJournal = null!;
     private GardenMessageJournal gardenMessageJournal = null!;
 
@@ -161,6 +162,7 @@ public sealed partial class Plugin : IDalamudPlugin
         pendingSyncRecords = pending.Length;
         var held = pending.Where(e => !SyncValidation.CanSend(e, now)).ToArray();
         heldSyncRecords = held.Length;
+        historicalHeldSyncRecords=held.Count(e=>SyncValidation.HistoricalCompanyPlaceholder(e,now));
         foreach (var e in held) if(reportedHeldRecords.Add(e.Id)) errorJournal.Record("held-record", SyncValidation.HoldReason(e, now), e.Id, e.Kind);
         var valid = pending.Where(e => SyncValidation.CanSend(e, now)).ToArray();
         var eligible = valid.Where(e => SyncValidation.SupportedByWebsite(e, config.SharedRoster?.ProtocolVersion ?? 1)).ToArray();
@@ -1028,7 +1030,8 @@ public sealed partial class Plugin : IDalamudPlugin
             // copy collection containers before the worker serializes them.
             var snapshot=new {
                 schemaVersion = 7, characterSync = ReadCharacterSyncStatus(), followTravel = followTravelDiagnostics.ToArray(), pluginVersion = typeof(Plugin).Assembly.GetName().Version?.ToString(), exportedAt = DateTimeOffset.UtcNow,
-                syncDiagnostics = new { enabled = config.SyncEnabled, paired = config.PairingKey.Length == 64, endpoint = "https://equinoxjournal.pages.dev", status = syncStatus, pending = pendingSyncRecords, eligible = readySyncRecords, held = heldSyncRecords, unsupported = unsupportedSyncRecords, acknowledgedLocal = config.SentEvents.Count, lastSyncReceiptAt, lastSyncBatchSize, lastSyncBatchOldest, lastSyncBatchNewest, nextAttemptAt = nextSync, inFlight = syncTask is not null },
+                syncDiagnostics = new { enabled = config.SyncEnabled, paired = config.PairingKey.Length == 64, endpoint = "https://equinoxjournal.pages.dev", status = syncStatus, pending = pendingSyncRecords, eligible = readySyncRecords, held = heldSyncRecords, historicalHeld = historicalHeldSyncRecords, unsupported = unsupportedSyncRecords, acknowledgedLocal = config.SentEvents.Count, lastSyncReceiptAt, lastSyncBatchSize, lastSyncBatchOldest, lastSyncBatchNewest, nextAttemptAt = nextSync, inFlight = syncTask is not null },
+                gardenPickerDetails=gardenPickerCaptures.ToArray(),
                 helperDiagnostics = new { character=Player.CharacterName, enabled=config.EnableFollowThem, armed=followSession.Armed, target=config.FollowThem.TargetName, questPermission=helperPermission.Quest, paused=HelperPaused, questPaused=helperPermission.QuestPaused, shareQuest=config.FollowThem.ShareQuestActions, stopOnMovement=config.FollowThem.StopOnMovement, followStatus, helperError, helperLastIssue, observedQuest=helperObservedQuest, followers=helperFollowers.Select(f=>new {f.Name,f.Status,f.Quest,f.QuestPaused,f.Control,f.Updated}).ToArray() },
                 eventExchangeDiagnostics=HelperExchangeDiagnostic(),
                 lotteryDiagnostics = lotteryDiagnostic,
@@ -1136,7 +1139,8 @@ public sealed partial class Plugin : IDalamudPlugin
                 ImGui.TextWrapped(syncStatus);
                 ImGui.TextWrapped(SyncQueueStatus);
                 DrawCharacterSyncStatus();
-                if (heldSyncRecords > 0) ImGui.TextWrapped($"{heldSyncRecords} incomplete observation(s) in Diagnostics. They are not sent and do not block valid actions.");
+                if (SyncValidation.ActionableHeld(heldSyncRecords,historicalHeldSyncRecords)>0) ImGui.TextWrapped($"{SyncValidation.ActionableHeld(heldSyncRecords,historicalHeldSyncRecords)} incomplete observation(s) need review in Diagnostics. Valid actions continue uploading.");
+                if(historicalHeldSyncRecords>0)ImGui.TextDisabled($"{historicalHeldSyncRecords} historical FC/placard captures retained in Diagnostics.");
                 SettingsHelp("Sends character and job details, confirmed owned-estate and FC details, property addresses, planting and tending records, and entry times. Pairing key is saved on this PC and is never included in test exports. Characters match automatically by name and home server. Unmatched houses and patches need linking once.",false);
     }
 
@@ -1145,6 +1149,8 @@ public sealed partial class Plugin : IDalamudPlugin
             ImGui.TextWrapped($"Tracking diagnostics · Companion {typeof(Plugin).Assembly.GetName().Version}");
             ImGui.TextWrapped(syncStatus);
             ImGui.TextWrapped(SyncQueueStatus);
+            if(historicalHeldSyncRecords>0)ImGui.TextWrapped($"{historicalHeldSyncRecords} historical FC/placard captures contain the game's placeholder FC ID and are at least seven days old. Kept locally for investigation; they are not sent or marked as uploaded, and do not block new actions.");
+            if(ImGui.CollapsingHeader("Garden item markers"))DrawGardenPickerDiagnostics();
             ImGui.TextWrapped(status);
             ImGui.TextWrapped(discoveryStatus);
             ImGui.TextWrapped(cropChatStatus);
@@ -1278,3 +1284,4 @@ public sealed partial class Plugin : IDalamudPlugin
         FlushConfiguration();
     }
 }
+

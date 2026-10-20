@@ -93,7 +93,9 @@ public sealed partial class Plugin
             var pickerOpen=picker!=null&&picker->IsVisible&&agent->ContextAddonId==picker->Id;
             // ImGui overlays sit above native windows. Never outline the covered
             // Gardening slots through the foreground soil/seed picker.
-            var marked=pickerOpen?MarkGardenPicker((AddonContextIconMenu*)picker,agent,items,covers[..coverCount]):MarkGardenItems(gardening,items,covers[..coverCount]);
+            var pickerCheck="";
+            var marked=pickerOpen?MarkGardenPicker((AddonContextIconMenu*)picker,agent,items,covers[..coverCount],out pickerCheck):MarkGardenItems(gardening,items,covers[..coverCount]);
+            if(pickerOpen)CaptureGardenPicker((AddonContextIconMenu*)picker,agent,items,marked,pickerCheck,now);
             gardenMarkerStatus+=marked>0?" · Green: required. Red: different item.":" · Choose soil and seed; follow the required names above.";
             if(pickerOpen&&!items.Any(x=>x.Required))gardenMarkerStatus+=" Required item is not offered; check inventory.";
 
@@ -214,12 +216,14 @@ public sealed partial class Plugin
         }
         return null;
     }
-    private static unsafe int MarkGardenPicker(AddonContextIconMenu* menu,AgentHousingPlant* agent,List<PlantMenuItem> items,ReadOnlySpan<Vector4> covers)
+    private static unsafe int MarkGardenPicker(AddonContextIconMenu* menu,AgentHousingPlant* agent,List<PlantMenuItem> items,ReadOnlySpan<Vector4> covers,out string check)
     {
         var list=menu->AtkComponentList240;var inventory=InventoryManager.Instance();
         var rowItems=GardenPickerRowItems(menu,items);var count=rowItems.Length;
-        if(list==null||inventory==null||count==0||list->ListLength!=count||list->IsUpdatePending||list->IsScrollRefreshPending)return 0;
+        check=list==null?"Picker list unavailable.":inventory==null?"Inventory unavailable.":count==0?"Picker names/count did not resolve to offered items.":list->ListLength!=count?$"Picker rows disagree: {count} named items, {list->ListLength} list rows.":list->IsUpdatePending||list->IsScrollRefreshPending?"Picker layout is updating.":"";
+        if(check.Length>0)return 0;
         var marked=0;var drawn=new HashSet<nint>();
+        var verifiedRows=0;var liveRows=0;var loadedIcons=0;var validBounds=0;
         // Draw only live logical rows. Walking the entire addon also visits its
         // reusable renderer templates, which retain old icons over empty space.
         for(var i=0;i<count;i++)
@@ -233,14 +237,19 @@ public sealed partial class Plugin
                 if(slot!=null&&slot->ItemId%1000000==item.Id){verified=true;break;}
             }
             if(!verified)continue;
+            verifiedRows++;
             var renderer=list->GetItemRenderer(i);if(renderer==null||renderer->ListItemIndex!=i||!MarkerVisible((AtkResNode*)renderer->OwnerNode))continue;
+            liveRows++;
             var icon=renderer->DragDropComponent!=null?renderer->DragDropComponent->AtkComponentIcon:null;
             if(icon==null){var budget=80;icon=GardenRendererIcon(&renderer->UldManager,item.Icon,ref budget);}
             if(icon==null||icon->IconId!=item.Icon||!icon->IsIconLoaded())continue;
+            loadedIcons++;
             var node=(AtkResNode*)icon->IconImage;
             if(!GardenItemBounds(node,out var bounds)||!GardenItemBounds((AtkResNode*)renderer->OwnerNode,out var rowBounds)||!GardenPlantRequirement.WithinRow(bounds,rowBounds))continue;
+            validBounds++;
             if(OutlineGardenBounds(node,bounds,item.Required,drawn,covers))marked++;
         }
+        check=$"Picker: {count} items · {verifiedRows} inventory matches · {liveRows} live rows · {loadedIcons} loaded icons · {validBounds} attached bounds · {marked} borders.";
         return marked;
     }
     private static unsafe int MarkGardenIcons(AtkUldManager* uld,List<PlantMenuItem> items,Dictionary<nint,bool> exact,HashSet<nint> drawn,HashSet<nint> used,ReadOnlySpan<Vector4> covers,ref int budget,int depth)

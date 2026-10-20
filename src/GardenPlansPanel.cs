@@ -249,6 +249,7 @@ public sealed partial class Plugin
         if(gardenMarkerStatus.Length>0)ImGui.TextWrapped(gardenMarkerStatus);
         ImGui.TextWrapped(help);
         if(ImGui.Button("Refresh / retry garden sync")){nextRosterRead=default;if(syncFailures==0)nextSync=default;}
+        if(ImGui.CollapsingHeader("Item border diagnostics"))DrawGardenPickerDiagnostics();
         ImGui.PopTextWrapPos();ImGui.EndPopup();
     }
     private static void DrawGardenHoverTarget(string id, Vector2 at, float size, Action contents)
@@ -403,3 +404,4 @@ public sealed partial class Plugin
     }
 
 }
+

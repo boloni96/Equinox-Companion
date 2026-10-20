@@ -4,6 +4,12 @@ namespace EquinoxCompanion;
 // Keep incomplete login/logout snapshots local; never let one block valid queued actions.
 public static class SyncValidation
 {
+    // Reporting only: old FC placeholder captures remain retained and invalid.
+    // Never suppress fresh malformed captures, valid uploads, or other failures.
+    public static bool HistoricalCompanyPlaceholder(SyncEvent e,DateTimeOffset now) =>
+        e.At.Year>=2020&&e.At<=now.AddDays(-7)&&ActorReady(e.Actor)&&
+        (e.Kind=="company.observed"?e.Company:e.Kind=="house.placard"?e.House?.FreeCompany:null)?.Id=="16140901064495857664";
+    public static int ActionableHeld(int held,int historical)=>Math.Max(0,held-Math.Clamp(historical,0,held));
     // Keep old diagnostic records in the export, but a complete newer snapshot
     // of the same character makes an incomplete login snapshot obsolete.
     public static bool SupersededIncompleteCharacter(SyncEvent e, IEnumerable<SyncEvent> records, DateTimeOffset now) =>
@@ -93,3 +99,4 @@ public static class SyncValidation
         };
     }
 }
+
