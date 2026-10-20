@@ -18,6 +18,13 @@ public static class GardenPlantRequirement
         var ids=offered.Where(x=>x.Id!=0&&string.Equals(x.Name,text.Trim(),StringComparison.Ordinal)).Select(x=>x.Id).Distinct().Take(2).ToArray();
         return ids.Length==1?ids[0]:0;
     }
+    public static bool VisibleCover(bool visible,byte alpha,bool rootVisible)=>visible&&alpha>0&&rootVisible;
+    public static bool ValidMarkerBounds(System.Numerics.Vector4 bounds)
+    {
+        if(!float.IsFinite(bounds.X)||!float.IsFinite(bounds.Y)||!float.IsFinite(bounds.Z)||!float.IsFinite(bounds.W))return false;
+        var width=bounds.Z-bounds.X;var height=bounds.W-bounds.Y;
+        return width>=12&&height>=12&&width<=256&&height<=256&&width/height is >=.55f and <=1.8f;
+    }
     public static bool MarkerCovered(System.Numerics.Vector4 marker,ReadOnlySpan<System.Numerics.Vector4> covers)
     {
         foreach(var cover in covers)
@@ -33,3 +40,4 @@ public static class GardenPlantRequirement
         return matches.Length==1?matches[0]:null;
     }
 }
+

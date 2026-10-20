@@ -78,13 +78,12 @@ public sealed partial class Plugin
             var items=MarkerItems(agent,next.Crop,soil);
             var gardening=(AtkUnitBase*)GardenGui.GetAddonByName("HousingGardening").Address;
             if(gardening==null||!gardening->IsVisible)return;
-            // Foreground ImGui drawings cannot sit behind the native confirmation.
-            // Read-only presentation guard: the planting confirmation path is unchanged.
-            var confirmation=(AtkUnitBase*)GardenGui.GetAddonByName("SelectYesno").Address;
-            if(confirmation!=null&&confirmation->IsVisible)return;
-            Span<Vector4> covers=stackalloc Vector4[2];var coverCount=0;
-            if(GardenMarkerCover("ItemDetail") is {} detail) covers[coverCount++]=detail;
-            if(GardenMarkerCover("Tooltip") is {} tooltip) covers[coverCount++]=tooltip;
+            // Native addons can retain visibility flags and old bounds after their
+            // contents disappear. Only currently displayed covers hide a marker.
+            Span<Vector4> covers=stackalloc Vector4[3];var coverCount=0;
+            if(GardenMarkerCover("SelectYesno") is {} confirmation)covers[coverCount++]=confirmation;
+            if(GardenMarkerCover("ItemDetail",AtkTooltipType.Item) is {} detail)covers[coverCount++]=detail;
+            if(GardenMarkerCover("Tooltip",AtkTooltipType.Text) is {} tooltip)covers[coverCount++]=tooltip;
             var picker=(AtkUnitBase*)GardenGui.GetAddonByName("ContextIconMenu").Address;
             var pickerOpen=picker!=null&&picker->IsVisible&&agent->ContextAddonId==picker->Id;
             // ImGui overlays sit above native windows. Never outline the covered
@@ -102,23 +101,35 @@ public sealed partial class Plugin
         for(var n=0;node!=null&&n<40;n++,node=node->ParentNode)if(!node->IsVisible())return false;
         return true;
     }
-    private static unsafe Vector4? GardenMarkerCover(string name)
+    private static unsafe Vector4? GardenMarkerCover(string name,AtkTooltipType tooltipType=AtkTooltipType.None)
     {
         var addon=(AtkUnitBase*)GardenGui.GetAddonByName(name).Address;
-        if(addon==null||!addon->IsVisible)return null;
+        if(addon==null||!GardenPlantRequirement.VisibleCover(addon->IsVisible,addon->Alpha,MarkerVisible(addon->RootNode)))return null;
+        if(tooltipType!=AtkTooltipType.None){
+            var stage=AtkStage.Instance();
+            if(stage==null||!MarkerVisible(stage->TooltipManager.TargetNode)||((AtkTooltipType)stage->TooltipManager.TooltipType&tooltipType)==0)return null;
+        }
         Bounds bounds;addon->GetWindowBounds(&bounds);
         return bounds.Width>0&&bounds.Height>0?new Vector4(bounds.Pos1.X,bounds.Pos1.Y,bounds.Pos2.X,bounds.Pos2.Y):null;
     }
+    private static unsafe bool GardenItemBounds(AtkResNode* node,out Vector4 rectangle)
+    {
+        rectangle=default;if(!MarkerVisible(node))return false;
+        Bounds bounds;node->GetBounds(&bounds);
+        rectangle=new(bounds.Pos1.X,bounds.Pos1.Y,bounds.Pos2.X,bounds.Pos2.Y);
+        return GardenPlantRequirement.ValidMarkerBounds(rectangle);
+    }
     private static unsafe bool OutlineGardenItem(AtkResNode* node,bool correct,HashSet<nint> drawn,ReadOnlySpan<Vector4> covers)
     {
-        if(!MarkerVisible(node)||!drawn.Add((nint)node))return false;
-        Bounds bounds;node->GetBounds(&bounds);
-        // Ignore tooltips bound to a whole window/text row, and invalid geometry.
-        if(bounds.Width<12||bounds.Height<12||bounds.Width>256||bounds.Height>256||(float)bounds.Width/bounds.Height is <.55f or >1.8f)return false;
-        if(GardenPlantRequirement.MarkerCovered(new(bounds.Pos1.X-4,bounds.Pos1.Y-4,bounds.Pos2.X+4,bounds.Pos2.Y+4),covers))return false;
+        if(!GardenItemBounds(node,out var bounds))return false;
+        return OutlineGardenBounds(node,bounds,correct,drawn,covers);
+    }
+    private static unsafe bool OutlineGardenBounds(AtkResNode* node,Vector4 bounds,bool correct,HashSet<nint> drawn,ReadOnlySpan<Vector4> covers)
+    {
+        if(GardenPlantRequirement.MarkerCovered(new(bounds.X-4,bounds.Y-4,bounds.Z+4,bounds.W+4),covers)||!drawn.Add((nint)node))return false;
         var offset=ImGui.GetMainViewport().Pos;
-        var thickness=Math.Clamp(bounds.Width/18f,2,4);
-        ImGui.GetForegroundDrawList().AddRect(offset+new Vector2(bounds.Pos1.X-2,bounds.Pos1.Y-2),offset+new Vector2(bounds.Pos2.X+2,bounds.Pos2.Y+2),correct?0xff65ee83:0xff5757f2,3,ImDrawFlags.None,thickness);
+        var thickness=Math.Clamp((bounds.Z-bounds.X)/18f,2,4);
+        ImGui.GetForegroundDrawList().AddRect(offset+new Vector2(bounds.X-2,bounds.Y-2),offset+new Vector2(bounds.Z+2,bounds.W+2),correct?0xff65ee83:0xff5757f2,3,ImDrawFlags.None,thickness);
         return true;
     }
     private static unsafe uint GardenTooltipItem(AtkTooltipManager.AtkTooltipInfo* info,List<PlantMenuItem> offered)
@@ -155,10 +166,8 @@ public sealed partial class Plugin
             }
         }
         if(plantingAgent!=null)MapGardenPickerEntries((AddonContextIconMenu*)addon,plantingAgent,items,exact);
-        // Native tooltip bindings carry an item ID, inventory slot or exact localized
-        // label even when the selector uses identical seed-bag images.
-        // Prefer the actual icon's bounds over a tooltip's collision/label bounds.
-        // Mark each exact binding as used so it cannot draw a second displaced border.
+        // Prefer the visible item image. An invalid icon container must not consume
+        // the exact tooltip binding: its validated bounds remain a fallback.
         var used=new HashSet<nint>();var nodes=600;
         var marked=MarkGardenIcons(&addon->UldManager,items,exact,drawn,used,covers,ref nodes,0);
         foreach(var match in exact)if(!used.Contains(match.Key)&&OutlineGardenItem((AtkResNode*)match.Key,match.Value,drawn,covers))marked++;
@@ -191,6 +200,7 @@ public sealed partial class Plugin
     {
         if(uld==null||uld->NodeList==null||depth>8)return 0;
         var marked=0;
+        Span<nint> bindings=stackalloc nint[5];Span<nint> candidates=stackalloc nint[4];
         for(var i=0;i<uld->NodeListCount&&budget-->0;i++)
         {
             var node=uld->NodeList[i];if(!MarkerVisible(node)||(int)node->Type<1000)continue;
@@ -199,15 +209,27 @@ public sealed partial class Plugin
             var icon=type==ComponentType.Icon?(AtkComponentIcon*)component:type==ComponentType.DragDrop?((AtkComponentDragDrop*)component)->AtkComponentIcon:null;
             if(icon!=null)
             {
-                var target=icon->OuterResNode!=null?icon->OuterResNode:node;
-                var hasExact=false;bool? correct=null;
-                foreach(var candidate in new[]{(nint)target,(nint)node,(nint)icon->IconImage,(nint)icon->OwnerNode})
-                    if(exact.TryGetValue(candidate,out var value)){hasExact=true;correct=value;used.Add(candidate);}
+                var bindingCount=0;bool? correct=null;var conflict=false;
+                candidates[0]=(nint)icon->OuterResNode;candidates[1]=(nint)node;candidates[2]=(nint)icon->IconImage;candidates[3]=(nint)icon->OwnerNode;
+                foreach(var candidate in candidates)
+                    if(exact.TryGetValue(candidate,out var value)){if(correct.HasValue&&correct.Value!=value)conflict=true;correct=value;bindings[bindingCount++]=candidate;}
                 var parent=node->ParentNode;
-                for(var n=0;!hasExact&&parent!=null&&n<40;n++,parent=parent->ParentNode)
-                    if(exact.TryGetValue((nint)parent,out var value)){hasExact=true;correct=value;used.Add((nint)parent);}
-                if(!hasExact)correct=GardenPlantRequirement.IconMatch(icon->IconId,items.Select(x=>(x.Icon,x.Required)));
-                if(correct is {} match&&OutlineGardenItem(target,match,drawn,covers))marked++;
+                for(var n=0;bindingCount==0&&parent!=null&&n<40;n++,parent=parent->ParentNode)
+                    if(exact.TryGetValue((nint)parent,out var value)){correct=value;bindings[bindingCount++]=(nint)parent;}
+                if(conflict){foreach(var binding in bindings[..bindingCount])used.Add(binding);continue;}
+                if(bindingCount==0)correct=GardenPlantRequirement.IconMatch(icon->IconId,items.Select(x=>(x.Icon,x.Required)));
+                if(correct is {} match){
+                    // OuterResNode is an interaction target, not necessarily the
+                    // visible square. Select valid geometry before retiring bindings.
+                    candidates[0]=(nint)icon->IconImage;candidates[1]=(nint)icon->OuterResNode;candidates[2]=(nint)node;candidates[3]=(nint)icon->OwnerNode;
+                    foreach(var candidate in candidates){
+                        var target=(AtkResNode*)candidate;
+                        if(!GardenItemBounds(target,out var bounds))continue;
+                        foreach(var binding in bindings[..bindingCount])used.Add(binding);
+                        if(OutlineGardenBounds(target,bounds,match,drawn,covers))marked++;
+                        break;
+                    }
+                }
                 continue;
             }
             marked+=MarkGardenIcons(&component->UldManager,items,exact,drawn,used,covers,ref budget,depth+1);
@@ -215,3 +237,4 @@ public sealed partial class Plugin
         return marked;
     }
 }
+
