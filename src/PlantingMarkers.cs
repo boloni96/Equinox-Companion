@@ -156,10 +156,18 @@ public sealed partial class Plugin
     }
     private static unsafe bool OutlineGardenBounds(AtkResNode* node,Vector4 bounds,bool correct,HashSet<nint> drawn,ReadOnlySpan<Vector4> covers)
     {
-        if(GardenPlantRequirement.MarkerCovered(new(bounds.X-4,bounds.Y-4,bounds.Z+4,bounds.W+4),covers)||!drawn.Add((nint)node))return false;
+        Span<Vector4> regions=stackalloc Vector4[GardenMarkerClip.MaxRegions];
+        var count=GardenMarkerClip.VisibleRegions(new(bounds.X-5,bounds.Y-5,bounds.Z+5,bounds.W+5),covers,regions);
+        if(count==0||!drawn.Add((nint)node))return false;
         var offset=ImGui.GetMainViewport().Pos;
         var thickness=Math.Clamp((bounds.Z-bounds.X)/18f,2,4);
-        ImGui.GetForegroundDrawList().AddRect(offset+new Vector2(bounds.X-2,bounds.Y-2),offset+new Vector2(bounds.Z+2,bounds.W+2),correct?0xff65ee83:0xff5757f2,3,ImDrawFlags.None,thickness);
+        var draw=ImGui.GetForegroundDrawList();
+        for(var i=0;i<count;i++){
+            var clip=regions[i];
+            draw.PushClipRect(offset+new Vector2(clip.X,clip.Y),offset+new Vector2(clip.Z,clip.W),true);
+            try{draw.AddRect(offset+new Vector2(bounds.X-2,bounds.Y-2),offset+new Vector2(bounds.Z+2,bounds.W+2),correct?0xff65ee83:0xff5757f2,3,ImDrawFlags.None,thickness);}
+            finally{draw.PopClipRect();}
+        }
         return true;
     }
     private static unsafe uint GardenTooltipItem(AtkTooltipManager.AtkTooltipInfo* info,List<PlantMenuItem> offered)
