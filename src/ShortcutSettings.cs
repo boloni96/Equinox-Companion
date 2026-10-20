@@ -53,10 +53,10 @@ public sealed partial class Plugin
     private void DrawShortcutSettings()
     {
         shortcutCaptureDrawFrame=ImGui.GetFrameCount();
-        ImGui.TextWrapped("Click Set shortcut, press your combination, then release all keys to save. Esc cancels. Use one key with optional Ctrl, Alt or Shift.");
+        SettingsHelp("Click Set shortcut, press your combination, then release all keys to save. Esc cancels. Use one key with optional Ctrl, Alt or Shift.",false);
         foreach(var (name,binding) in Shortcuts())
         {
-            ImGui.PushID(name);ImGui.Separator();ImGui.TextUnformatted(name+" — "+binding.Label);
+            ImGui.PushID(name);ImGui.TextUnformatted(name+" — "+binding.Label);ImGui.SameLine();
             if(capturingShortcut==name)
             {
                 ImGui.TextWrapped(shortcutCapture?.Pending is {} pending?$"{pending.Label} — release to save":"Listening… press your shortcut (Esc to cancel).");
@@ -71,25 +71,25 @@ public sealed partial class Plugin
             ImGui.PopID();
         }
         if(shortcutCaptureStatus.Length>0)ImGui.TextWrapped(shortcutCaptureStatus);
-        ImGui.TextWrapped("Shortcuts pause while typing or editing a control and while the game is unfocused. They do not replace FFXIV keybinds: choose unused combinations. /gardening still requires an identified paired house.");
+        SettingsHelp("Shortcuts pause while typing or editing a control and while the game is unfocused. They do not replace FFXIV keybinds: choose unused combinations. /gardening still requires an identified paired house.");
     }
     private void MessageToggle(string label,bool value,Action<bool> set)
     { if(ImGui.Checkbox(label,ref value)){set(value);SaveConfiguration();} }
     private void DrawChatMessageSettings()
     {
-        ImGui.TextWrapped("Choose which Equinox messages appear in your own chat. These controls do not disable tracking or syncing.");
+        SettingsHelp("Choose which Equinox messages appear in your own chat. These controls do not disable tracking or syncing.",false);
         ImGui.Separator();ImGui.TextUnformatted("Housing");
         MessageToggle("House entry messages",config.NotifyHouseEntries,v=>config.NotifyHouseEntries=v);
         MessageToggle("Housing reminders after 30 days",config.NotifyHousingWarnings,v=>config.NotifyHousingWarnings=v);
+        MessageToggle("Housing lottery period · once after login",config.NotifyHousingLottery,v=>config.NotifyHousingLottery=v);
         ImGui.Separator();ImGui.TextUnformatted("Gardening");
         MessageToggle("Garden chat messages enabled",config.NotifyGardenCare,v=>config.NotifyGardenCare=v);
         ImGui.BeginDisabled(!config.NotifyGardenCare);
         MessageToggle("Persons needing to tend (light blue)",config.NotifyGardenTending,v=>config.NotifyGardenTending=v);
         MessageToggle("Persons with gardens at risk (orange)",config.NotifyGardenRisk,v=>config.NotifyGardenRisk=v);
         ImGui.EndDisabled();
-        ImGui.TextWrapped("Once per character login: one light-blue tending message and/or one orange risk message, grouped by Person across all paired accounts and characters. Mature crops do not trigger reminders. No house lists or repeated messages during the session.");
-        ImGui.Separator();ImGui.TextUnformatted("Commands and Fashion Report");
-        MessageToggle("Housing lottery period · once after login",config.NotifyHousingLottery,v=>config.NotifyHousingLottery=v);
+        SettingsHelp("Once per character login: one light-blue tending message and/or one orange risk message, grouped by Person across all paired accounts and characters. Mature crops do not trigger reminders. No house lists or repeated messages during the session.");
+        ImGui.Separator();ImGui.TextUnformatted("Maintenance & command messages");
         MessageToggle("Maintenance reminder · 5 minutes after login (local computer time)",config.NotifyMaintenance,v=>config.NotifyMaintenance=v);
         MessageToggle("Fashion Report browser link",config.NotifyFashionLink,v=>config.NotifyFashionLink=v);
         MessageToggle("Gardening command: house not identified",config.NotifyPlantingUnavailable,v=>config.NotifyPlantingUnavailable=v);

@@ -1083,7 +1083,7 @@ public sealed partial class Plugin : IDalamudPlugin
     {
         ImGui.TextUnformatted("Website connection");
         DrawSavedPairingKey();
-                ImGui.TextWrapped("Use Journal V7.11.27 for all current features. Keep your existing pairing key. Both installations use the same key for this shared Journal.");
+                SettingsHelp("Use the same existing pairing key on both installations to share this Journal.",false);
                 ImGui.InputText("Pairing key", ref pairingInput, 128, ImGuiInputTextFlags.Password);
                 if (ImGui.Button("Save pairing key") && syncTask is null)
                 {
@@ -1103,7 +1103,7 @@ public sealed partial class Plugin : IDalamudPlugin
                 ImGui.TextWrapped(SyncQueueStatus);
                 DrawCharacterSyncStatus();
                 if (heldSyncRecords > 0) ImGui.TextWrapped($"{heldSyncRecords} incomplete observation(s) in Diagnostics. They are not sent and do not block valid actions.");
-                ImGui.TextWrapped("Sends character and job details, confirmed owned-estate and FC details, property addresses, planting and tending records, and entry times. Pairing key is saved on this PC and is never included in test exports. Characters match automatically by name and home server. Unmatched houses and patches need linking once.");
+                SettingsHelp("Sends character and job details, confirmed owned-estate and FC details, property addresses, planting and tending records, and entry times. Pairing key is saved on this PC and is never included in test exports. Characters match automatically by name and home server. Unmatched houses and patches need linking once.",false);
     }
 
     private void DrawDiagnosticsTracking()
@@ -1121,9 +1121,9 @@ public sealed partial class Plugin : IDalamudPlugin
             ImGui.TextWrapped($"Saved planting records: {config.Planting.Count}. Plant observer: {(plantHook is null ? "unavailable" : "ready")}");
             if (ImGui.CollapsingHeader("Recent observed house visits · latest 50"))
             {
-                ImGui.TextWrapped("Touched means entered inside. Times are local. Houses listed here are observed visits, not an ownership roster.");
+                SettingsHelp("Touched means entered inside. Times are local. Houses listed here are observed visits, not an ownership roster.",false);
                 if (currentAddress is not null && Player.IsLoaded && !config.Houses.Any(h => h.Actor.ContentId == Player.ContentId.ToString(CultureInfo.InvariantCulture) && h.Address.HouseId == currentAddress.HouseId))
-                    ImGui.TextWrapped("Current property: no entry recorded for this character yet.");
+                    SettingsHelp("Current property: no entry recorded for this character yet.",false);
                 foreach (var house in config.Houses.GroupBy(h => (h.Actor.ContentId, h.Address.HouseId)).OrderByDescending(g => g.Max(h => h.ObservedAt)).Take(50))
                 {
                     var last = house.OrderByDescending(h => h.ObservedAt).First();
@@ -1132,7 +1132,7 @@ public sealed partial class Plugin : IDalamudPlugin
                     ImGui.TextWrapped($"{last.Actor.Name} · {a.WorldName ?? a.WorldId.ToString()} · {a.DistrictName ?? a.TerritoryTypeId.ToString()} · W{a.Ward} P{a.Plot} · Room {a.Room}");
                     ImGui.TextWrapped(entry is null ? $"Observed inside {DisplayTime.Local(last.ObservedAt)}; entry time unknown" : $"Touched: {DisplayTime.Local(entry.ObservedAt)}");
                 }
-                ImGui.TextWrapped("No recorded entry means unknown. Entry observations do not confirm a demolition timer reset.");
+                SettingsHelp("No recorded entry means unknown. Entry observations do not confirm a demolition timer reset.",false);
             }
             if (ImGui.CollapsingHeader("Detected character and estate details"))
             {
@@ -1141,22 +1141,23 @@ public sealed partial class Plugin : IDalamudPlugin
                 if (details?.Character is { } ch) ImGui.TextWrapped($"{details.Actor.Name} · {details.Actor.HomeWorldName} · {ch.JobName} Lv. {ch.Level} · highest combat level {ch.HighestBattleLevel}");
                 foreach (var h in own.Where(x => x.Kind == "house.discovered").GroupBy(x => x.Address!.HouseId).Select(g => g.Last()))
                     ImGui.TextWrapped($"{h.House!.Type} · {h.House.EstateName} · {h.House.FreeCompany?.Name} · {h.House.Size} · W{h.Address!.Ward} P{h.Address.Plot}");
-                ImGui.TextWrapped("Open your estate placard to read its name and size. Open the FC member list with your character visible if FC details are missing. Only confirmed owned estate addresses are discovered.");
+                SettingsHelp("Open your estate placard to read its name and size. Open the FC member list with your character visible if FC details are missing. Only confirmed owned estate addresses are discovered.",false);
             }
             ImGui.Separator();
             if (ImGui.CollapsingHeader("Garden tracking details"))
             {
             ImGui.TextDisabled("Garden tracking controls: Settings > Tracking.");
-            ImGui.TextWrapped("English garden menus supported. Confirmed tending is saved per house, patch and bed. Website matching preserves existing batches. Planting records include the selected seed and soil plus a successful game response. Confirmed Remove Crop responses clear the exact observed bed. Harvest Crop plus the matching crop reward clears that numbered bed automatically. Cancelled or failed harvests never clear a bed. If a response cannot be matched, reopening its empty menu confirms it.");
+            SettingsHelp("English garden menus supported. Confirmed tending is saved per house, patch and bed. Website matching preserves existing batches. Planting records include the selected seed and soil plus a successful game response. Confirmed Remove Crop responses clear the exact observed bed. Harvest Crop plus the matching crop reward clears that numbered bed automatically. Cancelled or failed harvests never clear a bed. If a response cannot be matched, reopening its empty menu confirms it.",false);
             ImGui.TextWrapped($"Saved tending records: {config.Tending.Count} (latest 10,000 retained)");
             foreach (var tend in config.Tending.TakeLast(6).Reverse())
                 ImGui.TextWrapped($"{DisplayTime.Local(tend.ConfirmedAt)} · {tend.Actor.Name} · W{tend.Address.Ward} P{tend.Address.Plot} · Patch {tend.Patch}, bed {tend.Bed}: tended");
             ImGui.Separator();
             }
             ImGui.Separator();
-            ImGui.TextUnformatted("Diagnostic recording");
-            ImGui.TextWrapped("Record the action that is failing, then use Export diagnostics below. Normal tracking does not need a recording. Saved gardens and house visits are preserved.");
-            ImGui.TextWrapped("Recent garden system messages and menus are kept locally while garden tracking is enabled, including outside the five-minute test. Export diagnostics includes this bounded history for crop/growth checks. It is not sent through pairing.");
+            if(recording||ImGui.CollapsingHeader("Diagnostic recording"))
+            {
+            SettingsHelp("Record the action that is failing, then use Export diagnostics below. Normal tracking does not need a recording. Saved gardens and house visits are preserved.",false);
+            SettingsHelp("Recent garden system messages and menus are kept locally while garden tracking is enabled, including outside the five-minute test. Export diagnostics includes this bounded history for crop/growth checks. It is not sent through pairing.",false);
             if(gardenMessageJournal.WriteFailure is {} historyError)ImGui.TextWrapped(historyError);
             if (!recording)
             {
@@ -1176,7 +1177,8 @@ public sealed partial class Plugin : IDalamudPlugin
             ImGui.TextWrapped($"Action observer: {callbackStatus}");
             ImGui.TextWrapped($"Last submitted option (unverified): {lastSubmittedOption}");
             foreach (var signal in recentSignals) ImGui.TextWrapped(signal);
-            ImGui.TextWrapped("Recording includes garden menu labels and target details. Exports remain local until you share them.");
+            SettingsHelp("Recording includes garden menu labels and target details. Exports remain local until you share them.",false);
+            }
     }
 
     public void Dispose()

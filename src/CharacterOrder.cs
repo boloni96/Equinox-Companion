@@ -51,7 +51,7 @@ public sealed partial class Plugin
         var ownersFirst = config.HouseCharactersFirst;
         if (ImGui.Checkbox("Keep characters without houses at the bottom", ref ownersFirst))
         { config.HouseCharactersFirst = ownersFirst; SaveConfiguration(); }
-        ImGui.TextWrapped("Use Up / Down to arrange each list. With houses first enabled, moves stay within the house / no-house groups. Disable it to place anyone anywhere. Order is saved on this installation. The logged-in character temporarily appears first in the character tabs; your order here stays unchanged.");
+        SettingsHelp("Use Up / Down to arrange each list. With houses first enabled, moves stay within the house / no-house groups. Disable it to place anyone anywhere. Order is saved on this installation. The logged-in character temporarily appears first in the character tabs; your order here stays unchanged.");
         var owners = LocalHousingActors();
         DrawOrderList("local", "My Empire", OrderedLocalCharacters(true)
             .Select(a => new OrderCharacter(a.ContentId, a.Name + " · " + HomeLocation(a), owners.Contains(a.ContentId))).ToArray());
@@ -101,7 +101,7 @@ public sealed partial class Plugin
             }
             if (ImGui.TreeNode($"Hidden characters ({hiddenCharacters.Length})###hidden"))
             {
-                ImGui.TextWrapped("Hidden only from this plugin list. House records and website data are kept.");
+                SettingsHelp("Hidden only from this plugin list. House records and website data are kept.");
                 foreach (var c in hiddenCharacters)
                 {
                     ImGui.PushID("hidden-" + c.Id);

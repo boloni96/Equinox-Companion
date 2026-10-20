@@ -226,7 +226,7 @@ public sealed partial class Plugin
         DrawCofferAppearance();
         DrawCofferAutoOpenSettings();
         ImGui.TextWrapped(cofferStatus);
-        ImGui.TextWrapped("Red: unopened. Green: confirmed opened, including by another player. Opened locations remain for this territory visit; logout or changing territory clears them. Ordinary treasure objects are supported; special Event Object coffers need separate support. No Journal sync. Automatic opening is a separate opt-in setting above.");
+        SettingsHelp("Red: unopened. Green: confirmed opened, including by another player. Opened locations remain for this territory visit; logout or changing territory clears them. Ordinary treasure objects are supported; special Event Object coffers need separate support. No Journal sync. Automatic opening is a separate opt-in setting above.");
         if(ImGui.Button("Clear this visit's coffer markers"))SetCofferMarkers(true);
         if(cofferFault&&ImGui.Button("Retry coffer markers"))SetCofferMarkers(true);
     }

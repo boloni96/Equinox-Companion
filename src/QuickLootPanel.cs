@@ -41,7 +41,7 @@ public sealed partial class Plugin
         var s=CurrentQuickLoot;quickLootUiChanged=false;
         QCheck("Automatic rolling (FULF)",s.Automatic,v=>{s.Automatic=v;StopQuickLoot(v?"Automatic rolling enabled.":"Automatic rolling disabled.");});
         ImGui.SameLine();QCheck("Top bar (DTR)",s.ShowBar,v=>s.ShowBar=v);
-        ImGui.TextWrapped("One configuration for all characters. Unlocks and equipped gear are checked on the character currently logged in.");
+        SettingsHelp("One configuration for all characters. Unlocks and equipped gear are checked on the character currently logged in.",false);
         if(QuickLootConflict())ImGui.TextWrapped("LazyLoot is loaded. QuickLoot rolling is paused to avoid two plugins rolling together.");
         ImGui.Separator();
         QTabs("QuickLootSections",
@@ -76,16 +76,16 @@ public sealed partial class Plugin
     private void DrawQuickLootTiming()
     {
         var s=CurrentQuickLoot;QRoll("Automatic mode",s.Mode,v=>s.Mode=v);
-        ImGui.TextWrapped("Need falls back to Greed, then Pass, when the game does not allow the stronger roll. Rules and weekly protection still apply.");
+        SettingsHelp("Need falls back to Greed, then Pass, when the game does not allow the stronger roll. Rules and weekly protection still apply.",false);
         void Delay(string name,float min,float max,Action<float,float> set)
         {if(ImGui.DragFloatRange2(name,ref min,ref max,.1f,.5f,60,"%.1f s","%.1f s")){min=Math.Clamp(min,.5f,60);max=Math.Clamp(max,min,60);set(min,max);quickLootUiChanged=true;}}
         Delay("One-time delay",s.ManualMin,s.ManualMax,(a,b)=>{s.ManualMin=a;s.ManualMax=b;});
         Delay("Automatic delay",s.AutoMin,s.AutoMax,(a,b)=>{s.AutoMin=a;s.AutoMax=b;});
-        ImGui.TextWrapped("Delays apply before the first roll and between subsequent rolls. Changing character or area cancels the old queue.");
+        SettingsHelp("Delays apply before the first roll and between subsequent rolls. Changing character or area cancels the old queue.",false);
     }
     private void DrawQuickLootCollections()
     {
-        ImGui.TextWrapped("Pass only when the current character has unlocked the collectible. Unknown unlock states are kept. Faded copies are skipped only if every identified orchestrion result is unlocked.");
+        SettingsHelp("Pass only when the current character has unlocked the collectible. Unknown unlock states are kept. Faded copies are skipped only if every identified orchestrion result is unlocked.",false);
         foreach(var name in QuickLootSettings.Categories)
         {
             var s=CurrentQuickLoot;
@@ -105,21 +105,21 @@ public sealed partial class Plugin
         QCheck("Below current job average",s.BelowAverage,v=>s.BelowAverage=v);
         if(s.BelowAverage){QInt("Allowed item-level difference",s.BelowAverageBy,9999,v=>s.BelowAverageBy=v);QRoll("Below-average action",s.BelowAverageRoll,v=>s.BelowAverageRoll=v,true);}
         QCheck("Not an item-level upgrade",s.NotUpgrade,v=>s.NotUpgrade=v);if(s.NotUpgrade)QRoll("Non-upgrade action",s.NotUpgradeRoll,v=>s.NotUpgradeRoll=v,true);
-        ImGui.TextWrapped("Upgrade checks compare equipped items in the matching slot; rings use the lower equipped item level. Item level alone does not evaluate secondary stats.");
+        SettingsHelp("Upgrade checks compare equipped items in the matching slot; rings use the lower equipped item level. Item level alone does not evaluate secondary stats.",false);
         QCheck("Minimum Grand Company seals",s.MinimumSeals,v=>s.MinimumSeals=v);if(s.MinimumSeals)QInt("Expert-delivery seals",s.Seals,100000,v=>s.Seals=v);
     }
     private void DrawQuickLootProtection()
     {
         var s=CurrentQuickLoot;
         QCheck("Protect weekly-limited loot",s.ProtectWeekly,v=>s.ProtectWeekly=v);
-        ImGui.TextWrapped("While protected, weekly-limited entries are left for manual rolling in the game's loot window, including when an item or duty override exists.");
+        SettingsHelp("While protected, weekly-limited entries are left for manual rolling in the game's loot window, including when an item or duty override exists.",false);
         QCheck("Never automatically pass after a failed roll",s.PreventFailurePass,v=>s.PreventFailurePass=v);
-        ImGui.TextWrapped("Enabled by default. If disabled, an unacknowledged Need/Greed may be followed by one Pass attempt on that same non-weekly entry. No endless retries.");
+        SettingsHelp("Enabled by default. If disabled, an unacknowledged Need/Greed may be followed by one Pass attempt on that same non-weekly entry. No endless retries.",false);
     }
     private void DrawQuickLootRules(bool duties)
     {
         var s=CurrentQuickLoot;var rules=duties?s.Duties:s.Items;
-        ImGui.TextWrapped("Precedence: weekly protection → item override → duty override → global filters. Do nothing leaves the entry for you.");
+        SettingsHelp("Precedence: weekly protection → item override → duty override → global filters. Do nothing leaves the entry for you.",false);
         var categoryChanged=quickLootSearchDuties!=duties;
         quickLootSearchDuties=duties;
         ImGui.InputText("Search name or ID",ref quickLootRuleSearch,100);
@@ -189,7 +189,7 @@ public sealed partial class Plugin
     }
     private unsafe void DrawQuickLootPreview()
     {
-        ImGui.TextWrapped("Preview makes no roll. Current-loot preview uses the game's actual permissions; an ID preview assumes Need/Greed are permitted and no weekly restriction.");
+        SettingsHelp("Preview makes no roll. Current-loot preview uses the game's actual permissions; an ID preview assumes Need/Greed are permitted and no weekly restriction.",false);
         ImGui.InputInt("Item ID",ref quickLootPreviewId);
         if(ImGui.Button("Explain item"))
         {

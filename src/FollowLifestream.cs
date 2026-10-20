@@ -19,11 +19,11 @@ public sealed partial class Plugin
             catch(Exception) { PrintEquinox("[FollowThem] Could not open the Lifestream installation page. Visit https://github.com/NightmareXIV/Lifestream#installation"); }
         }
         if(ImGui.IsItemHovered())ImGui.SetTooltip("Open Lifestream's installation instructions in your browser.");
-        ImGui.TextWrapped("Requires the separate Lifestream plugin, installed and enabled. No vnavmesh dependency for Companion requests.");
+        SettingsHelp("Requires the separate Lifestream plugin, installed and enabled. No vnavmesh dependency for Companion requests.");
         if(!config.FollowThem.UseLifestream)return;
         MessageToggle("Follow World Visits (requires Lifestream)",config.FollowThem.FollowWorldVisits,v=>config.FollowThem.FollowWorldVisits=v);
         MessageToggle("Follow Data Center travel (Lifestream; logs this character out and back in)",config.FollowThem.FollowDataCenters,v=>config.FollowThem.FollowDataCenters=v);
-        ImGui.TextWrapped("Optional Lifestream integration. Its own travel restrictions and service-account configuration apply. Companion requests no vnavmesh movement. Use /et WorldName (unique prefixes accepted, e.g. /et sir); /eqtravel is also supported; /equinox travel WorldName also works to share the destination before World/DC departure. Observed /li WorldName commands also share when available; menu travel has an arrival fallback. Queues can take time; use Stop to cancel a request started here.");
+        SettingsHelp("Optional Lifestream integration. Its own travel restrictions and service-account configuration apply. Companion requests no vnavmesh movement. Use /et WorldName (unique prefixes accepted, e.g. /et sir); /eqtravel is also supported; /equinox travel WorldName also works to share the destination before World/DC departure. Observed /li WorldName commands also share when available; menu travel has an arrival fallback. Queues can take time; use Stop to cancel a request started here.");
     }
     private bool TryLifestreamAethernet(FollowPortalSignal signal)
     {

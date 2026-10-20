@@ -62,7 +62,7 @@ public sealed partial class Plugin
         if(configurationError.Length>0)ImGui.TextWrapped(configurationError);
         foreach(var stage in performanceStages.OrderByDescending(x => x.Value)) ImGui.TextUnformatted($"{stage.Key}: {stage.Value:F2} ms peak");
         if(ImGui.Button("Reset timing measurements")) { maxDrawMs=maxUpdateMs=maxSnapshotMs=0; performanceStages.Clear(); }
-        ImGui.TextWrapped("Reset, reproduce one hitch, then note these values. File serialization and writing run on a single background worker. These timings do not measure other plugins or the game's rendering.");
+        SettingsHelp("Reset, reproduce one hitch, then note these values. File serialization and writing run on a single background worker. These timings do not measure other plugins or the game's rendering.");
         ImGui.Separator();
     }
 }

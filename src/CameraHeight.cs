@@ -70,7 +70,7 @@ public sealed partial class Plugin
         MessageToggle("Remember camera height", config.RememberCameraHeight, value => {
             SetCameraHeightEnabled(value);
         });
-        ImGui.TextWrapped("Restores your saved Look At Height Offset when the game changes it. /cam toggles saved/game height. Local to this PC; does not change zoom or FOV. Pauses during loading, cutscenes, dialogue, GPose and first-person view.");
+        SettingsHelp("Restores your saved Look At Height Offset when the game changes it. /cam toggles saved/game height. Local to this PC; does not change zoom or FOV. Pauses during loading, cutscenes, dialogue, GPose and first-person view.");
         var preferred = config.PreferredCameraHeight;
         if (ImGui.SliderFloat("Saved height offset", ref preferred, -3f, 3f, "%.3f"))
         { config.PreferredCameraHeight = preferred; cameraHeightApplyPending=config.RememberCameraHeight; cameraHeightPolicy.Reset(); SaveConfiguration(); }
@@ -85,6 +85,6 @@ public sealed partial class Plugin
         ImGui.EndDisabled();
         if (available) ImGui.TextUnformatted($"Current height: {*HeightField(camera):0.000}");
         if (config.RememberCameraHeight) ImGui.TextWrapped(cameraHeightStatus);
-        ImGui.TextWrapped("Adjust EasyZoomReborn first, then Remember current height. Your saved value is kept when disabled. Off restores the game height; on reapplies your saved height. Set a /cam shortcut in Keybinds.");
+        SettingsHelp("Adjust EasyZoomReborn first, then Remember current height. Your saved value is kept when disabled. Off restores the game height; on reapplies your saved height. Set a /cam shortcut in Keybinds.");
     }
 }
