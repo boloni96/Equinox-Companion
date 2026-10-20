@@ -43,7 +43,7 @@ public sealed partial class Plugin
     {
         var now=ImGui.GetTime();
         if(pendingLauncher==name && now-launcherClickAt<=ImGui.GetIO().MouseDoubleClickTime)
-        { pendingLauncher=null; minimizedLaunchers.Remove(name); if(name=="Planting") StopGardenSession(); }
+        { pendingLauncher=null; minimizedLaunchers.Remove(name); }
         else { pendingLauncher=name; launcherClickAt=now; }
     }
     private FloatingLauncherOptions LauncherOptions(string name, int index)
@@ -130,7 +130,7 @@ public sealed partial class Plugin
             ImGui.InvisibleButton("Open", new(64, 44));
             var hovered = ImGui.IsItemHovered();
             if(hovered && pendingLauncher==name && ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left))
-            { pendingLauncher=null; minimizedLaunchers.Remove(name); if(name=="Planting")StopGardenSession(); }
+            { pendingLauncher=null; minimizedLaunchers.Remove(name); }
             if (ImGui.IsItemActive() && ImGui.IsMouseDragging(ImGuiMouseButton.Left))
             {
                 draggedLauncher = name;

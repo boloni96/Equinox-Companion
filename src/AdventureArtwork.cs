@@ -48,6 +48,7 @@ public sealed partial class Plugin
    var complete=plan.CompletedAt is not null||planned.Length>0&&planned.All(b=>b.Status=="confirmed");
    var requested=adventureOpenBed is {} target&&target.House==plan.HouseId&&target.Batch==plan.Batch;
    ImGui.TextUnformatted($"{(complete?"✓ ":"")}Batch {plan.Batch}");
+   ImGui.SameLine();DrawGardenGuideHelp();
    {
     if(requested&&adventureOpenBed is {} focus){if(focus.Bed>0)selectedGardenBed=focus;ImGui.SetScrollHereY(.15f);adventureOpenBed=null;}
     plan=WithQueuedGardenBeds(plan);

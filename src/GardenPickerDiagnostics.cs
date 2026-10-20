@@ -9,6 +9,33 @@ namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
     private readonly List<object> gardenPickerCaptures=[];
+    private readonly List<object> gardenMarkerStates=[];
+    private string lastGardenMarkerState="",lastGardenMarkerMessage="";
+    private void CaptureGardenMarkerState()
+    {
+        // Capture transitions only; never scan observation history or allocate a
+        // snapshot on each draw. Keep the last 48 states in the small picker report.
+        if(lastGardenMarkerState==gardenMarkerStage&&lastGardenMarkerMessage==gardenMarkerStatus)return;
+        lastGardenMarkerState=gardenMarkerStage;lastGardenMarkerMessage=gardenMarkerStatus;
+        var now=DateTimeOffset.UtcNow;var context=Volatile.Read(ref capturedContext);
+        var live=context?.Current;var candidate=context?.CandidateAt(now);var menu=guidanceBed;
+        var board=adventureBoards.FirstOrDefault(b=>b.Id==adventureSelected);
+        if(gardenMarkerStates.Count==48)gardenMarkerStates.RemoveAt(0);
+        gardenMarkerStates.Add(new {at=now,stage=gardenMarkerStage,message=gardenMarkerStatus,pickerCheck=gardenPickerCheck,
+            gardeningOpen=plantingWindow?.IsOpen==true,gardeningMinimized=minimizedLaunchers.Contains("Planting"),
+            adventureOpen=adventureWindow?.IsOpen==true,adventureMinimized=minimizedLaunchers.Contains("Adventure"),
+            adventureSelected=board is not null,adventureKind=board?.Kind,adventureStop=board?.Index,adventureStops=board?.Stops.Length,
+            adventureHasGardens=adventureGardenNavigation.HasGardens,
+            nativeOpen=gardenNativeOpen,nativeAddonId=gardenNativeAddonId,sessionBound=gardenMarkerSession.Bound,boundAddonId=gardenMarkerSession.AddonId,
+            menuAgeSeconds=menu is null?(double?)null:(now-menu.OpenedAt).TotalSeconds,
+            liveAgeMs=live is null?(double?)null:(now-live.ObservedAt).TotalMilliseconds,
+            candidateAgeMs=candidate is null?(double?)null:(now-candidate.ObservedAt).TotalMilliseconds,
+            liveTargetPresent=live?.TargetId is not null,candidatePresent=candidate is not null,
+            actorMatches=menu is not null&&live?.Actor==menu.Target.Actor,
+            addressMatches=menu is not null&&live?.Address is not null&&live.Address==menu.Target.Address,
+            targetMatches=menu is not null&&live?.TargetId==menu.Target.TargetId,
+            numberedBed=menu?.NumberedLocation()?.Bed,numberedPatch=menu?.NumberedLocation()?.Patch});
+    }
     private readonly List<string> gardenPickerCaptureKeys=[];
     private readonly Dictionary<string,int> gardenPickerCaptureCounts=new();
     private DateTimeOffset nextGardenPickerCapture;
@@ -79,21 +106,22 @@ public sealed partial class Plugin
     }
     private void ExportGardenPicker()
     {
-        if(DiagnosticExportBusy||gardenPickerCaptures.Count==0)return;
+        if(DiagnosticExportBusy||(gardenPickerCaptures.Count==0&&gardenMarkerStates.Count==0))return;
         diagnosticExportError="";exportPath=null;
         var path=Path.Combine(Pi.GetPluginConfigDirectory(),"exports",$"equinox-picker-{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.json");
-        diagnosticExportTask=DiagnosticExportWriter.Start(path,new {schemaVersion=1,pluginVersion=typeof(Plugin).Assembly.GetName().Version?.ToString(),exportedAt=DateTimeOffset.UtcNow,pickers=gardenPickerCaptures.ToArray()},json,()=>[],()=>[]);
+        diagnosticExportTask=DiagnosticExportWriter.Start(path,new {schemaVersion=2,pluginVersion=typeof(Plugin).Assembly.GetName().Version?.ToString(),exportedAt=DateTimeOffset.UtcNow,pickers=gardenPickerCaptures.ToArray(),markerStates=gardenMarkerStates.ToArray(),currentMarkerStatus=gardenMarkerStatus,pickerCheck=gardenPickerCheck},json,()=>[],()=>[]);
     }
     private void DrawGardenPickerDiagnostics()
     {
+        ImGui.TextWrapped(gardenMarkerStatus);
         ImGui.TextWrapped(gardenPickerCheck);
         ImGui.TextDisabled($"{gardenPickerCaptures.Count} recent picker snapshots retained this session.");
         if(ImGui.SmallButton("Capture again")){gardenPickerCaptureCounts.Clear();nextGardenPickerCapture=default;}
         ImGui.SameLine();
-        ImGui.BeginDisabled(DiagnosticExportBusy||gardenPickerCaptures.Count==0);
+        ImGui.BeginDisabled(DiagnosticExportBusy||(gardenPickerCaptures.Count==0&&gardenMarkerStates.Count==0));
         if(ImGui.SmallButton("Export picker details"))ExportGardenPicker();
         ImGui.EndDisabled();
-        if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))ImGui.SetTooltip("Open both the game's soil and seed pickers, then export this small report. It includes their item identities and row geometry, without your observation history or pairing key.");
+        if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))ImGui.SetTooltip("Open both the game's soil and seed pickers, then export this small report. It includes their item identities, row geometry and why borders stopped, without your observation history or pairing key.");
         if(!string.IsNullOrEmpty(exportPath)&&Path.GetFileName(exportPath).StartsWith("equinox-picker-",StringComparison.Ordinal)){
             ImGui.SameLine();if(ImGui.SmallButton("Open export folder"))Dalamud.Utility.Util.OpenLink(Path.GetDirectoryName(exportPath)!);
             ImGui.TextWrapped(Path.GetFileName(exportPath));

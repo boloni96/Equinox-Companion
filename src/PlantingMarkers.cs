@@ -47,46 +47,63 @@ public sealed partial class Plugin
         for(var i=0;i<2;i++)Add(agent->SelectedItems[i].ItemId);
         return items;
     }
+    private string gardenMarkerStage="idle";
+    private bool gardenNativeOpen;
+    private uint gardenNativeAddonId;
     private unsafe void DrawPlantingMarkers()
+    {
+        try { DrawPlantingMarkersCore(); }
+        finally { CaptureGardenMarkerState(); }
+    }
+    private unsafe void DrawPlantingMarkersCore()
     {
         var gardeningOpen=plantingWindow.IsOpen||minimizedLaunchers.Contains("Planting");
         var adventureOpen=adventureWindow?.IsOpen==true||minimizedLaunchers.Contains("Adventure");
         adventureGardenNavigation.Set(adventureOpen?adventureBoards.FirstOrDefault(b=>b.Id==adventureSelected):null);
-        if(!gardeningOpen&&!adventureGardenNavigation.HasGardens){StopGardenSession();return;}
-        if(!config.SyncEnabled||config.PairingKey.Length!=64||!Player.IsLoaded){StopGardenSession();return;}
+        if(!config.SyncEnabled||config.PairingKey.Length!=64||!Player.IsLoaded){StopGardenSession();gardenNativeOpen=false;gardenNativeAddonId=0;gardenMarkerStage="connection";gardenMarkerStatus="Waiting for a loaded character and paired connection.";return;}
         activeGardenSession=null;gardenMarkerError=false;gardenWrongBed=null;
+        gardenMarkerStage="awaiting-bed";
         gardenMarkerStatus="Automatic guide · Open a numbered bed in game. A fresh batch starts at Bed 1.";
         try
         {
             var menu=guidanceBed;var now=DateTimeOffset.UtcNow;
-            if(menu is null){gardenMarkerSession.Reset();return;}
-            var current=Volatile.Read(ref capturedContext)?.CandidateAt(now);
+            if(menu is null&&!gardeningOpen&&!adventureGardenNavigation.HasGardens){gardenMarkerSession.Reset();gardenNativeOpen=false;gardenNativeAddonId=0;gardenMarkerStage="idle";gardenMarkerStatus="";return;}
+            var context=Volatile.Read(ref capturedContext);
+            var current=context?.CandidateAt(now);
             var agent=AgentHousingPlant.Instance();
             var gardening=(AtkUnitBase*)GardenGui.GetAddonByName("HousingGardening").Address;
             var nativeOpen=agent!=null&&agent->IsAgentActive()&&gardening!=null&&gardening->IsVisible;
-            var retained=gardenMarkerSession.Matches(menu,current,now,(nint)gardening,gardening==null?0u:gardening->Id,nativeOpen);
+            gardenNativeOpen=nativeOpen;gardenNativeAddonId=gardening==null?0u:gardening->Id;
+            var retained=gardenMarkerSession.Matches(menu,current,now,(nint)gardening,gardenNativeAddonId,nativeOpen,context?.Current);
+            // Both guides share the native planting session. Opening, closing or
+            // minimizing a Companion window must not discard the numbered bed.
+            if(!gardeningOpen&&!adventureGardenNavigation.HasGardens){
+                if(!nativeOpen&&menu is not null&&now-menu.OpenedAt>TimeSpan.FromMinutes(1))guidanceBed=null;
+                gardenMarkerStage="guide-hidden";gardenMarkerStatus="Open Gardening or a matching Adventure stop to show item borders.";return;
+            }
+            if(menu is null)return;
             // Fresh numbered menus still show existing wrong-bed/occupied-bed guidance
             // before the native planting window opens. Only its display can outlive that menu.
-            if((!retained&&!menu.Matches(now,current))||menu.NumberedLocation() is not {} location)return;
+            if((!retained&&!menu.Matches(now,current))||menu.NumberedLocation() is not {} location){gardenMarkerStage="context";gardenMarkerStatus="Waiting for matching live bed context. Reopen the numbered bed if the planting window changed.";return;}
             var plans=GardenPlanSources();var house=SharedGardenLocation.Match(currentAddress,plans);
             var adventureAtHouse=house is not null&&adventureGardenNavigation.Contains(house);
-            if(!gardeningOpen&&!adventureAtHouse){gardenMarkerStatus="This house is not in the current adventure stop.";return;}
+            if(!gardeningOpen&&!adventureAtHouse){gardenMarkerStage="adventure-scope";gardenMarkerStatus="This house is not in the current adventure stop.";return;}
             var displayed=AdventureGardenNavigation.UseStandaloneBatch(gardeningOpen,adventureAtHouse)?plans.FirstOrDefault(p=>p.HouseId==house&&p.Batch==plantingBatch):null;
             if(displayed is not null&&location.Patch!=(displayed.PhysicalPatch>0?displayed.PhysicalPatch:displayed.Batch))
-            { gardenMarkerError=true;gardenMarkerStatus=$"Wrong batch: you opened Batch {location.Patch} in game, but the guide is showing Batch {displayed.Batch}. Open the matching batch in game or switch the guide tab. No items marked.";return; }
+            { gardenMarkerStage="wrong-batch";gardenMarkerError=true;gardenMarkerStatus=$"Wrong batch: you opened Batch {location.Patch} in game, but the guide is showing Batch {displayed.Batch}. Open the matching batch in game or switch the guide tab. No items marked.";return; }
             var matches=plans.Where(p=>p.HouseId==house&&(p.PhysicalPatch>0?p.PhysicalPatch:p.Batch)==location.Patch).Take(2).ToArray();
-            if(matches.Length!=1){gardenMarkerStatus="Waiting for an unambiguous saved plan for this physical batch.";return;}
+            if(matches.Length!=1){gardenMarkerStage="plan-match";gardenMarkerStatus="Waiting for an unambiguous saved plan for this physical batch.";return;}
             var source=matches[0];
-            if(!GardenGuidance.ValidOrder(source)){gardenMarkerStatus="Save a fresh website plan starting at Bed 1 before using markers.";return;}
+            if(!GardenGuidance.ValidOrder(source)){gardenMarkerStage="plan-order";gardenMarkerStatus="Save a fresh website plan starting at Bed 1 before using markers.";return;}
             activeGardenSession=GardenSessionKey(source);
             var plan=EffectiveGardenPlan(source);
-            if(plan.CompletedAt is not null || plan.Beds.Any(b=>b.Crop.Length>0)&&plan.Beds.Where(b=>b.Crop.Length>0).All(b=>b.Status=="confirmed")){StopGardenSession();gardenMarkerStatus="Planting complete · confirmed by game actions.";return;}
+            if(plan.CompletedAt is not null || plan.Beds.Any(b=>b.Crop.Length>0)&&plan.Beds.Where(b=>b.Crop.Length>0).All(b=>b.Status=="confirmed")){StopGardenSession();gardenMarkerStage="complete";gardenMarkerStatus="Planting complete · confirmed by game actions.";return;}
             var next=GardenGuidance.Next(plan);
-            if(next is null||next.Bed!=location.Bed){if(next is not null)gardenWrongBed=(source.HouseId,source.Batch,location.Bed,next.Bed);gardenMarkerError=next is not null;gardenMarkerStatus=next is null?"Waiting for the remaining planting steps.":$"Wrong bed: you opened Bed {location.Bed}; the plan expects Bed {next.Bed}. No items marked.";return;}
-            if(menu.EmptyLocation() is null){gardenMarkerStatus=$"Bed {location.Bed} is occupied. Review its planned/actual crop before replacing anything.";return;}
+            if(next is null||next.Bed!=location.Bed){gardenMarkerStage="next-bed";if(next is not null)gardenWrongBed=(source.HouseId,source.Batch,location.Bed,next.Bed);gardenMarkerError=next is not null;gardenMarkerStatus=next is null?"Waiting for the remaining planting steps.":$"Wrong bed: you opened Bed {location.Bed}; the plan expects Bed {next.Bed}. No items marked.";return;}
+            if(menu.EmptyLocation() is null){gardenMarkerStage="occupied";gardenMarkerStatus=$"Bed {location.Bed} is occupied. Review its planned/actual crop before replacing anything.";return;}
             var soil=GardenPlantRequirement.Soil(next);
             gardenMarkerStatus=$"Bed {next.Bed}: {next.Crop} · {soil}";
-            if(!nativeOpen)return;
+            if(!nativeOpen){gardenMarkerStage="window-closed";return;}
             var items=MarkerItems(agent,next.Crop,soil);
             // Native addons can retain visibility flags and old bounds after their
             // contents disappear. Only currently displayed covers hide a marker.
@@ -98,6 +115,7 @@ public sealed partial class Plugin
             var pickerOpen=picker!=null&&picker->IsVisible&&agent->ContextAddonId==picker->Id;
             // ImGui overlays sit above native windows. Never outline the covered
             // Gardening slots through the foreground soil/seed picker.
+            gardenMarkerStage=pickerOpen?"picker":"slots";
             var pickerCheck="";
             var marked=pickerOpen?MarkGardenPicker((AddonContextIconMenu*)picker,agent,items,covers[..coverCount],out pickerCheck):MarkGardenItems(gardening,items,covers[..coverCount]);
             if(pickerOpen)CaptureGardenPicker((AddonContextIconMenu*)picker,agent,items,marked,pickerCheck,now);
@@ -105,7 +123,7 @@ public sealed partial class Plugin
             if(pickerOpen&&!items.Any(x=>x.Required))gardenMarkerStatus+=" Required item is not offered; check inventory.";
 
         }
-        catch(Exception e){gardenMarkerStatus="Item marker unavailable; follow the bed guide.";errorJournal.Record("garden-marker","Could not read planting item menu",exceptionType:e.GetType().Name);}
+        catch(Exception e){gardenMarkerStage="error";gardenMarkerStatus="Item marker unavailable; follow the bed guide.";errorJournal.Record("garden-marker","Could not read planting item menu",exceptionType:e.GetType().Name);}
     }
     private static unsafe bool MarkerVisible(AtkResNode* node)
     {
