@@ -35,7 +35,6 @@ public sealed partial class Plugin
  private void StartBidSearch(){CancelBidSearch();bidPlots=[];bidDirty=true;bidFetched=default;if(bidWorld==0)return;bidCancel=new();bidTask=bidSearch.Search(bidWorld,bidCancel.Token);bidMessage="Checking Paissa…";bidRetry=DateTimeOffset.UtcNow.AddSeconds(10);}
  private void RefreshBidSearch(){if(bidTask is not null||DateTimeOffset.UtcNow<bidRetry)return;bidCancel?.Dispose();bidCancel=new();bidTask=bidSearch.Search(bidWorld,bidCancel.Token);bidMessage="Refreshing Paissa…";bidRetry=DateTimeOffset.UtcNow.AddSeconds(10);}
  private string BidWorldName(uint id)=>bidWorlds?.FirstOrDefault(w=>w.Id==id).Name??id.ToString();
- private bool bidHistory;
  private void RebuildBidMarkers(DateTimeOffset now){
   var round=HousingLottery.Period(now).Start;if(ReferenceEquals(bidLastRoster,config.SharedRoster)&&bidLastLocalCount==config.Discoveries.Count&&bidRound==round)return;
   bidLastRoster=config.SharedRoster;bidLastLocalCount=config.Discoveries.Count;bidRound=round;bidByPlot.Clear();bidMarkers.Clear();
@@ -108,16 +107,15 @@ public sealed partial class Plugin
    }
    var clip=ImGui.ImGuiListClipper();clip.Begin(bidShown.Length);while(clip.Step())for(var i=clip.DisplayStart;i<clip.DisplayEnd;i++){var p=bidShown[i];ImGui.PushID(p.Key);ImGui.TableNextRow();string[] values=[p.District,p.Ward.ToString(),p.Plot.ToString(),new[]{"Small","Medium","Large"}[p.Size],p.Price.ToString("N0"),p.Entries?.ToString()??"?",p.PhaseLabel(now),p.Tenants,MarketSearch.Age((long)p.Updated,now),MarketSearch.Age((long)p.FirstSeen,now)];for(var v=0;v<values.Length;v++){ImGui.TableNextColumn();if(v==0){var saved=bidFavoriteKeys.Contains(p.Key);if(DrawSavedPlotButton("SavePlot",saved))ToggleBidFavorite(new(p.World,p.District,p.Ward,p.Plot));if(ImGui.IsItemHovered())ImGui.SetTooltip(saved?"Remove from saved plots":"Save this plot for later");ImGui.SameLine();if(ImGui.SmallButton(IsFavouriteLocation(p.District,p.Ward,p.Plot)?"★##Location":"☆##Location"))ChooseFavouriteLocation(p.District,p.Ward,p.Plot);if(ImGui.IsItemHovered())ImGui.SetTooltip("Save this favourite plot here; choose any ward or this ward only.");ImGui.SameLine();}ImGui.TextUnformatted(values[v]);}ImGui.TableNextColumn();if(bidMarkers.TryGetValue(p.Key,out var marker)){ImGui.TextColored(Green,$"Your bids ({bidByPlot[p.Key].Count})");if(ImGui.IsItemHovered())ImGui.SetTooltip(marker);}else ImGui.TextDisabled("—");ImGui.TableNextColumn();ImGui.BeginDisabled(!Player.IsLoaded);if(ImGui.SmallButton("GO SEE"))GoSeeBid(p.World,p.District,p.Ward,p.Plot);ImGui.EndDisabled();ImGui.SameLine();if(ImGui.SmallButton("Copy"))ImGui.SetClipboardText($"{BidWorldName(p.World)} · {p.District} · Ward {p.Ward} · Plot {p.Plot}");ImGui.PopID();}clip.End();clip.Destroy();ImGui.EndTable();}
  }
- private void DrawPairedBidRows(){
-  var count=bidByPlot.Values.Sum(x=>x.Count);
-  if(!ImGui.CollapsingHeader("Your paired bids###PairedBids"))return;
-  ImGui.Checkbox("Show finished history",ref bidHistory);
-  if(count==0){ImGui.TextDisabled("No recorded bids.");return;}
-  var height=Math.Min(6,count)*ImGui.GetFrameHeightWithSpacing()+ImGui.GetStyle().ScrollbarSize+8;
+ private void DrawPairedBidRows(bool history=false){
+  var count=bidRows.Count(x=>history?!HousingBidActive(x.Bid):HousingBidActive(x.Bid));
+  if(!history&&!ImGui.CollapsingHeader("Your paired bids###PairedBids"))return;
+  if(count==0){ImGui.TextDisabled(history?"No finished bids yet.":"No active bids or outstanding refunds.");return;}
+  var height=history?Math.Max(100,ImGui.GetContentRegionAvail().Y-8):Math.Min(6,count)*ImGui.GetFrameHeightWithSpacing()+ImGui.GetStyle().ScrollbarSize+8;
   if(!ImGui.BeginTable("MyBids",4,ImGuiTableFlags.ScrollY|ImGuiTableFlags.ScrollX|ImGuiTableFlags.RowBg|ImGuiTableFlags.SizingFixedFit,new Vector2(0,height)))return;
   ImGui.TableSetupColumn("Person / account");ImGui.TableSetupColumn("Plot");ImGui.TableSetupColumn("Entry");ImGui.TableSetupColumn("Actions");
   var row=0;
-  foreach(var entry in bidRows.Where(x=>bidHistory?!HousingBidActive(x.Bid):HousingBidActive(x.Bid))){
+  foreach(var entry in bidRows.Where(x=>history?!HousingBidActive(x.Bid):HousingBidActive(x.Bid))){
    var b=entry.Bid;var address=$"{BidWorldName(b.WorldId)} · {b.District} W{b.Ward} P{b.Plot}";
    var details=$"{entry.Name} · {HousingLottery.BuyerLabel(b.Buyer)} · Entry #{b.Entry} · {HousingLottery.BidStatusLabel(b)}";
    if(b.RefundedAt is not null)details+=" · refund collected";else if(b.Status=="lost")details+=" · refund not confirmed";

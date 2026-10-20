@@ -69,10 +69,12 @@ public sealed partial class Plugin
   if(ImGui.RadioButton("Find plots",bidSection==0))bidSection=0;ImGui.SameLine();
   if(ImGui.RadioButton($"Saved plots ({config.BidFavorites.Count})",bidSection==1))bidSection=1;ImGui.SameLine();
   if(ImGui.RadioButton($"Favourite plots ({upgradeFavourites.Length})",bidSection==2)){bidSection=2;favouriteNext=default;}ImGui.SameLine();
-  if(ImGui.RadioButton("Upgrade matches",bidSection==3))bidSection=3;
+  if(ImGui.RadioButton("Upgrade matches",bidSection==3))bidSection=3;ImGui.SameLine();
+  if(ImGui.RadioButton("Bid history",bidSection==4))bidSection=4;
   ImGui.Separator();
   DrawHousingFavouritePlots();
   if(bidSection==2)return true;
+  if(bidSection==4){RebuildBidMarkers(DateTimeOffset.UtcNow);DrawPairedBidRows(true);return true;}
   if(bidSection==1){DrawBidFavorites(true);if(bidTravelMessage.Length>0)ImGui.TextWrapped(bidTravelMessage);DrawGoSeeHomeStop();return true;}
   if(bidSection!=3)return false;
   if(ImGui.SmallButton("Set up upgrade watches in Journal"))OpenUpgradeJournal();
