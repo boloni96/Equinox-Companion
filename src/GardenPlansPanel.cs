@@ -143,7 +143,7 @@ public sealed partial class Plugin
             drawingGardenGuide=true;gardenGuideActions=null;
             gardenActionsPlan=null;
             DrawGardenPlans();
-            if(gardenActionsPlan is {} plan)DrawGardenPlanActions(plan);
+            if(gardenActionsPlan is {} plan)windowFooter=()=>DrawGardenPlanActions(plan,compact:true);
         }
         finally
         {
@@ -207,8 +207,7 @@ public sealed partial class Plugin
         DrawBedSyncButton(plan,syncSize);
         }
         ImGui.SetCursorScreenPos(tabsAt+new Vector2(0,rowHeight+ImGui.GetStyle().ItemSpacing.Y));
-        var footerHeight=ImGui.GetFrameHeightWithSpacing()*3;
-        var visible=ImGui.BeginChild("garden-guide-content",new Vector2(0,Math.Max(1,ImGui.GetContentRegionAvail().Y-footerHeight)));
+        var visible=ImGui.BeginChild("garden-guide-content",Vector2.Zero);
         if(!visible){ImGui.EndChild();return;}
         if(BedSyncMatches(plan)&&gardenBedSync is {Complete:false})
         {
@@ -216,18 +215,17 @@ public sealed partial class Plugin
             if(ImGui.SmallButton("Cancel bed sync")){gardenBedSync=null;canceledBedSync=(plan.HouseId,physicalPatch);}
         }
         var complete=plan.CompletedAt is not null||planned.Length>0&&planned.All(b=>b.Status=="confirmed");var showPlan=planned.Length>0&&!complete;
-        ImGui.TextWrapped($"{plan.HouseName} · {plan.World} · {plan.District} W{plan.Ward} P{plan.Plot}");
-        if(ImGui.SmallButton("Refresh / retry garden sync")){nextRosterRead=default;if(syncFailures==0)nextSync=default;}
-        ImGui.PushStyleColor(ImGuiCol.Text, ImGui.GetStyle().Colors[(int)ImGuiCol.TextDisabled]);
-        ImGui.TextWrapped("Live plan check every 2s while open · Tend Suggested Every 12h");
-        ImGui.PopStyleColor();
-        DrawGardenInfoLabel("paired",rosterStatus+" "+syncStatus);
-        if(gardenMarkerStatus.Length>0){if(gardenMarkerError)ImGui.PushStyleColor(ImGuiCol.Text,new Vector4(1,.3f,.3f,1));ImGui.TextWrapped(gardenMarkerStatus);if(gardenMarkerError)ImGui.PopStyleColor();}
+        var totalSteps=planned.Sum(b=>b.ReplantOrder>0?2:1);var doneSteps=planned.Sum(b=>b.Status=="confirmed"?(b.ReplantOrder>0?2:1):b.Status is "starter" or "replant"?1:0);
+        ImGui.AlignTextToFramePadding();
+        ImGui.TextUnformatted(planned.Length>0?$"{(complete?totalSteps:doneSteps)}/{totalSteps} steps":"Live garden");
+        if(ImGui.IsItemHovered())ImGui.SetTooltip($"Batch {plan.Batch} · {(complete?"Planting complete":"Planting progress")}\nGoal: {plan.Target}\nTemporary starter and replant steps count separately. Hover a bed’s plan or care icon for details.");
+        ImGui.SameLine();DrawSharedStatus(showRefresh:false);
+        ImGui.SameLine();DrawGardenGuideHelp();
+        if(gardenMarkerError&&gardenMarkerStatus.Length>0)ImGui.TextColored(new Vector4(1,.3f,.3f,1),gardenWrongBed is {} wrong?$"Wrong bed · open Bed {wrong.NextBed}":"Wrong batch · check the selected tab");
+        if(gardenMarkerError&&ImGui.IsItemHovered())ImGui.SetTooltip(gardenMarkerStatus);
         var next=GardenGuidance.Next(plan);
         if(showPlan&&next is not null)ImGui.TextWrapped(next.Status=="replant"?$"Next: Step {next.ReplantOrder} · Bed {next.Bed}. {(GardenPlantRequirement.RemoveStarter(next)?"Remove only the temporary starter; replant":"Plant")} {next.Crop} with {next.Soil}.":next.Status=="starter"?"Starter planted. Finish the other required beds before replanting it.":$"Next: Step {next.Order} · Bed {next.Bed}: {next.Crop} · {GardenPlantRequirement.Soil(next)}");
-        else ImGui.TextWrapped(complete?"Planting complete · showing the actual synced garden":"Choose Start garden on the website to save a planting plan.");
-        var totalSteps=planned.Sum(b=>b.ReplantOrder>0?2:1);var doneSteps=planned.Sum(b=>b.Status=="confirmed"?(b.ReplantOrder>0?2:1):b.Status is "starter" or "replant"?1:0);
-        if(planned.Length>0)ImGui.TextWrapped($"{(complete?totalSteps:doneSteps)}/{totalSteps} planting steps complete · Goal: {plan.Target}");
+        else if(!complete)ImGui.TextDisabled("Choose a saved plan below to start planting.");
         DrawGardenBoard(plan,showPlan,complete);
         DrawGardenBatchMapping(plan);DrawSavedGardenPlans(plan);
         if(ImGui.CollapsingHeader("Tips, supplies and harvest potential")){
@@ -240,6 +238,18 @@ public sealed partial class Plugin
                 {gardenBedSync=new(restart.Actor,restartAddress,physicalPatch,DateTimeOffset.UtcNow);gardenBedSyncHouse=plan.HouseId;}
         }
         ImGui.EndChild();
+    }
+    private void DrawGardenGuideHelp()
+    {
+        const string help="Live plans check automatically while open. Tend suggested every 12h; this is not a cooldown.\nFollow the step numbers, not just bed numbers. Keep mature neighbours until the planting plan no longer needs them.\nGreen item border: required. Red: different item. Covered borders hide while a game tooltip or confirmation is open.";
+        if(ImGui.SmallButton("?##garden-guide-help"))ImGui.OpenPopup("garden-guide-help");
+        if(ImGui.IsItemHovered())ImGui.SetTooltip(gardenMarkerStatus+"\n\n"+help+"\nClick for a manual sync check.");
+        if(!ImGui.BeginPopup("garden-guide-help"))return;
+        ImGui.PushTextWrapPos(ImGui.GetFontSize()*28);
+        if(gardenMarkerStatus.Length>0)ImGui.TextWrapped(gardenMarkerStatus);
+        ImGui.TextWrapped(help);
+        if(ImGui.Button("Refresh / retry garden sync")){nextRosterRead=default;if(syncFailures==0)nextSync=default;}
+        ImGui.PopTextWrapPos();ImGui.EndPopup();
     }
     private static void DrawGardenHoverTarget(string id, Vector2 at, float size, Action contents)
     {

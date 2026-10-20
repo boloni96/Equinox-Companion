@@ -47,7 +47,7 @@ public sealed partial class Plugin
         rosterTaskKey = config.PairingKey;
         rosterTask = sync.ReadRoster(rosterTaskKey, config.SharedRoster?.Revision);
     }
-    private void DrawSharedStatus()
+    private void DrawSharedStatus(bool showRefresh=true)
     {
         var incompatible=unsupportedSyncRecords>0;
         var attention=rosterReadFailed||faulted||syncFailures>0||configurationError.Length>0||incompatible||heldSyncRecords>0;
@@ -64,8 +64,11 @@ public sealed partial class Plugin
             if(heldSyncRecords>0)ImGui.TextUnformatted("Some incomplete observations need review; valid actions continue uploading. Open Diagnostics for details.");
             ImGui.PopTextWrapPos();ImGui.EndTooltip();
         }
-        ImGui.SameLine();if (ImGui.SmallButton("Refresh")) nextRosterRead = default;
-        if(ImGui.IsItemHovered())ImGui.SetTooltip("Check paired profiles now. Drag the tabs below to reorder them.");
+        if(showRefresh)
+        {
+            ImGui.SameLine();if (ImGui.SmallButton("Refresh")) nextRosterRead = default;
+            if(ImGui.IsItemHovered())ImGui.SetTooltip("Check paired profiles now. Drag the tabs below to reorder them.");
+        }
     }
     private static HousingBand? SummarizeBands(IEnumerable<HousingBand> source)
     {

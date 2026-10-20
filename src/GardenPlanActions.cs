@@ -81,21 +81,25 @@ public sealed partial class Plugin
         if(ImGui.Button("Manage saved plans on website"))Dalamud.Utility.Util.OpenLink(GardenCareStatus.WebsiteUrl(plan.HouseId,plan.Batch)+"&plans=favourites");
         if(ImGui.IsItemHovered())ImGui.SetTooltip("Open the Journal’s favourite seeds and recipes. Changes return through your paired sync.");
     }
-    private void DrawGardenPlanActions(SharedGardenPlan plan)
+    private void DrawGardenPlanActions(SharedGardenPlan plan,bool compact=false)
     {
-        ImGui.Separator();
+        if(!compact)ImGui.Separator();
         var swap=GardenPlanEditing.Swap(plan.Definition);
         ImGui.BeginDisabled(swap is null||config.SharedRoster?.ProtocolVersion<12);
         if(ImGui.Button("Swap crops"))ChangeGardenPlan(plan,swap);
-        ImGui.EndDisabled();ImGui.SameLine();
+        ImGui.EndDisabled();
+        if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))ImGui.SetTooltip("Swap the planned crops. Actual crops and care records stay unchanged.");
+        ImGui.SameLine();
         ImGui.BeginDisabled(plan.Definition is null||config.SharedRoster?.ProtocolVersion<12);
         if(ImGui.Button("Reset plan"))ChangeGardenPlan(plan,null);
         ImGui.EndDisabled();
+        if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))ImGui.SetTooltip("Remove this batch’s planting plan. Actual crops and care records stay unchanged. Undo is available afterwards.");
         var key=plan.HouseId+":"+plan.Batch;
         if(gardenPlanUndo.TryGetValue(key,out var previous))
         {
             ImGui.SameLine();if(ImGui.Button("Undo")){ChangeGardenPlan(plan,previous,false);gardenPlanUndo.Remove(key);}
         }
-        if(gardenPlanEditStatus.Length>0)ImGui.TextWrapped(gardenPlanEditStatus);
+        if(compact)windowStatus=gardenPlanEditStatus;
+        else if(gardenPlanEditStatus.Length>0)ImGui.TextWrapped(gardenPlanEditStatus);
     }
 }
