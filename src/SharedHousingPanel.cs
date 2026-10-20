@@ -5,17 +5,25 @@ public sealed partial class Plugin
 {
     private Task<RosterResult>? rosterTask;
     private DateTimeOffset? rosterReceivedAt;
+    private string rosterStatusKey = "";
+    private bool rosterReadFailed;
     private string rosterTaskKey = "";
     private DateTimeOffset nextRosterRead;
     private string rosterStatus = "Waiting for paired Cloudflare profiles.";
     private string sharedSearch = "";
     private void UpdateSharedRoster(DateTimeOffset now)
     {
+        if(rosterStatusKey!=config.PairingKey)
+        {
+            rosterStatusKey=config.PairingKey;rosterReceivedAt=null;rosterReadFailed=false;
+            rosterStatus="Waiting for paired Cloudflare profiles.";nextRosterRead=default;
+        }
         if (rosterTask?.IsCompleted == true)
         {
             if (rosterTaskKey == config.PairingKey && rosterTask.IsCompletedSuccessfully)
             {
                 var r = rosterTask.Result; rosterStatus = r.Status;
+                rosterReadFailed=r.Roster is null&&!r.NotModified;
                 if(r.Roster is not null||r.NotModified)rosterReceivedAt=now;
                 if(r.Roster is not null||r.NotModified)registrationFreshKey=rosterTaskKey;
                 if (r.Roster is null && !r.NotModified) { errorJournal.Record("shared-roster", r.Status); nextRosterRead=now.AddSeconds(30); }
@@ -23,6 +31,11 @@ public sealed partial class Plugin
                 if (r.Unauthorized) { config.SharedRoster = null; SaveConfiguration(); }
             }
             if (rosterTask.IsFaulted) errorJournal.Record("shared-roster", "Shared roster task failed.", exceptionType: rosterTask.Exception?.GetBaseException().GetType().Name);
+            if(rosterTaskKey==config.PairingKey&&(rosterTask.IsFaulted||rosterTask.IsCanceled))
+            {
+                rosterReadFailed=true;rosterStatus="Shared profile check failed; retained data may be out of date. Retrying.";
+                nextRosterRead=now.AddSeconds(30);
+            }
             rosterTask = null;
         }
         if ((!visible && !(bidWindow?.IsOpen??false) && !(adventureWindow?.IsOpen??false) && !FastGardenSync && !config.RefreshSharedInBackground && !RegistrationNeedsRoster) || !config.SyncEnabled || config.PairingKey.Length != 64 || rosterTask is not null || now < nextRosterRead) return;
@@ -32,10 +45,23 @@ public sealed partial class Plugin
     }
     private void DrawSharedStatus()
     {
-        ImGui.TextDisabled(rosterStatus);
-        if (config.SharedRoster is { } r) ImGui.TextDisabled($"Shared journal saved: {DisplayTime.Local(r.Updated)}");
-        if (ImGui.SmallButton("Refresh shared profiles")) nextRosterRead = default;
-        ImGui.SameLine(); ImGui.TextDisabled("Drag tabs to reorder");
+        var incompatible=unsupportedSyncRecords>0;
+        var attention=rosterReadFailed||faulted||syncFailures>0||configurationError.Length>0||incompatible||heldSyncRecords>0;
+        var label=!config.SyncEnabled?"Sync off":config.PairingKey.Length!=64?"Not paired":attention?"Needs attention":syncTask is not null||readySyncRecords>0?"Saving…":rosterReceivedAt is null?"Checking shared data…":"Sync active";
+        ImGui.TextColored(attention?Orange:Grey,label);
+        if(ImGui.IsItemHovered()){
+            ImGui.BeginTooltip();ImGui.PushTextWrapPos(ImGui.GetFontSize()*32);
+            ImGui.TextUnformatted(syncStatus);ImGui.TextUnformatted(SyncQueueStatus);
+            if(incompatible)ImGui.TextUnformatted($"{unsupportedSyncRecords} action(s) require a newer Journal server; kept locally until you deploy the matching update.");
+            ImGui.TextUnformatted(rosterStatus);
+            ImGui.TextUnformatted("Journal server: "+(string.IsNullOrEmpty(config.SharedRoster?.ServerVersion)?"version not reported":config.SharedRoster.ServerVersion));
+            ImGui.TextUnformatted("Received by this plugin: "+(rosterReceivedAt is {} received?DisplayTime.Local(received):"not yet this session"));
+            ImGui.TextUnformatted("Another paired plugin's receipt is not reported. Sync active does not claim that every action has been applied.");
+            if(heldSyncRecords>0)ImGui.TextUnformatted("Some incomplete observations need review; valid actions continue uploading. Open Diagnostics for details.");
+            ImGui.PopTextWrapPos();ImGui.EndTooltip();
+        }
+        ImGui.SameLine();if (ImGui.SmallButton("Refresh")) nextRosterRead = default;
+        if(ImGui.IsItemHovered())ImGui.SetTooltip("Check paired profiles now. Drag the tabs below to reorder them.");
     }
     private static HousingBand? SummarizeBands(IEnumerable<HousingBand> source)
     {

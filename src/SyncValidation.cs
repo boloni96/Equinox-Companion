@@ -11,6 +11,8 @@ public static class SyncValidation
         !string.IsNullOrWhiteSpace(e.Actor?.ContentId) && records.Any(newer =>
             newer.Kind == "character.updated" && newer.Actor?.ContentId == e.Actor.ContentId &&
             newer.At > e.At && CanSend(newer, now));
+    public static bool SupportedByWebsite(SyncEvent e,int version) => SupportedByWebsite(e.Kind,version) &&
+        (e.Kind!="housing.lottery"||(e.Lottery?.Evidence switch {"refund-receipt"=>version>=23,"manual-refund"=>version>=22,_=>true}));
     public static bool SupportedByWebsite(string kind, int version) => kind == "house.shared-estates" ? version >= 21 : kind is "housing.lottery" or "housing.lottery-result" ? version >= 19 : kind == "garden.batch-order" ? version >= 15 : kind == "character.registered" ? version >= 14 : kind == "submarines.supplies" ? version >= 13 : kind == "garden.plan" ? version >= 12 : kind is "garden.status" or "garden.status.unmapped" ? version >= 11 : kind is "garden.empty.unmapped" or "garden.mapped" ? version >= 10 : kind == "garden.dead" ? version >= 9 : kind == "submarines.cached" ? version >= 7 : kind == "garden.fertilized" ? version >= 6 : kind == "company.observed" ? version >= 4 : kind == "storage.observed" ? version >= 18 : kind == "submarines.observed" ? version >= 16 : version >= 2 ||
         kind is "house.entered" or "garden.tended" or "garden.ready" or "garden.observed" or "garden.planted" or "house.discovered" or "character.updated";
     private static bool Text(string? s) => !string.IsNullOrWhiteSpace(s) && s.Length <= 100;

@@ -36,7 +36,7 @@ public sealed partial class Plugin
         ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing,new System.Numerics.Vector2(6,4));
         if(ImGui.BeginTabBar("SettingsSections",ImGuiTabBarFlags.FittingPolicyScroll))
         {
-            SettingsSection("Features",DrawFeatureSettings);
+            SettingsSection("Optional tools",DrawFeatureSettings);
             SettingsSection("Camera",DrawCameraHeightSettings);
             SettingsSection("Tracking",DrawGeneralSettings);
             SettingsSection("Chat",DrawChatMessageSettings);
@@ -57,11 +57,16 @@ public sealed partial class Plugin
     }
     private void DrawCompactDiagnostics()
     {
-        if(ImGui.Button("Export diagnostics"))Export();
+        PollDiagnosticExport();
+        ImGui.BeginDisabled(DiagnosticExportBusy);
+        if(ImGui.Button(DiagnosticExportBusy?"Exporting…":"Export diagnostics"))Export();
+        ImGui.EndDisabled();
         SettingsHelp("Exports recorded characters, houses, gardens and error history to a local file. Pairing keys are excluded. Send this file when asking for help; it is not uploaded automatically.");
         if(ImGui.SmallButton("Open export folder"))OpenDiagnosticFolder(System.IO.Path.Combine(Pi.GetPluginConfigDirectory(),"exports"));
         ImGui.SameLine();if(ImGui.SmallButton("Open logs folder"))OpenDiagnosticFolder(System.IO.Path.GetDirectoryName(errorJournal.FilePath)??Pi.GetPluginConfigDirectory());
         if(diagnosticFolderError.Length>0)ImGui.TextWrapped(diagnosticFolderError);
+        if(DiagnosticExportBusy)ImGui.TextDisabled("Writing diagnostics in the background…");
+        if(diagnosticExportError.Length>0)ImGui.TextWrapped(diagnosticExportError);
         if(exportPath is not null){ImGui.TextDisabled("Export ready");SettingsHelp(exportPath);}
         if(ImGui.CollapsingHeader("File paths")){
             if(ImGui.SmallButton("Copy error log path"))ImGui.SetClipboardText(errorJournal.FilePath);SettingsHelp(errorJournal.FilePath);
@@ -70,6 +75,7 @@ public sealed partial class Plugin
         if(errorJournal.WriteFailure is {} failure)ImGui.TextWrapped(failure);
         ImGui.TextDisabled($"Queued: {pendingSyncRecords} · ready: {readySyncRecords} · held: {heldSyncRecords}");
         SettingsHelp("Held records are incomplete observations. They do not block valid records. Logs are kept locally; repeated issues are limited to once every five minutes.");
+        if(optionalToolFailures.Count>0&&ImGui.CollapsingHeader("Optional tools need attention")){foreach(var issue in optionalToolFailures)ImGui.TextWrapped(issue.Key+": "+issue.Value);}
         if(ImGui.CollapsingHeader("Performance"))DrawPerformanceDiagnostics();
         if(ImGui.CollapsingHeader("Tracking & recording"))DrawDiagnosticsTracking();
         if(ImGui.CollapsingHeader("Housing lottery"))ImGui.TextWrapped(lotteryDiagnostic is null?"No lottery observation this session.":System.Text.Json.JsonSerializer.Serialize(lotteryDiagnostic));

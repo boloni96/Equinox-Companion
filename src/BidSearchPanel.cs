@@ -113,6 +113,7 @@ public sealed partial class Plugin
  private void DrawPairedBidRows(bool history=false){
   var rows=bidRows.Where(x=>history?!HousingBidActive(x.Bid):HousingBidActive(x.Bid)).ToArray();
   if(history){
+   ImGui.TextDisabled("Recent bid history");SettingsHelp("Paired history includes up to 40 bids per character. The Journal retains older bids. Local observations may add records not yet received from Cloudflare.");
    ImGui.SetNextItemWidth(150);
    if(ImGui.BeginCombo("##HistoryPerson",bidRows.FirstOrDefault(x=>x.PersonId==bidHistoryPerson)?.Person??"All persons")){
     if(ImGui.Selectable("All persons",bidHistoryPerson=="")){bidHistoryPerson="";bidHistoryAccount="";}

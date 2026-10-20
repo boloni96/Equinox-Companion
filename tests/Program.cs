@@ -1798,3 +1798,5 @@ Check("blank festival quest observation passes upload validation", EventQuestPol
     "quest", [71004], [71004], [], 1, [blankFestivalQuest196], [])).ToString(), "True");
 
 OwnedCompany200Tests.Run();
+
+await DiagnosticExportTests.Run();

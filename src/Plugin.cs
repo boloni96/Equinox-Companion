@@ -95,6 +95,9 @@ public sealed partial class Plugin : IDalamudPlugin
     private string lastSnapshotKey = "";
     private string status = "Waiting for your character.";
     private string? exportPath;
+    private Task<DiagnosticExportResult>? diagnosticExportTask;
+    private string diagnosticExportError="";
+    private bool DiagnosticExportBusy=>diagnosticExportTask is {IsCompleted:false};
     private bool faulted;
     private readonly CompanionSync sync = new();
     private Task<SyncResult>? syncTask;
@@ -103,6 +106,7 @@ public sealed partial class Plugin : IDalamudPlugin
     private string pairingInput = "";
     private int syncFailures;
     private int heldSyncRecords;
+    private int unsupportedSyncRecords;
     private bool syncHistoryFirst;
     private int pendingSyncRecords, readySyncRecords, lastSyncBatchSize;
     private DateTimeOffset? lastSyncReceiptAt, lastSyncBatchOldest, lastSyncBatchNewest;
@@ -111,6 +115,7 @@ public sealed partial class Plugin : IDalamudPlugin
     private GardenMessageJournal gardenMessageJournal = null!;
 
     private readonly HashSet<string> reportedHeldRecords = [];
+    private readonly SyncIdleQueueCache idleSyncQueue = new();
     private void UpdateSync(DateTimeOffset now)
     {
         if (syncTask?.IsCompleted == true)
@@ -135,6 +140,9 @@ public sealed partial class Plugin : IDalamudPlugin
             syncTask = null;
         }
         if (!config.SyncEnabled || config.PairingKey.Length != 64 || syncTask is not null || now < nextSync || now < lastSyncAttempt.AddSeconds(2)) return;
+        var idleStamp=new SyncIdleQueueStamp(configurationRevision,config.Houses.Count,config.Tending.Count,config.Planting.Count,config.Discoveries.Count,config.SentEvents.Count,config.SharedRoster?.ProtocolVersion??1,config.PairingKey,RegistrationScope,config.TrackGardens,config.SyncCharacterDetails,config.SyncCollections,config.SyncAutoRetainer,config.SyncActivities,config.SyncHouseDetails);
+        if(idleSyncQueue.Unchanged(idleStamp,now)){nextSync=now.AddSeconds(FastGardenSync?1:30);return;}
+        idleSyncQueue.Invalidate();
         var sent = config.SentEvents.ToHashSet();
         var pending = config.Houses.Where(h => h.Kind == "house.entered" && !sent.Contains(h.EventId))
             .Select(h => new SyncEvent(h.EventId, h.Kind, h.ObservedAt, WithWorldNames(h.Actor), WithAddressNames(h.Address)))
@@ -147,13 +155,16 @@ public sealed partial class Plugin : IDalamudPlugin
         var held = pending.Where(e => !SyncValidation.CanSend(e, now)).ToArray();
         heldSyncRecords = held.Length;
         foreach (var e in held) if(reportedHeldRecords.Add(e.Id)) errorJournal.Record("held-record", SyncValidation.HoldReason(e, now), e.Id, e.Kind);
-        var eligible = pending.Where(e => SyncValidation.CanSend(e, now) && SyncValidation.SupportedByWebsite(e.Kind, config.SharedRoster?.ProtocolVersion ?? 1)).ToArray();
+        var valid = pending.Where(e => SyncValidation.CanSend(e, now)).ToArray();
+        var eligible = valid.Where(e => SyncValidation.SupportedByWebsite(e, config.SharedRoster?.ProtocolVersion ?? 1)).ToArray();
+        unsupportedSyncRecords=valid.Length-eligible.Length;
         readySyncRecords = eligible.Length;
         var events = SyncQueue.Select(eligible, batch => JsonSerializer.SerializeToUtf8Bytes(new { events = batch }, json).Length, syncHistoryFirst);
         if (events.Length == 0) {
+            if(eligible.Length==0)idleSyncQueue.Remember(idleStamp,now);
             if (eligible.Length > 0) syncStatus = "Eligible records exceed the upload size limit; kept locally. Export diagnostics.";
-            else if (pending.Any(e => !SyncValidation.SupportedByWebsite(e.Kind, config.SharedRoster?.ProtocolVersion ?? 1)))
-                syncStatus = "New observations kept locally. Deploy Journal V7.11.164, save once, then refresh shared profiles.";
+            else if (pending.Any(e => !SyncValidation.SupportedByWebsite(e, config.SharedRoster?.ProtocolVersion ?? 1)))
+                syncStatus = "Server update needed for some recorded actions. They are kept locally; supported actions continue syncing.";
             nextSync = now.AddSeconds(FastGardenSync ? 1 : 30); return;
         }
         syncHistoryFirst = !syncHistoryFirst;
@@ -301,21 +312,21 @@ public sealed partial class Plugin : IDalamudPlugin
     private int discoveryStage;
     private unsafe void UpdateCore(IFramework framework)
     {
-        UpdateCameraHeight();
         var now = DateTimeOffset.UtcNow;
+        RunOptionalTool("Camera",now);
         UpdateMaintenanceNotices(now);
         UpdateLottery(now);
-        UpdateQuickLoot(now);
-        UpdateCofferMarkers(now);
+        RunOptionalTool("QuickLoot",now);
+        RunOptionalTool("Coffer markers",now);
         // Give a coffer click a short uncontested turn before other automatic interactions.
         // Movement-stop handling remains responsive during this brief priority window.
         if(now>=cofferPriorityUntil)
         {
-            UpdateFollowPortalRelay(now);
-            UpdateHelper(now);
-            UpdateFollowThem(now);
+            RunOptionalTool("Follow portals",now);
+            RunOptionalTool("Quest Helper",now);
+            RunOptionalTool("FollowThem",now);
         }
-        else UpdateFollowMovementStop(now);
+        else RunOptionalTool("Follow movement",now);
         var perf = System.Diagnostics.Stopwatch.GetTimestamp();
         UpdateSync(now);
         TrackPerformance("sync queue", perf);
@@ -674,6 +685,7 @@ public sealed partial class Plugin : IDalamudPlugin
 
     private void WakeObservationSync()
     {
+        idleSyncQueue.Invalidate();
         nextSync = SyncSchedule.Wake(DateTimeOffset.UtcNow, nextSync, lastSyncAttempt, syncFailures);
     }
 
@@ -995,23 +1007,34 @@ public sealed partial class Plugin : IDalamudPlugin
 
     private void Export()
     {
+        if(DiagnosticExportBusy)return;
+        diagnosticExportError="";exportPath=null;
         try
         {
             var dir = Path.Combine(Pi.GetPluginConfigDirectory(), "exports");
-            Directory.CreateDirectory(dir);
-            exportPath = Path.Combine(dir, $"equinox-test-{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.json");
-            File.WriteAllText(exportPath, JsonSerializer.Serialize(new {
-                schemaVersion = 7, characterSync = ReadCharacterSyncStatus(), followTravel = followTravelDiagnostics.ToArray(), pluginVersion = typeof(Plugin).Assembly.GetName().Version?.ToString(), errorLog = errorJournal.Snapshot(), recentGardenMessages=gardenMessageJournal.Snapshot(), exportedAt = DateTimeOffset.UtcNow,
-                syncDiagnostics = new { enabled = config.SyncEnabled, paired = config.PairingKey.Length == 64, endpoint = "https://equinoxjournal.pages.dev", status = syncStatus, pending = pendingSyncRecords, eligible = readySyncRecords, held = heldSyncRecords, acknowledgedLocal = config.SentEvents.Count, lastSyncReceiptAt, lastSyncBatchSize, lastSyncBatchOldest, lastSyncBatchNewest, nextAttemptAt = nextSync, inFlight = syncTask is not null },
+            var path = Path.Combine(dir, $"equinox-test-{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.json");
+            // Capture game-facing state now. Published record values are immutable;
+            // copy collection containers before the worker serializes them.
+            var snapshot=new {
+                schemaVersion = 7, characterSync = ReadCharacterSyncStatus(), followTravel = followTravelDiagnostics.ToArray(), pluginVersion = typeof(Plugin).Assembly.GetName().Version?.ToString(), exportedAt = DateTimeOffset.UtcNow,
+                syncDiagnostics = new { enabled = config.SyncEnabled, paired = config.PairingKey.Length == 64, endpoint = "https://equinoxjournal.pages.dev", status = syncStatus, pending = pendingSyncRecords, eligible = readySyncRecords, held = heldSyncRecords, unsupported = unsupportedSyncRecords, acknowledgedLocal = config.SentEvents.Count, lastSyncReceiptAt, lastSyncBatchSize, lastSyncBatchOldest, lastSyncBatchNewest, nextAttemptAt = nextSync, inFlight = syncTask is not null },
                 helperDiagnostics = new { character=Player.CharacterName, enabled=config.EnableFollowThem, armed=followSession.Armed, target=config.FollowThem.TargetName, questPermission=helperPermission.Quest, paused=HelperPaused, questPaused=helperPermission.QuestPaused, shareQuest=config.FollowThem.ShareQuestActions, stopOnMovement=config.FollowThem.StopOnMovement, followStatus, helperError, helperLastIssue, observedQuest=helperObservedQuest, followers=helperFollowers.Select(f=>new {f.Name,f.Status,f.Quest,f.QuestPaused,f.Control,f.Updated}).ToArray() },
                 eventExchangeDiagnostics=HelperExchangeDiagnostic(),
                 lotteryDiagnostics = lotteryDiagnostic,
                 companyProfileDiagnostics = new { latest = companyProfileDiagnostic, history = companyProfileHistory.ToArray(), status = discoveryStatus },
-                mode = "local-diagnostics", gardeningConfirmed = false, performance = new { maxDrawMs,maxUpdateMs,maxSnapshotMs, configurationError },
-                houseObservations = config.Houses, confirmedTending = config.Tending, confirmedPlanting = config.Planting, observedDetails = config.Discoveries, diagnostics
-            }, json));
+                mode = "local-diagnostics", gardeningConfirmed = false, performance = new { maxDrawMs,maxUpdateMs,maxSnapshotMs, configurationError, stages=performanceStages.ToDictionary(x=>x.Key,x=>x.Value), optionalTools=optionalToolFailures.ToDictionary(x=>x.Key,x=>x.Value) },
+                houseObservations = config.Houses.ToArray(), confirmedTending = config.Tending.ToArray(), confirmedPlanting = config.Planting.ToArray(), observedDetails = config.Discoveries.ToArray(), diagnostics=diagnostics.ToArray()
+            };
+            diagnosticExportTask=DiagnosticExportWriter.Start(path,snapshot,json,errorJournal.Snapshot,gardenMessageJournal.Snapshot);
         }
-        catch (Exception ex) { exportPath = null; status = "Export failed; see /xllog."; errorJournal.Record("plugin", "Equinox export failed", exceptionType: ex.GetType().Name); Log.Error(ex, "Equinox export failed"); }
+        catch (Exception ex) { exportPath = null; diagnosticExportError="Export failed ("+ex.GetType().Name+"). Try again or open the logs folder."; errorJournal.Record("plugin", "Equinox export failed", exceptionType: ex.GetType().Name); Log.Error(ex, "Equinox export failed"); }
+    }
+
+    private void PollDiagnosticExport()
+    {
+        if(diagnosticExportTask is not {IsCompleted:true} task)return;
+        var result=task.GetAwaiter().GetResult();diagnosticExportTask=null;
+        exportPath=result.Path;diagnosticExportError=result.Error is null?"":"Export failed ("+result.Error+"). Try again or open the logs folder.";
     }
 
     private void DrawCore()
