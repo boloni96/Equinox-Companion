@@ -13,6 +13,7 @@ public sealed partial class Plugin
     private DateTimeOffset nextLotteryReminderCheck,nextLotteryVisibleCheck;
     private object? lotteryDiagnostic;
     private LotteryResult? lotteryLastResult;
+    private (LotteryBid Bid,ulong Character,uint World,ulong Target,long Amount,DateTimeOffset At)? lotteryRefund;
     private (LotteryBid Bid, ulong Character, ulong Target, uint World, DateTimeOffset At)? lotteryPlacard;
     private string lotteryPendingBuyer="unknown";
     private ulong lotteryPendingCharacter;
@@ -29,7 +30,7 @@ public sealed partial class Plugin
     private void UpdateLottery(DateTimeOffset now)
     {
         var id=Player.IsLoaded?Player.ContentId:0;
-        if(id==0){lotteryBidNotices.Reset();lotteryLogin.Reset();lotteryPlacard=null;return;}
+        if(id==0){lotteryBidNotices.Reset();lotteryLogin.Reset();lotteryPlacard=null;lotteryRefund=null;return;}
         if(LotteryLoaded&&config.SyncHouseDetails&&now>=nextLotteryVisibleCheck){nextLotteryVisibleCheck=now.AddMilliseconds(500);ObserveSafely("housing-lottery",()=>PollLotteryViews(now));}
         lotteryBidNotices.Due(id,"",now);
         if(lotteryLogin.Due(id,now,config.NotifyHousingLottery,!LotteryLoaded))
@@ -130,7 +131,9 @@ public sealed partial class Plugin
     }
     private unsafe bool ObservePublicLotteryResult(AtkUnitBase* addon,DateTimeOffset now)
     {
-        var winner=HousingLottery.WinningNumber(LotteryVisibleText(addon));
+        var visible=LotteryVisibleText(addon);
+        ObserveLotteryRefundPrompt(visible,now);
+        var winner=HousingLottery.WinningNumber(visible);
         if(winner is null)return false;
         var board=(AtkUnitBase*)GardenGui.GetAddonByName("HousingSignBoard").Address;
         if(board!=null&&board->IsVisible)CaptureLotteryPlacard(board,now);
@@ -145,10 +148,32 @@ public sealed partial class Plugin
         lotteryLastResult=result;
         return true;
     }
+    private void ObserveLotteryRefundPrompt(string text,DateTimeOffset now)
+    {
+        if(HousingLottery.RefundAmount(text) is not {} amount||HousingLottery.WinningNumber(text) is not {} winner)return;
+        if(lotteryPlacard is not {} plot||plot.Character!=Player.ContentId||plot.World!=Player.CurrentWorld.RowId||Targets.Target?.GameObjectId!=plot.Target||now-plot.At>TimeSpan.FromMinutes(1))return;
+        var own=HousingLotteryNotices.WithShared(config.Discoveries,config.SharedRoster)
+            .Where(e=>e.Kind=="housing.lottery"&&e.Actor.ContentId==Player.ContentId.ToString()&&e.Actor.HomeWorldId==plot.World&&e.Lottery is {} b&&b.District==plot.Bid.District&&b.Ward==plot.Bid.Ward&&b.Plot==plot.Bid.Plot&&DateTimeOffset.TryParse(b.CycleStart,out var start)&&now>=start.AddDays(5)&&now<start.AddDays(95))
+            .GroupBy(e=>(e.Lottery!.CycleStart,e.Lottery.Entry)).Select(g=>g.MaxBy(e=>e.At)!).ToArray();
+        // A visible refund offer is not a receipt. Wait for its matching gil gain.
+        if(own.Length!=1||own[0].Lottery is not {} bid||bid.Entry==winner||bid.Status is "won" or "forfeited"||bid.Evidence is "manual-refund" or "refund-receipt")return;
+        lotteryRefund=(bid with {Status="lost",Evidence="refund-receipt"},Player.ContentId,plot.World,plot.Target,amount,now);
+        lotteryDiagnostic=new{at=now,state="Refund offered; waiting for gil receipt",amount,bid.District,bid.Ward,bid.Plot,bid.Entry};
+    }
+    private void ObserveLotteryRefundReceipt(string text,DateTimeOffset now)
+    {
+        if(lotteryRefund is not {} pending||HousingLottery.ReceivedGil(text) is not {} amount)return;
+        lotteryRefund=null;
+        if(!HousingLottery.RefundReceiptMatches(pending.Character,pending.World,pending.Target,pending.Amount,pending.At,Player.ContentId,Player.CurrentWorld.RowId,Targets.Target?.GameObjectId,amount,now))return;
+        RecordLottery(pending.Bid,now);
+        lotteryDiagnostic=new{at=now,state="Refund collected; matching gil receipt",amount,pending.Bid.District,pending.Bid.Ward,pending.Bid.Plot,pending.Bid.Entry};
+        nextRosterRead=default;
+    }
     private void ObserveLotteryChat(IHandleableChatMessage message)
     {
-        if(!LotteryLoaded||!config.SyncHouseDetails||message.LogKind is not (XivChatType.SystemMessage or XivChatType.Notice)||message.OriginalSender.ExtractText().Length!=0)return;
+        if(!LotteryLoaded||!config.SyncHouseDetails||message.LogKind is not (XivChatType.SystemMessage or XivChatType.Notice or XivChatType.LootNotice or XivChatType.Item)||message.OriginalSender.ExtractText().Length!=0)return;
         var text=message.OriginalMessage.ExtractText();
+        ObserveLotteryRefundReceipt(text,DateTimeOffset.UtcNow);
         var m=Regex.Match(text,@"^You (?:have )?submitted a lottery entry for plot (\d+), ward (\d+), ([^.]+)\. Your lottery number is (\d+)",RegexOptions.IgnoreCase);
         if(!m.Success)return;var now=DateTimeOffset.UtcNow;
         var buyer=lotteryPendingCharacter==Player.ContentId&&lotteryPendingWorld==Player.CurrentWorld.RowId&&now-lotteryPendingAt<TimeSpan.FromMinutes(5)?lotteryPendingBuyer:"unknown";
@@ -163,7 +188,7 @@ public sealed partial class Plugin
         if(prior?.Lottery is {} old && bid.Evidence=="timers")bid=bid with {CycleStart=old.CycleStart,Status=old.Status,Buyer=bid.Buyer=="unknown"?old.Buyer:bid.Buyer,FcId=old.FcId.Length>0?old.FcId:bid.FcId};
         if(prior?.Lottery is {} known && bid.Buyer=="unknown" && known.Buyer!="unknown")bid=bid with {Buyer=known.Buyer,FcId=known.FcId};
         if(bid.Buyer=="fc"&&bid.FcId=="")bid=bid with {FcId=config.Discoveries.LastOrDefault(e=>e.Actor.ContentId==actor.ContentId&&e.Kind=="character.updated")?.Character is {FcMember: not false,FreeCompany: {} company}?company.Id:""};
-        if(bid.Buyer=="fc"&&bid.FcName.Length==0)bid=bid with {FcName=prior?.Lottery?.FcName is {Length:>0} name?name:config.Discoveries.LastOrDefault(e=>e.Actor.ContentId==actor.ContentId&&e.Kind=="character.updated")?.Character?.FreeCompany?.Name??""};
+        if(bid.Buyer=="fc"&&string.IsNullOrEmpty(bid.FcName))bid=bid with {FcName=prior?.Lottery?.FcName is {Length:>0} name?name:config.Discoveries.LastOrDefault(e=>e.Actor.ContentId==actor.ContentId&&e.Kind=="character.updated")?.Character?.FreeCompany?.Name??""};
         if(prior?.Lottery is {} previous && (previous with {Evidence=bid.Evidence})==bid)return;
         KeepDiscovery(new(Guid.NewGuid().ToString("N"),"housing.lottery",now,WithWorldNames(actor),null,Lottery:bid));
     }

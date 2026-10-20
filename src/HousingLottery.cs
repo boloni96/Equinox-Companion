@@ -40,7 +40,18 @@ public static class HousingLottery
         var type=Regex.Match(text,@"Type of Entry:\s*([^\r\n]+)",RegexOptions.IgnoreCase);
         return Parse(text,text,type.Success?Buyer(type.Groups[1].Value):"unknown",now,"timers");
     }
-    public static bool Valid(LotteryBid? b) => b is not null && District(b.District) is not null && b.Ward is >=1 and <=60 && b.Plot is >=1 and <=60 && b.Entry is >=1 and <=100000 && b.Buyer is "private" or "fc" or "unknown" && (b.FcId==""||CompanyProfileIdentity.ValidId(b.FcId)) && b.Status is "entered" or "won" or "lost" or "forfeited" && DateTimeOffset.TryParse(b.CycleStart,out var at)&&at>=Epoch && (b.Evidence is "timers" or "submission" or "result-dialog" || b.Evidence=="manual-refund"&&b.Status=="lost");
+    public static bool Valid(LotteryBid? b) => b is not null && District(b.District) is not null && b.Ward is >=1 and <=60 && b.Plot is >=1 and <=60 && b.Entry is >=1 and <=100000 && b.Buyer is "private" or "fc" or "unknown" && (b.FcId==""||CompanyProfileIdentity.ValidId(b.FcId)) && b.Status is "entered" or "won" or "lost" or "forfeited" && DateTimeOffset.TryParse(b.CycleStart,out var at)&&at>=Epoch && (b.Evidence is "timers" or "submission" or "result-dialog" || (b.Evidence is "manual-refund" or "refund-receipt")&&b.Status=="lost");
+    public static bool RefundReceiptMatches(ulong character,uint world,ulong target,long amount,DateTimeOffset offered,ulong currentCharacter,uint currentWorld,ulong? currentTarget,long received,DateTimeOffset now) => character!=0&&character==currentCharacter&&world==currentWorld&&target==currentTarget&&amount==received&&now>=offered&&now-offered<=TimeSpan.FromSeconds(30);
+    public static long? RefundAmount(string text)
+    {
+        var m=Regex.Match(text,@"Accept\s+a\s+full\s+refund\s+of\s+your\s+deposit\s+of\s+([\d,]+)\s+gil\?",RegexOptions.IgnoreCase);
+        return m.Success&&long.TryParse(m.Groups[1].Value.Replace(",",""),out var amount)&&amount>0?amount:null;
+    }
+    public static long? ReceivedGil(string text)
+    {
+        var m=Regex.Match(text.Trim(),@"^You obtain ([\d,]+) gil\.$",RegexOptions.IgnoreCase);
+        return m.Success&&long.TryParse(m.Groups[1].Value.Replace(",",""),out var amount)&&amount>0?amount:null;
+    }
     public static int? WinningNumber(string text)
     {
         var m=Regex.Match(text,@"\bThe\s+winning\s+number\s+(?:for\s+this\s+plot\s+is|is)\s*(?:\.{3}|…)?\s*(\d+)(?=[.!\s]|$)",RegexOptions.IgnoreCase);

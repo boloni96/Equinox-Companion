@@ -26,6 +26,7 @@ public static class HousingLotteryNotices
             .GroupBy(e=>(e.Actor.HomeWorldId,e.Lottery!.District,e.Lottery.Ward,e.Lottery.Plot,e.Lottery.Entry)).Select(g=>g.MaxBy(e=>e.At)!))
         {
             var b=e.Lottery!;
+            if(b.Evidence is "manual-refund" or "refund-receipt")continue;
             if(all.Any(h=>h.Kind=="house.discovered"&&h.House?.Evidence=="owned-estate-id"&&h.At>=period.Start.AddDays(5)&&h.Address is {} a&&a.WorldId==e.Actor.HomeWorldId&&HousingLottery.District(a.DistrictName??"")==b.District&&a.Ward==b.Ward&&a.Plot==b.Plot&&(b.Buyer=="fc"&&b.FcId!=""?h.House.FreeCompany?.Id==b.FcId:h.Actor.ContentId==character&&b.Buyer=="private"&&h.House.Type=="Private house")))continue;
             var status=b.Status;
             var result=all.LastOrDefault(x=>x.Kind=="housing.lottery-result"&&x.LotteryResult is {} r&&r.WorldId==e.Actor.HomeWorldId&&r.District==b.District&&r.Ward==b.Ward&&r.Plot==b.Plot&&DateTimeOffset.Parse(r.CycleStart)==period.Start)?.LotteryResult;

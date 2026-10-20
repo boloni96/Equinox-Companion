@@ -12,7 +12,17 @@ internal static class Lottery201Tests
   Check(HousingLottery.Result("Better luck\nin the future.")=="lost","Wrapped losing dialog");
   Check(HousingLottery.Result("You are the winner of this lottery!")=="won","Winning dialog retained");
   Check(HousingLottery.BuyerLabel("fc")=="FC house"&&HousingLottery.BuyerLabel("private")=="Private house","Explicit property types");
+  Check(HousingLottery.RefundAmount("The winning number is...11. May you have better luck in the future!\n\nAccept a full refund of your deposit of 20,000,000 gil?")==20000000,"Exact refund offer");
+  Check(HousingLottery.ReceivedGil("You obtain 20,000,000 gil.")==20000000,"Exact gil receipt");
+  Check(HousingLottery.ReceivedGil("You spend 20,000,000 gil.")==null,"Spending is not a receipt");
+  Check(HousingLottery.RefundAmount("You obtain 20,000,000 gil.")==null,"Receipt alone cannot identify refund");
   var now=DateTimeOffset.Parse("2026-10-20T03:17:00Z");
+  Check(HousingLottery.RefundReceiptMatches(1,87,4,20000000,now,1,87,4,20000000,now.AddSeconds(4)),"Matching receipt");
+  Check(!HousingLottery.RefundReceiptMatches(1,87,4,20000000,now,2,87,4,20000000,now.AddSeconds(4)),"Different character rejected");
+  Check(!HousingLottery.RefundReceiptMatches(1,87,4,20000000,now,1,88,4,20000000,now.AddSeconds(4)),"Different world rejected");
+  Check(!HousingLottery.RefundReceiptMatches(1,87,4,20000000,now,1,87,5,20000000,now.AddSeconds(4)),"Different target rejected");
+  Check(!HousingLottery.RefundReceiptMatches(1,87,4,20000000,now,1,87,4,10,now.AddSeconds(4)),"Different amount rejected");
+  Check(!HousingLottery.RefundReceiptMatches(1,87,4,20000000,now,1,87,4,20000000,now.AddSeconds(31)),"Expired prompt rejected");
   var address=HousingLottery.PlacardAddress("For Sale\n3,750,000 Gil\nPlot 50, 17th Ward, Mist\nSmall\nAvailable to free companies. Available to private buyers.\nSelling via lottery. (Current participants: 16)",now);
   Check(address is {District:"Mist",Ward:17,Plot:50},"Full visible sale placard address");
   Check(HousingLottery.PlacardAddress("Plot 50, 17th Ward, Mist\nPlot 51, 17th Ward, Mist",now)==null,"Conflicting addresses rejected");
