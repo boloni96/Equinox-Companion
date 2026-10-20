@@ -3,7 +3,11 @@ using Dalamud.Game.ClientState.Conditions;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
- private string PublicAdventureWorld(){var world=Player.CurrentWorld.Value;return world.IsPublic?world.Name.ToString():"";}
+ private string PublicAdventureWorld()
+ {
+  var ready=Player.IsLoaded&&Player.ContentId!=0&&!Conditions[ConditionFlag.BetweenAreas]&&!Conditions[ConditionFlag.BetweenAreas51];
+  return AdventureWorldName.Read(ready,Player.CurrentWorld);
+ }
  private readonly UiProjectionCache<int?> adventureLocationStop=new(maxAgeMs:0);
  private readonly UiProjectionCache<string> adventureLocationHouse=new(maxAgeMs:0);
  private readonly UiProjectionCache<string> adventureAreaLabel=new(maxAgeMs:0);
@@ -32,7 +36,7 @@ public sealed partial class Plugin
   if(!config.SyncEnabled||config.PairingKey.Length!=64||!Player.IsLoaded||Player.ContentId==0||Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]){adventurePresenceSession.Reset();return;}
   if(!adventureFresh||adventureRequest is not null||AdventureSaving)return;
   var character=CurrentSharedCharacter();if(character is null)return;
-  var world=PublicAdventureWorld();if(world.Length==0)return;
+  var world=PublicAdventureWorld();if(world.Length==0){adventurePresenceSession.Reset();return;}
   var area=CurrentAdventureArea();var territory=(uint)Client.TerritoryType;
   var house=adventureLocationHouse.Get(config.SharedRoster,$"{Player.CurrentWorld.RowId}:{currentAddress}",Environment.TickCount64,
    ()=>AdventurePolicy.CurrentHouse(currentAddress,Player.CurrentWorld.RowId,(config.SharedRoster?.People??[]).SelectMany(p=>p.Characters).SelectMany(c=>c.Houses)));
@@ -46,8 +50,7 @@ public sealed partial class Plugin
  }
  private void DrawAdventureLocation(AdventureBoard board)
  {
-  var ready=Player.IsLoaded&&Player.ContentId!=0&&!Conditions[ConditionFlag.BetweenAreas]&&!Conditions[ConditionFlag.BetweenAreas51];
-  var world=PublicAdventureWorld();ready=ready&&world.Length>0;
+  var world=PublicAdventureWorld();var ready=world.Length>0;
   var house=ready?adventureLocationHouse.Get(config.SharedRoster,$"{Player.CurrentWorld.RowId}:{currentAddress}",Environment.TickCount64,
    ()=>AdventurePolicy.CurrentHouse(currentAddress,Player.CurrentWorld.RowId,(config.SharedRoster?.People??[]).SelectMany(p=>p.Characters).SelectMany(c=>c.Houses))):"";
   var target=adventureLocationStop.Get(board,world+"|"+house,Environment.TickCount64,()=>AdventurePolicy.HouseIndex(board,house,world));
