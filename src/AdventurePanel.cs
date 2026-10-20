@@ -143,9 +143,9 @@ public sealed partial class Plugin
      if(ImGui.Checkbox("##done",ref check))AdventureAction(board,task:task,value:check);ImGui.EndDisabled();
      var hover=ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled);ImGui.SameLine();
      ImGui.TextWrapped(label);
-     var bedLink=task.Rule is {Batch:>=1,Bed:>=1 and <=8} rule&&rule.HouseId.Length>0&&(rule.HouseId==stop.HouseId||AdventurePolicy.IsGardenTask(task));
-     if(ImGui.IsItemClicked()){if(bedLink&&task.Rule is {} clicked)adventureOpenBed=(clicked.HouseId,clicked.Batch,clicked.Bed);else ImGui.SetClipboardText(label);}
-     if(hover||ImGui.IsItemHovered()){ImGui.BeginTooltip();ImGui.PushTextWrapPos(ImGui.GetFontSize()*32);ImGui.TextUnformatted((bedLink?"Click to open this bed’s batch.\n":"Click to copy this label.\n")+(AdventureTaskHint(task) is {Length:>0} hint?hint+"\n":"")+(task.Status.Length>0?DisplayTime.InText(task.Status):task.Done?"Completion recorded in the Journal":"Waiting for completion")+(task.ServerConfirmed?"\nConfirmed automatically from game records. This check cannot be removed manually.":!task.CanCheck?"\nThis task updates automatically.":"\nManual completion can be changed here."));ImGui.PopTextWrapPos();ImGui.EndTooltip();}
+     var gardenLink=AdventureGardenNavigation.TaskTarget(task,stop);
+     if(ImGui.IsItemClicked()){if(gardenLink is {} clicked)adventureOpenBed=clicked;else ImGui.SetClipboardText(label);}
+     if(hover||ImGui.IsItemHovered()){ImGui.BeginTooltip();ImGui.PushTextWrapPos(ImGui.GetFontSize()*32);ImGui.TextUnformatted((gardenLink is {} link?link.Bed>0?"Click to open this bed’s batch.\n":"Click to open this batch.\n":"Click to copy this label.\n")+(AdventureTaskHint(task) is {Length:>0} hint?hint+"\n":"")+(task.Status.Length>0?DisplayTime.InText(task.Status):task.Done?"Completion recorded in the Journal":"Waiting for completion")+(task.ServerConfirmed?"\nConfirmed automatically from game records. This check cannot be removed manually.":!task.CanCheck?"\nThis task updates automatically.":"\nManual completion can be changed here."));ImGui.PopTextWrapPos();ImGui.EndTooltip();}
      if(!check&&(house is not null||AdventurePolicy.IsFashion(task))){
       var right=ImGui.GetItemRectMax().X+ImGui.GetStyle().ItemSpacing.X;
       if(right+ImGui.CalcTextSize("Go").X+ImGui.GetStyle().FramePadding.X*2<ImGui.GetCursorScreenPos().X+ImGui.GetContentRegionAvail().X)ImGui.SameLine();
@@ -203,6 +203,8 @@ public sealed partial class Plugin
   }
   ImGui.TextUnformatted(board.Title);
   ImGui.SameLine();DrawAdventureLocation(board);
+  // Resolve game selection before any collapsed house/character section is drawn.
+  FollowAdventureGarden(board);
   if(board.Protocol<2)ImGui.TextWrapped("This saved route still needs an upgrade. Reload Journal V7.11.177 or newer, sign in, and wait for Adventure pairing to finish. Then close it and press Refresh here.");
   ImGui.BeginChild("AdventureChecklist",new Vector2(0,0),false);
   if(board.Index>=board.Stops.Length){ImGui.TextWrapped("Round reviewed. Unconfirmed work stays unconfirmed. You can revisit any stop or build another adventure in the Journal.");}
@@ -227,7 +229,7 @@ public sealed partial class Plugin
      DrawAdventureMultiGardens(section.Tasks);
      ImGui.PopID();
     }
-    if(adventureSharedTasks.Length>0){ImGui.Separator();ImGui.TextUnformatted("Shared tasks");DrawAdventureTaskSection(board,stop,adventureSharedTasks,true);}
+    if(adventureSharedTasks.Length>0){ImGui.Separator();ImGui.TextUnformatted("Shared tasks");DrawAdventureTaskSection(board,stop,adventureSharedTasks,true);DrawAdventureMultiGardens(adventureSharedTasks);}
    }else if(stepsOpen)DrawAdventureTaskList(board,stop,stop.Tasks);
    if(!string.IsNullOrEmpty(stop.HouseId)){
     if(board.Kind!="multi")DrawAdventureHouseMembers(stop);
@@ -256,3 +258,4 @@ public sealed partial class Plugin
   }
  }
 }
+

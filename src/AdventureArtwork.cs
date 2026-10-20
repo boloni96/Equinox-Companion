@@ -5,7 +5,15 @@ public sealed partial class Plugin
 {
  private bool adventureShowActual;
  private (string House,int Batch,int Bed)? adventureOpenBed;
- private readonly GardenSelectionFollow adventureGardenSelectionFollow=new();
+ private readonly AdventureGardenNavigation adventureGardenNavigation=new();
+ private void FollowAdventureGarden(AdventureBoard board)
+ {
+  adventureGardenNavigation.Set(board);
+  if(!adventureGardenNavigation.HasGardens)return;
+  var selected=adventureGardenNavigation.Follow(GardenGuideSelection(),currentAddress,atOutdoorEstate,
+   gardenBedSync is {Complete:false},GardenMappings(),GardenPlanSources(),DateTimeOffset.UtcNow);
+  if(selected is {} target)adventureOpenBed=target;
+ }
  private void DrawAdventureHeading(string icon,string title)
  {
   var at=ImGui.GetCursorScreenPos();var size=ImGui.GetTextLineHeight()*2;
@@ -33,10 +41,6 @@ public sealed partial class Plugin
  {
   var sources=GardenPlanSources().Where(p=>p.HouseId==houseId).OrderBy(p=>p.Batch).ToArray();
   if(sources.Length==0){ImGui.TextWrapped("Waiting for this house’s garden records. Confirmed garden observations will appear after Companion syncs.");return;}
-  if(GardenGuideSelection() is {} gameTarget&&gameTarget.Address==currentAddress&&atOutdoorEstate&&DateTimeOffset.UtcNow-gameTarget.ObservedAt<TimeSpan.FromSeconds(2)&&gardenBedSync is not {Complete:false}){
-   var selection=adventureGardenSelectionFollow.Update(gameTarget,GardenMappings(),sources,DateTimeOffset.UtcNow);
-   if(selection is {} selected&&selected.House==houseId)adventureOpenBed=selected;
-  }else adventureGardenSelectionFollow.Reset();
   foreach(var source in sources){
    ImGui.PushID("adventure-garden-"+source.HouseId+"-"+source.Batch);
    var plan=EffectiveGardenPlan(source);
@@ -45,7 +49,7 @@ public sealed partial class Plugin
    var requested=adventureOpenBed is {} target&&target.House==plan.HouseId&&target.Batch==plan.Batch;
    ImGui.TextUnformatted($"{(complete?"✓ ":"")}Batch {plan.Batch}");
    {
-    if(requested&&adventureOpenBed is {} focus){selectedGardenBed=(focus.House,focus.Batch,focus.Bed);ImGui.SetScrollHereY(.15f);adventureOpenBed=null;}
+    if(requested&&adventureOpenBed is {} focus){if(focus.Bed>0)selectedGardenBed=focus;ImGui.SetScrollHereY(.15f);adventureOpenBed=null;}
     plan=WithQueuedGardenBeds(plan);
     var showPlan=!adventureShowActual&&planned.Length>0&&!complete;
     ImGui.TextWrapped(GardenOverview.Summary([plan],DateTimeOffset.UtcNow));
@@ -75,3 +79,4 @@ public sealed partial class Plugin
   if(ImGui.IsItemHovered())ImGui.SetTooltip("On: show crops observed in game. Off: show planting guidance when an unfinished plan is available.");
  }
 }
+

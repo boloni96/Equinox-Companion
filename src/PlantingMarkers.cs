@@ -17,7 +17,7 @@ public sealed partial class Plugin
     private string gardenMarkerStatus="";
     private bool gardenMarkerError;
     private (string House,int Batch,int WrongBed,int NextBed)? gardenWrongBed;
-    private bool FastGardenSync => plantingWindow?.IsOpen==true || activeGardenSession is not null || (adventureWindow?.IsOpen==true && adventureBoards.Any(b=>b.Id==adventureSelected&&b.Kind=="garden"));
+    private bool FastGardenSync => plantingWindow?.IsOpen==true || activeGardenSession is not null || (adventureWindow?.IsOpen==true && AdventureGardenNavigation.HasGarden(adventureBoards.FirstOrDefault(b=>b.Id==adventureSelected)));
     private static string GardenSessionKey(SharedGardenPlan p)=>$"{p.HouseId}:{p.Batch}:{p.At:O}";
     private void StopGardenSession() { activeGardenSession=null; guidanceBed=null; gardenMarkerStatus="";gardenWrongBed=null; }
     private void RememberGuidanceBed(GardenMenu menu)
@@ -48,7 +48,10 @@ public sealed partial class Plugin
     }
     private unsafe void DrawPlantingMarkers()
     {
-        if(!plantingWindow.IsOpen&&!minimizedLaunchers.Contains("Planting")){StopGardenSession();return;}
+        var gardeningOpen=plantingWindow.IsOpen||minimizedLaunchers.Contains("Planting");
+        var adventureOpen=adventureWindow?.IsOpen==true||minimizedLaunchers.Contains("Adventure");
+        adventureGardenNavigation.Set(adventureOpen?adventureBoards.FirstOrDefault(b=>b.Id==adventureSelected):null);
+        if(!gardeningOpen&&!adventureGardenNavigation.HasGardens){StopGardenSession();return;}
         if(!config.SyncEnabled||config.PairingKey.Length!=64||!Player.IsLoaded){StopGardenSession();return;}
         activeGardenSession=null;gardenMarkerError=false;gardenWrongBed=null;
         gardenMarkerStatus="Automatic guide · Open a numbered bed in game. A fresh batch starts at Bed 1.";
@@ -56,7 +59,9 @@ public sealed partial class Plugin
         var current=Volatile.Read(ref capturedContext)?.CandidateAt(now);
         if(menu is null||!menu.Matches(now,current)||menu.NumberedLocation() is not {} location)return;
         var plans=GardenPlanSources();var house=SharedGardenLocation.Match(currentAddress,plans);
-        var displayed=plans.FirstOrDefault(p=>p.HouseId==house&&p.Batch==plantingBatch);
+        var adventureAtHouse=house is not null&&adventureGardenNavigation.Contains(house);
+        if(!gardeningOpen&&!adventureAtHouse){gardenMarkerStatus="This house is not in the current adventure stop.";return;}
+        var displayed=AdventureGardenNavigation.UseStandaloneBatch(gardeningOpen,adventureAtHouse)?plans.FirstOrDefault(p=>p.HouseId==house&&p.Batch==plantingBatch):null;
         if(displayed is not null&&location.Patch!=(displayed.PhysicalPatch>0?displayed.PhysicalPatch:displayed.Batch))
         { gardenMarkerError=true;gardenMarkerStatus=$"Wrong batch: you opened Batch {location.Patch} in game, but the guide is showing Batch {displayed.Batch}. Open the matching batch in game or switch the guide tab. No items marked.";return; }
         var matches=plans.Where(p=>p.HouseId==house&&(p.PhysicalPatch>0?p.PhysicalPatch:p.Batch)==location.Patch).Take(2).ToArray();
@@ -88,7 +93,7 @@ public sealed partial class Plugin
             var pickerOpen=picker!=null&&picker->IsVisible&&agent->ContextAddonId==picker->Id;
             // ImGui overlays sit above native windows. Never outline the covered
             // Gardening slots through the foreground soil/seed picker.
-            var marked=pickerOpen?MarkGardenItems(picker,items,covers[..coverCount],agent):MarkGardenItems(gardening,items,covers[..coverCount]);
+            var marked=pickerOpen?MarkGardenPicker((AddonContextIconMenu*)picker,agent,items,covers[..coverCount]):MarkGardenItems(gardening,items,covers[..coverCount]);
             gardenMarkerStatus+=marked>0?" · Green: required. Red: different item.":" · Choose soil and seed; follow the required names above.";
             if(pickerOpen&&!items.Any(x=>x.Required))gardenMarkerStatus+=" Required item is not offered; check inventory.";
 
@@ -148,7 +153,7 @@ public sealed partial class Plugin
         }
         return item.Kind==DetailKind.Item&&item.ItemId>0?(uint)item.ItemId%1000000:0;
     }
-    private static unsafe int MarkGardenItems(AtkUnitBase* addon,List<PlantMenuItem> items,ReadOnlySpan<Vector4> covers,AgentHousingPlant* plantingAgent=null)
+    private static unsafe int MarkGardenItems(AtkUnitBase* addon,List<PlantMenuItem> items,ReadOnlySpan<Vector4> covers)
     {
         if(addon==null||!addon->IsVisible||items.Count==0)return 0;
         var drawn=new HashSet<nint>();var exact=new Dictionary<nint,bool>();
@@ -165,7 +170,6 @@ public sealed partial class Plugin
                 if(GardenPlantRequirement.Required(id,allowed) is {} correct)exact[(nint)node]=correct;
             }
         }
-        if(plantingAgent!=null)MapGardenPickerEntries((AddonContextIconMenu*)addon,plantingAgent,items,exact);
         // Prefer the visible item image. An invalid icon container must not consume
         // the exact tooltip binding: its validated bounds remain a fallback.
         var used=new HashSet<nint>();var nodes=600;
@@ -173,28 +177,71 @@ public sealed partial class Plugin
         foreach(var match in exact)if(!used.Contains(match.Key)&&OutlineGardenItem((AtkResNode*)match.Key,match.Value,drawn,covers))marked++;
         return marked;
     }
-    private static unsafe void MapGardenPickerEntries(AddonContextIconMenu* menu,AgentHousingPlant* agent,List<PlantMenuItem> items,Dictionary<nint,bool> exact)
+    private static unsafe uint[] GardenPickerRowItems(AddonContextIconMenu* menu,List<PlantMenuItem> items)
     {
-        var list=menu->AtkComponentList240;var inventory=InventoryManager.Instance();var count=menu->EntryCount;
-        if(list==null||inventory==null||count is <=0 or >140||count!=agent->SelectableItemCount||list->ListLength!=count)return;
-        // Use the native list item's logical index, not screen position or a seed-bag image.
-        // Validate the current inventory slot and displayed icon before drawing a border.
+        var values=menu->AtkValuesSpan;
+        if(values.Length<=4||values[4].Type!=AtkValueType.UInt||values[4].UInt is 0 or >140)return [];
+        var count=(int)values[4].UInt;
+        uint[]? resolved=null;
+        // ContextIconMenu has shipped both six- and eight-value entry records.
+        // Accept a layout only when EVERY displayed localized name resolves to
+        // an offered item; contradictory layouts never select a colour.
+        foreach(var stride in new[]{6,8}){
+            if(values.Length<=13+(count-1)*stride)continue;
+            var candidate=new uint[count];var valid=true;
+            for(var i=0;i<count;i++){
+                var value=values[13+i*stride];
+                if(value.Type is not (AtkValueType.String or AtkValueType.ManagedString)){valid=false;break;}
+                candidate[i]=GardenPlantRequirement.TooltipItem(value.String.ToString(),items.Select(x=>(x.Id,x.Name)));
+                if(candidate[i]==0){valid=false;break;}
+            }
+            if(!valid)continue;
+            if(resolved is not null&&!resolved.SequenceEqual(candidate))return [];
+            resolved=candidate;
+        }
+        return resolved??[];
+    }
+    private static unsafe AtkComponentIcon* GardenRendererIcon(AtkUldManager* uld,uint expected,ref int budget,int depth=0)
+    {
+        if(uld==null||uld->NodeList==null||depth>6)return null;
+        for(var i=0;i<uld->NodeListCount&&budget-->0;i++){
+            var node=uld->NodeList[i];if(!MarkerVisible(node)||(int)node->Type<1000)continue;
+            var component=node->GetComponent();if(component==null)continue;
+            var type=component->GetComponentType();
+            var icon=type==ComponentType.Icon?(AtkComponentIcon*)component:type==ComponentType.DragDrop?((AtkComponentDragDrop*)component)->AtkComponentIcon:null;
+            if(icon!=null){if(icon->IconId==expected&&MarkerVisible((AtkResNode*)icon->IconImage))return icon;continue;}
+            var child=GardenRendererIcon(&component->UldManager,expected,ref budget,depth+1);if(child!=null)return child;
+        }
+        return null;
+    }
+    private static unsafe int MarkGardenPicker(AddonContextIconMenu* menu,AgentHousingPlant* agent,List<PlantMenuItem> items,ReadOnlySpan<Vector4> covers)
+    {
+        var list=menu->AtkComponentList240;var inventory=InventoryManager.Instance();
+        var rowItems=GardenPickerRowItems(menu,items);var count=rowItems.Length;
+        if(list==null||inventory==null||count==0||list->ListLength!=count||list->IsUpdatePending||list->IsScrollRefreshPending)return 0;
+        var marked=0;var drawn=new HashSet<nint>();
+        // Draw only live logical rows. Walking the entire addon also visits its
+        // reusable renderer templates, which retain old icons over empty space.
         for(var i=0;i<count;i++)
         {
-            var offered=agent->SelectableItems[i];var cache=offered.ItemCache;if(cache==null)continue;
-            if(offered.InventoryType is not (InventoryType.Inventory1 or InventoryType.Inventory2 or InventoryType.Inventory3 or InventoryType.Inventory4)||offered.InventorySlot>=35)continue;
-            var slot=inventory->GetInventorySlot(offered.InventoryType,offered.InventorySlot);if(slot==null)continue;
-            var item=items.FirstOrDefault(x=>x.Id==cache->Id%1000000);if(item.Id==0)continue;
-            var renderer=list->GetItemRenderer(i);if(renderer==null||!MarkerVisible((AtkResNode*)renderer->OwnerNode))continue;
+            var item=items.FirstOrDefault(x=>x.Id==rowItems[i]);if(item.Id==0)continue;
+            var verified=false;
+            for(var j=0;j<Math.Min((int)agent->SelectableItemCount,140);j++){
+                var offered=agent->SelectableItems[j];var cache=offered.ItemCache;
+                if(cache==null||cache->Id%1000000!=item.Id||offered.InventoryType is not (InventoryType.Inventory1 or InventoryType.Inventory2 or InventoryType.Inventory3 or InventoryType.Inventory4)||offered.InventorySlot>=35)continue;
+                var slot=inventory->GetInventorySlot(offered.InventoryType,offered.InventorySlot);
+                if(slot!=null&&slot->ItemId%1000000==item.Id){verified=true;break;}
+            }
+            if(!verified)continue;
+            var renderer=list->GetItemRenderer(i);if(renderer==null||renderer->ListItemIndex!=i||!MarkerVisible((AtkResNode*)renderer->OwnerNode))continue;
             var icon=renderer->DragDropComponent!=null?renderer->DragDropComponent->AtkComponentIcon:null;
-            // A scrolling list need not allocate a renderer for every inventory
-            // entry. GetItemRenderer resolves the current logical item safely.
-            var visibleIcon=icon!=null&&icon->IconId!=0?icon->IconId:list->ItemRendererList!=null&&i<list->AllocatedItemRendererListLength?list->ItemRendererList[i].IconId:0;
-            if(!GardenPlantRequirement.PickerEntryMatches(count,agent->SelectableItemCount,list->ListLength,i,renderer->ListItemIndex,cache->Id%1000000,slot->ItemId%1000000,item.Icon,visibleIcon))continue;
-            var node=icon!=null&&icon->OuterResNode!=null?(nint)icon->OuterResNode:(nint)renderer->OwnerNode;
-            // An independently registered exact tooltip wins over a list binding.
-            if(!exact.ContainsKey(node))exact[node]=item.Required;
+            if(icon==null){var budget=80;icon=GardenRendererIcon(&renderer->UldManager,item.Icon,ref budget);}
+            if(icon==null||icon->IconId!=item.Icon||!icon->IsIconLoaded())continue;
+            var node=(AtkResNode*)icon->IconImage;
+            if(!GardenItemBounds(node,out var bounds)||!GardenItemBounds((AtkResNode*)renderer->OwnerNode,out var rowBounds)||!GardenPlantRequirement.WithinRow(bounds,rowBounds))continue;
+            if(OutlineGardenBounds(node,bounds,item.Required,drawn,covers))marked++;
         }
+        return marked;
     }
     private static unsafe int MarkGardenIcons(AtkUldManager* uld,List<PlantMenuItem> items,Dictionary<nint,bool> exact,HashSet<nint> drawn,HashSet<nint> used,ReadOnlySpan<Vector4> covers,ref int budget,int depth)
     {

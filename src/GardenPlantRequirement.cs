@@ -31,6 +31,9 @@ public static class GardenPlantRequirement
             if(marker.X<cover.Z&&marker.Z>cover.X&&marker.Y<cover.W&&marker.W>cover.Y)return true;
         return false;
     }
+    // Borders belong to an actual row's icon, never a cached template elsewhere.
+    public static bool WithinRow(System.Numerics.Vector4 icon,System.Numerics.Vector4 row) =>
+        ValidMarkerBounds(icon)&&ValidMarkerBounds(row)&&icon.X>=row.X-2&&icon.Y>=row.Y-2&&icon.Z<=row.Z+2&&icon.W<=row.W+2;
     public static bool PickerEntryMatches(int entries,int offered,int listLength,int index,int rendererIndex,uint cacheId,uint inventoryId,uint expectedIcon,uint displayedIcon) => entries>0&&entries<=140&&entries==offered&&entries==listLength&&index>=0&&index<entries&&rendererIndex==index&&cacheId!=0&&cacheId==inventoryId&&expectedIcon!=0&&expectedIcon==displayedIcon;
     // An icon is not an item identity. Only fall back when all offered items with this
     // artwork have the same meaning; shared seed icons must never produce false green.
