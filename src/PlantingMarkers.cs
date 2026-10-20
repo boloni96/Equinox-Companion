@@ -14,12 +14,13 @@ public sealed partial class Plugin
     [PluginService] internal static IGameGui GardenGui { get; private set; } = null!;
     private string? activeGardenSession;
     private GardenMenu? guidanceBed;
+    private readonly GardenMarkerSession gardenMarkerSession = new();
     private string gardenMarkerStatus="";
     private bool gardenMarkerError;
     private (string House,int Batch,int WrongBed,int NextBed)? gardenWrongBed;
     private bool FastGardenSync => plantingWindow?.IsOpen==true || activeGardenSession is not null || (adventureWindow?.IsOpen==true && AdventureGardenNavigation.HasGarden(adventureBoards.FirstOrDefault(b=>b.Id==adventureSelected)));
     private static string GardenSessionKey(SharedGardenPlan p)=>$"{p.HouseId}:{p.Batch}:{p.At:O}";
-    private void StopGardenSession() { activeGardenSession=null; guidanceBed=null; gardenMarkerStatus="";gardenWrongBed=null; }
+    private void StopGardenSession() { gardenMarkerSession.Reset();activeGardenSession=null; guidanceBed=null; gardenMarkerStatus="";gardenWrongBed=null; }
     private void RememberGuidanceBed(GardenMenu menu)
     {
         // Only a numbered empty-bed menu establishes identity; selected guide tabs never do.
@@ -55,34 +56,38 @@ public sealed partial class Plugin
         if(!config.SyncEnabled||config.PairingKey.Length!=64||!Player.IsLoaded){StopGardenSession();return;}
         activeGardenSession=null;gardenMarkerError=false;gardenWrongBed=null;
         gardenMarkerStatus="Automatic guide · Open a numbered bed in game. A fresh batch starts at Bed 1.";
-        var menu=guidanceBed;var now=DateTimeOffset.UtcNow;
-        var current=Volatile.Read(ref capturedContext)?.CandidateAt(now);
-        if(menu is null||!menu.Matches(now,current)||menu.NumberedLocation() is not {} location)return;
-        var plans=GardenPlanSources();var house=SharedGardenLocation.Match(currentAddress,plans);
-        var adventureAtHouse=house is not null&&adventureGardenNavigation.Contains(house);
-        if(!gardeningOpen&&!adventureAtHouse){gardenMarkerStatus="This house is not in the current adventure stop.";return;}
-        var displayed=AdventureGardenNavigation.UseStandaloneBatch(gardeningOpen,adventureAtHouse)?plans.FirstOrDefault(p=>p.HouseId==house&&p.Batch==plantingBatch):null;
-        if(displayed is not null&&location.Patch!=(displayed.PhysicalPatch>0?displayed.PhysicalPatch:displayed.Batch))
-        { gardenMarkerError=true;gardenMarkerStatus=$"Wrong batch: you opened Batch {location.Patch} in game, but the guide is showing Batch {displayed.Batch}. Open the matching batch in game or switch the guide tab. No items marked.";return; }
-        var matches=plans.Where(p=>p.HouseId==house&&(p.PhysicalPatch>0?p.PhysicalPatch:p.Batch)==location.Patch).Take(2).ToArray();
-        if(matches.Length!=1){gardenMarkerStatus="Waiting for an unambiguous saved plan for this physical batch.";return;}
-        var source=matches[0];
-        if(!GardenGuidance.ValidOrder(source)){gardenMarkerStatus="Save a fresh website plan starting at Bed 1 before using markers.";return;}
-        activeGardenSession=GardenSessionKey(source);
-        var plan=EffectiveGardenPlan(source);
-        if(plan.CompletedAt is not null || plan.Beds.Any(b=>b.Crop.Length>0)&&plan.Beds.Where(b=>b.Crop.Length>0).All(b=>b.Status=="confirmed")){StopGardenSession();gardenMarkerStatus="Planting complete · confirmed by game actions.";return;}
-        var next=GardenGuidance.Next(plan);
-        if(next is null||next.Bed!=location.Bed){if(next is not null)gardenWrongBed=(source.HouseId,source.Batch,location.Bed,next.Bed);gardenMarkerError=next is not null;gardenMarkerStatus=next is null?"Waiting for the remaining planting steps.":$"Wrong bed: you opened Bed {location.Bed}; the plan expects Bed {next.Bed}. No items marked.";return;}
-        if(menu.EmptyLocation() is null){gardenMarkerStatus=$"Bed {location.Bed} is occupied. Review its planned/actual crop before replacing anything.";return;}
-        var soil=GardenPlantRequirement.Soil(next);
-        gardenMarkerStatus=$"Bed {next.Bed}: {next.Crop} · {soil}";
         try
         {
+            var menu=guidanceBed;var now=DateTimeOffset.UtcNow;
+            if(menu is null){gardenMarkerSession.Reset();return;}
+            var current=Volatile.Read(ref capturedContext)?.CandidateAt(now);
             var agent=AgentHousingPlant.Instance();
-            if(agent==null||!agent->IsAgentActive())return;
-            var items=MarkerItems(agent,next.Crop,soil);
             var gardening=(AtkUnitBase*)GardenGui.GetAddonByName("HousingGardening").Address;
-            if(gardening==null||!gardening->IsVisible)return;
+            var nativeOpen=agent!=null&&agent->IsAgentActive()&&gardening!=null&&gardening->IsVisible;
+            var retained=gardenMarkerSession.Matches(menu,current,now,(nint)gardening,gardening==null?0u:gardening->Id,nativeOpen);
+            // Fresh numbered menus still show existing wrong-bed/occupied-bed guidance
+            // before the native planting window opens. Only its display can outlive that menu.
+            if((!retained&&!menu.Matches(now,current))||menu.NumberedLocation() is not {} location)return;
+            var plans=GardenPlanSources();var house=SharedGardenLocation.Match(currentAddress,plans);
+            var adventureAtHouse=house is not null&&adventureGardenNavigation.Contains(house);
+            if(!gardeningOpen&&!adventureAtHouse){gardenMarkerStatus="This house is not in the current adventure stop.";return;}
+            var displayed=AdventureGardenNavigation.UseStandaloneBatch(gardeningOpen,adventureAtHouse)?plans.FirstOrDefault(p=>p.HouseId==house&&p.Batch==plantingBatch):null;
+            if(displayed is not null&&location.Patch!=(displayed.PhysicalPatch>0?displayed.PhysicalPatch:displayed.Batch))
+            { gardenMarkerError=true;gardenMarkerStatus=$"Wrong batch: you opened Batch {location.Patch} in game, but the guide is showing Batch {displayed.Batch}. Open the matching batch in game or switch the guide tab. No items marked.";return; }
+            var matches=plans.Where(p=>p.HouseId==house&&(p.PhysicalPatch>0?p.PhysicalPatch:p.Batch)==location.Patch).Take(2).ToArray();
+            if(matches.Length!=1){gardenMarkerStatus="Waiting for an unambiguous saved plan for this physical batch.";return;}
+            var source=matches[0];
+            if(!GardenGuidance.ValidOrder(source)){gardenMarkerStatus="Save a fresh website plan starting at Bed 1 before using markers.";return;}
+            activeGardenSession=GardenSessionKey(source);
+            var plan=EffectiveGardenPlan(source);
+            if(plan.CompletedAt is not null || plan.Beds.Any(b=>b.Crop.Length>0)&&plan.Beds.Where(b=>b.Crop.Length>0).All(b=>b.Status=="confirmed")){StopGardenSession();gardenMarkerStatus="Planting complete · confirmed by game actions.";return;}
+            var next=GardenGuidance.Next(plan);
+            if(next is null||next.Bed!=location.Bed){if(next is not null)gardenWrongBed=(source.HouseId,source.Batch,location.Bed,next.Bed);gardenMarkerError=next is not null;gardenMarkerStatus=next is null?"Waiting for the remaining planting steps.":$"Wrong bed: you opened Bed {location.Bed}; the plan expects Bed {next.Bed}. No items marked.";return;}
+            if(menu.EmptyLocation() is null){gardenMarkerStatus=$"Bed {location.Bed} is occupied. Review its planned/actual crop before replacing anything.";return;}
+            var soil=GardenPlantRequirement.Soil(next);
+            gardenMarkerStatus=$"Bed {next.Bed}: {next.Crop} · {soil}";
+            if(!nativeOpen)return;
+            var items=MarkerItems(agent,next.Crop,soil);
             // Native addons can retain visibility flags and old bounds after their
             // contents disappear. Only currently displayed covers hide a marker.
             Span<Vector4> covers=stackalloc Vector4[3];var coverCount=0;
