@@ -12,6 +12,14 @@ internal static class Lottery201Tests
   Check(HousingLottery.Result("Better luck\nin the future.")=="lost","Wrapped losing dialog");
   Check(HousingLottery.Result("You are the winner of this lottery!")=="won","Winning dialog retained");
   Check(HousingLottery.BuyerLabel("fc")=="FC house"&&HousingLottery.BuyerLabel("private")=="Private house","Explicit property types");
+  var now=DateTimeOffset.Parse("2026-10-20T03:17:00Z");
+  var address=HousingLottery.PlacardAddress("For Sale\n3,750,000 Gil\nPlot 50, 17th Ward, Mist\nSmall\nAvailable to free companies. Available to private buyers.\nSelling via lottery. (Current participants: 16)",now);
+  Check(address is {District:"Mist",Ward:17,Plot:50},"Full visible sale placard address");
+  Check(HousingLottery.PlacardAddress("Plot 50, 17th Ward, Mist\nPlot 51, 17th Ward, Mist",now)==null,"Conflicting addresses rejected");
+  Check(HousingLottery.PlacardAddress("Plot 50, 17th Ward, Mist\nPlot 50, 17th Ward, Mist",now)?.Plot==50,"Repeated text nodes accepted");
+  Check(HousingLottery.WinningNumber("The winning number for this plot is 13.")==13,"Nora screenshot winner");
+  var nora=new SharedHousingBid("Mist",17,50,5,"fc","","entered","2026-10-14T15:00:00Z","timers",409,"Kraken",now);
+  Check(HousingLottery.ObservedStatus(nora,[new("Mist",17,50,409,13,nora.CycleStart)])=="lost","Visitor winner 13 resolves paired entry 5");
   var cycle="2026-10-14T15:00:00Z";
   var bid=new SharedHousingBid("Lavender Beds",19,17,5,"fc","","entered",cycle,"timers",35,"Famfrit",DateTimeOffset.Parse(cycle));
   var result=new LotteryResult("Lavender Beds",19,17,35,3,cycle);

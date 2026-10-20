@@ -21,6 +21,12 @@ public static class HousingLottery
         var bid=new LotteryBid(district,ward,plot,entry,buyer,"","entered",Period(now).Start.ToString("O"),evidence);
         return Valid(bid)?bid:null;
     }
+    public static LotteryBid? PlacardAddress(string text,DateTimeOffset now)
+    {
+        var found=text.Split('\n').Select(line=>Parse(line,"Lottery Number: 1","unknown",now,"timers"))
+            .Where(b=>b is not null).DistinctBy(b=>(b!.District,b.Ward,b.Plot)).ToArray();
+        return found.Length==1?found[0]:null;
+    }
     public static string Buyer(string text)
     {
         var fc=Regex.IsMatch(text,@"\bfree\s+company\b",RegexOptions.IgnoreCase);

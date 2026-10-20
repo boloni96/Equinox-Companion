@@ -10,7 +10,9 @@ public sealed partial class Plugin
 {
     private readonly LotteryLogin lotteryLogin=new();
     private readonly LotteryBidNoticeGate lotteryBidNotices=new();
-    private DateTimeOffset nextLotteryReminderCheck;
+    private DateTimeOffset nextLotteryReminderCheck,nextLotteryVisibleCheck;
+    private object? lotteryDiagnostic;
+    private LotteryResult? lotteryLastResult;
     private (LotteryBid Bid, ulong Character, ulong Target, uint World, DateTimeOffset At)? lotteryPlacard;
     private string lotteryPendingBuyer="unknown";
     private ulong lotteryPendingCharacter;
@@ -27,7 +29,8 @@ public sealed partial class Plugin
     private void UpdateLottery(DateTimeOffset now)
     {
         var id=Player.IsLoaded?Player.ContentId:0;
-        if(id==0){lotteryBidNotices.Reset();lotteryLogin.Reset();return;}
+        if(id==0){lotteryBidNotices.Reset();lotteryLogin.Reset();lotteryPlacard=null;return;}
+        if(LotteryLoaded&&config.SyncHouseDetails&&now>=nextLotteryVisibleCheck){nextLotteryVisibleCheck=now.AddMilliseconds(500);ObserveSafely("housing-lottery",()=>PollLotteryViews(now));}
         lotteryBidNotices.Due(id,"",now);
         if(lotteryLogin.Due(id,now,config.NotifyHousingLottery,!LotteryLoaded))
         {
@@ -53,11 +56,7 @@ public sealed partial class Plugin
             var addon=(AtkUnitBase*)args.Addon.Address;var now=DateTimeOffset.UtcNow;
             if(args.AddonName=="HousingSignBoard")
             {
-                var node=addon->GetTextNodeById(56);
-                var location=node==null?"":node->NodeText.ToString();
-                var address=HousingLottery.Parse(location,"Lottery Number: 1","unknown",now,"timers");
-                if(address is not null && Targets.Target is {} sign)lotteryPlacard=(address,Player.ContentId,sign.GameObjectId,Player.CurrentWorld.RowId,now);
-                else lotteryPlacard=null;
+                CaptureLotteryPlacard(addon,now);
             }
             else if(args.AddonName=="ContentsInfoDetail")
             {
@@ -93,6 +92,29 @@ public sealed partial class Plugin
         }
         catch(Exception ex){errorJournal.Record("housing-lottery","Lottery view could not be read; existing entries kept.",exceptionType:ex.GetType().Name);}
     }
+    private unsafe void CaptureLotteryPlacard(AtkUnitBase* addon,DateTimeOffset now)
+    {
+        if(addon==null||!addon->IsVisible)return;
+        var address=HousingLottery.PlacardAddress(LotteryVisibleText(addon),now);
+        if(address is not null&&Targets.Target is {} sign)
+        {
+            lotteryPlacard=(address,Player.ContentId,sign.GameObjectId,Player.CurrentWorld.RowId,now);
+            lotteryDiagnostic=new{at=now,state="Placard address captured",address.District,address.Ward,address.Plot,world=Player.CurrentWorld.RowId};
+        }
+        else {lotteryPlacard=null;lotteryDiagnostic=new{at=now,state="Visible placard address or target unavailable"};}
+    }
+    private unsafe void PollLotteryViews(DateTimeOffset now)
+    {
+        if(Client.ClientLanguage!=Dalamud.Game.ClientLanguage.English)return;
+        var board=(AtkUnitBase*)GardenGui.GetAddonByName("HousingSignBoard").Address;
+        if(board!=null&&board->IsVisible)CaptureLotteryPlacard(board,now);
+        if(lotteryPlacard is not {} plot||plot.Character!=Player.ContentId||plot.World!=Player.CurrentWorld.RowId||Targets.Target?.GameObjectId!=plot.Target||now-plot.At>TimeSpan.FromMinutes(1)){lotteryPlacard=null;return;}
+        foreach(var name in new[]{"SelectOk","SelectYesno","SelectString","Talk","SelectYesNoTextScroll"})
+        {
+            var addon=(AtkUnitBase*)GardenGui.GetAddonByName(name).Address;
+            if(addon!=null&&addon->IsVisible)ObservePublicLotteryResult(addon,now);
+        }
+    }
     private static unsafe string LotteryVisibleText(AtkUnitBase* addon)
     {
         var texts=new List<string>();
@@ -108,14 +130,19 @@ public sealed partial class Plugin
     }
     private unsafe bool ObservePublicLotteryResult(AtkUnitBase* addon,DateTimeOffset now)
     {
-        var period=HousingLottery.Period(now);
-        if(period.Entry||lotteryPlacard is not {} plot||plot.Character!=Player.ContentId||plot.World!=Player.CurrentWorld.RowId||Targets.Target?.GameObjectId!=plot.Target||now-plot.At>TimeSpan.FromMinutes(1))return false;
         var winner=HousingLottery.WinningNumber(LotteryVisibleText(addon));
         if(winner is null)return false;
+        var board=(AtkUnitBase*)GardenGui.GetAddonByName("HousingSignBoard").Address;
+        if(board!=null&&board->IsVisible)CaptureLotteryPlacard(board,now);
+        var period=HousingLottery.Period(now);
+        if(period.Entry||lotteryPlacard is not {} plot||plot.Character!=Player.ContentId||plot.World!=Player.CurrentWorld.RowId||Targets.Target?.GameObjectId!=plot.Target||now-plot.At>TimeSpan.FromMinutes(1)){lotteryDiagnostic=new{at=now,state="Winning number seen; exact current placard context unavailable",winner};return false;}
         var actor=ReadActor();if(!SyncValidation.ActorReady(actor))return false;
+        lotteryDiagnostic=new{at=now,state="Winning number matched to placard",winner,plot.World,plot.Bid.District,plot.Bid.Ward,plot.Bid.Plot};
         var result=new LotteryResult(plot.Bid.District,plot.Bid.Ward,plot.Bid.Plot,plot.World,winner.Value,period.Start.ToString("O"));
-        if(config.Discoveries.Any(e=>e.Kind=="housing.lottery-result"&&e.LotteryResult==result))return true;
+        if(lotteryLastResult==result)return true;
+        if(config.Discoveries.Any(e=>e.Kind=="housing.lottery-result"&&e.LotteryResult==result)){lotteryLastResult=result;return true;}
         KeepDiscovery(new(Guid.NewGuid().ToString("N"),"housing.lottery-result",now,WithWorldNames(actor),null,LotteryResult:result));
+        lotteryLastResult=result;
         return true;
     }
     private void ObserveLotteryChat(IHandleableChatMessage message)
