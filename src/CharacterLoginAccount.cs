@@ -12,6 +12,38 @@ public sealed partial class Plugin
     private int characterAccountIndex = -1;
     private CharacterLoginMode characterAccountMode;
     private (string PersonId, string PersonName, string AccountId, string AccountName) characterAccountScope;
+    private DateTimeOffset nextLoginObservation;
+    private string observedLoginFingerprintInput = "", observedLoginFingerprintPairing = "", observedLoginFingerprint = "";
+
+    private void UpdateLoginAccount(DateTimeOffset now)
+    {
+        if (now < nextLoginObservation) return;
+        nextLoginObservation = now.AddMilliseconds(250);
+        RememberLoadedLoginAccount();
+    }
+
+    private unsafe string RememberLoadedLoginAccount()
+    {
+        // Capture session identity independently of profile scans, network sync,
+        // window visibility and the 15-second character-progress grace period.
+        var local = Objects.LocalPlayer;
+        if (!Client.IsLoggedIn || !Player.IsLoaded || Player.ContentId == 0 || local is null) return "";
+        var native = (FFXIVClientStructs.FFXIV.Client.Game.Character.Character*)local.Address;
+        if (native == null || native->ContentId != Player.ContentId) return "";
+        var index = CurrentLoginServiceAccount();
+        characterLoginAccount.Remember(config.PairingKey, index, native->ContentId);
+        if (config.PairingKey.Length != 64 || native->AccountId == 0 || index < 0) return "";
+        var identity = $"equinox-account-v1:{native->AccountId}:{index}";
+        if (identity != observedLoginFingerprintInput || config.PairingKey != observedLoginFingerprintPairing)
+        {
+            observedLoginFingerprintInput = identity;
+            observedLoginFingerprintPairing = config.PairingKey;
+            observedLoginFingerprint = Convert.ToHexString(System.Security.Cryptography.HMACSHA256.HashData(
+                System.Text.Encoding.UTF8.GetBytes(config.PairingKey), System.Text.Encoding.UTF8.GetBytes(identity))).ToLowerInvariant();
+        }
+        ObserveSquareEnixLogin(observedLoginFingerprint);
+        return observedLoginFingerprint;
+    }
 
     private static unsafe int CurrentLoginServiceAccount()
     {
@@ -45,7 +77,11 @@ public sealed partial class Plugin
 
     private unsafe (string PersonId, string PersonName, string AccountId, string AccountName) CurrentCharacterSwitchScope(CharacterLoginMode mode, bool refresh = false)
     {
-        if (Player.IsLoaded) return CharacterSwitchScope(CurrentSharedCharacter()?.Id ?? "");
+        if (Player.IsLoaded)
+        {
+            RememberLoadedLoginAccount();
+            return CharacterSwitchScope(CurrentSharedCharacter()?.Id ?? "");
+        }
         if (mode is not (CharacterLoginMode.Title or CharacterLoginMode.CharacterSelect) || config.SharedRoster is not {} roster)
             return CharacterSwitchScope("");
         var lobby = AgentLobby.Instance();
@@ -76,7 +112,9 @@ public sealed partial class Plugin
             }
             contentIds = ids.ToArray();
         }
-        var scope = characterLoginAccount.Resolve(roster, config.PairingKey, lobby->ServiceAccountIndex, contentIds);
+        var scope = mode == CharacterLoginMode.Title
+            ? characterLoginAccount.ResolveTitle(roster, config.PairingKey)
+            : characterLoginAccount.Resolve(roster, config.PairingKey, lobby->ServiceAccountIndex, contentIds);
         if (scope is not {} known) return CharacterSwitchScope("");
         if (contentIds is not null)
         {

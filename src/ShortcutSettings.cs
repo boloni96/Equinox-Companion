@@ -9,11 +9,29 @@ public sealed partial class Plugin
     private ShortcutCapture? shortcutCapture;
     private string shortcutCaptureStatus = "";
     private int shortcutCaptureDrawFrame;
+    private readonly ShortcutActivation[] shortcutActivation = [new(), new(), new(), new()];
+    private static bool ShortcutKeyDown(int code) => code != 0
+        && (Keys.IsVirtualKeyValid(code) || Keys.IsExtendedVirtualKeyValid(code)) && Keys[code];
+    private void PauseShortcuts() { foreach (var state in shortcutActivation) state.Reset(); }
     private unsafe void UpdateShortcuts()
     {
         var io=ImGui.GetIO();
         var game=FFXIVClientStructs.FFXIV.Client.System.Framework.Framework.Instance();
         var ui=RaptureAtkModule.Instance();
+        var bindings=Shortcuts();
+        var ctrl=ShortcutKeyDown(0x11)||ShortcutKeyDown(0xA2)||ShortcutKeyDown(0xA3);
+        var alt=ShortcutKeyDown(0x12)||ShortcutKeyDown(0xA4)||ShortcutKeyDown(0xA5);
+        var shift=ShortcutKeyDown(0x10)||ShortcutKeyDown(0xA0)||ShortcutKeyDown(0xA1);
+        var super=ShortcutKeyDown(0x5B)||ShortcutKeyDown(0x5C);
+        var blocked=capturingShortcut is not null||game==null||!game->CursorInputs.IsGameWindowFocused
+            ||ui==null||ui->IsTextInputActive()||io.WantTextInput||ImGui.IsAnyItemActive();
+        var activate=-1;
+        for(var i=0;i<bindings.Length;i++)
+        {
+            var b=bindings[i].Binding;
+            if(shortcutActivation[i].Step(b,ShortcutKeyDown(ShortcutKeyMap.VirtualKey(b.Key)),ctrl,alt,shift,super,blocked)
+                &&bindings.Count(x=>x.Binding.Matches(b.Key,b.Ctrl,b.Alt,b.Shift))==1&&activate<0)activate=i;
+        }
         if(capturingShortcut is not null)
         {
             if(!visible||game==null||!game->CursorInputs.IsGameWindowFocused||ui==null||ui->IsTextInputActive()||io.WantTextInput||ImGui.GetFrameCount()-shortcutCaptureDrawFrame>1||ImGui.IsKeyPressed(ImGuiKey.Escape,false))
@@ -35,19 +53,13 @@ public sealed partial class Plugin
             }
             return;
         }
-        if(game==null||!game->CursorInputs.IsGameWindowFocused||ui==null||ui->IsTextInputActive()||io.WantTextInput||ImGui.IsAnyItemActive())return;
-        var bindings=Shortcuts();
-        foreach(var (name,binding) in bindings)
+        if(activate>=0)
         {
-            if(binding.Key=="None"||!ShortcutKeys.Contains(binding.Key)||!Enum.TryParse<ImGuiKey>(binding.Key,out var key))continue;
-            if(!binding.Matches(binding.Key,io.KeyCtrl,io.KeyAlt,io.KeyShift)||io.KeySuper||!ImGui.IsKeyPressed(key,false))continue;
-            // Duplicate shortcuts do nothing; the settings screen highlights the conflict.
-            if(bindings.Count(x=>x.Binding.Matches(binding.Key,binding.Ctrl,binding.Alt,binding.Shift))!=1)continue;
+            var name=bindings[activate].Name;
             if(name=="/equinox")OnCommand(name,"");
             else if(name=="/gardening")OnPlantingCommand(name,"");
             else if(name=="/cam")SetCameraHeightEnabled(!config.RememberCameraHeight);
             else OnFashionCommand(name,"");
-            break;
         }
     }
     private void DrawShortcutSettings()

@@ -1,6 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
-using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using FFXIVClientStructs.FFXIV.Client.Game.UI;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using NativeCharacter = FFXIVClientStructs.FFXIV.Client.Game.Character.Character;
@@ -21,19 +18,7 @@ public sealed partial class Plugin
         var hasTag = !string.IsNullOrWhiteSpace(local.CompanyTag.TextValue);
         // Missing tag/proxy data is unknown, not evidence of leaving an FC.
         bool? membership = hasTag || details.FreeCompany is not null ? true : null;
-        var accountKey = "";
-        var lobby = AgentLobby.Instance();
-        // The loaded local player above proves the active character. Character-
-        // selection IDs belong to the lobby UI and are not an in-world identity gate.
-        if (config.PairingKey.Length == 64 && characterState->AccountId != 0 && lobby != null && lobby->IsLoggedIn &&
-            lobby->ServiceAccountIndex >= 0)
-        {
-            // Only a journal-scoped fingerprint leaves the game; never raw account IDs or session data.
-            var identity = $"equinox-account-v1:{characterState->AccountId}:{lobby->ServiceAccountIndex}";
-            accountKey = Convert.ToHexString(HMACSHA256.HashData(Encoding.UTF8.GetBytes(config.PairingKey), Encoding.UTF8.GetBytes(identity))).ToLowerInvariant();
-            characterLoginAccount.Remember(config.PairingKey, lobby->ServiceAccountIndex, characterState->ContentId);
-            ObserveSquareEnixLogin(accountKey);
-        }
+        var accountKey = RememberLoadedLoginAccount();
         var ps = &state->PlayerState;
         var lang = Dalamud.Game.ClientLanguage.English;
         var nameday = ps->BirthMonth is >= 1 and <= 12 && ps->BirthDay is >= 1 and <= 32

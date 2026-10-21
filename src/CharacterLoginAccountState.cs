@@ -7,21 +7,42 @@ internal sealed class CharacterLoginAccountState
     private string pairing = "";
     private int serviceAccount = -1;
     private ulong[] verifiedCharacters = [];
+    private ulong[] titleCharacters = [];
+
+    private void UsePairing(string pairingKey)
+    {
+        if (pairingKey == pairing) return;
+        pairing = pairingKey;
+        serviceAccount = -1;
+        verifiedCharacters = [];
+        titleCharacters = [];
+    }
 
     public void Remember(string pairingKey, int index, ulong contentId)
     {
-        if (pairingKey.Length != 64 || index < 0 || contentId == 0) return;
-        pairing = pairingKey;
+        UsePairing(pairingKey);
+        if (pairingKey.Length != 64 || contentId == 0) return;
+        if (serviceAccount == index && verifiedCharacters.Length == 1 && verifiedCharacters[0] == contentId
+            && titleCharacters.Length == 1 && titleCharacters[0] == contentId) return;
         serviceAccount = index;
-        verifiedCharacters = [contentId];
+        titleCharacters = verifiedCharacters = [contentId];
+    }
+
+    // The title menu may reset the lobby index. It does not change the login of
+    // this running client. Keep actual character evidence until another ready
+    // list/character replaces it; never restore it from a previous game process.
+    public (string Person, string Account)? ResolveTitle(SharedRoster roster, string pairingKey)
+    {
+        UsePairing(pairingKey);
+        return pairingKey.Length == 64 ? Match(roster, titleCharacters).Scope : null;
     }
 
     public (string Person, string Account)? Resolve(SharedRoster roster, string pairingKey, int index, ulong[]? loadedCharacters = null)
     {
-        if (pairingKey != pairing || index != serviceAccount)
+        UsePairing(pairingKey);
+        if (index != serviceAccount)
         {
             verifiedCharacters = [];
-            pairing = pairingKey;
             serviceAccount = index;
         }
         if (pairingKey.Length != 64 || index < 0) return null;
@@ -34,8 +55,14 @@ internal sealed class CharacterLoginAccountState
             if (observed.Known)
             {
                 // Conflicting or incomplete mappings invalidate earlier evidence.
-                verifiedCharacters = observed.Scope is null ? [] : loadedCharacters.ToArray();
+                titleCharacters = verifiedCharacters = observed.Scope is null ? [] : loadedCharacters.ToArray();
                 return observed.Scope;
+            }
+            if (loadedCharacters.Any(id => id != 0))
+            {
+                // A ready, entirely unknown list is not the previous account.
+                titleCharacters = verifiedCharacters = [];
+                return null;
             }
         }
         return Match(roster, verifiedCharacters).Scope;

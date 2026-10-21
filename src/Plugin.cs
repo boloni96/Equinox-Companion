@@ -325,6 +325,7 @@ public sealed partial class Plugin : IDalamudPlugin
     private unsafe void UpdateCore(IFramework framework)
     {
         var now = DateTimeOffset.UtcNow;
+        UpdateLoginAccount(now);
         RunOptionalTool("Camera",now);
         UpdateMaintenanceNotices(now);
         UpdateLottery(now);
@@ -1057,6 +1058,7 @@ public sealed partial class Plugin : IDalamudPlugin
         // Keep the same window instance/namespace, position and minimize behavior.
         if (HelperInCutscene())
         {
+            PauseShortcuts();
             escapeRequested=false;
             escapeWasDown=Keys[Dalamud.Game.ClientState.Keys.VirtualKey.ESCAPE];
             adventureCutsceneWindows.Draw();
@@ -1284,4 +1286,3 @@ public sealed partial class Plugin : IDalamudPlugin
         FlushConfiguration();
     }
 }
-
