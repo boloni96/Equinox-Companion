@@ -35,7 +35,7 @@ public sealed partial class Plugin
     private CharacterLoginRelationship LoginRelationship(SharedCharacter character,
         (string PersonId, string PersonName, string AccountId, string AccountName) from,
         (string PersonId, string PersonName, string AccountId, string AccountName) to) =>
-        squareEnixLogin.Relationship(LoginPairingScope(), character.GameAccountKey, config.SquareEnixLoginGroups,
+        squareEnixLogin.Relationship(LoginPairingScope(), SquareEnixLoginState.TargetAccountKey(config.SharedRoster, character, to.PersonId, to.AccountId), config.SquareEnixLoginGroups,
             from.PersonId, from.AccountId, to.PersonId, to.AccountId);
 
     private bool CharacterLoginNeedsConfirmation(SharedCharacter character,
@@ -84,6 +84,7 @@ public sealed partial class Plugin
             var keys = roster.People.SelectMany(p => p.Characters).Where(c => ids.Contains(c.ContentId))
                 .Select(c => c.GameAccountKey).Where(k => !string.IsNullOrEmpty(k)).Distinct().Take(2).ToArray();
             if (keys.Length == 1) ObserveSquareEnixLogin(keys[0]);
+            else if (keys.Length == 0) ObserveSquareEnixLogin(SquareEnixLoginState.AccountKey(roster, known.Person, known.Account));
         }
         var person = roster.People.FirstOrDefault(p => p.Id == known.Person);
         var account = person?.Characters.FirstOrDefault(c => c.AccountId == known.Account);

@@ -120,7 +120,7 @@ public sealed partial class Plugin
    ImGui.TextUnformatted($"To: {character.Name} @ {character.World} · {to.PersonName} / {to.AccountName}");
    if(characterSwitchConfirmFrom!=0)ImGui.TextUnformatted("This logs out the current character.");
    else if(!knownAccount)ImGui.TextUnformatted("Current login is not verified yet. Open your character list or log in once to identify it.");
-   ImGui.TextWrapped("Another service account on the same login can switch using Lifestream. Equinox remembers this after seeing both in this game client.");
+   ImGui.TextWrapped("Another service account on the same login can switch using Lifestream. Equinox remembers the link after seeing one character from each service account in this game client.");
    ImGui.TextWrapped("A different Square Enix login needs you to exit and sign in again, or use its already signed-in game client.");
    if(ImGui.Button("Cancel"))ImGui.CloseCurrentPopup();ImGui.SameLine();
    var unchanged=CharacterSwitchConsentCurrent(character,from,to);
@@ -150,8 +150,8 @@ public sealed partial class Plugin
   ImGui.TextUnformatted("Target: "+(targetKnown?to.PersonName+" / "+to.AccountName:"Not verified"));
   ImGui.Separator();
   ImGui.TextWrapped(Player.IsLoaded?"Log out and switch using Lifestream.":"Log in using Lifestream and the current game login.");
-  if(relationship==CharacterLoginRelationship.SameSquareEnixLogin)ImGui.TextWrapped("Service accounts verified under this login. Lifestream selects the configured service account.");
-  else if(!same)ImGui.TextWrapped("Different service accounts may share one login. Equinox learns the link after seeing both in this game client. A different Square Enix login requires exiting and signing in again.");
+  if(relationship==CharacterLoginRelationship.SameSquareEnixLogin)ImGui.TextWrapped("Service accounts verified under this login. The link covers every character in those Person/accounts. Lifestream selects the configured service account.");
+  else if(!same)ImGui.TextWrapped("Different service accounts may share one login. One character identifies its whole Person/account. Equinox learns a shared login after seeing one character from each service account in this game client. A different Square Enix login requires exiting and signing in again.");
   if(!targetKnown)ImGui.TextWrapped("Sync this character's Person/account information first.");
   if(switching)ImGui.TextWrapped("A character switch is already requested.");
   else if(mode==CharacterLoginMode.Unavailable)ImGui.TextWrapped(Player.IsLoaded?"Unavailable during combat, duties or loading.":"Wait for the title or character-selection screen and enable Lifestream.");
