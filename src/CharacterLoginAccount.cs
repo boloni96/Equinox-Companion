@@ -4,6 +4,8 @@ namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
     private readonly CharacterLoginAccountState characterLoginAccount = new();
+    private readonly SquareEnixLoginState squareEnixLogin = new();
+    private string loginPairingKey = "", loginPairingScope = "";
     private DateTimeOffset characterAccountProbeAt;
     private SharedRoster? characterAccountRoster;
     private string characterAccountPairing = "";
@@ -16,6 +18,30 @@ public sealed partial class Plugin
         var lobby = AgentLobby.Instance();
         return lobby != null ? lobby->ServiceAccountIndex : -1;
     }
+
+    private string LoginPairingScope()
+    {
+        if (loginPairingKey == config.PairingKey) return loginPairingScope;
+        loginPairingKey = config.PairingKey;
+        return loginPairingScope = config.PairingKey.Length == 64
+            ? Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(config.PairingKey))).ToLowerInvariant() : "";
+    }
+
+    private void ObserveSquareEnixLogin(string accountKey)
+    {
+        if (squareEnixLogin.Observe(LoginPairingScope(), accountKey, config.SquareEnixLoginGroups)) SaveConfiguration();
+    }
+
+    private CharacterLoginRelationship LoginRelationship(SharedCharacter character,
+        (string PersonId, string PersonName, string AccountId, string AccountName) from,
+        (string PersonId, string PersonName, string AccountId, string AccountName) to) =>
+        squareEnixLogin.Relationship(LoginPairingScope(), character.GameAccountKey, config.SquareEnixLoginGroups,
+            from.PersonId, from.AccountId, to.PersonId, to.AccountId);
+
+    private bool CharacterLoginNeedsConfirmation(SharedCharacter character,
+        (string PersonId, string PersonName, string AccountId, string AccountName) from,
+        (string PersonId, string PersonName, string AccountId, string AccountName) to) =>
+        LoginRelationship(character, from, to) == CharacterLoginRelationship.Unverified;
 
     private unsafe (string PersonId, string PersonName, string AccountId, string AccountName) CurrentCharacterSwitchScope(CharacterLoginMode mode, bool refresh = false)
     {
@@ -52,6 +78,13 @@ public sealed partial class Plugin
         }
         var scope = characterLoginAccount.Resolve(roster, config.PairingKey, lobby->ServiceAccountIndex, contentIds);
         if (scope is not {} known) return CharacterSwitchScope("");
+        if (contentIds is not null)
+        {
+            var ids = contentIds.Select(id => id.ToString(System.Globalization.CultureInfo.InvariantCulture)).ToHashSet();
+            var keys = roster.People.SelectMany(p => p.Characters).Where(c => ids.Contains(c.ContentId))
+                .Select(c => c.GameAccountKey).Where(k => !string.IsNullOrEmpty(k)).Distinct().Take(2).ToArray();
+            if (keys.Length == 1) ObserveSquareEnixLogin(keys[0]);
+        }
         var person = roster.People.FirstOrDefault(p => p.Id == known.Person);
         var account = person?.Characters.FirstOrDefault(c => c.AccountId == known.Account);
         return characterAccountScope = person is not null && account is not null

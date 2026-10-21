@@ -35,11 +35,11 @@ public sealed partial class Plugin
   var chosen=people.SelectMany(p=>p.Characters).FirstOrDefault(c=>c.Id==bringChoice);
   ImGui.TextUnformatted("Selected: "+(chosen?.Name??"Choose a character"));
   var from=CharacterSwitchScope(CurrentSharedCharacter()?.Id??"");var to=CharacterSwitchScope(chosen?.Id??"");
-  var cross=CharacterTravelPolicy.NeedsConfirmation(from.PersonId,from.AccountId,to.PersonId,to.AccountId);
-  if(cross)ImGui.TextWrapped("Different Person or account: this may log you out. Check Lifestream’s service-account settings; another game login may be needed.");
+  var cross=chosen is null||CharacterLoginNeedsConfirmation(chosen,from,to);
+  if(cross)ImGui.TextWrapped("Square Enix login not verified: another service account can use this login; a different login needs its own game client.");
   if(bringMessage.Length>0)ImGui.TextWrapped(bringMessage);
   ImGui.BeginDisabled(chosen is null||report is null||bringTrip is not null||!Player.IsLoaded||Player.ContentId!=bringOpenedActor||bringOpenedPairing!=config.PairingKey);
-  if(ImGui.Button(cross?"Confirm different Person/account and travel":"Switch and travel")){
+  if(ImGui.Button(cross?"Confirm same login and travel":"Switch and travel")){
    if(StartBringCharacter(chosen!,report!,cross))ImGui.CloseCurrentPopup();
   }
   ImGui.EndDisabled();ImGui.SameLine();if(ImGui.Button("Close"))ImGui.CloseCurrentPopup();ImGui.EndPopup();

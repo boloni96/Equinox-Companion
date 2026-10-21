@@ -48,7 +48,7 @@ public sealed partial class Plugin
   if(followSession.Armed){characterTravelStatus="Stop FollowThem before switching characters.";return;}
   if(mode==CharacterLoginMode.InGame&&CharacterTravelPolicy.IsCurrent(character,ReadActor())){characterTravelStatus="You are already on this character.";return;}
   var from=CurrentCharacterSwitchScope(mode,true);var to=CharacterSwitchScope(character.Id);
-  if(CharacterTravelPolicy.NeedsConfirmation(from.PersonId,from.AccountId,to.PersonId,to.AccountId)&&(!confirmed||!CharacterSwitchConsentCurrent(character,from,to))){characterTravelStatus="Confirm the person/account change before switching. Check Lifestream’s service-account settings first.";return;}
+  if(CharacterLoginNeedsConfirmation(character,from,to)&&(!confirmed||!CharacterSwitchConsentCurrent(character,from,to))){characterTravelStatus="Confirm that this character is available on the current Square Enix login. A different login needs its own game client.";return;}
   // Prefer the observed game identity over a manually decorated Journal name.
   var observed=config.Discoveries.LastOrDefault(e=>e.Actor.ContentId==character.ContentId)?.Actor;
   var name=observed?.Name??character.Name;var world=string.IsNullOrWhiteSpace(observed?.HomeWorldName)?character.World:observed.HomeWorldName;
@@ -103,7 +103,7 @@ public sealed partial class Plugin
   if(ImGui.SmallButton(CharacterLoginPolicy.Label(Player.IsLoaded))){
    characterTravelStatusOwner=character.Id;
    var from=CurrentCharacterSwitchScope(ReadCharacterLoginMode(true),true);var to=CharacterSwitchScope(character.Id);
-   if(CharacterTravelPolicy.NeedsConfirmation(from.PersonId,from.AccountId,to.PersonId,to.AccountId)){
+   if(CharacterLoginNeedsConfirmation(character,from,to)){
     characterSwitchConfirmFrom=Player.IsLoaded?Player.ContentId:0;characterSwitchConfirmServiceAccount=CurrentLoginServiceAccount();characterSwitchConfirmKey=config.PairingKey;characterSwitchConfirmTarget=character.Id;characterSwitchConfirmScope=SwitchScopeKey(from)+">"+SwitchScopeKey(to);ImGui.OpenPopup("Confirm character###EquinoxCharacterSwitch");
    }else SwitchSharedCharacter(character);
   }
@@ -111,22 +111,23 @@ public sealed partial class Plugin
   ImGui.EndDisabled();
   if(travelHovered)DrawCharacterTravelTooltip(character,mode,switching);
   if(ImGui.BeginPopupModal("Confirm character###EquinoxCharacterSwitch",ImGuiWindowFlags.AlwaysAutoResize)){
+   ImGui.PushTextWrapPos(ImGui.GetFontSize()*32);
    var current=CurrentSharedCharacter();var from=CurrentCharacterSwitchScope(mode);var to=CharacterSwitchScope(character.Id);
    var knownAccount=from.PersonId.Length>0&&from.AccountId.Length>0;
-   ImGui.TextUnformatted(characterSwitchConfirmFrom!=0||knownAccount?"Change to a different Person or account?":"Log in as this character using the current game login?");
+   ImGui.TextUnformatted("Is this character on the current Square Enix login?");
    if(characterSwitchConfirmFrom!=0)ImGui.TextUnformatted($"From: {current?.Name??"Unidentified character"} · {from.PersonName} / {from.AccountName}");
    else if(knownAccount)ImGui.TextUnformatted($"From: {from.PersonName} / {from.AccountName}");
    ImGui.TextUnformatted($"To: {character.Name} @ {character.World} · {to.PersonName} / {to.AccountName}");
    if(characterSwitchConfirmFrom!=0)ImGui.TextUnformatted("This logs out the current character.");
-   else if(!knownAccount)ImGui.TextUnformatted("Current account is not verified yet. Open your character list or log in once to identify it.");
-   ImGui.TextUnformatted("Check Lifestream's service-account settings for this Person/account.");
-   ImGui.TextUnformatted("A different game account still needs its own game login.");
+   else if(!knownAccount)ImGui.TextUnformatted("Current login is not verified yet. Open your character list or log in once to identify it.");
+   ImGui.TextWrapped("Another service account on the same login can switch using Lifestream. Equinox remembers this after seeing both in this game client.");
+   ImGui.TextWrapped("A different Square Enix login needs you to exit and sign in again, or use its already signed-in game client.");
    if(ImGui.Button("Cancel"))ImGui.CloseCurrentPopup();ImGui.SameLine();
    var unchanged=CharacterSwitchConsentCurrent(character,from,to);
    ImGui.BeginDisabled(!unchanged||mode==CharacterLoginMode.Unavailable||switching);
-   if(ImGui.Button(characterSwitchConfirmFrom==0?"Yes, log in":"Yes, switch character")){ImGui.CloseCurrentPopup();SwitchSharedCharacter(character,true);characterSwitchConfirmTarget="";}
+   if(ImGui.Button(characterSwitchConfirmFrom==0?"Same login — log in":"Same login — switch")){ImGui.CloseCurrentPopup();SwitchSharedCharacter(character,true);characterSwitchConfirmTarget="";}
    ImGui.EndDisabled();if(!unchanged)ImGui.TextUnformatted("The current character, account or pairing changed. Cancel and choose again.");
-   ImGui.EndPopup();
+   ImGui.PopTextWrapPos();ImGui.EndPopup();
   }
   if(showHouses)DrawCharacterHouseIcons(character);
   if(switching){ImGui.SameLine();if(ImGui.SmallButton("Stop switch")){bringTrip=null;try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}characterSwitchUntil=default;characterTravelStatus="Switch queue stopped. If already logged out, select a character in game.";}}
@@ -138,19 +139,19 @@ public sealed partial class Plugin
   var from=CurrentCharacterSwitchScope(mode);var to=CharacterSwitchScope(character.Id);
   var currentKnown=!string.IsNullOrWhiteSpace(from.PersonId)&&!string.IsNullOrWhiteSpace(from.AccountId);
   var targetKnown=!string.IsNullOrWhiteSpace(to.PersonId)&&!string.IsNullOrWhiteSpace(to.AccountId);
-  var verified=currentKnown&&targetKnown;
-  var same=verified&&!CharacterTravelPolicy.NeedsConfirmation(from.PersonId,from.AccountId,to.PersonId,to.AccountId);
+  var relationship=LoginRelationship(character,from,to);
+  var same=relationship!=CharacterLoginRelationship.Unverified;
   ImGui.BeginTooltip();ImGui.PushTextWrapPos(ImGui.GetFontSize()*28);
   ImGui.TextUnformatted(character.Name+" @ "+character.World);
-  if(same)ImGui.TextColored(new Vector4(.45f,.85f,.63f,1),"Same account · no account confirmation");
-  else if(verified)ImGui.TextColored(new Vector4(1,.75f,.35f,1),"Different Person/account · confirmation required");
-  else ImGui.TextDisabled("Account not verified · confirmation required");
+  if(relationship==CharacterLoginRelationship.SameServiceAccount)ImGui.TextColored(new Vector4(.45f,.85f,.63f,1),"Same service account · no confirmation");
+  else if(relationship==CharacterLoginRelationship.SameSquareEnixLogin)ImGui.TextColored(new Vector4(.45f,.85f,.63f,1),"Same Square Enix login · no confirmation");
+  else ImGui.TextColored(new Vector4(1,.75f,.35f,1),"Square Enix login not verified · confirmation required");
   ImGui.TextUnformatted("Current: "+(currentKnown?from.PersonName+" / "+from.AccountName:"Not verified"));
   ImGui.TextUnformatted("Target: "+(targetKnown?to.PersonName+" / "+to.AccountName:"Not verified"));
   ImGui.Separator();
   ImGui.TextWrapped(Player.IsLoaded?"Log out and switch using Lifestream.":"Log in using Lifestream and the current game login.");
-  if(verified&&!same)ImGui.TextWrapped("Check Lifestream's service-account settings. A different game account needs its own game login.");
-  else if(!currentKnown)ImGui.TextWrapped("Open your character list or log in once to identify the current account.");
+  if(relationship==CharacterLoginRelationship.SameSquareEnixLogin)ImGui.TextWrapped("Service accounts verified under this login. Lifestream selects the configured service account.");
+  else if(!same)ImGui.TextWrapped("Different service accounts may share one login. Equinox learns the link after seeing both in this game client. A different Square Enix login requires exiting and signing in again.");
   if(!targetKnown)ImGui.TextWrapped("Sync this character's Person/account information first.");
   if(switching)ImGui.TextWrapped("A character switch is already requested.");
   else if(mode==CharacterLoginMode.Unavailable)ImGui.TextWrapped(Player.IsLoaded?"Unavailable during combat, duties or loading.":"Wait for the title or character-selection screen and enable Lifestream.");
