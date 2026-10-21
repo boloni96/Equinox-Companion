@@ -5,6 +5,21 @@ public sealed partial class Plugin
 {
     private readonly CharacterLoginAccountState characterLoginAccount = new();
     private readonly SquareEnixLoginState squareEnixLogin = new();
+    private readonly LoginAccountLinks loginAccountLinks = new();
+    private SharedRoster? loginWitnessRoster;
+    private ulong loginWitnessCharacter;
+    private string loginWitnessPairing = "";
+
+    private void ObserveLoginAccountWitness(ulong contentId)
+    {
+        var roster = config.SharedRoster;
+        if (roster is null || contentId == 0) return;
+        var scope = LoginPairingScope();
+        if (contentId == loginWitnessCharacter && ReferenceEquals(roster, loginWitnessRoster) && scope == loginWitnessPairing) return;
+        loginWitnessCharacter = contentId; loginWitnessRoster = roster; loginWitnessPairing = scope;
+        if (loginAccountLinks.Observe(scope, roster, contentId.ToString(System.Globalization.CultureInfo.InvariantCulture), config.LoginAccountGroups))
+            SaveConfiguration();
+    }
     private string loginPairingKey = "", loginPairingScope = "";
     private DateTimeOffset characterAccountProbeAt;
     private SharedRoster? characterAccountRoster;
@@ -32,6 +47,7 @@ public sealed partial class Plugin
         if (native == null || native->ContentId != Player.ContentId) return "";
         var index = CurrentLoginServiceAccount();
         characterLoginAccount.Remember(config.PairingKey, index, native->ContentId);
+        ObserveLoginAccountWitness(native->ContentId);
         if (config.PairingKey.Length != 64 || native->AccountId == 0 || index < 0) return "";
         var identity = $"equinox-account-v1:{native->AccountId}:{index}";
         if (identity != observedLoginFingerprintInput || config.PairingKey != observedLoginFingerprintPairing)
@@ -66,9 +82,14 @@ public sealed partial class Plugin
 
     private CharacterLoginRelationship LoginRelationship(SharedCharacter character,
         (string PersonId, string PersonName, string AccountId, string AccountName) from,
-        (string PersonId, string PersonName, string AccountId, string AccountName) to) =>
-        squareEnixLogin.Relationship(LoginPairingScope(), SquareEnixLoginState.TargetAccountKey(config.SharedRoster, character, to.PersonId, to.AccountId), config.SquareEnixLoginGroups,
+        (string PersonId, string PersonName, string AccountId, string AccountName) to)
+    {
+        var relationship = squareEnixLogin.Relationship(LoginPairingScope(), SquareEnixLoginState.TargetAccountKey(config.SharedRoster, character, to.PersonId, to.AccountId), config.SquareEnixLoginGroups,
             from.PersonId, from.AccountId, to.PersonId, to.AccountId);
+        if (relationship != CharacterLoginRelationship.Unverified) return relationship;
+        return loginAccountLinks.Recognizes(LoginPairingScope(), config.SharedRoster, character, to.PersonId, to.AccountId, config.LoginAccountGroups)
+            ? CharacterLoginRelationship.SameSquareEnixLogin : CharacterLoginRelationship.Unverified;
+    }
 
     private bool CharacterLoginNeedsConfirmation(SharedCharacter character,
         (string PersonId, string PersonName, string AccountId, string AccountName) from,
@@ -119,6 +140,11 @@ public sealed partial class Plugin
         if (contentIds is not null)
         {
             var ids = contentIds.Select(id => id.ToString(System.Globalization.CultureInfo.InvariantCulture)).ToHashSet();
+            // Resolve already established one account for this ready list. One
+            // exact CID is sufficient; avoid rescanning every visible character.
+            var witness = roster.People.Where(p => p.Id == known.Person).SelectMany(p => p.Characters)
+                .FirstOrDefault(c => c.AccountId == known.Account && ids.Contains(c.ContentId));
+            if (ulong.TryParse(witness?.ContentId, out var witnessId)) ObserveLoginAccountWitness(witnessId);
             var keys = roster.People.SelectMany(p => p.Characters).Where(c => ids.Contains(c.ContentId))
                 .Select(c => c.GameAccountKey).Where(k => !string.IsNullOrEmpty(k)).Distinct().Take(2).ToArray();
             if (keys.Length == 1) ObserveSquareEnixLogin(keys[0]);

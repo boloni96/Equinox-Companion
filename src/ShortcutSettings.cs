@@ -10,34 +10,37 @@ public sealed partial class Plugin
     private string shortcutCaptureStatus = "";
     private int shortcutCaptureDrawFrame;
     private readonly ShortcutActivation[] shortcutActivation = [new(), new(), new(), new()];
-    private static bool ShortcutKeyDown(int code) => code != 0
-        && (Keys.IsVirtualKeyValid(code) || Keys.IsExtendedVirtualKeyValid(code)) && Keys[code];
     private void PauseShortcuts() { foreach (var state in shortcutActivation) state.Reset(); }
     private unsafe void UpdateShortcuts()
     {
         var io=ImGui.GetIO();
-        var game=FFXIVClientStructs.FFXIV.Client.System.Framework.Framework.Instance();
         var ui=RaptureAtkModule.Instance();
+        var focused=ShortcutKeyboard.OwnGameFocused();
+        if(!focused)
+        {
+            PauseShortcuts();
+            if(capturingShortcut is not null)
+            {capturingShortcut=null;shortcutCapture=null;shortcutCaptureStatus="Shortcut capture cancelled: game lost focus.";}
+            return;
+        }
+        bool Down(int code)=>ShortcutKeyboard.Down(code,focused);
         var bindings=Shortcuts();
-        var ctrl=ShortcutKeyDown(0x11)||ShortcutKeyDown(0xA2)||ShortcutKeyDown(0xA3);
-        var alt=ShortcutKeyDown(0x12)||ShortcutKeyDown(0xA4)||ShortcutKeyDown(0xA5);
-        var shift=ShortcutKeyDown(0x10)||ShortcutKeyDown(0xA0)||ShortcutKeyDown(0xA1);
-        var super=ShortcutKeyDown(0x5B)||ShortcutKeyDown(0x5C);
-        var blocked=capturingShortcut is not null||game==null||!game->CursorInputs.IsGameWindowFocused
+        var ctrl=Down(0x11);var alt=Down(0x12);var shift=Down(0x10);var super=Down(0x5B)||Down(0x5C);
+        var blocked=capturingShortcut is not null||!focused
             ||ui==null||ui->IsTextInputActive()||io.WantTextInput||ImGui.IsAnyItemActive();
         var activate=-1;
         for(var i=0;i<bindings.Length;i++)
         {
             var b=bindings[i].Binding;
-            if(shortcutActivation[i].Step(b,ShortcutKeyDown(ShortcutKeyMap.VirtualKey(b.Key)),ctrl,alt,shift,super,blocked)
+            if(shortcutActivation[i].Step(b,Down(ShortcutKeyMap.VirtualKey(b.Key)),ctrl,alt,shift,super,blocked)
                 &&bindings.Count(x=>x.Binding.Matches(b.Key,b.Ctrl,b.Alt,b.Shift))==1&&activate<0)activate=i;
         }
         if(capturingShortcut is not null)
         {
-            if(!visible||game==null||!game->CursorInputs.IsGameWindowFocused||ui==null||ui->IsTextInputActive()||io.WantTextInput||ImGui.GetFrameCount()-shortcutCaptureDrawFrame>1||ImGui.IsKeyPressed(ImGuiKey.Escape,false))
+            if(!visible||!focused||ui==null||ui->IsTextInputActive()||io.WantTextInput||ImGui.GetFrameCount()-shortcutCaptureDrawFrame>1||Down(0x1B))
             {capturingShortcut=null;shortcutCapture=null;shortcutCaptureStatus="Shortcut capture cancelled.";return;}
-            var keys=ShortcutKeys.Where(k=>k!="None"&&Enum.TryParse<ImGuiKey>(k,out var code)&&ImGui.IsKeyDown(code)).ToArray();
-            var captured=shortcutCapture!.Step(keys,io.KeyCtrl,io.KeyAlt,io.KeyShift,io.KeySuper);
+            var keys=ShortcutKeys.Where(k=>k!="None"&&Down(ShortcutKeyMap.VirtualKey(k))).ToArray();
+            var captured=shortcutCapture!.Step(keys,ctrl,alt,shift,super);
             if(captured is not null)
             {
                 var name=capturingShortcut;
