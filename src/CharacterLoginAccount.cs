@@ -9,16 +9,40 @@ public sealed partial class Plugin
     private SharedRoster? loginWitnessRoster;
     private ulong loginWitnessCharacter;
     private string loginWitnessPairing = "";
+    private SharedRoster? loginResolvedRoster;
+    private string loginResolvedPairing = "";
+    private ulong[] loginLobbyCharacters = [];
+    private SharedRoster? loginLobbyRoster;
+    private string loginLobbyPairing = "";
+
+    private void RefreshLoginAccountWitnesses()
+    {
+        var roster = config.SharedRoster;
+        var scope = LoginPairingScope();
+        if (ReferenceEquals(roster, loginResolvedRoster) && scope == loginResolvedPairing) return;
+        loginResolvedRoster = roster; loginResolvedPairing = scope;
+        if (loginAccountLinks.Refresh(scope, roster, config.LoginAccountGroups)) SaveConfiguration();
+    }
 
     private void ObserveLoginAccountWitness(ulong contentId)
     {
         var roster = config.SharedRoster;
-        if (roster is null || contentId == 0) return;
+        if (contentId == 0) return;
         var scope = LoginPairingScope();
         if (contentId == loginWitnessCharacter && ReferenceEquals(roster, loginWitnessRoster) && scope == loginWitnessPairing) return;
         loginWitnessCharacter = contentId; loginWitnessRoster = roster; loginWitnessPairing = scope;
         if (loginAccountLinks.Observe(scope, roster, contentId.ToString(System.Globalization.CultureInfo.InvariantCulture), config.LoginAccountGroups))
             SaveConfiguration();
+    }
+
+    private void ObserveLoginAccountList(ulong[] contentIds)
+    {
+        var roster = config.SharedRoster;
+        var scope = LoginPairingScope();
+        if (ReferenceEquals(roster, loginLobbyRoster) && scope == loginLobbyPairing && contentIds.SequenceEqual(loginLobbyCharacters)) return;
+        loginLobbyCharacters = contentIds; loginLobbyRoster = roster; loginLobbyPairing = scope;
+        if (loginAccountLinks.ObserveMany(scope, roster,
+            contentIds.Select(id => id.ToString(System.Globalization.CultureInfo.InvariantCulture)), config.LoginAccountGroups)) SaveConfiguration();
     }
     private string loginPairingKey = "", loginPairingScope = "";
     private DateTimeOffset characterAccountProbeAt;
@@ -34,7 +58,11 @@ public sealed partial class Plugin
     {
         if (now < nextLoginObservation) return;
         nextLoginObservation = now.AddMilliseconds(250);
+        RefreshLoginAccountWitnesses();
         RememberLoadedLoginAccount();
+        // A ready character list can identify a fresh client before the first
+        // Switch button click. This path is cached and never initiates travel.
+        if (!Player.IsLoaded && !Client.IsLoggedIn) CurrentCharacterSwitchScope(ReadCharacterLoginMode());
     }
 
     private unsafe string RememberLoadedLoginAccount()
@@ -98,13 +126,15 @@ public sealed partial class Plugin
 
     private unsafe (string PersonId, string PersonName, string AccountId, string AccountName) CurrentCharacterSwitchScope(CharacterLoginMode mode, bool refresh = false)
     {
+        RefreshLoginAccountWitnesses();
         if (Player.IsLoaded)
         {
             RememberLoadedLoginAccount();
             return CharacterSwitchScope(CurrentSharedCharacter()?.Id ?? "");
         }
-        if (mode is not (CharacterLoginMode.Title or CharacterLoginMode.CharacterSelect) || config.SharedRoster is not {} roster)
+        if (mode is not (CharacterLoginMode.Title or CharacterLoginMode.CharacterSelect))
             return CharacterSwitchScope("");
+        var roster = config.SharedRoster;
         var lobby = AgentLobby.Instance();
         if (lobby == null) return CharacterSwitchScope("");
         var now = DateTimeOffset.UtcNow;
@@ -132,7 +162,9 @@ public sealed partial class Plugin
                     ids.Add(character->ContentId);
             }
             contentIds = ids.ToArray();
+            ObserveLoginAccountList(contentIds);
         }
+        if (roster is null) return characterAccountScope;
         var scope = mode == CharacterLoginMode.Title
             ? characterLoginAccount.ResolveTitle(roster, config.PairingKey)
             : characterLoginAccount.Resolve(roster, config.PairingKey, lobby->ServiceAccountIndex, contentIds);
@@ -140,11 +172,6 @@ public sealed partial class Plugin
         if (contentIds is not null)
         {
             var ids = contentIds.Select(id => id.ToString(System.Globalization.CultureInfo.InvariantCulture)).ToHashSet();
-            // Resolve already established one account for this ready list. One
-            // exact CID is sufficient; avoid rescanning every visible character.
-            var witness = roster.People.Where(p => p.Id == known.Person).SelectMany(p => p.Characters)
-                .FirstOrDefault(c => c.AccountId == known.Account && ids.Contains(c.ContentId));
-            if (ulong.TryParse(witness?.ContentId, out var witnessId)) ObserveLoginAccountWitness(witnessId);
             var keys = roster.People.SelectMany(p => p.Characters).Where(c => ids.Contains(c.ContentId))
                 .Select(c => c.GameAccountKey).Where(k => !string.IsNullOrEmpty(k)).Distinct().Take(2).ToArray();
             if (keys.Length == 1) ObserveSquareEnixLogin(keys[0]);

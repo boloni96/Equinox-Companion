@@ -9,6 +9,10 @@ internal sealed class LoginAccountLinks
 {
     private string pairing = "";
     private readonly List<LoginAccountWitness> session = [];
+    // Native character IDs can arrive before the first shared roster. Keep this
+    // process's evidence until it can be matched; never restore it on restart.
+    private readonly HashSet<string> pendingCharacters = [];
+    private const int MaxPendingCharacters = 1024;
     private static bool ValidPairing(string scope) => scope.Length == 64 && scope.All(char.IsAsciiHexDigit);
     private static bool SameAccount(LoginAccountWitness a, LoginAccountWitness b) => a.PersonId == b.PersonId && a.AccountId == b.AccountId;
 
@@ -17,6 +21,7 @@ internal sealed class LoginAccountLinks
         if (pairing == scope) return;
         pairing = scope;
         session.Clear();
+        pendingCharacters.Clear();
     }
 
     private static LoginAccountWitness? Find(SharedRoster roster, string contentId)
@@ -34,14 +39,40 @@ internal sealed class LoginAccountLinks
     // Call only with a loaded local character or a current ready lobby list.
     // Clicking a confirmation, saved labels, native indices and paired remote
     // observations are never sufficient to create a link.
-    public bool Observe(string scope, SharedRoster roster, string contentId, List<LoginAccountGroup> groups)
+    public bool Observe(string scope, SharedRoster? roster, string contentId, List<LoginAccountGroup> groups) =>
+        ObserveMany(scope, roster, [contentId], groups);
+
+    public bool ObserveMany(string scope, SharedRoster? roster, IEnumerable<string> contentIds, List<LoginAccountGroup> groups)
     {
         UsePairing(scope);
         if (!ValidPairing(scope)) return false;
+        if (roster is not null) session.RemoveAll(w => !ValidWitness(roster, w));
+        foreach (var contentId in contentIds)
+        {
+            if (!ulong.TryParse(contentId, out var id) || id == 0) continue;
+            if (roster is not null && Find(roster, contentId) is {} observed)
+            {
+                pendingCharacters.Remove(contentId);
+                if (!session.Any(w => SameAccount(w, observed))) session.Add(observed);
+            }
+            else if (pendingCharacters.Count < MaxPendingCharacters) pendingCharacters.Add(contentId);
+        }
+        return Refresh(scope, roster, groups);
+    }
+
+    // Called when the roster changes, including after logout. Remote records
+    // can resolve prior local evidence but cannot create a local login witness.
+    public bool Refresh(string scope, SharedRoster? roster, List<LoginAccountGroup> groups)
+    {
+        UsePairing(scope);
+        if (!ValidPairing(scope) || roster is null) return false;
         session.RemoveAll(w => !ValidWitness(roster, w));
-        var observed = Find(roster, contentId);
-        if (observed is null || session.Any(w => SameAccount(w, observed))) return false;
-        session.Add(observed);
+        foreach (var contentId in pendingCharacters.ToArray())
+        {
+            if (Find(roster, contentId) is not {} observed) continue;
+            pendingCharacters.Remove(contentId);
+            if (!session.Any(w => SameAccount(w, observed))) session.Add(observed);
+        }
         if (session.Count < 2) return false;
 
         var joined = session.ToList();
