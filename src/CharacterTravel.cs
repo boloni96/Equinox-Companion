@@ -9,6 +9,24 @@ public sealed partial class Plugin
  private ulong characterSwitchFrom;
  private ulong characterSwitchConfirmFrom;
  private string characterSwitchConfirmScope="",characterSwitchConfirmKey="",characterSwitchConfirmTarget="";
+ private SharedCharacter? characterSwitchTarget;
+ private CharacterLoginMode characterLoginMode;
+ private DateTimeOffset characterLoginProbeAt;
+ private CharacterLoginMode ReadCharacterLoginMode(bool refresh=false)
+ {
+  if(Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]||Conditions[ConditionFlag.BoundByDuty])return CharacterLoginMode.Unavailable;
+  if(Player.IsLoaded&&Player.ContentId!=0)return CharacterLoginMode.InGame;
+  if(Client.IsLoggedIn)return CharacterLoginMode.Unavailable;
+  var now=DateTimeOffset.UtcNow;
+  if(!refresh&&now<characterLoginProbeAt)return characterLoginMode;
+  characterLoginProbeAt=now.AddMilliseconds(500);characterLoginMode=CharacterLoginMode.Unavailable;
+  try{
+   if(LifestreamBusy())return characterLoginMode;
+   if(Pi.GetIpcSubscriber<bool>("Lifestream.CanAutoLogin").InvokeFunc())characterLoginMode=CharacterLoginMode.Title;
+   else if(Pi.GetIpcSubscriber<bool>("Lifestream.CanInitiateTravelFromCharaSelectList").InvokeFunc())characterLoginMode=CharacterLoginMode.CharacterSelect;
+  }catch{/* Optional Lifestream login IPC is unavailable; keep the saved roster usable. */}
+  return characterLoginMode;
+ }
  private (string PersonId,string PersonName,string AccountId,string AccountName) CharacterSwitchScope(string id){
   foreach(var p in config.SharedRoster?.People??[])if(p.Characters.FirstOrDefault(c=>c.Id==id) is {} c)return(p.Id,p.Name,c.AccountId,c.Account);
   return("","Unknown person","","Unknown account");
@@ -20,14 +38,14 @@ public sealed partial class Plugin
  }
  private static string SwitchScopeKey((string PersonId,string PersonName,string AccountId,string AccountName) scope)=>scope.PersonId+"|"+scope.AccountId;
  private bool CharacterSwitchConsentCurrent(SharedCharacter character,(string PersonId,string PersonName,string AccountId,string AccountName) from,(string PersonId,string PersonName,string AccountId,string AccountName) to)=>
-  Player.IsLoaded&&Player.ContentId==characterSwitchConfirmFrom&&config.PairingKey==characterSwitchConfirmKey&&character.Id==characterSwitchConfirmTarget&&characterSwitchConfirmScope==SwitchScopeKey(from)+">"+SwitchScopeKey(to);
+  CharacterLoginPolicy.SameSource(characterSwitchConfirmFrom,Player.IsLoaded,Player.ContentId)&&config.PairingKey==characterSwitchConfirmKey&&character.Id==characterSwitchConfirmTarget&&characterSwitchConfirmScope==SwitchScopeKey(from)+">"+SwitchScopeKey(to);
  private void SwitchSharedCharacter(SharedCharacter character,bool confirmed=false)
  {
-  if(!Player.IsLoaded||Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]||Conditions[ConditionFlag.BoundByDuty]){characterTravelStatus="Leave combat, loading or your duty before switching characters.";return;}
+  var mode=ReadCharacterLoginMode(true);
+  if(mode==CharacterLoginMode.Unavailable){characterTravelStatus=Player.IsLoaded?"Leave combat, loading or your duty before switching characters.":"Wait for the title or character-selection screen and enable Lifestream before logging in.";return;}
   if(DateTimeOffset.UtcNow<characterSwitchUntil){characterTravelStatus="A character switch is already requested.";return;}
   if(followSession.Armed){characterTravelStatus="Stop FollowThem before switching characters.";return;}
-  var actor=ReadActor();
-  if(CharacterTravelPolicy.IsCurrent(character,actor)){characterTravelStatus="You are already on this character.";return;}
+  if(mode==CharacterLoginMode.InGame&&CharacterTravelPolicy.IsCurrent(character,ReadActor())){characterTravelStatus="You are already on this character.";return;}
   var current=CurrentSharedCharacter();var from=CharacterSwitchScope(current?.Id??"");var to=CharacterSwitchScope(character.Id);
   if(CharacterTravelPolicy.NeedsConfirmation(from.PersonId,from.AccountId,to.PersonId,to.AccountId)&&(!confirmed||!CharacterSwitchConsentCurrent(character,from,to))){characterTravelStatus="Confirm the person/account change before switching. Check Lifestream’s service-account settings first.";return;}
   // Prefer the observed game identity over a manually decorated Journal name.
@@ -36,11 +54,15 @@ public sealed partial class Plugin
   if(!CharacterTravelPolicy.ValidTarget(name,world)){characterTravelStatus="A complete in-game character name and home world are needed. Sync this character first.";return;}
   try{
    if(shoppingTravel is not null||LifestreamBusy()){characterTravelStatus="Travel is already in progress.";return;}
-   Pi.GetIpcSubscriber<string,object>("Lifestream.ExecuteCommand").InvokeAction(name+"@"+world);
-   characterSwitchFrom=Player.ContentId;characterSwitchUntil=DateTimeOffset.UtcNow.AddMinutes(5);
-   characterTravelStatus=$"Switch requested: {name} @ {world}. Lifestream handles logout and login. The character must be accessible through this game login.";
+   var accepted=CharacterLoginPolicy.Request(mode,name,world,
+    command=>Pi.GetIpcSubscriber<string,object>("Lifestream.ExecuteCommand").InvokeAction(command),
+    (n,w)=>Pi.GetIpcSubscriber<string,string,bool>("Lifestream.ConnectAndLogin").InvokeFunc(n,w),
+    (n,w)=>Pi.GetIpcSubscriber<string,string,bool>("Lifestream.InitiateLoginFromCharaSelectScreen").InvokeFunc(n,w));
+   if(!accepted){characterTravelStatus=mode==CharacterLoginMode.CharacterSelect?"Lifestream could not find this character in the current list. Return to the title screen and choose Log in as this character again.":"Lifestream could not start login from this screen. Wait for the title menu and try again.";return;}
+   characterSwitchFrom=mode==CharacterLoginMode.InGame?Player.ContentId:0;characterSwitchTarget=character;characterSwitchUntil=DateTimeOffset.UtcNow.AddMinutes(5);
+   characterTravelStatus=$"{(mode==CharacterLoginMode.InGame?"Switch":"Login")} requested: {name} @ {world}. Lifestream uses this game login and its service-account settings.";
    PrintEquinox("[Equinox] "+characterTravelStatus);
-  }catch(Exception){characterTravelStatus="Lifestream is unavailable. Install or enable it before switching.";}
+  }catch(Exception){characterTravelStatus="Lifestream's character login is unavailable. Update or enable Lifestream and try again.";}
  }
  private DateTimeOffset goSeeNativeUntil;
  private unsafe bool TryGoSeeEstateTeleport(uint world,string district,int ward,int plot)
@@ -73,31 +95,31 @@ public sealed partial class Plugin
  }
  private void DrawCharacterTravel(SharedCharacter character,bool showHouses=true)
  {
-  if(characterSwitchUntil!=default&&Player.IsLoaded&&Player.ContentId!=characterSwitchFrom){characterSwitchUntil=default;characterTravelStatus="Character changed.";}
+  if(characterSwitchUntil!=default&&Player.IsLoaded&&Player.ContentId!=0&&Player.ContentId!=characterSwitchFrom){characterSwitchUntil=default;characterTravelStatus=characterSwitchTarget is {} requested&&CharacterTravelPolicy.IsCurrent(requested,ReadActor())?"Logged in as "+Player.CharacterName+".":"A different character logged in.";characterSwitchTarget=null;}
   var switching=DateTimeOffset.UtcNow<characterSwitchUntil;
-  ImGui.BeginDisabled(!Player.IsLoaded||switching);
-  if(ImGui.SmallButton("Switch to this Character")){
+  var mode=ReadCharacterLoginMode();
+  ImGui.BeginDisabled(mode==CharacterLoginMode.Unavailable||switching);
+  if(ImGui.SmallButton(CharacterLoginPolicy.Label(Player.IsLoaded))){
    characterTravelStatusOwner=character.Id;
    var current=CurrentSharedCharacter();var from=CharacterSwitchScope(current?.Id??"");var to=CharacterSwitchScope(character.Id);
    if(CharacterTravelPolicy.NeedsConfirmation(from.PersonId,from.AccountId,to.PersonId,to.AccountId)){
-    characterSwitchConfirmFrom=Player.ContentId;characterSwitchConfirmKey=config.PairingKey;characterSwitchConfirmTarget=character.Id;characterSwitchConfirmScope=SwitchScopeKey(from)+">"+SwitchScopeKey(to);ImGui.OpenPopup("Switch to another person or account?");
+    characterSwitchConfirmFrom=Player.IsLoaded?Player.ContentId:0;characterSwitchConfirmKey=config.PairingKey;characterSwitchConfirmTarget=character.Id;characterSwitchConfirmScope=SwitchScopeKey(from)+">"+SwitchScopeKey(to);ImGui.OpenPopup("Confirm character###EquinoxCharacterSwitch");
    }else SwitchSharedCharacter(character);
   }
-  if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))ImGui.SetTooltip("Log out and switch using Lifestream: "+character.Name+" @ "+character.World+"\nUses the current game login and Lifestream's service-account settings.");
+  if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))ImGui.SetTooltip((Player.IsLoaded?"Log out and switch using Lifestream: ":"Log in using Lifestream: ")+character.Name+" @ "+character.World+"\nUses the current game login and Lifestream's service-account settings."+(mode==CharacterLoginMode.Unavailable?"\nWait until loading finishes. At the title screen, Lifestream must be enabled.":mode==CharacterLoginMode.CharacterSelect?"\nThe character must be in the loaded list; use the title screen for another world or service account.":""));
   ImGui.EndDisabled();
-  if(ImGui.BeginPopupModal("Switch to another person or account?",ImGuiWindowFlags.AlwaysAutoResize)){
+  if(ImGui.BeginPopupModal("Confirm character###EquinoxCharacterSwitch",ImGuiWindowFlags.AlwaysAutoResize)){
    var current=CurrentSharedCharacter();var from=CharacterSwitchScope(current?.Id??"");var to=CharacterSwitchScope(character.Id);
-   ImGui.TextUnformatted("Are you sure you want to change to a different person or account?");
-   ImGui.TextUnformatted($"From: {current?.Name??"Unidentified character"} · {from.PersonName} / {from.AccountName}");
+   ImGui.TextUnformatted(characterSwitchConfirmFrom==0?"Log in as this character using the current game login?":"Change to a different Person or account?");
+   if(characterSwitchConfirmFrom!=0)ImGui.TextUnformatted($"From: {current?.Name??"Unidentified character"} · {from.PersonName} / {from.AccountName}");
    ImGui.TextUnformatted($"To: {character.Name} @ {character.World} · {to.PersonName} / {to.AccountName}");
-   ImGui.TextUnformatted("This logs out the current character. Another game login may be required.");
-   ImGui.TextUnformatted("Lifestream may not be configured for this person or service account.");
-   ImGui.TextUnformatted("Check its service-account settings before continuing. A different login may be needed.");
-   ImGui.TextUnformatted("Companion cannot verify those login settings or enter credentials.");
+   ImGui.TextUnformatted(characterSwitchConfirmFrom==0?"Current Person/account cannot be verified while logged out.":"This logs out the current character.");
+   ImGui.TextUnformatted("Check Lifestream's service-account settings for this Person/account.");
+   ImGui.TextUnformatted("A different game account still needs its own game login.");
    if(ImGui.Button("Cancel"))ImGui.CloseCurrentPopup();ImGui.SameLine();
    var unchanged=CharacterSwitchConsentCurrent(character,from,to);
-   ImGui.BeginDisabled(!unchanged);
-   if(ImGui.Button("Yes, switch character")){ImGui.CloseCurrentPopup();SwitchSharedCharacter(character,true);characterSwitchConfirmTarget="";}
+   ImGui.BeginDisabled(!unchanged||mode==CharacterLoginMode.Unavailable||switching);
+   if(ImGui.Button(characterSwitchConfirmFrom==0?"Yes, log in":"Yes, switch character")){ImGui.CloseCurrentPopup();SwitchSharedCharacter(character,true);characterSwitchConfirmTarget="";}
    ImGui.EndDisabled();if(!unchanged)ImGui.TextUnformatted("The current character or pairing changed. Cancel and choose again.");
    ImGui.EndPopup();
   }
