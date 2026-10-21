@@ -8,6 +8,7 @@ public sealed partial class Plugin
  private DateTimeOffset characterSwitchUntil;
  private ulong characterSwitchFrom;
  private ulong characterSwitchConfirmFrom;
+ private int characterSwitchConfirmServiceAccount=-1;
  private string characterSwitchConfirmScope="",characterSwitchConfirmKey="",characterSwitchConfirmTarget="";
  private SharedCharacter? characterSwitchTarget;
  private CharacterLoginMode characterLoginMode;
@@ -38,7 +39,7 @@ public sealed partial class Plugin
  }
  private static string SwitchScopeKey((string PersonId,string PersonName,string AccountId,string AccountName) scope)=>scope.PersonId+"|"+scope.AccountId;
  private bool CharacterSwitchConsentCurrent(SharedCharacter character,(string PersonId,string PersonName,string AccountId,string AccountName) from,(string PersonId,string PersonName,string AccountId,string AccountName) to)=>
-  CharacterLoginPolicy.SameSource(characterSwitchConfirmFrom,Player.IsLoaded,Player.ContentId)&&config.PairingKey==characterSwitchConfirmKey&&character.Id==characterSwitchConfirmTarget&&characterSwitchConfirmScope==SwitchScopeKey(from)+">"+SwitchScopeKey(to);
+  CharacterLoginPolicy.SameSource(characterSwitchConfirmFrom,Player.IsLoaded,Player.ContentId)&&(characterSwitchConfirmFrom!=0||characterSwitchConfirmServiceAccount==CurrentLoginServiceAccount())&&config.PairingKey==characterSwitchConfirmKey&&character.Id==characterSwitchConfirmTarget&&characterSwitchConfirmScope==SwitchScopeKey(from)+">"+SwitchScopeKey(to);
  private void SwitchSharedCharacter(SharedCharacter character,bool confirmed=false)
  {
   var mode=ReadCharacterLoginMode(true);
@@ -46,7 +47,7 @@ public sealed partial class Plugin
   if(DateTimeOffset.UtcNow<characterSwitchUntil){characterTravelStatus="A character switch is already requested.";return;}
   if(followSession.Armed){characterTravelStatus="Stop FollowThem before switching characters.";return;}
   if(mode==CharacterLoginMode.InGame&&CharacterTravelPolicy.IsCurrent(character,ReadActor())){characterTravelStatus="You are already on this character.";return;}
-  var current=CurrentSharedCharacter();var from=CharacterSwitchScope(current?.Id??"");var to=CharacterSwitchScope(character.Id);
+  var from=CurrentCharacterSwitchScope(mode,true);var to=CharacterSwitchScope(character.Id);
   if(CharacterTravelPolicy.NeedsConfirmation(from.PersonId,from.AccountId,to.PersonId,to.AccountId)&&(!confirmed||!CharacterSwitchConsentCurrent(character,from,to))){characterTravelStatus="Confirm the person/account change before switching. Check Lifestream’s service-account settings first.";return;}
   // Prefer the observed game identity over a manually decorated Journal name.
   var observed=config.Discoveries.LastOrDefault(e=>e.Actor.ContentId==character.ContentId)?.Actor;
@@ -101,26 +102,29 @@ public sealed partial class Plugin
   ImGui.BeginDisabled(mode==CharacterLoginMode.Unavailable||switching);
   if(ImGui.SmallButton(CharacterLoginPolicy.Label(Player.IsLoaded))){
    characterTravelStatusOwner=character.Id;
-   var current=CurrentSharedCharacter();var from=CharacterSwitchScope(current?.Id??"");var to=CharacterSwitchScope(character.Id);
+   var from=CurrentCharacterSwitchScope(ReadCharacterLoginMode(true),true);var to=CharacterSwitchScope(character.Id);
    if(CharacterTravelPolicy.NeedsConfirmation(from.PersonId,from.AccountId,to.PersonId,to.AccountId)){
-    characterSwitchConfirmFrom=Player.IsLoaded?Player.ContentId:0;characterSwitchConfirmKey=config.PairingKey;characterSwitchConfirmTarget=character.Id;characterSwitchConfirmScope=SwitchScopeKey(from)+">"+SwitchScopeKey(to);ImGui.OpenPopup("Confirm character###EquinoxCharacterSwitch");
+    characterSwitchConfirmFrom=Player.IsLoaded?Player.ContentId:0;characterSwitchConfirmServiceAccount=CurrentLoginServiceAccount();characterSwitchConfirmKey=config.PairingKey;characterSwitchConfirmTarget=character.Id;characterSwitchConfirmScope=SwitchScopeKey(from)+">"+SwitchScopeKey(to);ImGui.OpenPopup("Confirm character###EquinoxCharacterSwitch");
    }else SwitchSharedCharacter(character);
   }
   if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))ImGui.SetTooltip((Player.IsLoaded?"Log out and switch using Lifestream: ":"Log in using Lifestream: ")+character.Name+" @ "+character.World+"\nUses the current game login and Lifestream's service-account settings."+(mode==CharacterLoginMode.Unavailable?"\nWait until loading finishes. At the title screen, Lifestream must be enabled.":mode==CharacterLoginMode.CharacterSelect?"\nThe character must be in the loaded list; use the title screen for another world or service account.":""));
   ImGui.EndDisabled();
   if(ImGui.BeginPopupModal("Confirm character###EquinoxCharacterSwitch",ImGuiWindowFlags.AlwaysAutoResize)){
-   var current=CurrentSharedCharacter();var from=CharacterSwitchScope(current?.Id??"");var to=CharacterSwitchScope(character.Id);
-   ImGui.TextUnformatted(characterSwitchConfirmFrom==0?"Log in as this character using the current game login?":"Change to a different Person or account?");
+   var current=CurrentSharedCharacter();var from=CurrentCharacterSwitchScope(mode);var to=CharacterSwitchScope(character.Id);
+   var knownAccount=from.PersonId.Length>0&&from.AccountId.Length>0;
+   ImGui.TextUnformatted(characterSwitchConfirmFrom!=0||knownAccount?"Change to a different Person or account?":"Log in as this character using the current game login?");
    if(characterSwitchConfirmFrom!=0)ImGui.TextUnformatted($"From: {current?.Name??"Unidentified character"} · {from.PersonName} / {from.AccountName}");
+   else if(knownAccount)ImGui.TextUnformatted($"From: {from.PersonName} / {from.AccountName}");
    ImGui.TextUnformatted($"To: {character.Name} @ {character.World} · {to.PersonName} / {to.AccountName}");
-   ImGui.TextUnformatted(characterSwitchConfirmFrom==0?"Current Person/account cannot be verified while logged out.":"This logs out the current character.");
+   if(characterSwitchConfirmFrom!=0)ImGui.TextUnformatted("This logs out the current character.");
+   else if(!knownAccount)ImGui.TextUnformatted("Current account is not verified yet. Open your character list or log in once to identify it.");
    ImGui.TextUnformatted("Check Lifestream's service-account settings for this Person/account.");
    ImGui.TextUnformatted("A different game account still needs its own game login.");
    if(ImGui.Button("Cancel"))ImGui.CloseCurrentPopup();ImGui.SameLine();
    var unchanged=CharacterSwitchConsentCurrent(character,from,to);
    ImGui.BeginDisabled(!unchanged||mode==CharacterLoginMode.Unavailable||switching);
    if(ImGui.Button(characterSwitchConfirmFrom==0?"Yes, log in":"Yes, switch character")){ImGui.CloseCurrentPopup();SwitchSharedCharacter(character,true);characterSwitchConfirmTarget="";}
-   ImGui.EndDisabled();if(!unchanged)ImGui.TextUnformatted("The current character or pairing changed. Cancel and choose again.");
+   ImGui.EndDisabled();if(!unchanged)ImGui.TextUnformatted("The current character, account or pairing changed. Cancel and choose again.");
    ImGui.EndPopup();
   }
   if(showHouses)DrawCharacterHouseIcons(character);

@@ -31,6 +31,7 @@ public sealed partial class Plugin
             // Only a journal-scoped fingerprint leaves the game; never raw account IDs or session data.
             var identity = $"equinox-account-v1:{characterState->AccountId}:{lobby->ServiceAccountIndex}";
             accountKey = Convert.ToHexString(HMACSHA256.HashData(Encoding.UTF8.GetBytes(config.PairingKey), Encoding.UTF8.GetBytes(identity))).ToLowerInvariant();
+            characterLoginAccount.Remember(config.PairingKey, lobby->ServiceAccountIndex, characterState->ContentId);
         }
         var ps = &state->PlayerState;
         var lang = Dalamud.Game.ClientLanguage.English;
@@ -61,3 +62,4 @@ public sealed partial class Plugin
         return details with { AccountKey = accountKey, Msq15Complete = msq15, FcMember = membership, Nameday = nameday, Guardian = guardian, CityState = town, GrandCompany = company };
     }
 }
+
