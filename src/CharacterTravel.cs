@@ -107,8 +107,9 @@ public sealed partial class Plugin
     characterSwitchConfirmFrom=Player.IsLoaded?Player.ContentId:0;characterSwitchConfirmServiceAccount=CurrentLoginServiceAccount();characterSwitchConfirmKey=config.PairingKey;characterSwitchConfirmTarget=character.Id;characterSwitchConfirmScope=SwitchScopeKey(from)+">"+SwitchScopeKey(to);ImGui.OpenPopup("Confirm character###EquinoxCharacterSwitch");
    }else SwitchSharedCharacter(character);
   }
-  if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))ImGui.SetTooltip((Player.IsLoaded?"Log out and switch using Lifestream: ":"Log in using Lifestream: ")+character.Name+" @ "+character.World+"\nUses the current game login and Lifestream's service-account settings."+(mode==CharacterLoginMode.Unavailable?"\nWait until loading finishes. At the title screen, Lifestream must be enabled.":mode==CharacterLoginMode.CharacterSelect?"\nThe character must be in the loaded list; use the title screen for another world or service account.":""));
+  var travelHovered=ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled);
   ImGui.EndDisabled();
+  if(travelHovered)DrawCharacterTravelTooltip(character,mode,switching);
   if(ImGui.BeginPopupModal("Confirm character###EquinoxCharacterSwitch",ImGuiWindowFlags.AlwaysAutoResize)){
    var current=CurrentSharedCharacter();var from=CurrentCharacterSwitchScope(mode);var to=CharacterSwitchScope(character.Id);
    var knownAccount=from.PersonId.Length>0&&from.AccountId.Length>0;
@@ -130,6 +131,31 @@ public sealed partial class Plugin
   if(showHouses)DrawCharacterHouseIcons(character);
   if(switching){ImGui.SameLine();if(ImGui.SmallButton("Stop switch")){bringTrip=null;try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}characterSwitchUntil=default;characterTravelStatus="Switch queue stopped. If already logged out, select a character in game.";}}
   if(characterTravelStatusOwner==character.Id){if(characterTravelStatus.Length>0)ImGui.TextWrapped(characterTravelStatus);DrawGoSeeHomeStop();}
+ }
+ private void DrawCharacterTravelTooltip(SharedCharacter character,CharacterLoginMode mode,bool switching)
+ {
+  // Use the same account evidence and decision as the button; hover never starts travel.
+  var from=CurrentCharacterSwitchScope(mode);var to=CharacterSwitchScope(character.Id);
+  var currentKnown=!string.IsNullOrWhiteSpace(from.PersonId)&&!string.IsNullOrWhiteSpace(from.AccountId);
+  var targetKnown=!string.IsNullOrWhiteSpace(to.PersonId)&&!string.IsNullOrWhiteSpace(to.AccountId);
+  var verified=currentKnown&&targetKnown;
+  var same=verified&&!CharacterTravelPolicy.NeedsConfirmation(from.PersonId,from.AccountId,to.PersonId,to.AccountId);
+  ImGui.BeginTooltip();ImGui.PushTextWrapPos(ImGui.GetFontSize()*28);
+  ImGui.TextUnformatted(character.Name+" @ "+character.World);
+  if(same)ImGui.TextColored(new Vector4(.45f,.85f,.63f,1),"Same account · no account confirmation");
+  else if(verified)ImGui.TextColored(new Vector4(1,.75f,.35f,1),"Different Person/account · confirmation required");
+  else ImGui.TextDisabled("Account not verified · confirmation required");
+  ImGui.TextUnformatted("Current: "+(currentKnown?from.PersonName+" / "+from.AccountName:"Not verified"));
+  ImGui.TextUnformatted("Target: "+(targetKnown?to.PersonName+" / "+to.AccountName:"Not verified"));
+  ImGui.Separator();
+  ImGui.TextWrapped(Player.IsLoaded?"Log out and switch using Lifestream.":"Log in using Lifestream and the current game login.");
+  if(verified&&!same)ImGui.TextWrapped("Check Lifestream's service-account settings. A different game account needs its own game login.");
+  else if(!currentKnown)ImGui.TextWrapped("Open your character list or log in once to identify the current account.");
+  if(!targetKnown)ImGui.TextWrapped("Sync this character's Person/account information first.");
+  if(switching)ImGui.TextWrapped("A character switch is already requested.");
+  else if(mode==CharacterLoginMode.Unavailable)ImGui.TextWrapped(Player.IsLoaded?"Unavailable during combat, duties or loading.":"Wait for the title or character-selection screen and enable Lifestream.");
+  else if(mode==CharacterLoginMode.CharacterSelect)ImGui.TextWrapped("The character must be in the loaded list. Use the title screen for another world or service account.");
+  ImGui.PopTextWrapPos();ImGui.EndTooltip();
  }
  private static string CharacterHouseRole(SharedCharacter character,SharedHouse house)
  {
