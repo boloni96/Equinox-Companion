@@ -20,6 +20,7 @@ public sealed partial class Plugin
  private string testingPairingKey="";
  private TestingLocal testingState=new();private string testingScope="",testingRequestScope="",testingRequestId="",testingMessage="Open the checklist to connect.",testingReceived="";
  private Task<TestingResponse>? testingRequest;private DateTimeOffset testingNext,testingPoll;
+ private string testingSelectedBase="";
  private string testingSearch="",testingCategory="",testingFilter="",testingName="",testingNotes="",testingSelected="";private bool testingArchive;
  private readonly Dictionary<string,TestReport[]> testingReportsByTest=[];private readonly Dictionary<string,TestReport[]> testingCurrentByTest=[];
  private PlayTest[] testingVisible=[];private readonly Dictionary<string,(string Status,bool Retest)> testingSummaries=[];
@@ -45,7 +46,7 @@ public sealed partial class Plugin
    if(testingRequestScope==testingScope){
     var before=testingState;
     if(reply.Page is {} page){testingState=TestingPolicy.Apply(testingState,page);testingReceived=now.ToLocalTime().ToString("g");testingMessage=(testingState.Pending??[]).Any(p=>p.Blocked.Length>0)?"Needs review · a saved test report conflicts":page.More?"Loading report history…":"Synced · results received from Cloudflare";}
-    if(reply.Report is {} report){testingState=TestingPolicy.Acknowledge(testingState,report);testingMessage="Synced · report saved in Cloudflare";}
+    if(reply.Report is {} report){testingState=TestingPolicy.Acknowledge(testingState,report);var draftKey=testingScope+"|"+report.TesterId+"|"+report.TestId+"|"+report.TestRevision;if(config.TestingDrafts.GetValueOrDefault(draftKey)==report.Notes){config.TestingDrafts.Remove(draftKey);config.TestingDraftBases.Remove(draftKey);}if(testingSelected==report.TestId&&config.TestingTesterId==report.TesterId&&testingNotes==report.Notes)testingSelectedBase=report.Id;testingMessage="Synced · report saved in Cloudflare";}
     if(reply.Error.Length>0){testingMessage=reply.Error;if(reply.Conflict&&testingRequestId.Length>0)testingState=testingState with {Pending=(testingState.Pending??[]).Select(p=>p.Report.Id==testingRequestId?p with {Blocked=reply.Error}:p).ToArray()};}
     if(!ReferenceEquals(before,testingState)){SaveTesting();RebuildTesting();}
     testingNext=now.AddSeconds(reply.Error.Length>0?10:reply.Page?.More==true||reply.Report is not null?0:5);
@@ -59,7 +60,7 @@ public sealed partial class Plugin
   testingRequest=pending is not null?testingSync.Send(config.PairingKey,pending.Report):testingSync.Read(config.PairingKey,testingState.Cursor);testingNext=now.AddSeconds(5);
  }
  private IEnumerable<(string Id,string Name)> TestingPeople()=>(config.SharedRoster?.People??[]).Select(p=>(Id:"person:"+p.Id,Name:p.Name)).Concat((testingState.Reports??[]).Select(r=>(Id:r.TesterId,Name:r.TesterName))).Concat(config.TestingTesterId.Length>0?[(config.TestingTesterId,config.TestingTesterName)]:Array.Empty<(string,string)>()).DistinctBy(p=>p.Item1);
- private void SelectTest(PlayTest t){testingSelected=t.Id;var mine=(testingCurrentByTest.GetValueOrDefault(t.Id)??[]).FirstOrDefault(r=>r.TesterId==config.TestingTesterId);testingNotes=(testingState.Pending??[]).FirstOrDefault(p=>p.Report.TestId==t.Id&&p.Report.TesterId==config.TestingTesterId)?.Report.Notes??config.TestingDrafts.GetValueOrDefault(TestingDraftKey(t))??mine?.Notes??"";}
+ private void SelectTest(PlayTest t){testingSelected=t.Id;var mine=(testingCurrentByTest.GetValueOrDefault(t.Id)??[]).FirstOrDefault(r=>r.TesterId==config.TestingTesterId);testingSelectedBase=config.TestingDraftBases.GetValueOrDefault(TestingDraftKey(t))??mine?.Id??"";testingNotes=(testingState.Pending??[]).FirstOrDefault(p=>p.Report.TestId==t.Id&&p.Report.TesterId==config.TestingTesterId)?.Report.Notes??config.TestingDrafts.GetValueOrDefault(TestingDraftKey(t))??mine?.Notes??"";}
  private string TestingDraftKey(PlayTest t)=>testingScope+"|"+config.TestingTesterId+"|"+t.Id+"|"+t.Revision;
  private void DrawTesting()
  {
@@ -92,17 +93,17 @@ public sealed partial class Plugin
   ImGui.TextWrapped(t.Steps);ImGui.TextDisabled(t.When+" · revision "+t.Revision);
   var mine=(testingCurrentByTest.GetValueOrDefault(t.Id)??[]).FirstOrDefault(r=>r.TesterId==config.TestingTesterId);var pending=(testingState.Pending??[]).FirstOrDefault(p=>p.Report.TestId==t.Id&&p.Report.TesterId==config.TestingTesterId);
   ImGui.TextUnformatted(pending is null?"Your result: "+TestingPolicy.Label(mine?.Status??""):pending.Blocked.Length>0?"Needs review · your draft is kept":"Saving… · kept on this device");
-  if(ImGui.InputTextMultiline("##testNotes"+t.Id,ref testingNotes,4000,new Vector2(-1,58))){config.TestingDrafts[TestingDraftKey(t)]=testingNotes;SaveConfiguration();}
+  if(ImGui.InputTextMultiline("##testNotes"+t.Id,ref testingNotes,4000,new Vector2(-1,58))){config.TestingDraftBases.TryAdd(TestingDraftKey(t),testingSelectedBase);config.TestingDrafts[TestingDraftKey(t)]=testingNotes;SaveConfiguration();}
   ImGui.BeginDisabled(t.Archived||config.TestingTesterId.Length==0||pending is not null);
   foreach(var result in new[]{"pass","fail","later","not-tested"}){if(result!="pass")ImGui.SameLine();if(ImGui.Button(TestingPolicy.Label(result)+"##"+t.Id))QueueTest(t,result);}
   ImGui.EndDisabled();
-  if(pending?.Blocked.Length>0){ImGui.TextWrapped(pending.Blocked);if(ImGui.Button("Keep my draft and retry##"+t.Id)){testingState=testingState with {Pending=(testingState.Pending??[]).Where(p=>p.Report.Id!=pending.Report.Id).ToArray()};QueueTest(t,pending.Report.Status);}if(ImGui.IsItemHovered())ImGui.SetTooltip("Read the latest tester results below first. Saves your notes as a new report against the current result and test revision.");}
+  if(pending?.Blocked.Length>0){ImGui.TextWrapped(pending.Blocked);if(ImGui.Button("Keep my draft and retry##"+t.Id)){testingState=testingState with {Pending=(testingState.Pending??[]).Where(p=>p.Report.Id!=pending.Report.Id).ToArray()};testingSelectedBase=mine?.Id??"";config.TestingDraftBases[TestingDraftKey(t)]=testingSelectedBase;QueueTest(t,pending.Report.Status);}if(ImGui.IsItemHovered())ImGui.SetTooltip("Read the latest tester results below first. Saves your notes as a new report against the current result and test revision.");}
   if(ImGui.TreeNode("Tester results & history##"+t.Id)){foreach(var r in (testingReportsByTest.GetValueOrDefault(t.Id)??[]).Reverse()){ImGui.TextWrapped(r.TesterName+" · "+TestingPolicy.Label(r.Status)+" · "+(DateTimeOffset.TryParse(r.At,out var at)?at.ToLocalTime().ToString("g"):r.At));if(ImGui.IsItemHovered())ImGui.SetTooltip($"Test revision {r.TestRevision} · {r.Source}\nCompanion: {r.PluginVersion}\nJournal: {r.JournalVersion}\nServer: {r.WorkerVersion}");if(r.Notes.Length>0)ImGui.TextWrapped(r.Notes);}ImGui.TreePop();}
  }
  private void QueueTest(PlayTest test,string status)
  {
   var mine=(testingCurrentByTest.GetValueOrDefault(test.Id)??[]).FirstOrDefault(r=>r.TesterId==config.TestingTesterId);
-  var report=new TestReport(Guid.NewGuid().ToString(),test.Id,test.Revision,config.TestingTesterId,config.TestingTesterName,status,testingNotes,typeof(Plugin).Assembly.GetName().Version?.ToString()??"",testingState.ServerVersion,testingState.ServerVersion,"plugin",mine?.Id??"");
+  var report=new TestReport(Guid.NewGuid().ToString(),test.Id,test.Revision,config.TestingTesterId,config.TestingTesterName,status,testingNotes,typeof(Plugin).Assembly.GetName().Version?.ToString()??"",testingState.ServerVersion,testingState.ServerVersion,"plugin",config.TestingDraftBases.GetValueOrDefault(TestingDraftKey(test))??testingSelectedBase);
   testingState=testingState with {Pending=[..testingState.Pending??[],new(report)]};SaveTesting();testingMessage="Saving… · report queued locally";testingNext=default;
  }
  private void ExportTesting()

@@ -5,6 +5,7 @@ public sealed class Configuration : IPluginConfiguration
 {
     public Dictionary<string, TestingLocal> TestingByPairing { get; set; } = [];
     public Dictionary<string, string> TestingDrafts { get; set; } = [];
+    public Dictionary<string,string> TestingDraftBases { get; set; } = [];
     public string TestingTesterId { get; set; } = "";
     public string TestingTesterName { get; set; } = "";
     public bool RememberCameraHeight { get; set; }
