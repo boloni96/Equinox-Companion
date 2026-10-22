@@ -1225,6 +1225,7 @@ public sealed partial class Plugin : IDalamudPlugin
 
     public void Dispose()
     {
+        if (titleLoginProbe.Active) StopTitleLoginCheck("Login check stopped because Companion is unloading.");
         DisposeMaintenanceNotices();
         CancelMarketShopping();
         catalogueQuests?.Dispose(); catalogueHair?.Dispose();
@@ -1286,3 +1287,4 @@ public sealed partial class Plugin : IDalamudPlugin
         FlushConfiguration();
     }
 }
+

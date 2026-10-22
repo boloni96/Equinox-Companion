@@ -60,6 +60,7 @@ public sealed partial class Plugin
         nextLoginObservation = now.AddMilliseconds(250);
         RefreshLoginAccountWitnesses();
         RememberLoadedLoginAccount();
+        UpdateTitleLoginCheck(now);
         // A ready character list can identify a fresh client before the first
         // Switch button click. This path is cached and never initiates travel.
         if (!Player.IsLoaded && !Client.IsLoggedIn) CurrentCharacterSwitchScope(ReadCharacterLoginMode());
@@ -184,3 +185,4 @@ public sealed partial class Plugin
             : CharacterSwitchScope("");
     }
 }
+
