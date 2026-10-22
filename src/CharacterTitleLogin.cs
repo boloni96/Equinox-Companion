@@ -4,6 +4,7 @@ namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
     private readonly CharacterLoginProbe titleLoginProbe = new();
+    private DateTimeOffset nextTitleLoginCheck;
 
     private LoginProbeTarget? TitleLoginTarget(string id)
     {
@@ -20,6 +21,12 @@ public sealed partial class Plugin
     private void StartTitleLoginCheck(SharedCharacter character)
     {
         if (titleLoginProbe.Active || DateTimeOffset.UtcNow < characterSwitchUntil) return;
+        var mode = ReadCharacterLoginMode(true);
+        var from = CurrentCharacterSwitchScope(mode, true);
+        var to = CharacterSwitchScope(character.Id);
+        if (mode != CharacterLoginMode.Title || CharacterLoginPolicy.Action(mode, LoginRelationship(character, from, to),
+                true, CharacterSwitchConsentCurrent(character, from, to)) != CharacterLoginAction.CheckList)
+        { characterTravelStatus = "Confirm the current login before checking another account. No Lifestream request was sent."; return; }
         var target = TitleLoginTarget(character.Id);
         if (target is null) { characterTravelStatus = "This character is no longer in the paired roster. Choose it again."; return; }
         if (followSession.Armed || shoppingTravel is not null || bringTrip is not null)
@@ -36,6 +43,7 @@ public sealed partial class Plugin
             if (!Pi.GetIpcSubscriber<string, string, bool>("Lifestream.ConnectAndOpenCharaSelect").InvokeFunc(target.Name, target.World))
             { titleLoginProbe.Cancel(); characterTravelStatus = "Lifestream could not open the character list. Wait and try again."; return; }
             characterSwitchFrom = 0; characterSwitchTarget = character;
+            nextTitleLoginCheck = default;
             characterSwitchUntil = titleLoginProbe.Deadline;
             characterTravelStatusOwner = character.Id;
             characterTravelStatus = "Checking this login for " + target.Name + "…";
@@ -83,13 +91,20 @@ public sealed partial class Plugin
     private void UpdateTitleLoginCheck(DateTimeOffset now)
     {
         if (titleLoginProbe.Target is not {} target) return;
+        if (now < nextTitleLoginCheck && now < titleLoginProbe.Deadline) return;
+        nextTitleLoginCheck = now.AddMilliseconds(250);
         try
         {
             var current = TitleLoginTarget(target.Id);
-            var busy = LifestreamBusy();
-            var ready = TryReadReadyLoginList(out var entries);
-            var result = titleLoginProbe.Inspect(now, config.PairingKey, current,
-                Client.IsLoggedIn || Player.IsLoaded, busy, ready, entries);
+            var result = titleLoginProbe.CheckState(now, config.PairingKey, current, Client.IsLoggedIn || Player.IsLoaded);
+            LoginProbeEntry[] entries = [];
+            if (result == LoginProbeResult.Waiting)
+            {
+                var busy = LifestreamBusy();
+                var ready = TryReadReadyLoginList(out entries);
+                result = titleLoginProbe.Inspect(now, config.PairingKey, current,
+                    Client.IsLoggedIn || Player.IsLoaded, busy, ready, entries);
+            }
             if (result == LoginProbeResult.Waiting) return;
             if (result != LoginProbeResult.Verified)
             {

@@ -26,15 +26,23 @@ internal sealed class CharacterLoginProbe
     public LoginProbeResult Inspect(DateTimeOffset now, string pairingKey, LoginProbeTarget? currentTarget,
         bool loggedIn, bool busy, bool ready, IReadOnlyList<LoginProbeEntry> entries)
     {
-        if (Target is null || pairingKey != pairing || currentTarget != Target || loggedIn) return LoginProbeResult.Cancelled;
-        if (now >= Deadline) return LoginProbeResult.TimedOut;
+        var state = CheckState(now, pairingKey, currentTarget, loggedIn);
+        if (state != LoginProbeResult.Waiting) return state;
         if (busy || !ready || entries.Count == 0) { matchedAt = default; return LoginProbeResult.Waiting; }
-        var matches = entries.Where(e => !e.Locked && ExactCharacter(Target, e)).Take(2).ToArray();
+        var matches = entries.Where(e => !e.Locked && ExactCharacter(Target!, e)).Take(2).ToArray();
         if (matches.Length != 1) { matchedAt = default; return LoginProbeResult.NotFound; }
         // A second ready sample prevents a transient loading list from initiating
         // login. The native list is checked again immediately before the IPC call.
         if (matchedAt == default) { matchedAt = now; return LoginProbeResult.Waiting; }
         return now - matchedAt >= TimeSpan.FromMilliseconds(200) ? LoginProbeResult.Verified : LoginProbeResult.Waiting;
+    }
+
+    // Check the deadline before any optional IPC or native-list access. Neither
+    // a busy Lifestream queue nor account-observation failures may postpone it.
+    public LoginProbeResult CheckState(DateTimeOffset now, string pairingKey, LoginProbeTarget? currentTarget, bool loggedIn)
+    {
+        if (Target is null || pairingKey != pairing || currentTarget != Target || loggedIn) return LoginProbeResult.Cancelled;
+        return now >= Deadline ? LoginProbeResult.TimedOut : LoginProbeResult.Waiting;
     }
 
     public static bool ExactCharacter(LoginProbeTarget target, LoginProbeEntry entry)

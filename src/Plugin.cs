@@ -325,6 +325,9 @@ public sealed partial class Plugin : IDalamudPlugin
     private unsafe void UpdateCore(IFramework framework)
     {
         var now = DateTimeOffset.UtcNow;
+        // The login cancellation/deadline runs before account observations and
+        // all other optional work, including while logged out or windows closed.
+        UpdateTitleLoginCheck(now);
         UpdateLoginAccount(now);
         RunOptionalTool("Camera",now);
         UpdateMaintenanceNotices(now);
