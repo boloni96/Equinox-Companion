@@ -21,13 +21,18 @@ public sealed partial class Plugin
  private TestingLocal testingState=new();private string testingScope="",testingRequestScope="",testingRequestId="",testingMessage="Open the checklist to connect.",testingReceived="";
  private Task<TestingResponse>? testingRequest;private DateTimeOffset testingNext,testingPoll;
  private string testingSearch="",testingCategory="",testingFilter="",testingName="",testingNotes="",testingSelected="";private bool testingArchive;
+ private readonly Dictionary<string,TestReport[]> testingReportsByTest=[];private readonly Dictionary<string,TestReport[]> testingCurrentByTest=[];
  private PlayTest[] testingVisible=[];private readonly Dictionary<string,(string Status,bool Retest)> testingSummaries=[];
  private Task<string>? testingExport;private string testingExportPath="";
  private void InitializeTesting(){testingWindow=new(this);windows.AddWindow(testingWindow);testingCommand=Commands.AddHandler("/eqtests",new CommandInfo((_,_)=>OpenTesting()){HelpMessage="Open shared tester checklists. /equinox tests also works."});}
  private void DisposeTesting(){if(testingCommand)Commands.RemoveHandler("/eqtests");windows.RemoveWindow(testingWindow);testingSync.Dispose();}
  private void OpenTesting(){testingWindow.IsOpen=true;testingNext=default;}
  private void SaveTesting(){if(testingScope.Length==0)return;config.TestingByPairing[testingScope]=testingState;SaveConfiguration();}
- private void RebuildTesting(){testingSummaries.Clear();foreach(var t in testingState.Catalog?.Tests??[])testingSummaries[t.Id]=(TestingPolicy.Summary(t,testingState.Reports??[]),TestingPolicy.NeedsRetest(t,testingState.Reports??[]));FilterTesting();}
+ private void RebuildTesting(){
+  testingSummaries.Clear();testingReportsByTest.Clear();testingCurrentByTest.Clear();
+  foreach(var group in (testingState.Reports??[]).GroupBy(r=>r.TestId))testingReportsByTest[group.Key]=group.ToArray();
+  foreach(var t in testingState.Catalog?.Tests??[]){var history=testingReportsByTest.GetValueOrDefault(t.Id)??[];testingCurrentByTest[t.Id]=TestingPolicy.Current(t,history);testingSummaries[t.Id]=(TestingPolicy.Summary(t,history),TestingPolicy.NeedsRetest(t,history));}FilterTesting();
+ }
  private void FilterTesting()=>testingVisible=(testingState.Catalog?.Tests??[]).Where(t=>(testingArchive||!t.Archived)&&(testingCategory.Length==0||t.Category==testingCategory)&&(testingFilter.Length==0||(testingFilter=="retest"?testingSummaries[t.Id].Retest:testingSummaries[t.Id].Status==testingFilter))&&(testingSearch.Length==0||(t.Id+" "+t.Title+" "+t.Steps).Contains(testingSearch,StringComparison.OrdinalIgnoreCase))).ToArray();
  private void UpdateTesting(DateTimeOffset now)
  {
@@ -54,7 +59,7 @@ public sealed partial class Plugin
   testingRequest=pending is not null?testingSync.Send(config.PairingKey,pending.Report):testingSync.Read(config.PairingKey,testingState.Cursor);testingNext=now.AddSeconds(5);
  }
  private IEnumerable<(string Id,string Name)> TestingPeople()=>(config.SharedRoster?.People??[]).Select(p=>(Id:"person:"+p.Id,Name:p.Name)).Concat((testingState.Reports??[]).Select(r=>(Id:r.TesterId,Name:r.TesterName))).Concat(config.TestingTesterId.Length>0?[(config.TestingTesterId,config.TestingTesterName)]:Array.Empty<(string,string)>()).DistinctBy(p=>p.Item1);
- private void SelectTest(PlayTest t){testingSelected=t.Id;var mine=TestingPolicy.Current(t,testingState.Reports??[]).FirstOrDefault(r=>r.TesterId==config.TestingTesterId);testingNotes=(testingState.Pending??[]).FirstOrDefault(p=>p.Report.TestId==t.Id&&p.Report.TesterId==config.TestingTesterId)?.Report.Notes??config.TestingDrafts.GetValueOrDefault(TestingDraftKey(t))??mine?.Notes??"";}
+ private void SelectTest(PlayTest t){testingSelected=t.Id;var mine=(testingCurrentByTest.GetValueOrDefault(t.Id)??[]).FirstOrDefault(r=>r.TesterId==config.TestingTesterId);testingNotes=(testingState.Pending??[]).FirstOrDefault(p=>p.Report.TestId==t.Id&&p.Report.TesterId==config.TestingTesterId)?.Report.Notes??config.TestingDrafts.GetValueOrDefault(TestingDraftKey(t))??mine?.Notes??"";}
  private string TestingDraftKey(PlayTest t)=>testingScope+"|"+config.TestingTesterId+"|"+t.Id+"|"+t.Revision;
  private void DrawTesting()
  {
@@ -85,18 +90,18 @@ public sealed partial class Plugin
  private void DrawTestDetails(PlayTest t)
  {
   ImGui.TextWrapped(t.Steps);ImGui.TextDisabled(t.When+" · revision "+t.Revision);
-  var mine=TestingPolicy.Current(t,testingState.Reports??[]).FirstOrDefault(r=>r.TesterId==config.TestingTesterId);var pending=(testingState.Pending??[]).FirstOrDefault(p=>p.Report.TestId==t.Id&&p.Report.TesterId==config.TestingTesterId);
+  var mine=(testingCurrentByTest.GetValueOrDefault(t.Id)??[]).FirstOrDefault(r=>r.TesterId==config.TestingTesterId);var pending=(testingState.Pending??[]).FirstOrDefault(p=>p.Report.TestId==t.Id&&p.Report.TesterId==config.TestingTesterId);
   ImGui.TextUnformatted(pending is null?"Your result: "+TestingPolicy.Label(mine?.Status??""):pending.Blocked.Length>0?"Needs review · your draft is kept":"Saving… · kept on this device");
   if(ImGui.InputTextMultiline("##testNotes"+t.Id,ref testingNotes,4000,new Vector2(-1,58))){config.TestingDrafts[TestingDraftKey(t)]=testingNotes;SaveConfiguration();}
   ImGui.BeginDisabled(t.Archived||config.TestingTesterId.Length==0||pending is not null);
   foreach(var result in new[]{"pass","fail","later","not-tested"}){if(result!="pass")ImGui.SameLine();if(ImGui.Button(TestingPolicy.Label(result)+"##"+t.Id))QueueTest(t,result);}
   ImGui.EndDisabled();
   if(pending?.Blocked.Length>0){ImGui.TextWrapped(pending.Blocked);if(ImGui.Button("Keep my draft and retry##"+t.Id)){testingState=testingState with {Pending=(testingState.Pending??[]).Where(p=>p.Report.Id!=pending.Report.Id).ToArray()};QueueTest(t,pending.Report.Status);}if(ImGui.IsItemHovered())ImGui.SetTooltip("Read the latest tester results below first. Saves your notes as a new report against the current result and test revision.");}
-  if(ImGui.TreeNode("Tester results & history##"+t.Id)){foreach(var r in (testingState.Reports??[]).Where(r=>r.TestId==t.Id).Reverse()){ImGui.TextWrapped(r.TesterName+" · "+TestingPolicy.Label(r.Status)+" · "+(DateTimeOffset.TryParse(r.At,out var at)?at.ToLocalTime().ToString("g"):r.At));if(ImGui.IsItemHovered())ImGui.SetTooltip($"Test revision {r.TestRevision} · {r.Source}\nCompanion: {r.PluginVersion}\nJournal: {r.JournalVersion}\nServer: {r.WorkerVersion}");if(r.Notes.Length>0)ImGui.TextWrapped(r.Notes);}ImGui.TreePop();}
+  if(ImGui.TreeNode("Tester results & history##"+t.Id)){foreach(var r in (testingReportsByTest.GetValueOrDefault(t.Id)??[]).Reverse()){ImGui.TextWrapped(r.TesterName+" · "+TestingPolicy.Label(r.Status)+" · "+(DateTimeOffset.TryParse(r.At,out var at)?at.ToLocalTime().ToString("g"):r.At));if(ImGui.IsItemHovered())ImGui.SetTooltip($"Test revision {r.TestRevision} · {r.Source}\nCompanion: {r.PluginVersion}\nJournal: {r.JournalVersion}\nServer: {r.WorkerVersion}");if(r.Notes.Length>0)ImGui.TextWrapped(r.Notes);}ImGui.TreePop();}
  }
  private void QueueTest(PlayTest test,string status)
  {
-  var mine=TestingPolicy.Current(test,testingState.Reports??[]).FirstOrDefault(r=>r.TesterId==config.TestingTesterId);
+  var mine=(testingCurrentByTest.GetValueOrDefault(test.Id)??[]).FirstOrDefault(r=>r.TesterId==config.TestingTesterId);
   var report=new TestReport(Guid.NewGuid().ToString(),test.Id,test.Revision,config.TestingTesterId,config.TestingTesterName,status,testingNotes,typeof(Plugin).Assembly.GetName().Version?.ToString()??"",testingState.ServerVersion,testingState.ServerVersion,"plugin",mine?.Id??"");
   testingState=testingState with {Pending=[..testingState.Pending??[],new(report)]};SaveTesting();testingMessage="Saving… · report queued locally";testingNext=default;
  }
