@@ -42,6 +42,7 @@ public sealed partial class Plugin
   CharacterLoginPolicy.SameSource(characterSwitchConfirmFrom,Player.IsLoaded,Player.ContentId)&&(characterSwitchConfirmFrom!=0||characterSwitchConfirmServiceAccount==CurrentLoginServiceAccount())&&config.PairingKey==characterSwitchConfirmKey&&character.Id==characterSwitchConfirmTarget&&characterSwitchConfirmScope==SwitchScopeKey(from)+">"+SwitchScopeKey(to);
  private void SwitchSharedCharacter(SharedCharacter character,bool confirmed=false)
  {
+  if(loginMenuReturn.Active){characterTravelStatus="Returning to the main menu. Wait or stop the return before choosing a character.";return;}
   var mode=ReadCharacterLoginMode(true);
   if(mode==CharacterLoginMode.Unavailable){characterTravelStatus=Player.IsLoaded?"Leave combat, loading or your duty before switching characters.":"Wait for the title or character-selection screen and enable Lifestream before logging in.";return;}
   if(DateTimeOffset.UtcNow<characterSwitchUntil){characterTravelStatus="A character switch is already requested.";return;}
@@ -102,7 +103,7 @@ public sealed partial class Plugin
  private void DrawCharacterTravel(SharedCharacter character,bool showHouses=true)
  {
   if(characterSwitchUntil!=default&&Player.IsLoaded&&Player.ContentId!=0&&Player.ContentId!=characterSwitchFrom){characterSwitchUntil=default;characterTravelStatus=characterSwitchTarget is {} requested&&CharacterTravelPolicy.IsCurrent(requested,ReadActor())?"Logged in as "+Player.CharacterName+".":"A different character logged in.";characterSwitchTarget=null;}
-  var switching=titleLoginProbe.Active||DateTimeOffset.UtcNow<characterSwitchUntil;
+  var switching=loginMenuReturn.Active||titleLoginProbe.Active||DateTimeOffset.UtcNow<characterSwitchUntil;
   var mode=ReadCharacterLoginMode();
   ImGui.BeginDisabled(mode==CharacterLoginMode.Unavailable||switching);
   if(ImGui.SmallButton(CharacterLoginPolicy.Label(Player.IsLoaded))){
@@ -116,7 +117,7 @@ public sealed partial class Plugin
   ImGui.EndDisabled();
   if(travelHovered)DrawCharacterTravelTooltip(character,mode,switching);
   if(queuedLoginConfirmation==character.Id&&!switching&&mode!=CharacterLoginMode.Unavailable){
-   queuedLoginConfirmation="";OpenCharacterLoginConfirmation(character,mode);
+   queuedLoginConfirmation="";OpenCharacterLoginConfirmation(character,mode,true);
   }
   if(ImGui.BeginPopupModal("Confirm character###EquinoxCharacterSwitch",ImGuiWindowFlags.AlwaysAutoResize)){
    ImGui.PushTextWrapPos(ImGui.GetFontSize()*32);
@@ -131,19 +132,34 @@ public sealed partial class Plugin
    ImGui.TextWrapped("No search or login for this character has started. Continue only if it belongs to the Square Enix login used to launch this client.");
    ImGui.TextWrapped("Different service accounts can share one Square Enix login. Once a character from each account logs into this game client, Equinox remembers the link for every character in those accounts.");
    ImGui.TextWrapped("A different Square Enix login needs you to exit and sign in again, or use its already signed-in game client.");
-   if(ImGui.Button("Cancel"))ImGui.CloseCurrentPopup();ImGui.SameLine();
    var unchanged=CharacterSwitchConsentCurrent(character,from,to);
+   if(ImGui.Button("Cancel")){CancelCharacterLoginConfirmation(mode,unchanged);ImGui.CloseCurrentPopup();}ImGui.SameLine();
    ImGui.BeginDisabled(!unchanged||mode==CharacterLoginMode.Unavailable||switching);
-   if(ImGui.Button(mode==CharacterLoginMode.Title?"Same login — check character list":characterSwitchConfirmFrom==0?"Same login — log in":"Same login — switch")){ImGui.CloseCurrentPopup();SwitchSharedCharacter(character,true);characterSwitchConfirmTarget="";}
+   if(ImGui.Button(mode==CharacterLoginMode.Title?"Same login — check character list":characterSwitchConfirmFrom==0?"Same login — log in":"Same login — switch")){characterSwitchReturnOnCancel=false;ImGui.CloseCurrentPopup();SwitchSharedCharacter(character,true);characterSwitchConfirmTarget="";}
    ImGui.EndDisabled();if(!unchanged)ImGui.TextUnformatted("The current character, account or pairing changed. Cancel and choose again.");
    ImGui.PopTextWrapPos();ImGui.EndPopup();
   }
   if(showHouses)DrawCharacterHouseIcons(character);
-  if(switching){ImGui.SameLine();if(ImGui.SmallButton(titleLoginProbe.Active?"Stop check":"Stop switch")){bringTrip=null;if(titleLoginProbe.Active)StopTitleLoginCheck("Login check stopped. No login was requested.");else{try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}characterSwitchUntil=default;characterSwitchTarget=null;characterTravelStatus="Switch queue stopped. If already logged out, select a character in game.";}}}
+  if(switching){
+   ImGui.SameLine();
+   if(ImGui.SmallButton(loginMenuReturn.Active?"Stop return":titleLoginProbe.Active?"Stop check":"Stop switch")){
+    if(loginMenuReturn.Active){loginMenuReturn.Stop();characterTravelStatus="Return stopped. No character login was requested.";}
+    else{
+     bringTrip=null;
+     if(titleLoginProbe.Active)StopTitleLoginCheck("Login check stopped. No login was requested.");
+     else{
+      try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}
+      characterSwitchUntil=default;characterSwitchTarget=null;
+      characterTravelStatus="Switch queue stopped. If already logged out, select a character in game.";
+     }
+    }
+   }
+  }
   if(characterTravelStatusOwner==character.Id){if(characterTravelStatus.Length>0)ImGui.TextWrapped(characterTravelStatus);DrawGoSeeHomeStop();}
  }
- private void OpenCharacterLoginConfirmation(SharedCharacter character,CharacterLoginMode mode)
+ private void OpenCharacterLoginConfirmation(SharedCharacter character,CharacterLoginMode mode,bool openedFromTitle=false)
  {
+  characterSwitchReturnOnCancel=openedFromTitle;
   var from=CurrentCharacterSwitchScope(mode,true);var to=CharacterSwitchScope(character.Id);
   characterSwitchConfirmFrom=Player.IsLoaded?Player.ContentId:0;characterSwitchConfirmServiceAccount=CurrentLoginServiceAccount();
   characterSwitchConfirmKey=config.PairingKey;characterSwitchConfirmTarget=character.Id;
@@ -160,7 +176,8 @@ public sealed partial class Plugin
   var same=relationship!=CharacterLoginRelationship.Unverified;
   ImGui.BeginTooltip();ImGui.PushTextWrapPos(ImGui.GetFontSize()*28);
   ImGui.TextUnformatted(character.Name+" @ "+character.World);
-  if(titleLoginProbe.Active)ImGui.TextColored(new Vector4(1,.75f,.35f,1),currentLoginIdentification is not null?"Identifying current login · no character selected":"Checking character list · no login requested");
+  if(loginMenuReturn.Active)ImGui.TextColored(new Vector4(1,.75f,.35f,1),"Returning to main menu · no login requested");
+  else if(titleLoginProbe.Active)ImGui.TextColored(new Vector4(1,.75f,.35f,1),currentLoginIdentification is not null?"Identifying current login · no character selected":"Checking character list · no login requested");
   else if(relationship==CharacterLoginRelationship.SameServiceAccount)ImGui.TextColored(new Vector4(.45f,.85f,.63f,1),"Same service account · no confirmation");
   else if(relationship==CharacterLoginRelationship.SameSquareEnixLogin)ImGui.TextColored(new Vector4(.45f,.85f,.63f,1),"Same Square Enix login · no confirmation");
   else if(mode==CharacterLoginMode.Title&&!currentKnown)ImGui.TextColored(new Vector4(1,.75f,.35f,1),"Identify current login automatically");
@@ -173,6 +190,7 @@ public sealed partial class Plugin
   else if(!same)ImGui.TextWrapped("A successful login from each service account in this game client links their whole Person/accounts locally. No Journal refresh is needed. A different Square Enix login requires exiting and signing in again.");
   if(!targetKnown)ImGui.TextWrapped("Sync this character's Person/account information first.");
   if(titleLoginProbe.Active)ImGui.TextWrapped($"Checking the current character list before login. Stops in {Math.Max(0,(int)Math.Ceiling((titleLoginProbe.Deadline-DateTimeOffset.UtcNow).TotalSeconds))}s. Stop check cancels this request.");
+  else if(loginMenuReturn.Active)ImGui.TextWrapped("Cancel is returning to the main menu. Stop return cancels this request.");
   else if(switching)ImGui.TextWrapped("A character switch is already requested.");
   else if(mode==CharacterLoginMode.Title&&!currentKnown&&!same)ImGui.TextWrapped("Opens START and reads this game's character list first. Your verified login continues automatically; an unverified account needs confirmation before any target search or login.");
   else if(mode==CharacterLoginMode.Title&&!same)ImGui.TextWrapped("Shows a warning before sending anything to Lifestream. If you confirm this is the same login, checks the exact character in the game list before requesting login. A different Square Enix login needs its own game client.");

@@ -335,6 +335,7 @@ public sealed partial class Plugin : IDalamudPlugin
         var now = DateTimeOffset.UtcNow;
         // The login cancellation/deadline runs before account observations and
         // all other optional work, including while logged out or windows closed.
+        UpdateCancelledLoginReturn(now);
         UpdateTitleLoginCheck(now);
         UpdateLoginAccount(now);
         RunOptionalTool("Camera",now);
