@@ -3,6 +3,10 @@ namespace EquinoxCompanion;
 [Serializable]
 public sealed class Configuration : IPluginConfiguration
 {
+    public Dictionary<string, TestingLocal> TestingByPairing { get; set; } = [];
+    public Dictionary<string, string> TestingDrafts { get; set; } = [];
+    public string TestingTesterId { get; set; } = "";
+    public string TestingTesterName { get; set; } = "";
     public bool RememberCameraHeight { get; set; }
     public Shortcut CameraShortcut { get; set; } = new();
     public float PreferredCameraHeight { get; set; }
@@ -11,9 +15,11 @@ public sealed class Configuration : IPluginConfiguration
         // Published observation/roster records are immutable. Copy their mutable list
         // containers, but do not serialize the large history on the game's thread.
         var small=(Configuration)MemberwiseClone();
+        small.TestingByPairing=[];
         small.CachedAdventures=[];small.SharedRoster=null;small.Discoveries=[];small.Houses=[];
         small.Planting=[];small.Tending=[];small.SentEvents=[];
         var copy=System.Text.Json.JsonSerializer.Deserialize<Configuration>(System.Text.Json.JsonSerializer.Serialize(small))!;
+        copy.TestingByPairing=new(TestingByPairing);
         copy.CachedAdventures=CachedAdventures;copy.SharedRoster=SharedRoster;copy.Discoveries=[..Discoveries];copy.Houses=[..Houses];
         copy.Planting=[..Planting];copy.Tending=[..Tending];copy.SentEvents=[..SentEvents];
         return copy;
@@ -91,3 +97,4 @@ public sealed class Configuration : IPluginConfiguration
     public List<TendingRecord> Tending { get; set; } = [];
     public List<HouseObservation> Houses { get; set; } = [];
 }
+

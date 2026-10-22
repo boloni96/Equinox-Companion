@@ -34,6 +34,7 @@ public sealed partial class Plugin
         else if(name == "Do I already have it?") itemSearchWindow.IsOpen=false;
         else if(name == "Fashion Report") fashionWindow.IsOpen=false;
         else if(name=="Planting")plantingWindow.IsOpen=false;
+        else if(name=="Testing")testingWindow.IsOpen=false;
         else if(name=="Adventure")adventureWindow.IsOpen=false;
         else if(name=="Housing bids")bidWindow.IsOpen=false;
         else if(name=="Welcome")welcomeWindow.IsOpen=false;
@@ -59,6 +60,8 @@ public sealed partial class Plugin
         if(plantingWindow.IsOpen) minimizedLaunchers.Remove("Planting");
         if(itemSearchWindow.IsOpen)minimizedLaunchers.Remove("Do I already have it?");
         if(marketWindow.IsOpen)minimizedLaunchers.Remove("Where is it cheapest?");
+        if(testingWindow.IsOpen)minimizedLaunchers.Remove("Testing");
+        DrawLauncher("Testing",9,"garden-art/assets/category-icons/adventure.png");
         if(adventureWindow.IsOpen)minimizedLaunchers.Remove("Adventure");
         if(bidWindow.IsOpen)minimizedLaunchers.Remove("Housing bids");
         DrawLauncher("Adventure",7,"garden-art/assets/category-icons/adventure.png");
@@ -79,6 +82,7 @@ public sealed partial class Plugin
             {
                 if(pending=="Where is it cheapest?")marketWindow.IsOpen=true;
                 else if(pending=="Do I already have it?")itemSearchWindow.IsOpen=true;
+                else if(pending=="Testing")OpenTesting();
                 else if(pending=="Adventure")OpenAdventure();
                 else if(pending=="Housing bids")bidWindow.IsOpen=true;
                 else if(pending=="Companion") Open();
@@ -159,13 +163,14 @@ public sealed partial class Plugin
         var changed = ImGui.SliderFloat("Opacity", ref opacity, .2f, 1, "%.2f");
         changed |= ImGui.Checkbox("Blur background", ref blur);
         changed |= ImGui.Checkbox("Lock position", ref locked);
-        if (ImGui.Button("Reset position")) { o.X = 24; o.Y = 180 + (name == "Companion" ? 0 : name == "Fashion Report" ? 76 : name=="Planting"?152:name=="Welcome"?228:name=="New Character"?304:name=="Where is it cheapest?"?456:name=="Adventure"?532:name=="Housing bids"?608:380); changed = true; }
+        if (ImGui.Button("Reset position")) { o.X = 24; o.Y = 180 + (name == "Companion" ? 0 : name == "Fashion Report" ? 76 : name=="Planting"?152:name=="Welcome"?228:name=="New Character"?304:name=="Where is it cheapest?"?456:name=="Adventure"?532:name=="Housing bids"?608:name=="Testing"?684:380); changed = true; }
         if (changed) { o.Opacity = opacity; o.Blur = blur; o.Locked = locked; SaveConfiguration(); }
     }
     private void DrawFloatingLauncherSettings()
     {
         SettingsHelp("Use the native title-bar collapse triangle or double-click the title bar to minimize to an icon. Single-click reopens its window; double-click closes both. Esc minimizes the focused window to its icon. X closes without an icon. Commands and keybinds reopen windows. Drag icons to move them.",false);
-        var names = new[] { "Companion", "Fashion Report", "Planting", "Welcome", "New Character", "Do I already have it?", "Where is it cheapest?", "Adventure", "Housing bids" };
+        var names = new[] { "Companion", "Fashion Report", "Planting", "Welcome", "New Character", "Do I already have it?", "Where is it cheapest?", "Adventure", "Housing bids", "Testing" };
         for (var i = 0; i < names.Length; i++) { ImGui.PushID(i); if(ImGui.CollapsingHeader(names[i]=="Planting"?"Gardening":names[i]))DrawLauncherOptions(names[i], LauncherOptions(names[i], i)); ImGui.PopID(); }
     }
 }
+

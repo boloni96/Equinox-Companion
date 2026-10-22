@@ -249,6 +249,7 @@ public sealed partial class Plugin : IDalamudPlugin
         InitializeMarketSearch();
         InitializeBidSearch();
         InitializeAdventures();
+        InitializeTesting();
         itemSearchWindow=new ItemSearchWindow(this);windows.AddWindow(itemSearchWindow);
         mainWindow = new CompanionWindow(this); windows.AddWindow(mainWindow);
         welcomeWindow = new WelcomeWindow(this); windows.AddWindow(welcomeWindow);
@@ -287,6 +288,7 @@ public sealed partial class Plugin : IDalamudPlugin
     private readonly Dalamud.Game.Text.SeStringHandling.Payloads.DalamudLinkPayload fashionBrowserLink;
     private void OnCommand(string command, string args)
     {
+        if(args.Trim().Equals("tests",StringComparison.OrdinalIgnoreCase)){OpenTesting();return;}
         if(args.Trim().Equals("adventure",StringComparison.OrdinalIgnoreCase)){OpenAdventure();return;}
         if(args.Trim().Equals("bid",StringComparison.OrdinalIgnoreCase)){OpenBidSearch();return;}
         if(args.Trim().Equals("cheap",StringComparison.OrdinalIgnoreCase) || args.Trim().StartsWith("cheap ",StringComparison.OrdinalIgnoreCase)){OpenMarketSearch(args.Trim()[5..].Trim());return;}
@@ -358,6 +360,7 @@ public sealed partial class Plugin : IDalamudPlugin
         perf = System.Diagnostics.Stopwatch.GetTimestamp();
         UpdateSharedRoster(now);
         UpdateAdventure();
+        UpdateTesting(now);
         UpdateShoppingTravel(now);
         UpdateBringCharacter(now);
         UpdateBidWorld(now);
@@ -1160,6 +1163,7 @@ public sealed partial class Plugin : IDalamudPlugin
 
     private void DrawDiagnosticsTracking()
     {
+            if(ImGui.Button("Testing checklist"))OpenTesting();
             ImGui.TextWrapped($"Tracking diagnostics · Companion {typeof(Plugin).Assembly.GetName().Version}");
             ImGui.TextWrapped(syncStatus);
             ImGui.TextWrapped(SyncQueueStatus);
@@ -1282,6 +1286,7 @@ public sealed partial class Plugin : IDalamudPlugin
         DisposeMarketSearch();
         DisposeBidSearch();
         DisposeAdventures();
+        DisposeTesting();
         windows.RemoveAllWindows();
         fashionWindow.Dispose();
         Pi.UiBuilder.OpenMainUi -= Open;
@@ -1299,5 +1304,6 @@ public sealed partial class Plugin : IDalamudPlugin
         FlushConfiguration();
     }
 }
+
 
 

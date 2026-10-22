@@ -54,6 +54,7 @@ public sealed partial class Plugin
    ImGui.SameLine();if(ImGui.Selectable(name,false,ImGuiSelectableFlags.None,new Vector2(250,size))){open();ImGui.CloseCurrentPopup();}if(ImGui.IsItemHovered())ImGui.SetTooltip(command);
   }
   Row("Companion","/equinox","characters",()=>{visible=true;mainWindow.IsOpen=true;},mainWindow.IsOpen);
+  Row("Testing checklist","/eqtests · /equinox tests","adventure",OpenTesting,testingWindow.IsOpen);
   Row("Adventure","/adventure","adventure",OpenAdventure,adventureWindow.IsOpen);
   Row("Where is it cheapest?","/whereischeap","market-search",()=>OpenMarketSearch(""),marketWindow.IsOpen);
   Row("Do I already have it?","/doihaveit","item-search",()=>OpenItemSearch(""),itemSearchWindow.IsOpen);
@@ -69,4 +70,5 @@ public sealed partial class Plugin
   ImGui.EndPopup();
  }
 }
+
 
