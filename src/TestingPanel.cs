@@ -39,7 +39,7 @@ public sealed partial class Plugin
   if(testingRequest?.IsCompleted==true){var reply=testingRequest.IsCompletedSuccessfully?testingRequest.Result:new TestingResponse(Error:"Testing request failed; your report is kept.");if(testingRequest.IsFaulted)_=testingRequest.Exception;
    if(testingRequestScope==testingScope){
     var before=testingState;
-    if(reply.Page is {} page){testingState=TestingPolicy.Apply(testingState,page);testingReceived=now.ToLocalTime().ToString("g");testingMessage=page.More?"Loading report history…":"Synced · results received from Cloudflare";}
+    if(reply.Page is {} page){testingState=TestingPolicy.Apply(testingState,page);testingReceived=now.ToLocalTime().ToString("g");testingMessage=(testingState.Pending??[]).Any(p=>p.Blocked.Length>0)?"Needs review · a saved test report conflicts":page.More?"Loading report history…":"Synced · results received from Cloudflare";}
     if(reply.Report is {} report){testingState=TestingPolicy.Acknowledge(testingState,report);testingMessage="Synced · report saved in Cloudflare";}
     if(reply.Error.Length>0){testingMessage=reply.Error;if(reply.Conflict&&testingRequestId.Length>0)testingState=testingState with {Pending=(testingState.Pending??[]).Select(p=>p.Report.Id==testingRequestId?p with {Blocked=reply.Error}:p).ToArray()};}
     if(!ReferenceEquals(before,testingState)){SaveTesting();RebuildTesting();}
@@ -53,7 +53,7 @@ public sealed partial class Plugin
   testingRequestScope=scope;testingRequestId=pending?.Report.Id??"";
   testingRequest=pending is not null?testingSync.Send(config.PairingKey,pending.Report):testingSync.Read(config.PairingKey,testingState.Cursor);testingNext=now.AddSeconds(5);
  }
- private IEnumerable<(string Id,string Name)> TestingPeople()=>(config.SharedRoster?.People??[]).Select(p=>(Id:"person:"+p.Id,Name:p.Name)).Concat((testingState.Reports??[]).Select(r=>(Id:r.TesterId,Name:r.TesterName))).Concat(config.TestingTesterId.Length>0?[(config.TestingTesterId,config.TestingTesterName)]:Array.Empty<(string,string)>()).DistinctBy(p=>p.Id);
+ private IEnumerable<(string Id,string Name)> TestingPeople()=>(config.SharedRoster?.People??[]).Select(p=>(Id:"person:"+p.Id,Name:p.Name)).Concat((testingState.Reports??[]).Select(r=>(Id:r.TesterId,Name:r.TesterName))).Concat(config.TestingTesterId.Length>0?[(config.TestingTesterId,config.TestingTesterName)]:Array.Empty<(string,string)>()).DistinctBy(p=>p.Item1);
  private void SelectTest(PlayTest t){testingSelected=t.Id;var mine=TestingPolicy.Current(t,testingState.Reports??[]).FirstOrDefault(r=>r.TesterId==config.TestingTesterId);testingNotes=(testingState.Pending??[]).FirstOrDefault(p=>p.Report.TestId==t.Id&&p.Report.TesterId==config.TestingTesterId)?.Report.Notes??config.TestingDrafts.GetValueOrDefault(TestingDraftKey(t))??mine?.Notes??"";}
  private string TestingDraftKey(PlayTest t)=>testingScope+"|"+config.TestingTesterId+"|"+t.Id+"|"+t.Revision;
  private void DrawTesting()

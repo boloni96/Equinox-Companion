@@ -18,6 +18,7 @@ internal static class Testing237Tests
   var page=new TestingPage(1,catalog,0,[],1,false,"7.11.220");Check(ReferenceEquals(local,TestingPolicy.Apply(local,page)),"unchanged poll does not trigger config save");
   var changed=TestingPolicy.Apply(local,page with {Reports=[b],Cursor=2});Check(changed.Pending!.Length==1,"incoming data keeps pending report");Check(changed.Reports!.Length==2,"incoming tester merged");
   Check(!TestingPolicy.Valid(catalog with {Tests=[test,test]}),"duplicate test ids rejected");Check(!TestingPolicy.Valid(catalog with {Schema=2}),"unknown protocol rejected");
+  Check(!ReferenceEquals(local,TestingPolicy.Apply(local,page with {Catalog=catalog with {Tests=[test with {Title="Reworded title"}]}})),"catalog content changes refresh even with unchanged catalog version");
   Console.WriteLine($"PASS {count} shared testing checklist checks");
  }
 }
