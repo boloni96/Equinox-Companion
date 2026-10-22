@@ -5,6 +5,9 @@ public sealed partial class Plugin
 {
     private readonly CharacterLoginProbe titleLoginProbe = new();
     private DateTimeOffset nextTitleLoginCheck;
+    private bool titleLoginOwnsLifestream;
+    private CurrentLoginIdentification? currentLoginIdentification;
+    private string queuedLoginConfirmation = "";
 
     private LoginProbeTarget? TitleLoginTarget(string id)
     {
@@ -38,10 +41,12 @@ public sealed partial class Plugin
             { characterTravelStatus = "Wait for the title screen and the current trip to finish."; return; }
             if (!titleLoginProbe.Begin(target, config.PairingKey, DateTimeOffset.UtcNow))
             { characterTravelStatus = "A paired account and complete in-game character name and home world are needed."; return; }
+            currentLoginIdentification = null;
+            titleLoginOwnsLifestream = true;
             // This IPC only connects and opens the list. It does not select a
             // character for login, accept a login dialog, or change launcher login.
             if (!Pi.GetIpcSubscriber<string, string, bool>("Lifestream.ConnectAndOpenCharaSelect").InvokeFunc(target.Name, target.World))
-            { titleLoginProbe.Cancel(); characterTravelStatus = "Lifestream could not open the character list. Wait and try again."; return; }
+            { titleLoginProbe.Cancel(); titleLoginOwnsLifestream = false; characterTravelStatus = "Lifestream could not open the character list. Wait and try again."; return; }
             characterSwitchFrom = 0; characterSwitchTarget = character;
             nextTitleLoginCheck = default;
             characterSwitchUntil = titleLoginProbe.Deadline;
@@ -78,11 +83,14 @@ public sealed partial class Plugin
 
     private void StopTitleLoginCheck(string message)
     {
-        var owned = titleLoginProbe.Active;
+        var active = titleLoginProbe.Active;
+        var owned = active && titleLoginOwnsLifestream;
         titleLoginProbe.Cancel();
-        if (owned)
+        titleLoginOwnsLifestream = false;
+        currentLoginIdentification = null;
+        if (active)
         {
-            try { Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction(); } catch { }
+            if (owned) try { Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction(); } catch { }
             characterSwitchUntil = default; characterSwitchTarget = null;
         }
         characterTravelStatus = message;
@@ -100,6 +108,11 @@ public sealed partial class Plugin
             LoginProbeEntry[] entries = [];
             if (result == LoginProbeResult.Waiting)
             {
+                if (currentLoginIdentification is not null)
+                {
+                    UpdateCurrentLoginIdentification(target, now);
+                    return;
+                }
                 var busy = LifestreamBusy();
                 var ready = TryReadReadyLoginList(out entries);
                 result = titleLoginProbe.Inspect(now, config.PairingKey, current,
@@ -122,7 +135,7 @@ public sealed partial class Plugin
             ObserveLoginAccountList(entries.Where(e => !e.Locked).Select(e => ulong.Parse(e.ContentId)).ToArray());
             var from = CurrentCharacterSwitchScope(CharacterLoginMode.CharacterSelect, true);
             var to = CharacterSwitchScope(character.Id);
-            titleLoginProbe.Cancel(); characterSwitchUntil = default; characterSwitchTarget = null;
+            titleLoginProbe.Cancel(); titleLoginOwnsLifestream = false; characterSwitchUntil = default; characterSwitchTarget = null;
             characterSwitchConfirmFrom = 0; characterSwitchConfirmServiceAccount = CurrentLoginServiceAccount();
             characterSwitchConfirmKey = config.PairingKey; characterSwitchConfirmTarget = character.Id;
             characterSwitchConfirmScope = SwitchScopeKey(from) + ">" + SwitchScopeKey(to);
@@ -135,3 +148,4 @@ public sealed partial class Plugin
         }
     }
 }
+

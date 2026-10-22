@@ -36,7 +36,9 @@ public sealed partial class Plugin
             var flags=tab.Id=="settings"?ImGuiTabItemFlags.Trailing|ImGuiTabItemFlags.NoReorder:ImGuiTabItemFlags.None;
             if(tab.Id=="quickloot"&&quickLootSelectTab){flags|=ImGuiTabItemFlags.SetSelected;quickLootSelectTab=false;}
             if(tab.Id=="followthem"&&followThemSelectTab){flags|=ImGuiTabItemFlags.SetSelected;followThemSelectTab=false;}
+            if(tab.Id=="settings"&&settingsSelectTab)flags|=ImGuiTabItemFlags.SetSelected;
             var active=ImGui.BeginTabItem(label,flags);
+            if(active&&tab.Id=="settings")settingsSelectTab=false;
             if(category is not null){var at=ImGui.GetItemRectMin();var max=ImGui.GetItemRectMax();var size=Math.Min(ImGui.GetFontSize()+2,max.Y-at.Y-2);var draw=ImGui.GetWindowDrawList();draw.PushClipRect(at,max,true);GardenImage("assets/category-icons/"+category+".png",at+new Vector2(ImGui.GetStyle().FramePadding.X,(max.Y-at.Y-size)/2),new Vector2(size));draw.PopClipRect();}
             if(!active)continue;
             if(ImGui.BeginChild("TabContent##"+tab.Id,Vector2.Zero,false))
@@ -66,4 +68,5 @@ public sealed partial class Plugin
         ImGui.EndTabBar();
     }
 }
+
 

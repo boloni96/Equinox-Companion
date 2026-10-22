@@ -257,7 +257,7 @@ public sealed partial class Plugin : IDalamudPlugin
         registrationWindow = new NewCharacterWindow(this); windows.AddWindow(registrationWindow);
         Pi.UiBuilder.Draw += Draw;
         Pi.UiBuilder.OpenMainUi += Open;
-        Pi.UiBuilder.OpenConfigUi += Open;
+        Pi.UiBuilder.OpenConfigUi += OpenSettings;
         Framework.Update += Update;
         Client.Login += OnGardenNoticeLogin;
         InitializeLottery();
@@ -271,6 +271,14 @@ public sealed partial class Plugin : IDalamudPlugin
     }
 
     private void Open() => visible = true;
+    private bool settingsSelectTab;
+    private void OpenSettings()
+    {
+        settingsSelectTab = true;
+        visible = true;
+        mainWindow.IsOpen = true;
+        minimizedLaunchers.Remove("Companion");
+    }
     private readonly bool shortTravelCommandRegistered;
     private readonly bool travelCommandRegistered;
     private readonly bool fashionCommandRegistered;
@@ -1276,7 +1284,7 @@ public sealed partial class Plugin : IDalamudPlugin
         windows.RemoveAllWindows();
         fashionWindow.Dispose();
         Pi.UiBuilder.OpenMainUi -= Open;
-        Pi.UiBuilder.OpenConfigUi -= Open;
+        Pi.UiBuilder.OpenConfigUi -= OpenSettings;
         ContextMenu.OnMenuOpened -= OnItemSearchMenu;
         if(itemSearchCommandRegistered)Commands.RemoveHandler("/doihaveit");
         DisposeCameraCommand();
@@ -1290,4 +1298,5 @@ public sealed partial class Plugin : IDalamudPlugin
         FlushConfiguration();
     }
 }
+
 

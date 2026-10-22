@@ -1,11 +1,16 @@
 namespace EquinoxCompanion;
 
 public enum CharacterLoginMode { Unavailable, InGame, Title, CharacterSelect }
-internal enum CharacterLoginAction { Wait, Proceed, Confirm, CheckList }
+internal enum CharacterLoginAction { Wait, Proceed, Confirm, CheckList, IdentifyLogin }
 
 public static class CharacterLoginPolicy
 {
     public static string Label(bool loaded) => loaded ? "Switch to this character" : "Log in as this character";
+
+    internal static CharacterLoginAction InitialAction(CharacterLoginMode mode,
+        CharacterLoginRelationship relationship, bool currentLoginKnown) =>
+        mode == CharacterLoginMode.Title && !currentLoginKnown && relationship == CharacterLoginRelationship.Unverified
+            ? CharacterLoginAction.IdentifyLogin : Action(mode, relationship);
 
     // A title-screen list search is already a Lifestream action. An unknown
     // account must receive the same pre-action warning as an in-game switch.

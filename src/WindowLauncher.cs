@@ -63,8 +63,10 @@ public sealed partial class Plugin
   Row("Fashion Report","/fashionr","fashion-report",()=>OnFashionCommand("/fashionr",""),fashionWindow.IsOpen);
   Row("Journal · Adventure & Properties","Open the paired Journal in your browser","characters",()=>Dalamud.Utility.Util.OpenLink("https://equinoxjournal.pages.dev/#adventure"));
   Row("Welcome & guide","Companion guide","characters",()=>welcomeWindow.IsOpen=true,welcomeWindow.IsOpen);
+  Row("Settings","Open Companion settings","options",OpenSettings);
   if(registrationSnapshot is {} snapshot && Player.IsLoaded && snapshot.Actor.ContentId==Player.ContentId.ToString())
    Row("New character","/equinox register","characters",()=>registrationWindow.IsOpen=true,registrationWindow.IsOpen);
   ImGui.EndPopup();
  }
 }
+
