@@ -49,9 +49,10 @@ public sealed partial class Plugin
   ImGui.TextDisabled("OPEN A WINDOW");ImGui.Separator();
   void Row(string name,string command,string icon,Action open,bool isOpen=false){
    if(isOpen)return;
-   var size=ImGui.GetTextLineHeight()*1.65f;var at=ImGui.GetCursorScreenPos();ImGui.Dummy(new Vector2(size));
+   var compact=GoddessAppearance||welcomeWindow.IsOpen;
+   var size=ImGui.GetTextLineHeight()*(compact?1.2f:1.65f);var at=ImGui.GetCursorScreenPos();ImGui.Dummy(new Vector2(size));
    GardenImage("assets/category-icons/"+icon+".png",at,new Vector2(size));
-   ImGui.SameLine();if(ImGui.Selectable(name,false,ImGuiSelectableFlags.None,new Vector2(250,size))){open();ImGui.CloseCurrentPopup();}if(ImGui.IsItemHovered())ImGui.SetTooltip(command);
+   ImGui.SameLine();if(ImGui.Selectable(name,false,ImGuiSelectableFlags.None,new Vector2(compact?ImGui.GetFontSize()*12:250,size))){open();ImGui.CloseCurrentPopup();}if(ImGui.IsItemHovered())ImGui.SetTooltip(command);
   }
   Row("Companion","/equinox","characters",()=>{visible=true;mainWindow.IsOpen=true;},mainWindow.IsOpen);
   Row("Testing checklist","/eqtests · /equinox tests","adventure",OpenTesting,testingWindow.IsOpen);
@@ -62,7 +63,7 @@ public sealed partial class Plugin
   ImGui.Separator();
   Row("Gardening guide","/gardening","gardening",()=>OnPlantingCommand("/gardening",""),plantingWindow.IsOpen);
   Row("Fashion Report","/fashionr","fashion-report",()=>OnFashionCommand("/fashionr",""),fashionWindow.IsOpen);
-  Row("Journal · Adventure & Properties","Open the paired Journal in your browser","characters",()=>Dalamud.Utility.Util.OpenLink("https://equinoxjournal.pages.dev/#adventure"));
+  Row("Journal","Open the paired Journal in your browser","characters",()=>Dalamud.Utility.Util.OpenLink("https://equinoxjournal.pages.dev/#adventure"));
   Row("Welcome & guide","Companion guide","characters",()=>welcomeWindow.IsOpen=true,welcomeWindow.IsOpen);
   Row("Settings","Open Companion settings","options",OpenSettings);
   if(registrationSnapshot is {} snapshot && Player.IsLoaded && snapshot.Actor.ContentId==Player.ContentId.ToString())
@@ -70,5 +71,6 @@ public sealed partial class Plugin
   ImGui.EndPopup();
  }
 }
+
 
 

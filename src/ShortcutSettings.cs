@@ -59,10 +59,27 @@ public sealed partial class Plugin
         if(activate>=0)
         {
             var name=bindings[activate].Name;
-            if(name=="/equinox")OnCommand(name,"");
-            else if(name=="/gardening")OnPlantingCommand(name,"");
+            if(name=="/equinox")
+            {
+                if(pendingLauncher=="Companion")pendingLauncher=null;
+                minimizedLaunchers.Remove("Companion");
+                OnCommand(name,"");
+            }
+            else if(name=="/gardening")
+            {
+                if(pendingLauncher=="Planting")pendingLauncher=null;
+                minimizedLaunchers.Remove("Planting");
+                if(plantingWindow.IsOpen)plantingWindow.IsOpen=false;
+                else OnPlantingCommand(name,"");
+            }
             else if(name=="/cam")SetCameraHeightEnabled(!config.RememberCameraHeight);
-            else OnFashionCommand(name,"");
+            else
+            {
+                if(pendingLauncher=="Fashion Report")pendingLauncher=null;
+                minimizedLaunchers.Remove("Fashion Report");
+                if(fashionWindow.IsOpen)fashionWindow.IsOpen=false;
+                else OnFashionCommand(name,"");
+            }
         }
     }
     private void DrawShortcutSettings()
@@ -86,7 +103,7 @@ public sealed partial class Plugin
             ImGui.PopID();
         }
         if(shortcutCaptureStatus.Length>0)ImGui.TextWrapped(shortcutCaptureStatus);
-        SettingsHelp("Shortcuts pause while typing or editing a control and while the game is unfocused. They do not replace FFXIV keybinds: choose unused combinations. /gardening still requires an identified paired house.");
+        SettingsHelp("Window shortcuts toggle open / closed. Shortcuts pause while typing or editing a control and while the game is unfocused. They do not replace FFXIV keybinds: choose unused combinations. /gardening still requires an identified paired house.");
     }
     private void MessageToggle(string label,bool value,Action<bool> set)
     { if(ImGui.Checkbox(label,ref value)){set(value);SaveConfiguration();} }
@@ -111,3 +128,4 @@ public sealed partial class Plugin
         MessageToggle("Fashion Report: could not open browser",config.NotifyBrowserErrors,v=>config.NotifyBrowserErrors=v);
     }
 }
+

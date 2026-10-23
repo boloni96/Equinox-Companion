@@ -55,7 +55,7 @@ public sealed partial class Plugin
   }
   if(testingRequest is not null||!config.SyncEnabled||scope.Length==0||now<testingNext)return;
   var pending=(testingState.Pending??[]).FirstOrDefault(p=>p.Blocked.Length==0);
-  if(!testingWindow.IsOpen&&pending is null)return;
+  if(!testingWindow.IsOpen&&!TestingInCompanion&&pending is null)return;
   testingRequestScope=scope;testingRequestId=pending?.Report.Id??"";
   testingRequest=pending is not null?testingSync.Send(config.PairingKey,pending.Report):testingSync.Read(config.PairingKey,testingState.Cursor);testingNext=now.AddSeconds(5);
  }
@@ -72,11 +72,11 @@ public sealed partial class Plugin
    ImGui.EndCombo();
   }
   if(ImGui.IsItemHovered())ImGui.SetTooltip("Your tester label is shared. Each tester keeps a separate result; select the same label on your other client or in the Journal.");
-  ImGui.SameLine();if(ImGui.SmallButton("New tester"))ImGui.OpenPopup("New test participant");
+  SameLineIfFits(ButtonWidth("New tester"));if(ImGui.SmallButton("New tester"))ImGui.OpenPopup("New test participant");
   if(ImGui.BeginPopup("New test participant")){ImGui.InputText("Display name",ref testingName,100);if(ImGui.Button("Use this name")&&testingName.Trim().Length>0){var chosenName=testingName.Trim();var chosenId=TestingPeople().FirstOrDefault(p=>string.Equals(p.Name,chosenName,StringComparison.OrdinalIgnoreCase)).Id??"tester:"+Guid.NewGuid().ToString();config.TestingTesterName=chosenName;config.TestingTesterId=chosenId;SaveConfiguration();testingSelected="";ImGui.CloseCurrentPopup();}ImGui.EndPopup();}
-  ImGui.SetNextItemWidth(210);if(ImGui.InputTextWithHint("##testSearch","Find a test",ref testingSearch,150))FilterTesting();ImGui.SameLine();
-  ImGui.SetNextItemWidth(160);if(ImGui.BeginCombo("##testCategory",testingCategory.Length==0?"All categories":testingCategory)){if(ImGui.Selectable("All categories",testingCategory.Length==0)){testingCategory="";FilterTesting();}foreach(var category in (testingState.Catalog?.Tests??[]).Select(t=>t.Category).Distinct())if(ImGui.Selectable(category,testingCategory==category)){testingCategory=category;FilterTesting();}ImGui.EndCombo();}
-  ImGui.SameLine();ImGui.SetNextItemWidth(130);if(ImGui.BeginCombo("##testStatus",testingFilter.Length==0?"All results":testingFilter=="retest"?"Needs retest":TestingPolicy.Label(testingFilter))){foreach(var f in new[]{"","not-tested","pass","fail","later","retest"})if(ImGui.Selectable(f==""?"All results":f=="retest"?"Needs retest":TestingPolicy.Label(f),testingFilter==f)){testingFilter=f;FilterTesting();}ImGui.EndCombo();}
+  ImGui.SetNextItemWidth(Math.Min(210,ImGui.GetContentRegionAvail().X));if(ImGui.InputTextWithHint("##testSearch","Find a test",ref testingSearch,150))FilterTesting();SameLineIfFits(160);
+  ImGui.SetNextItemWidth(Math.Min(160,ImGui.GetContentRegionAvail().X));if(ImGui.BeginCombo("##testCategory",testingCategory.Length==0?"All categories":testingCategory)){if(ImGui.Selectable("All categories",testingCategory.Length==0)){testingCategory="";FilterTesting();}foreach(var category in (testingState.Catalog?.Tests??[]).Select(t=>t.Category).Distinct())if(ImGui.Selectable(category,testingCategory==category)){testingCategory=category;FilterTesting();}ImGui.EndCombo();}
+  SameLineIfFits(130);ImGui.SetNextItemWidth(Math.Min(130,ImGui.GetContentRegionAvail().X));if(ImGui.BeginCombo("##testStatus",testingFilter.Length==0?"All results":testingFilter=="retest"?"Needs retest":TestingPolicy.Label(testingFilter))){foreach(var f in new[]{"","not-tested","pass","fail","later","retest"})if(ImGui.Selectable(f==""?"All results":f=="retest"?"Needs retest":TestingPolicy.Label(f),testingFilter==f)){testingFilter=f;FilterTesting();}ImGui.EndCombo();}
   if(ImGui.Checkbox("Previous reports",ref testingArchive))FilterTesting();ImGui.SameLine();ImGui.TextDisabled($"{testingVisible.Length} tests · {(testingState.Pending??[]).Length} pending");if(ImGui.IsItemHovered())ImGui.SetTooltip("Manual testing results · not game activity completion.\nLast received: "+(testingReceived.Length>0?testingReceived:"not yet")+"\nCompanion "+typeof(Plugin).Assembly.GetName().Version+" · Journal "+testingState.ServerVersion);
   if(testingState.Catalog is null){ImGui.TextWrapped(testingMessage);return;}
   if(ImGui.BeginChild("TestingRows",Vector2.Zero,false))foreach(var t in testingVisible){
@@ -95,7 +95,7 @@ public sealed partial class Plugin
   ImGui.TextUnformatted(pending is null?"Your result: "+TestingPolicy.Label(mine?.Status??""):pending.Blocked.Length>0?"Needs review · your draft is kept":"Saving… · kept on this device");
   if(ImGui.InputTextMultiline("##testNotes"+t.Id,ref testingNotes,4000,new Vector2(-1,58))){config.TestingDraftBases.TryAdd(TestingDraftKey(t),testingSelectedBase);config.TestingDrafts[TestingDraftKey(t)]=testingNotes;SaveConfiguration();}
   ImGui.BeginDisabled(t.Archived||config.TestingTesterId.Length==0||pending is not null);
-  foreach(var result in new[]{"pass","fail","later","not-tested"}){if(result!="pass")ImGui.SameLine();if(ImGui.Button(TestingPolicy.Label(result)+"##"+t.Id))QueueTest(t,result);}
+  foreach(var result in new[]{"pass","fail","later","not-tested"}){if(result!="pass")SameLineIfFits(ButtonWidth(TestingPolicy.Label(result)));if(ImGui.Button(TestingPolicy.Label(result)+"##"+t.Id))QueueTest(t,result);}
   ImGui.EndDisabled();
   if(pending?.Blocked.Length>0){ImGui.TextWrapped(pending.Blocked);if(ImGui.Button("Keep my draft and retry##"+t.Id)){testingState=testingState with {Pending=(testingState.Pending??[]).Where(p=>p.Report.Id!=pending.Report.Id).ToArray()};testingSelectedBase=mine?.Id??"";config.TestingDraftBases[TestingDraftKey(t)]=testingSelectedBase;QueueTest(t,pending.Report.Status);}if(ImGui.IsItemHovered())ImGui.SetTooltip("Read the latest tester results below first. Saves your notes as a new report against the current result and test revision.");}
   if(ImGui.TreeNode("Tester results & history##"+t.Id)){foreach(var r in (testingReportsByTest.GetValueOrDefault(t.Id)??[]).Reverse()){ImGui.TextWrapped(r.TesterName+" · "+TestingPolicy.Label(r.Status)+" · "+(DateTimeOffset.TryParse(r.At,out var at)?at.ToLocalTime().ToString("g"):r.At));if(ImGui.IsItemHovered())ImGui.SetTooltip($"Test revision {r.TestRevision} · {r.Source}\nCompanion: {r.PluginVersion}\nJournal: {r.JournalVersion}\nServer: {r.WorkerVersion}");if(r.Notes.Length>0)ImGui.TextWrapped(r.Notes);}ImGui.TreePop();}
@@ -113,3 +113,4 @@ public sealed partial class Plugin
   testingExport=Task.Run(()=>{Directory.CreateDirectory(Path.GetDirectoryName(path)!);File.WriteAllText(path,JsonSerializer.Serialize(snapshot,new JsonSerializerOptions(JsonSerializerDefaults.Web){WriteIndented=true}));return path;});testingMessage="Exporting checklist…";
  }
 }
+

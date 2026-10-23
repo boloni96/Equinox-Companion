@@ -6,7 +6,7 @@ namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
     private readonly Dictionary<string,string> tabPerformanceLabels=[];
-    private void DrawOrderedTabs()
+    private List<(string Id, string Label, Action Draw)> CompanionTabs()
     {
         var tabs = new List<(string Id, string Label, Action Draw)>
         {
@@ -19,10 +19,20 @@ public sealed partial class Plugin
         if(config.EnableQuickLoot)tabs.Add(("quickloot", "QuickLoot###equinox-quickloot", DrawQuickLoot));
         if(config.EnableFollowThem)tabs.Add(("followthem", "Helper###equinox-followthem", DrawHelperPanel));
         tabs.Add(("settings", "Settings###equinox-settings", DrawSettings));
+        return tabs;
+    }
+    private List<string> CompanionTabOrder(List<(string Id, string Label, Action Draw)> tabs)
+    {
         config.TabOrder ??= [];
         // Repair the old person-at-end layout once; retain subsequent user ordering.
         var order = TabOrderPolicy.Reconcile(config.TabOrder,tabs.Select(t=>t.Id),config.TabOrderVersion<1);
         if(config.TabOrderVersion<1){config.TabOrderVersion=1;config.TabOrder=order;SaveConfiguration();}
+        return order;
+    }
+    private void DrawOrderedTabs()
+    {
+        var tabs = CompanionTabs();
+        var order = CompanionTabOrder(tabs);
         // ImGui appends late-arriving tabs regardless of submission order. Recreate the
         // bar when the roster's tab membership changes, then restore the saved order.
         var tabBarId="CompanionSections-v2-"+string.Join("|",tabs.Select(t=>t.Id));
@@ -68,5 +78,6 @@ public sealed partial class Plugin
         ImGui.EndTabBar();
     }
 }
+
 
 

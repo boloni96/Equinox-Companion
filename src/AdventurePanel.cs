@@ -8,7 +8,7 @@ public sealed partial class Plugin
  private sealed class AdventureWindow:Window
  {
   private readonly Plugin p;
-  public AdventureWindow(Plugin p):base("Adventure · Equinox###EquinoxAdventure"){this.p=p;RespectCloseHotkey=false;Size=new(740,590);SizeCondition=ImGuiCond.FirstUseEver;SizeConstraints=new(){MinimumSize=new(510,330),MaximumSize=new(float.MaxValue)};AllowPinning=true;}
+  public AdventureWindow(Plugin p):base("Adventure · Equinox###EquinoxAdventure"){this.p=p;RespectCloseHotkey=false;Size=new(540,530);SizeCondition=ImGuiCond.FirstUseEver;SizeConstraints=new(){MinimumSize=new(360,280),MaximumSize=new(float.MaxValue)};AllowPinning=true;}
   public override void Draw()=>p.DrawWindowWithLauncher(p.DrawAdventure);
   public override void PostDraw()=>HandleNativeCollapse(this,()=>p.MinimizeLauncher("Adventure"));
  }
@@ -62,8 +62,16 @@ public sealed partial class Plugin
   if(config.AdventurePairingHash==hash&&old.Length==adventureBoards.Length&&old.Zip(adventureBoards).All(x=>x.First.Id==x.Second.Id&&x.First.Revision==x.Second.Revision)&&config.SelectedAdventure==adventureSelected)return;
   config.AdventurePairingHash=hash;config.CachedAdventures=adventureBoards;config.SelectedAdventure=adventureSelected;SaveConfiguration();
  }
- private void DrawAdventureNavigation(AdventureBoard board)
+ private readonly UiProjectionCache<AdventureProgress> adventureProgress=new(maxAgeMs:0);
+ private void DrawAdventureTotal(AdventureBoard board)
  {
+  var progress=adventureProgress.Get(board,"",Environment.TickCount64,()=>AdventureProgress.Count(board));
+  ImGui.ProgressBar(progress.Total==0?0:(float)progress.Done/progress.Total,new Vector2(-1,ImGui.GetFrameHeight()),$"{progress.Done} / {progress.Total} done");
+  if(ImGui.IsItemHovered())ImGui.SetTooltip(board.Title+"\nCompleted activities across the whole adventure. Shared activities count once.\n"+$"{progress.StopsDone} / {progress.Stops} stops complete. Visiting a stop does not complete its activities.");
+ }
+ private void DrawAdventureNavigation(AdventureBoard board,float width)
+ {
+  ImGui.SetNextItemWidth(width);
   if(board.Kind!="garden"){
    if(ImGui.BeginCombo("##WorldCharacter",board.Index>=board.Stops.Length?"Round reviewed":AdventureText(board.Stops[board.Index].Title))){
     for(var i=0;i<board.Stops.Length;i++){var s=board.Stops[i];if(ImGui.Selectable($"{s.Tasks.Count(t=>t.Done)}/{s.Tasks.Length} · {AdventureText(s.Title)}##stop{i}",i==board.Index))AdventureAction(board,i);}ImGui.EndCombo();
@@ -71,11 +79,11 @@ public sealed partial class Plugin
   }
   var current=board.Index<board.Stops.Length?board.Stops[board.Index]:board.Stops.FirstOrDefault();if(current is null)return;
   var worlds=board.Stops.Select(s=>s.World).Distinct().ToArray();
-  ImGui.SetNextItemWidth(Math.Max(180,ImGui.GetContentRegionAvail().X-65));
-  if(ImGui.BeginCombo("World",AdventureText(current.World))){foreach(var world in worlds){var stops=board.Stops.Select((s,i)=>(Stop:s,Index:i)).Where(x=>x.Stop.World==world).ToArray();if(ImGui.Selectable($"{stops.Count(x=>AdventurePolicy.Complete(x.Stop))}/{stops.Length} · {AdventureText(world)}",world==current.World)){var next=stops.FirstOrDefault(x=>!AdventurePolicy.Complete(x.Stop));AdventureAction(board,next.Stop is null?stops[0].Index:next.Index);}}ImGui.EndCombo();}
+  if(ImGui.BeginCombo("##GardenWorld",AdventureText(current.World))){foreach(var world in worlds){var stops=board.Stops.Select((s,i)=>(Stop:s,Index:i)).Where(x=>x.Stop.World==world).ToArray();if(ImGui.Selectable($"{stops.Count(x=>AdventurePolicy.Complete(x.Stop))}/{stops.Length} · {AdventureText(world)}",world==current.World)){var next=stops.FirstOrDefault(x=>!AdventurePolicy.Complete(x.Stop));AdventureAction(board,next.Stop is null?stops[0].Index:next.Index);}}ImGui.EndCombo();}
+  if(ImGui.IsItemHovered())ImGui.SetTooltip("World · "+current.World);
   string Label(AdventureStop stop){var names=(config.SharedRoster?.People??[]).SelectMany(p=>p.Characters.Where(c=>stop.CharacterIds?.Contains(c.Id)==true).Take(1).Select(c=>p.Name+" / "+c.Account+" / "+c.Name));return $"{stop.Tasks.Count(t=>t.Done)}/{stop.Tasks.Length} · {string.Join(", ",names)} · {stop.Title} · {stop.Subtitle}";}
-  ImGui.SetNextItemWidth(Math.Max(180,ImGui.GetContentRegionAvail().X-65));
-  if(ImGui.BeginCombo("House",AdventureText(Label(current)))){for(var i=0;i<board.Stops.Length;i++){var stop=board.Stops[i];if(stop.World!=current.World)continue;if(ImGui.Selectable(AdventureText(Label(stop))+"##house"+i,i==board.Index))AdventureAction(board,i);}ImGui.EndCombo();}
+  ImGui.SetNextItemWidth(width);
+  if(ImGui.BeginCombo("##GardenHouse",AdventureText(Label(current)))){for(var i=0;i<board.Stops.Length;i++){var stop=board.Stops[i];if(stop.World!=current.World)continue;if(ImGui.Selectable(AdventureText(Label(stop))+"##house"+i,i==board.Index))AdventureAction(board,i);}ImGui.EndCombo();}
   if(ImGui.IsItemHovered())ImGui.SetTooltip(Label(current));
  }
  private bool AdventureInScope(AdventureBoard board)
@@ -87,14 +95,14 @@ public sealed partial class Plugin
  private void DrawAdventureFilters()
  {
   var people=config.SharedRoster?.People??[];
-  ImGui.SetNextItemWidth(180);
+  ImGui.SetNextItemWidth(Math.Min(180,Math.Max(60,ImGui.GetContentRegionAvail().X-ButtonWidth("Person"))));
   if(ImGui.BeginCombo("Person",people.FirstOrDefault(p=>p.Id==adventurePerson)?.Name??"All people")){
    if(ImGui.Selectable("All people",adventurePerson.Length==0)){adventurePerson="";adventureAccount="";adventureSelected="";}
    foreach(var p in people)if(ImGui.Selectable(AdventureText(p.Name)+"##"+p.Id,p.Id==adventurePerson)){adventurePerson=p.Id;adventureAccount="";adventureSelected="";}
    ImGui.EndCombo();
   }
   var accounts=people.Where(p=>adventurePerson.Length==0||p.Id==adventurePerson).SelectMany(p=>(p.Accounts??[]).Select(a=>(Id:a.Id,Name:p.Name+" / "+a.Name))).ToArray();
-  ImGui.SetNextItemWidth(260);
+  ImGui.SetNextItemWidth(Math.Min(260,Math.Max(60,ImGui.GetContentRegionAvail().X-ButtonWidth("Account"))));
   if(ImGui.BeginCombo("Account",accounts.FirstOrDefault(a=>a.Id==adventureAccount).Name??"All accounts")){
    if(ImGui.Selectable("All accounts",adventureAccount.Length==0)){adventureAccount="";adventureSelected="";}
    foreach(var a in accounts)if(ImGui.Selectable(AdventureText(a.Name)+"##"+a.Id,a.Id==adventureAccount)){adventureAccount=a.Id;adventureSelected="";}
@@ -183,9 +191,8 @@ public sealed partial class Plugin
  private void DrawAdventure()
  {
   if(!config.SyncEnabled||config.PairingKey.Length!=64){ImGui.TextWrapped("Pair Companion with your Journal in Settings to open the same saved adventures here.");if(ImGui.Button("Open Companion settings"))visible=true;return;}
-  ImGui.TextColored(new Vector4(.65f,.8f,1,1),"YOUR PEOPLE · YOUR WORLDS");
   if(ImGui.Button("Adventure home")){adventureSelected="";adventurePrompt=null;}
-  ImGui.SameLine();if(ImGui.Button("Open Journal"))Dalamud.Utility.Util.OpenLink("https://equinoxjournal.pages.dev/#adventure");
+  SameLineIfFits(ButtonWidth("Open Journal"));if(ImGui.Button("Open Journal"))Dalamud.Utility.Util.OpenLink("https://equinoxjournal.pages.dev/#adventure");
   if(!adventureFresh)ImGui.TextWrapped(adventureMessage);
   if(ImGui.CollapsingHeader("People, accounts & connection")){ImGui.BeginDisabled(adventureRequest is not null);if(ImGui.SmallButton("Refresh"))adventureNext=default;ImGui.EndDisabled();DrawAdventureFilters();ImGui.TextWrapped(adventureMessage);if(adventureFetched!=default)ImGui.TextDisabled($"Last checked {adventureFetched.ToLocalTime():h:mm:ss tt}");}
   ImGui.Separator();
@@ -201,8 +208,8 @@ public sealed partial class Plugin
     ImGui.PopID();
    }ImGui.EndChild();return;
   }
-  ImGui.TextUnformatted(board.Title);
-  ImGui.SameLine();DrawAdventureLocation(board);
+  DrawAdventureTotal(board);
+  DrawAdventureLocation(board);
   // Resolve game selection before any collapsed house/character section is drawn.
   FollowAdventureGarden(board);
   if(board.Protocol<2)ImGui.TextWrapped("This saved route still needs an upgrade. Reload Journal V7.11.177 or newer, sign in, and wait for Adventure pairing to finish. Then close it and press Refresh here.");
@@ -219,7 +226,7 @@ public sealed partial class Plugin
      else DrawAdventureCharacter(characters[i],stop);
     }
     if(characters.Length==0){DrawAdventureHouseControls(stop);stepsOpen=DrawAdventureStepsHeader(stop.Tasks);}
-   }else ImGui.ProgressBar(stop.Tasks.Length==0?0:(float)stop.Tasks.Count(t=>t.Done)/stop.Tasks.Length,new Vector2(-1,0),$"{stop.Tasks.Count(t=>t.Done)} / {stop.Tasks.Length} confirmed");
+   }else ImGui.TextDisabled($"This stop · {stop.Tasks.Count(t=>t.Done)} / {stop.Tasks.Length} confirmed");
    if(board.Kind=="multi"){
     PrepareAdventureLayout(stop);
     foreach(var section in adventureCharacterTasks){
@@ -258,4 +265,5 @@ public sealed partial class Plugin
   }
  }
 }
+
 

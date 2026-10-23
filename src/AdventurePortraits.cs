@@ -83,7 +83,9 @@ public sealed partial class Plugin
    if(entry.Picture is null&&entry.Loading is null&&DateTimeOffset.UtcNow>=entry.Retry&&portraitCache.Values.Count(e=>e.Loading is not null)<2)entry.Loading=LoadAdventurePortrait(character.Id,reference.Hash,config.PairingKey,portraitCancel.Token);
    picture=entry.Picture;
   }
-  ImGui.PushID("travel-"+character.Id);var origin=ImGui.GetCursorScreenPos();var size=new Vector2(88,110);
+  ImGui.PushID("travel-"+character.Id);var origin=ImGui.GetCursorScreenPos();
+  var compact=ImGui.GetContentRegionAvail().X<ImGui.GetFontSize()*27;
+  var size=compact?new Vector2(60,75):new Vector2(88,110);
   if(ImGui.BeginTable("portrait-header",2,ImGuiTableFlags.SizingFixedFit)){
    ImGui.TableSetupColumn("Portrait",ImGuiTableColumnFlags.WidthFixed,size.X);
    ImGui.TableSetupColumn("Character",ImGuiTableColumnFlags.WidthStretch);
@@ -91,9 +93,9 @@ public sealed partial class Plugin
    if(picture is {} p){var scale=Math.Max(size.X/p.Texture.Width,size.Y/p.Texture.Height)*p.Frame.Z;var full=new Vector2(p.Texture.Width,p.Texture.Height)*scale;var offset=(full-size)*new Vector2(p.Frame.X/100,p.Frame.Y/100);ImGui.Image(p.Texture.Handle,size,offset/full,(offset+size)/full);}
    else{GardenImage("assets/category-icons/characters.png",ImGui.GetCursorScreenPos(),size);ImGui.Dummy(size);}
    ImGui.TableNextColumn();
-   if(ImGui.BeginTable("character-heading",2,ImGuiTableFlags.SizingFixedFit)){
+   if(ImGui.BeginTable("character-heading",compact?1:2,ImGuiTableFlags.SizingFixedFit)){
     ImGui.TableSetupColumn("Name",ImGuiTableColumnFlags.WidthStretch);
-    ImGui.TableSetupColumn("Houses",ImGuiTableColumnFlags.WidthFixed,2*Math.Max(28,ImGui.GetFrameHeight())+ImGui.GetStyle().ItemSpacing.X);
+    if(!compact)ImGui.TableSetupColumn("Houses",ImGuiTableColumnFlags.WidthFixed,2*Math.Max(28,ImGui.GetFrameHeight())+ImGui.GetStyle().ItemSpacing.X);
     ImGui.TableNextRow();ImGui.TableNextColumn();ImGui.TextWrapped(character.Name);
    var scope=CharacterSwitchScope(character.Id);ImGui.TextWrapped(scope.PersonName+" · "+character.Account);
    var here=Player.IsLoaded&&Player.ContentId.ToString(System.Globalization.CultureInfo.InvariantCulture)==character.ContentId;
@@ -107,3 +109,4 @@ public sealed partial class Plugin
   ImGui.Spacing();ImGui.PopID();
  }
 }
+

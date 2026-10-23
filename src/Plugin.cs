@@ -252,7 +252,7 @@ public sealed partial class Plugin : IDalamudPlugin
         InitializeTesting();
         itemSearchWindow=new ItemSearchWindow(this);windows.AddWindow(itemSearchWindow);
         mainWindow = new CompanionWindow(this); windows.AddWindow(mainWindow);
-        welcomeWindow = new WelcomeWindow(this); windows.AddWindow(welcomeWindow);
+        welcomeWindow = new WelcomeWindow(this); welcomeWindows.AddWindow(welcomeWindow);
         fashionWindow = new FashionReportWindow(this,OpenFashionBrowser); windows.AddWindow(fashionWindow); fashionWindow.Minimize = () => MinimizeLauncher("Fashion Report");
         plantingWindow = new PlantingGuideWindow(this); windows.AddWindow(plantingWindow);
         registrationWindow = new NewCharacterWindow(this); windows.AddWindow(registrationWindow);
@@ -1076,8 +1076,11 @@ public sealed partial class Plugin : IDalamudPlugin
             PauseShortcuts();
             escapeRequested=false;
             escapeWasDown=Keys[Dalamud.Game.ClientState.Keys.VirtualKey.ESCAPE];
-            adventureCutsceneWindows.Draw();
-            DrawPluginItemPopup();
+            using (new EquinoxAppearance(GoddessAppearance))
+            {
+                adventureCutsceneWindows.Draw();
+                DrawPluginItemPopup();
+            }
             return;
         }
         UpdateShortcuts();
@@ -1086,8 +1089,13 @@ public sealed partial class Plugin : IDalamudPlugin
         var escapeDown=Keys[Dalamud.Game.ClientState.Keys.VirtualKey.ESCAPE];
         escapeRequested=escapeDown&&!escapeWasDown;escapeWasDown=escapeDown;
         var perf = System.Diagnostics.Stopwatch.GetTimestamp();
-        windows.Draw();
-        DrawPluginItemPopup();
+        using (new EquinoxAppearance(GoddessAppearance))
+        {
+            windows.Draw();
+            DrawPluginItemPopup();
+        }
+        // The introduction previews the new design even before it is selected.
+        using (new EquinoxAppearance(true)) welcomeWindows.Draw();
         TrackPerformance("window drawing", perf);
         perf = System.Diagnostics.Stopwatch.GetTimestamp();
         visible = mainWindow.IsOpen;
@@ -1102,6 +1110,7 @@ public sealed partial class Plugin : IDalamudPlugin
     private void DrawContents()
     {
         RememberItemMenuWindow();
+        if (GoddessAppearance) { DrawGoddessCompanion(); return; }
         if(configurationError.Length>0)ImGui.TextWrapped(configurationError);
         if (ImGui.BeginTable("companion-header", 2, ImGuiTableFlags.SizingStretchProp))
         {
@@ -1288,6 +1297,7 @@ public sealed partial class Plugin : IDalamudPlugin
         DisposeAdventures();
         DisposeTesting();
         windows.RemoveAllWindows();
+        welcomeWindows.RemoveAllWindows();
         fashionWindow.Dispose();
         Pi.UiBuilder.OpenMainUi -= Open;
         Pi.UiBuilder.OpenConfigUi -= OpenSettings;
@@ -1304,6 +1314,7 @@ public sealed partial class Plugin : IDalamudPlugin
         FlushConfiguration();
     }
 }
+
 
 
 

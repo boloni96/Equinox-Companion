@@ -5,12 +5,16 @@ namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
     private static string CompanionVersion => typeof(Plugin).Assembly.GetName().Version?.ToString()??"0";
+    private readonly WindowSystem welcomeWindows = new("EquinoxCompanion");
     private WelcomeWindow welcomeWindow = null!;
     private void DismissWelcome()
     {
         welcomeWindow.IsOpen=false;
-        if(config.WelcomeVersion==CompanionVersion)return;
-        config.WelcomeVersion=CompanionVersion;SaveConfiguration();
+        var needsSave = config.WelcomeVersion != CompanionVersion || AppearancePolicy.NeedsChoice(config.Appearance);
+        config.WelcomeVersion=CompanionVersion;
+        // Closing the introduction never opts into a new theme.
+        config.Appearance=AppearancePolicy.Dismiss(config.Appearance);
+        if(needsSave)SaveConfiguration();
     }
     private sealed class WelcomeWindow : Window
     {
@@ -18,52 +22,59 @@ public sealed partial class Plugin
         public WelcomeWindow(Plugin plugin):base("Welcome to Equinox Companion###EquinoxWelcome",ImGuiWindowFlags.None)
         {
             this.plugin=plugin;RespectCloseHotkey=false;
-            IsOpen=plugin.config.WelcomeVersion!=CompanionVersion;
-            Size=new Vector2(580,550);SizeCondition=ImGuiCond.FirstUseEver;
-            SizeConstraints=new WindowSizeConstraints{MinimumSize=new Vector2(460,440),MaximumSize=new Vector2(900,850)};
+            IsOpen=plugin.config.WelcomeVersion!=CompanionVersion || AppearancePolicy.NeedsChoice(plugin.config.Appearance);
+            Size=new Vector2(540,440);SizeCondition=ImGuiCond.FirstUseEver;
+            SizeConstraints=new WindowSizeConstraints{MinimumSize=new Vector2(380,300),MaximumSize=new Vector2(900,850)};
         }
         public override void OnClose(){if(!plugin.minimizedLaunchers.Contains("Welcome"))plugin.DismissWelcome();}
         public override void PostDraw()=>HandleNativeCollapse(this,()=>plugin.MinimizeLauncher("Welcome"));
         public override void Draw()=>plugin.DrawWindowWithLauncher(DrawContent);
         private void DrawContent()
         {
-            var icon=Textures.GetFromFile(Path.Combine(Pi.AssemblyLocation.DirectoryName!,"icon.png")).GetWrapOrDefault();
-            if(icon is not null){ImGui.Image(icon.Handle,new Vector2(64,64));ImGui.SameLine();}
-            ImGui.BeginGroup();ImGui.TextDisabled("EQUINOX COMPANION");
-            ImGui.TextColored(new Vector4(.72f,.84f,1f,1f),"Welcome, Goddess");
-            ImGui.SameLine();
-            // A drawn blue heart stays visible even when the user's font has no emoji glyphs.
-            var heart=ImGui.GetCursorScreenPos();var ink=ImGui.GetColorU32(new Vector4(.35f,.65f,1f,1f));var draw=ImGui.GetWindowDrawList();
-            draw.AddCircleFilled(heart+new Vector2(5,5),4,ink);
-            draw.AddCircleFilled(heart+new Vector2(11,5),4,ink);
-            draw.AddTriangleFilled(heart+new Vector2(1,6),heart+new Vector2(15,6),heart+new Vector2(8,15),ink);
-            ImGui.Dummy(new Vector2(17,17));
-            ImGui.TextWrapped("Your Empire, with a little less to carry.");ImGui.EndGroup();
-            ImGui.Spacing();ImGui.Separator();ImGui.Spacing();
-            ImGui.TextWrapped("Equinox Companion was created to help you care for your Equinox Empire—from every little garden to every place you call home. A little less to remember, a little more time to enjoy the worlds you’ve made your own.");
-            ImGui.Spacing();
-            ImGui.TextColored(new Vector4(.72f,.84f,1f,1f),"Made with care, for you.");
-            ImGui.Spacing();ImGui.Separator();ImGui.Spacing();
-            if(ImGui.CollapsingHeader("Companion guide & what's new"))
+            var font=ImGui.GetFontSize();var iconSize=font*2;
+            var at=ImGui.GetCursorScreenPos();
+            plugin.GardenImage("assets/category-icons/characters.png",at,new Vector2(iconSize));
+            ImGui.Dummy(new Vector2(iconSize));ImGui.SameLine();ImGui.BeginGroup();
+            ImGui.TextColored(new Vector4(.57f,.79f,1,1),"EQUINOX · A little more room to play");
+            ImGui.TextDisabled("Companion "+CompanionVersion);ImGui.EndGroup();
+            ImGui.TextWrapped("Meet Goddess blue: a tighter menu, compact windows and the same familiar tools.");
+            ImGui.TextDisabled("Design preview · example progress");
+            if(ImGui.BeginChild("DesignPreview",new Vector2(0,font*9.5f),true))
             {
-                ImGui.BulletText("0.5.1.60: Background local saves and performance timings");
-                ImGui.TextWrapped("Settings > Diagnostics measures draw, update and snapshot time. Typing numeric settings commits after editing. QuickLoot searches run in bounded batches.");
-                ImGui.BulletText("FollowThem travel and movement testing");
-                ImGui.TextWrapped("Mount matching, brief movement-input capture, bounded follow recovery, transport menu matching, and optional Lifestream World/DC travel. Deploy Journal V7.11.77 for new relay types. Native routes still need in-game testing.");
-                ImGui.BulletText("Characters, accounts and collections");
-                ImGui.BulletText("Housing visits and garden care reminders");
-                ImGui.BulletText("Gardening plans, submarine timers and supplies");
-                ImGui.BulletText("Fashion Report, right here in game");
-                ImGui.Spacing();ImGui.TextUnformatted("Version "+CompanionVersion);
-                ImGui.TextWrapped("New: optional nearby coffer auto-open (off by default), plus six coffer styles with red/green previews in Settings > Features > Treasure Coffer markers > Coffer appearance. Your selection applies to both maps and stays local. The original Game chest style is retained until you choose another. Auto-open waits through combat/loading and never moves you or clicks portals. Native opening and icon hiding/restoration need in-game testing. Right-click FollowThem or QuickLoot in the top bar to open Companion. Esc minimizes focused windows to their icons. Journal requirements are unchanged.");
-                ImGui.Spacing();
-                ImGui.TextWrapped(plugin.config.PairingKey.Length==64?"Your saved pairing and settings are kept. Journal V7.11.27 supports the new submarine cache sync; save once after updating the website.":"Start in Settings > Connection: paste the pairing key from your Journal's Game connection. Then choose what to sync in Settings > Tracking.");
-                ImGui.TextWrapped("/equinox opens Companion. /gardening opens the garden guide at an identified paired house. /fashionr opens the Fashion Report.");
+                if(ImGui.BeginTable("PreviewColumns",2,ImGuiTableFlags.SizingFixedFit))
+                {
+                    ImGui.TableSetupColumn("Menu",ImGuiTableColumnFlags.WidthFixed,font*6.3f);
+                    ImGui.TableSetupColumn("Content",ImGuiTableColumnFlags.WidthStretch);
+                    ImGui.TableNextColumn();
+                    ImGui.TextColored(new Vector4(.57f,.79f,1,1),"EQUINOX");
+                    ImGui.TextUnformatted("My Empire");ImGui.TextUnformatted("Your people");
+                    ImGui.TextUnformatted("Gardening");ImGui.TextUnformatted("Submarines");
+                    ImGui.TextUnformatted("Testing");ImGui.TextUnformatted("Settings");
+                    ImGui.TableNextColumn();
+                    ImGui.TextUnformatted("Adventure");
+                    ImGui.ProgressBar(.3f,new Vector2(-1,0),"6 / 20 done");
+                    ImGui.TextDisabled("This stop · 2 / 3 confirmed");
+                    ImGui.Separator();ImGui.TextUnformatted("Gardening");
+                    ImGui.TextUnformatted("Fashion Report");
+                    ImGui.TextWrapped("Details when you need them.");
+                    ImGui.EndTable();
+                }
             }
-            ImGui.Spacing();
-            if(ImGui.Button("Open Companion")){plugin.visible=true;plugin.mainWindow.IsOpen=true;plugin.DismissWelcome();}
-            ImGui.SameLine();if(ImGui.Button("Close"))plugin.DismissWelcome();
-            ImGui.TextDisabled("Shown once per version. Reopen from Settings > Diagnostics.");
+            ImGui.EndChild();
+            ImGui.TextWrapped("Choose for this installation. You can switch at any time in Settings → Appearance.");
+            if(ImGui.Button("Use the new design")){plugin.SetAppearance(true);plugin.visible=true;plugin.mainWindow.IsOpen=true;plugin.DismissWelcome();}
+            SameLineIfFits(ButtonWidth("Keep the current design"));
+            if(ImGui.Button("Keep the current design")){plugin.SetAppearance(false);plugin.DismissWelcome();}
+            ImGui.TextDisabled(plugin.GoddessAppearance?"Saved choice: Goddess blue":"Saved choice: current design");
+            if(ImGui.IsItemHovered())ImGui.SetTooltip("Your choice is remembered after restarting and updating. Closing this preview keeps the saved choice. Pairing and game settings are unchanged.");
+            if(ImGui.CollapsingHeader("What's new & guide"))
+            {
+                ImGui.TextWrapped("Goddess blue applies to Companion, Adventure, Gardening, housing bids, Fashion Report and item tools. The new Companion menu keeps your people and accounts, with Testing built in. Narrow windows use menu icons with hover names.");
+                ImGui.TextWrapped("Adventure shows overall activities done, with separate current-stop confirmation. Its world selector stays compact; Bring here and Cancel bring remain reachable. Window keybinds toggle open and closed.");
+                ImGui.TextWrapped(plugin.config.PairingKey.Length==64?"Your saved pairing and settings are kept.":"Start in Settings → Connection: paste the pairing key from your Journal's Game connection.");
+                ImGui.TextWrapped("/equinox · /adventure · /gardening · /fashionr · /bid · /eqtests. Esc minimises a focused window to its familiar icon. Commands reopen windows; shortcuts toggle them.");
+                if(ImGui.SmallButton("Open Companion")){plugin.visible=true;plugin.mainWindow.IsOpen=true;plugin.DismissWelcome();}
+            }
         }
     }
 }

@@ -3,6 +3,8 @@ namespace EquinoxCompanion;
 [Serializable]
 public sealed class Configuration : IPluginConfiguration
 {
+    public AppearancePreference Appearance { get; set; } = new();
+    public string CompanionSection { get; set; } = "housing";
     public Dictionary<string, TestingLocal> TestingByPairing { get; set; } = [];
     public Dictionary<string, string> TestingDrafts { get; set; } = [];
     public Dictionary<string,string> TestingDraftBases { get; set; } = [];
@@ -98,4 +100,5 @@ public sealed class Configuration : IPluginConfiguration
     public List<TendingRecord> Tending { get; set; } = [];
     public List<HouseObservation> Houses { get; set; } = [];
 }
+
 

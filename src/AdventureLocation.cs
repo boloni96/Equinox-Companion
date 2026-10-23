@@ -54,14 +54,17 @@ public sealed partial class Plugin
   var house=ready?adventureLocationHouse.Get(config.SharedRoster,$"{Player.CurrentWorld.RowId}:{currentAddress}",Environment.TickCount64,
    ()=>AdventurePolicy.CurrentHouse(currentAddress,Player.CurrentWorld.RowId,(config.SharedRoster?.People??[]).SelectMany(p=>p.Characters).SelectMany(c=>c.Houses))):"";
   var target=adventureLocationStop.Get(board,world+"|"+house,Environment.TickCount64,()=>AdventurePolicy.HouseIndex(board,house,world));
-  if(ImGui.Checkbox("Follow my character / world / house",ref adventureFollow))adventureFollowSession.Reset();
+  if(ImGui.Checkbox("Follow character",ref adventureFollow))adventureFollowSession.Reset();
+  if(ImGui.IsItemHovered())ImGui.SetTooltip("Follow my character / world / house. Automatically open the matching stop when my location changes.");
   if(ready&&target is not null){
   ImGui.BeginDisabled(AdventureSaving||!adventureFresh);
   if(ImGui.SmallButton("Open current house")&&target is {} index){adventureFocusHouse=house;if(index!=board.Index){adventurePrompt=null;AdventureAction(board,index);}}
   ImGui.EndDisabled();
   if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))ImGui.SetTooltip(target is null?"Your current house must be identified and included in this adventure.":"Open this house’s stop in the active adventure. This shares navigation with the Journal and does not mark tasks complete.");
   }
-  ImGui.BeginDisabled(AdventureSaving||!adventureFresh);ImGui.SetNextItemWidth(Math.Max(160,ImGui.GetContentRegionAvail().X-180));DrawAdventureNavigation(board);ImGui.EndDisabled();ImGui.SameLine();
+  var navigation=CompactLayout.Navigation(ImGui.GetContentRegionAvail().X,BringControlsWidth,ImGui.GetStyle().ItemSpacing.X,ImGui.GetFontSize());
+  ImGui.BeginDisabled(AdventureSaving||!adventureFresh);DrawAdventureNavigation(board,navigation.SelectorWidth);ImGui.EndDisabled();
+  if(!navigation.WrapActions)ImGui.SameLine();
   var selected=board.Stops.ElementAtOrDefault(board.Index);
   DrawBringCharacter(ready,selected?.World??world,selected?.World==world?house:"");
   if(!adventureFollow){adventureFollowSession.Reset();return;}
@@ -87,3 +90,4 @@ public sealed partial class Plugin
   if(next is {} n&&n!=board.Index){adventurePrompt=null;AdventureAction(board,n);}
  }
 }
+

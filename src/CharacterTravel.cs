@@ -141,7 +141,7 @@ public sealed partial class Plugin
   }
   if(showHouses)DrawCharacterHouseIcons(character);
   if(switching){
-   ImGui.SameLine();
+   SameLineIfFits(ButtonWidth(loginMenuReturn.Active?"Stop return":titleLoginProbe.Active?"Stop check":"Stop switch"));
    if(ImGui.SmallButton(loginMenuReturn.Active?"Stop return":titleLoginProbe.Active?"Stop check":"Stop switch")){
     if(loginMenuReturn.Active){loginMenuReturn.Stop();characterTravelStatus="Return stopped. No character login was requested.";}
     else{
@@ -242,5 +242,6 @@ public sealed partial class Plugin
  }
 
 }
+
 
 

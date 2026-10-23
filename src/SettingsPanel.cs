@@ -36,6 +36,7 @@ public sealed partial class Plugin
         ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing,new System.Numerics.Vector2(6,4));
         if(ImGui.BeginTabBar("SettingsSections",ImGuiTabBarFlags.FittingPolicyScroll))
         {
+            SettingsSection("Appearance",DrawAppearanceSettings);
             SettingsSection("Optional tools",DrawFeatureSettings);
             SettingsSection("Camera",DrawCameraHeightSettings);
             SettingsSection("Tracking",DrawGeneralSettings);
@@ -138,4 +139,5 @@ public sealed partial class Plugin
         SettingsHelp("Open the Armoire, Glamour Dresser and each retainer to refresh their stored contents. Current state and unsent records are kept; older acknowledged history is pruned after 60 days.");
     }
 }
+
 

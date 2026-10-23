@@ -168,9 +168,10 @@ public sealed partial class Plugin
     }
     private void DrawFloatingLauncherSettings()
     {
-        SettingsHelp("Use the native title-bar collapse triangle or double-click the title bar to minimize to an icon. Single-click reopens its window; double-click closes both. Esc minimizes the focused window to its icon. X closes without an icon. Commands and keybinds reopen windows. Drag icons to move them.",false);
+        SettingsHelp("Use the native title-bar collapse triangle or double-click the title bar to minimize to an icon. Single-click reopens its window; double-click closes both. Esc minimizes the focused window to its icon. X closes without an icon. Commands reopen windows. Drag icons to move them.",false);
         var names = new[] { "Companion", "Fashion Report", "Planting", "Welcome", "New Character", "Do I already have it?", "Where is it cheapest?", "Adventure", "Housing bids", "Testing" };
         for (var i = 0; i < names.Length; i++) { ImGui.PushID(i); if(ImGui.CollapsingHeader(names[i]=="Planting"?"Gardening":names[i]))DrawLauncherOptions(names[i], LauncherOptions(names[i], i)); ImGui.PopID(); }
     }
 }
+
 

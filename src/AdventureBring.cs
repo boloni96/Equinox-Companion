@@ -10,13 +10,14 @@ public sealed partial class Plugin
  private string bringOpenedPairing="";
  private DateTimeOffset bringTick;
  private AdventurePresence? bringDestination;
+ private float BringControlsWidth => ButtonWidth("Bring here") + (bringTrip is null ? 0 : ImGui.GetStyle().ItemSpacing.X + ButtonWidth("Cancel bring"));
  private void DrawBringCharacter(bool ready,string world,string house)
  {
   ImGui.BeginDisabled(!ready||world.Length==0||bringTrip is not null);
-  if(ImGui.SmallButton("Bring a character here")){bringDestination=new AdventurePresence(world,DateTimeOffset.UtcNow.ToString("O"),world==PublicAdventureWorld()?CurrentAdventureArea():"",world==PublicAdventureWorld()?(uint)Client.TerritoryType:0,house);bringChoice=CurrentSharedCharacter()?.Id??"";bringOpenedActor=Player.ContentId;bringOpenedPairing=config.PairingKey;bringMessage="";ImGui.OpenPopup("Bring character");}
+  if(ImGui.SmallButton("Bring here")){bringDestination=new AdventurePresence(world,DateTimeOffset.UtcNow.ToString("O"),world==PublicAdventureWorld()?CurrentAdventureArea():"",world==PublicAdventureWorld()?(uint)Client.TerritoryType:0,house);bringChoice=CurrentSharedCharacter()?.Id??"";bringOpenedActor=Player.ContentId;bringOpenedPairing=config.PairingKey;bringMessage="";ImGui.OpenPopup("Bring character");}
   ImGui.EndDisabled();
   if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))ImGui.SetTooltip("Bring a paired character to the world selected above. When it is your current world, also return to your current area or estate entrance. Travel does not complete tasks or add characters to the route.");
-  if(bringTrip is not null){ImGui.SameLine();if(ImGui.SmallButton("Cancel bring")){bringTrip=null;try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}characterSwitchUntil=default;bringMessage="Bring character cancelled.";}}
+  if(bringTrip is not null){SameLineIfFits(ButtonWidth("Cancel bring"));if(ImGui.SmallButton("Cancel bring")){bringTrip=null;try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}characterSwitchUntil=default;bringMessage="Bring character cancelled.";}}
   if(!ImGui.BeginPopupModal("Bring character",ImGuiWindowFlags.AlwaysAutoResize))return;
   var report=bringDestination;
   ImGui.TextUnformatted("Bring a character to this location");
@@ -91,3 +92,4 @@ public sealed partial class Plugin
   }catch{EndBring("Bring character stopped: Lifestream unavailable.");}
  }
 }
+
