@@ -83,29 +83,32 @@ public sealed partial class Plugin
    if(entry.Picture is null&&entry.Loading is null&&DateTimeOffset.UtcNow>=entry.Retry&&portraitCache.Values.Count(e=>e.Loading is not null)<2)entry.Loading=LoadAdventurePortrait(character.Id,reference.Hash,config.PairingKey,portraitCancel.Token);
    picture=entry.Picture;
   }
-  ImGui.PushID("travel-"+character.Id);var origin=ImGui.GetCursorScreenPos();
+  ImGui.PushID("travel-"+character.Id);
   var compact=ImGui.GetContentRegionAvail().X<ImGui.GetFontSize()*27;
-  var size=compact?new Vector2(60,75):new Vector2(88,110);
-  if(ImGui.BeginTable("portrait-header",2,ImGuiTableFlags.SizingFixedFit)){
+  var portraitWidth=Math.Min((compact?60:88)*ImGui.GetFontSize()/17f,ImGui.GetContentRegionAvail().X*.20f);
+  var size=new Vector2(portraitWidth,portraitWidth*1.25f);
+  var hasHouses=CharacterHouseIconCount(character)>0;
+  if(ImGui.BeginTable("portrait-header",hasHouses?3:2,ImGuiTableFlags.SizingFixedFit)){
    ImGui.TableSetupColumn("Portrait",ImGuiTableColumnFlags.WidthFixed,size.X);
    ImGui.TableSetupColumn("Character",ImGuiTableColumnFlags.WidthStretch);
+   if(hasHouses)ImGui.TableSetupColumn("Houses",ImGuiTableColumnFlags.WidthFixed,CharacterHouseIconWidth(character,compact));
    ImGui.TableNextRow();ImGui.TableNextColumn();
    if(picture is {} p){var scale=Math.Max(size.X/p.Texture.Width,size.Y/p.Texture.Height)*p.Frame.Z;var full=new Vector2(p.Texture.Width,p.Texture.Height)*scale;var offset=(full-size)*new Vector2(p.Frame.X/100,p.Frame.Y/100);ImGui.Image(p.Texture.Handle,size,offset/full,(offset+size)/full);}
    else{GardenImage("assets/category-icons/characters.png",ImGui.GetCursorScreenPos(),size);ImGui.Dummy(size);}
    ImGui.TableNextColumn();
-   if(ImGui.BeginTable("character-heading",compact?1:2,ImGuiTableFlags.SizingFixedFit)){
-    ImGui.TableSetupColumn("Name",ImGuiTableColumnFlags.WidthStretch);
-    if(!compact)ImGui.TableSetupColumn("Houses",ImGuiTableColumnFlags.WidthFixed,2*Math.Max(28,ImGui.GetFrameHeight())+ImGui.GetStyle().ItemSpacing.X);
-    ImGui.TableNextRow();ImGui.TableNextColumn();ImGui.TextWrapped(character.Name);
+   ImGui.TextWrapped(character.Name);
+   if(ImGui.IsItemHovered())ImGui.SetTooltip(character.Name+" @ "+character.World);
    var scope=CharacterSwitchScope(character.Id);ImGui.TextWrapped(scope.PersonName+" · "+character.Account);
    var here=Player.IsLoaded&&Player.ContentId.ToString(System.Globalization.CultureInfo.InvariantCulture)==character.ContentId;
    var reported=adventureBoards.FirstOrDefault(b=>b.Id==adventureSelected)?.Locations?.GetValueOrDefault(character.Id);
-   ImGui.TextWrapped(here?"Now: "+CurrentAdventureArea():reported is not null&&!string.IsNullOrEmpty(reported.Area)?"Last reported: "+reported.Area:"Location not reported yet");
+   var area=here?CurrentAdventureArea():reported?.Area??"";
+   if(!string.IsNullOrWhiteSpace(area))ImGui.TextWrapped((here?"Now: ":"Last reported: ")+area);
    if(ImGui.IsItemHovered())ImGui.SetTooltip(here?"Current area · "+(WorldName(Player.CurrentWorld.RowId)??character.World):reported is not null?reported.World+" · Last location shared by this character’s Companion · "+(DateTimeOffset.TryParse(reported.At,out var observed)?observed.ToLocalTime().ToString("g"):"time unavailable"):"No current location reported in this adventure yet.");
-    ImGui.TableNextColumn();DrawCharacterHouseIcons(character,false);ImGui.EndTable();
-   }
-   DrawCharacterTravel(character,false);details?.Invoke();ImGui.EndTable();
+   DrawCharacterTravel(character,false);
+   if(hasHouses){ImGui.TableNextColumn();DrawCharacterHouseIcons(character,false,compact);}
+   ImGui.EndTable();
   }
+  details?.Invoke();
   ImGui.Spacing();ImGui.PopID();
  }
 }

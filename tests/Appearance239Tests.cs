@@ -14,6 +14,11 @@ internal static class Appearance239Tests
         var reloaded=JsonSerializer.Deserialize<Configuration>(JsonSerializer.Serialize(migrated.Snapshot()))!;
         Check(reloaded.Appearance.GoddessBlue&&!AppearancePolicy.NeedsChoice(reloaded.Appearance),"new design survives save, snapshot and reload");
         Check(reloaded.CompanionSection=="person:goddess","menu section survives reload");
+        Check(!migrated.CompanionMenuCollapsed,"existing installs start with the named menu");
+        migrated.CompanionMenuCollapsed=true;
+        Check(JsonSerializer.Deserialize<Configuration>(JsonSerializer.Serialize(migrated.Snapshot()))!.CompanionMenuCollapsed,"collapsed menu survives snapshot and restart");
+        migrated.CompanionMenuCollapsed=false;
+        Check(!JsonSerializer.Deserialize<Configuration>(JsonSerializer.Serialize(migrated.Snapshot()))!.CompanionMenuCollapsed,"expanded menu survives snapshot and restart");
         Check(AppearancePolicy.Dismiss(reloaded.Appearance).GoddessBlue,"closing preview keeps new choice");
         Check(!AppearancePolicy.Dismiss(new()).GoddessBlue&&!AppearancePolicy.NeedsChoice(AppearancePolicy.Dismiss(new())),"closing first preview keeps current and prevents repeated prompt");
         Check(!AppearancePolicy.Choose(false).GoddessBlue&&!AppearancePolicy.NeedsChoice(AppearancePolicy.Choose(false)),"explicit current choice remembered");

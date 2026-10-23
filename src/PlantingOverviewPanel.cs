@@ -37,7 +37,8 @@ public sealed partial class Plugin
         if(config.SharedRoster is not {} roster){ImGui.TextWrapped("Connect your shared Journal in Settings to see everyone's houses and garden timers.");return;}
         if(ImGui.SmallButton("Refresh gardens"))nextRosterRead=default;
         SettingsHelp($"Journal updated {DisplayTime.Local(roster.Updated)}. Tend suggested every 12h. Harvest countdowns are estimates; Ready and Dead require game confirmation. T = next suggested tend; H = estimated harvest. Hover for every batch; click to expand. Blue: tend. Green: ready / cared for. Orange: check / risk. Mixed icons show together.");
-        ImGui.InputText("Find person / character / house",ref plantingOverviewSearch,120);
+        ImGui.SetNextItemWidth(-1);
+        ImGui.InputTextWithHint("##GardenOverviewSearch","Find person / character / house",ref plantingOverviewSearch,120);
         var now=DateTimeOffset.UtcNow;
         var display=gardenOverviewDisplayCache.Get(roster,
             $"{Player.ContentId}:{config.HouseCharactersFirst}:{config.Planting.Count}:{config.Planting.LastOrDefault()?.EventId}:{config.Tending.Count}:{config.Tending.LastOrDefault()?.EventId}:{config.Discoveries.Count}:{config.Discoveries.LastOrDefault()?.Id}:{gardenBedSync?.Mappings.Count()}:{gardenBedSync?.Mappings.LastOrDefault()?.Id}",Environment.TickCount64,()=>{
@@ -222,11 +223,11 @@ public sealed partial class Plugin
                 var expanded=ImGui.TreeNode($"Batch {batch.Batch}###batch");
                 ImGui.PopStyleColor();
                 DrawOverviewIndicators([batch],now);
-                ImGui.SameLine();
+                SameLineIfFits(ButtonWidth("Website plan"));
                 if(ImGui.SmallButton("Website plan"))Dalamud.Utility.Util.OpenLink(GardenCareStatus.WebsiteUrl(batch.HouseId,batch.Batch));
                 if(SharedGardenLocation.Match(currentAddress,[batch])==batch.HouseId)
                 {
-                    ImGui.SameLine();if(ImGui.SmallButton("Open Gardening guide")){plantingBatch=batch.Batch;previousPlantingHouse=batch.HouseId;plantingHouseId=batch.HouseId;plantingWindow.IsOpen=true;}
+                    SameLineIfFits(ButtonWidth("Open Gardening guide"));if(ImGui.SmallButton("Open Gardening guide")){plantingBatch=batch.Batch;previousPlantingHouse=batch.HouseId;plantingHouseId=batch.HouseId;plantingWindow.IsOpen=true;}
                 }
                 ImGui.PushStyleColor(ImGuiCol.Text,OverviewColour([batch],now));
                 ImGui.TextWrapped(GardenOverview.Summary([batch],now));

@@ -39,12 +39,13 @@ public sealed partial class Plugin
     }
     private void DrawHousingContents()
     {
-        ImGui.TextColored(Green, "0–7 days"); ImGui.SameLine();
-        ImGui.TextColored(Orange, "8–30"); ImGui.SameLine();
-        ImGui.TextColored(Red, "31–45"); ImGui.SameLine();
+        ImGui.TextColored(Green, "0–7 days"); SameLineIfFits(ImGui.CalcTextSize("8–30").X);
+        ImGui.TextColored(Orange, "8–30"); SameLineIfFits(ImGui.CalcTextSize("31–45").X);
+        ImGui.TextColored(Red, "31–45"); SameLineIfFits(ImGui.CalcTextSize("45+ DEMOLISHED?").X);
         ImGui.TextColored(Purple, "45+ DEMOLISHED?");
         SettingsHelp("Based on recorded eligible entries. Other players' visits and demolition suspensions may change the actual deadline. Name bar: left = Private, right = FC. Character order: Settings.");
-        ImGui.InputText("Find character / server", ref housingSearch, 100);
+        ImGui.SetNextItemWidth(-1);
+        ImGui.InputTextWithHint("##EmpireCharacterSearch","Find character / world", ref housingSearch, 100);
         ImGui.BeginChild("EmpireCharacters",Vector2.Zero,false);
         var actors = localHousingCache.Get(config,$"{configurationRevision}:{config.Discoveries.Count}:{config.Houses.Count}:{config.Tending.Count}:{config.Planting.Count}:{(Player.IsLoaded?Player.ContentId:0)}",Environment.TickCount64,BuildLocalHousingRows);
         if (actors.Length == 0) ImGui.TextWrapped("No visible characters. Log in to record them, or restore hidden characters in Settings.");

@@ -16,6 +16,8 @@ public sealed partial class Plugin
         ImGui.TextUnformatted("Window design");
         if (ImGui.RadioButton("Goddess blue · compact menu", GoddessAppearance)) SetAppearance(true);
         if (ImGui.RadioButton("Current design · Dalamud tabs", !GoddessAppearance)) SetAppearance(false);
+        var collapsed=config.CompanionMenuCollapsed;
+        if(ImGui.Checkbox("Icons-only menu",ref collapsed)){config.CompanionMenuCollapsed=collapsed;SaveConfiguration();}
         SettingsHelp("Applies to Equinox windows on this installation. Pairing, window positions, minimised icons and gameplay settings are kept. Resize windows by dragging their edges. Your choice stays saved after updates.", false);
         if (ImGui.Button("Preview the new design")) welcomeWindow.IsOpen = true;
         ImGui.Separator();
@@ -78,7 +80,7 @@ public sealed partial class Plugin
         if (followThemSelectTab) { SelectCompanionSection("followthem"); followThemSelectTab = false; }
         var selected = AppearancePolicy.SelectSection(config.CompanionSection, tabs.Select(t => t.Id).Append("testing"));
         var font = ImGui.GetFontSize();
-        var iconsOnly = ImGui.GetContentRegionAvail().X < font * 37;
+        var iconsOnly = config.CompanionMenuCollapsed;
         var menuWidth = font * (iconsOnly ? 2.25f : 7.75f);
         var rowHeight = font + 6;
         ImGui.BeginChild("CompanionMenu", new Vector2(menuWidth, 0), false);
@@ -97,7 +99,19 @@ public sealed partial class Plugin
         }
         ImGui.EndChild();
         MenuRow("settings", "Settings", "options", OpenSettings);
-        ImGui.EndChild(); ImGui.SameLine();
+        ImGui.EndChild(); ImGui.SameLine(0,font*.18f);
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding,Vector2.Zero);
+        if(ImGui.BeginChild("CompanionMenuDivider",new Vector2(font*.9f,0),false,ImGuiWindowFlags.NoScrollbar|ImGuiWindowFlags.NoScrollWithMouse))
+        {
+            var width=ImGui.GetContentRegionAvail().X;var height=font*2.6f;
+            ImGui.SetCursorPosY(ImGui.GetCursorPosY()+Math.Max(0,(ImGui.GetContentRegionAvail().Y-height)/2));
+            ImGui.PushStyleVar(ImGuiStyleVar.FramePadding,Vector2.Zero);
+            if(ImGui.Button((iconsOnly?">":"<")+"###ToggleCompanionMenu",new Vector2(width,height)))
+            {config.CompanionMenuCollapsed=!iconsOnly;SaveConfiguration();}
+            ImGui.PopStyleVar();
+            if(ImGui.IsItemHovered())ImGui.SetTooltip(iconsOnly?"Expand menu · show icons and names":"Collapse menu · keep only icons. This choice stays saved when resizing.");
+        }
+        ImGui.EndChild();ImGui.PopStyleVar();ImGui.SameLine(0,font*.18f);
         if (ImGui.BeginChild("CompanionSection##" + selected, Vector2.Zero, false))
         {
             var draw = selected == "testing" ? (Action)DrawTesting : tabs.First(t => t.Id == selected).Draw;

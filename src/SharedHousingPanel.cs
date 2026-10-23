@@ -125,8 +125,9 @@ public sealed partial class Plugin
     private void DrawSharedPerson(SharedPerson person)
     {
         ImGui.PushID("shared-"+person.Id);
-        ImGui.InputText("Find character / server",ref sharedSearch,100);
-        SettingsHelp("Shared Journal characters. Name bar: left = Private, right = FC. Hover an estate for entry details.");
+        ImGui.SetNextItemWidth(-1);
+        ImGui.InputTextWithHint("##SharedCharacterSearch","Find character / world",ref sharedSearch,100);
+        if(ImGui.IsItemHovered())ImGui.SetTooltip("Filter shared characters by name, world, data centre, region or account. Name bar: left = Private, right = FC. Hover an estate for entry details.");
         ImGui.BeginChild("SharedCharacters",Vector2.Zero,false);
         var now=DateTimeOffset.UtcNow;
         var characters = OrderedSharedCharacters(person);

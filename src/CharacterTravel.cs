@@ -102,11 +102,23 @@ public sealed partial class Plugin
  }
  private void DrawCharacterTravel(SharedCharacter character,bool showHouses=true)
  {
+  if(showHouses&&CharacterHouseIconCount(character)>0){
+   var stack=ImGui.GetContentRegionAvail().X<ImGui.GetFontSize()*27;
+   if(ImGui.BeginTable("character-travel-actions",2,ImGuiTableFlags.SizingFixedFit)){
+    ImGui.TableSetupColumn("Character",ImGuiTableColumnFlags.WidthStretch);
+    ImGui.TableSetupColumn("Houses",ImGuiTableColumnFlags.WidthFixed,CharacterHouseIconWidth(character,stack));
+    ImGui.TableNextRow();ImGui.TableNextColumn();DrawCharacterTravel(character,false);
+    ImGui.TableNextColumn();DrawCharacterHouseIcons(character,false,stack);ImGui.EndTable();
+   }
+   return;
+  }
   if(characterSwitchUntil!=default&&Player.IsLoaded&&Player.ContentId!=0&&Player.ContentId!=characterSwitchFrom){characterSwitchUntil=default;characterTravelStatus=characterSwitchTarget is {} requested&&CharacterTravelPolicy.IsCurrent(requested,ReadActor())?"Logged in as "+Player.CharacterName+".":"A different character logged in.";characterSwitchTarget=null;}
   var switching=loginMenuReturn.Active||titleLoginProbe.Active||DateTimeOffset.UtcNow<characterSwitchUntil;
   var mode=ReadCharacterLoginMode();
   ImGui.BeginDisabled(mode==CharacterLoginMode.Unavailable||switching);
-  if(ImGui.SmallButton(CharacterLoginPolicy.Label(Player.IsLoaded))){
+  var travelLabel=CharacterLoginPolicy.Label(Player.IsLoaded);
+  if(ButtonWidth(travelLabel)>ImGui.GetContentRegionAvail().X)travelLabel=Player.IsLoaded?"Switch":"Log in";
+  if(ImGui.SmallButton(travelLabel+"###character-travel")){
    characterTravelStatusOwner=character.Id;
    var clickMode=ReadCharacterLoginMode(true);var from=CurrentCharacterSwitchScope(clickMode,true);var to=CharacterSwitchScope(character.Id);
    if(CharacterLoginPolicy.InitialAction(clickMode,LoginRelationship(character,from,to),from.PersonId.Length>0&&from.AccountId.Length>0)==CharacterLoginAction.Confirm)
@@ -139,7 +151,6 @@ public sealed partial class Plugin
    ImGui.EndDisabled();if(!unchanged)ImGui.TextUnformatted("The current character, account or pairing changed. Cancel and choose again.");
    ImGui.PopTextWrapPos();ImGui.EndPopup();
   }
-  if(showHouses)DrawCharacterHouseIcons(character);
   if(switching){
    SameLineIfFits(ButtonWidth(loginMenuReturn.Active?"Stop return":titleLoginProbe.Active?"Stop check":"Stop switch"));
    if(ImGui.SmallButton(loginMenuReturn.Active?"Stop return":titleLoginProbe.Active?"Stop check":"Stop switch")){
@@ -210,12 +221,19 @@ public sealed partial class Plugin
   var owner=house.Type=="Free Company house"?house.FcName:house.OwnerName;
   return role+" · "+(string.IsNullOrWhiteSpace(owner)?"Owner not recorded":owner);
  }
- private void DrawCharacterHouseIcons(SharedCharacter character,bool inline=true)
+ private static int CharacterHouseIconCount(SharedCharacter character) =>
+  (character.Houses.Any(h=>h.Type=="Private house")?1:0)+(character.Houses.Any(h=>h.Type=="Free Company house")?1:0);
+ private static float CharacterHouseIconWidth(SharedCharacter character,bool stack)
+ {
+  var count=CharacterHouseIconCount(character);if(count==0)return 0;
+  var size=Math.Max(28,ImGui.GetFrameHeight());return stack?size:count*size+(count-1)*ImGui.GetStyle().ItemSpacing.X;
+ }
+ private void DrawCharacterHouseIcons(SharedCharacter character,bool inline=true,bool stack=false)
  {
   var switching=DateTimeOffset.UtcNow<characterSwitchUntil;var first=true;
   foreach(var type in new[]{"Private house","Free Company house"}){
    var houses=character.Houses.Where(h=>h.Type==type).DistinctBy(h=>h.Id).ToArray();if(houses.Length==0)continue;
-   if(inline||!first)ImGui.SameLine();first=false;var size=Math.Max(28,ImGui.GetFrameHeight());var at=ImGui.GetCursorScreenPos();
+   if((inline&&first)||(!first&&!stack))ImGui.SameLine();first=false;var size=Math.Max(28,ImGui.GetFrameHeight());var at=ImGui.GetCursorScreenPos();
    ImGui.BeginDisabled(!Player.IsLoaded||switching);
    var clicked=ImGui.InvisibleButton("Visit "+type,new Vector2(size));
    GardenImage("assets/category-icons/"+(type=="Private house"?"private-house":"fc-house")+".png",at,new Vector2(size));
