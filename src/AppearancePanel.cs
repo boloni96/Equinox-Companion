@@ -15,14 +15,14 @@ public sealed partial class Plugin
     {
         ImGui.TextUnformatted("Window design");
         if (ImGui.RadioButton("Goddess blue · compact menu", GoddessAppearance)) SetAppearance(true);
-        if (ImGui.RadioButton("Current design · Dalamud tabs", !GoddessAppearance)) SetAppearance(false);
+        if (ImGui.RadioButton("Classic Dalamud · tabs", !GoddessAppearance)) SetAppearance(false);
         var collapsed=config.CompanionMenuCollapsed;
         if(ImGui.Checkbox("Icons-only menu",ref collapsed)){config.CompanionMenuCollapsed=collapsed;SaveConfiguration();}
-        SettingsHelp("Applies to Equinox windows on this installation. Pairing, window positions, minimised icons and gameplay settings are kept. Resize windows by dragging their edges. Your choice stays saved after updates.", false);
-        if (ImGui.Button("Preview the new design")) welcomeWindow.IsOpen = true;
+        SettingsHelp("Applies to Equinox windows on this installation. Both designs use the same features and updates. Pairing, window positions, minimised icons and gameplay settings are kept. Resize windows by dragging their edges. Your choice stays saved after updates.", false);
+        if (ImGui.Button("Open welcome & choose design")) welcomeWindow.IsOpen = true;
         ImGui.Separator();
         ImGui.TextUnformatted("Menu order");
-        SettingsHelp("Move sections up or down here. The same order is used by the current tab layout. Settings stays at the end.");
+        SettingsHelp("Move sections up or down here. The same order is used by classic tabs. Settings stays at the end.");
         var tabs = CompanionTabs();
         var order = CompanionTabOrder(tabs);
         var shown = tabs.Where(t => t.Id != "settings").OrderBy(t => order.IndexOf(t.Id)).ToArray();
@@ -115,7 +115,7 @@ public sealed partial class Plugin
         if (ImGui.BeginChild("CompanionSection##" + selected, Vector2.Zero, false))
         {
             var draw = selected == "testing" ? (Action)DrawTesting : tabs.First(t => t.Id == selected).Draw;
-            DrawWindowWithLauncher(draw);
+            DrawWindowWithLauncher(draw, selected);
         }
         ImGui.EndChild();
         void MenuRow(string id, string label, string category, Action action)

@@ -7,7 +7,7 @@ public sealed partial class Plugin
  private string windowStatus="";
  private readonly Dictionary<System.Reflection.MethodInfo,string> windowPerformanceLabels=[];
  // One shared footer: actions and status on the left, launcher on the right.
- private void DrawWindowWithLauncher(Action content)
+ private void DrawWindowWithLauncher(Action content, string? sectionId = null)
  {
   RememberItemMenuWindow();windowFooter=null;windowStatus="";
   var height=Math.Max(32,ImGui.GetFrameHeight());
@@ -25,7 +25,7 @@ public sealed partial class Plugin
      "DrawContent"=>content.Target?.GetType().Name switch {"FashionReportWindow"=>"Fashion Report","WelcomeWindow"=>"Welcome","NewCharacterWindow"=>"New character",var type=>type??"Content"},var name=>name
     });
     var started=System.Diagnostics.Stopwatch.GetTimestamp();
-    try{content();}finally{RecordPerformanceElapsed(stage,started);}
+    try{if(sectionId is null)content();else DrawCompanionSection(sectionId, content);}finally{RecordPerformanceElapsed(stage,started);}
    }
   }
   finally{ImGui.EndChild();}

@@ -16,6 +16,14 @@ public sealed partial class Plugin
         config.Appearance=AppearancePolicy.Dismiss(config.Appearance);
         if(needsSave)SaveConfiguration();
     }
+    // Both choices take the same launch path; appearance never selects a different feature set.
+    private void ChooseWelcomeAppearance(bool goddessBlue)
+    {
+        SetAppearance(goddessBlue);
+        visible=true;
+        mainWindow.IsOpen=true;
+        DismissWelcome();
+    }
     private sealed class WelcomeWindow : Window
     {
         private readonly Plugin plugin;
@@ -23,8 +31,8 @@ public sealed partial class Plugin
         {
             this.plugin=plugin;RespectCloseHotkey=false;
             IsOpen=plugin.config.WelcomeVersion!=CompanionVersion || AppearancePolicy.NeedsChoice(plugin.config.Appearance);
-            Size=new Vector2(540,440);SizeCondition=ImGuiCond.FirstUseEver;
-            SizeConstraints=new WindowSizeConstraints{MinimumSize=new Vector2(380,300),MaximumSize=new Vector2(900,850)};
+            Size=new Vector2(500,350);SizeCondition=ImGuiCond.FirstUseEver;
+            SizeConstraints=new WindowSizeConstraints{MinimumSize=new Vector2(360,280),MaximumSize=new Vector2(900,850)};
         }
         public override void OnClose(){if(!plugin.minimizedLaunchers.Contains("Welcome"))plugin.DismissWelcome();}
         public override void PostDraw()=>HandleNativeCollapse(this,()=>plugin.MinimizeLauncher("Welcome"));
@@ -35,39 +43,22 @@ public sealed partial class Plugin
             var at=ImGui.GetCursorScreenPos();
             plugin.GardenImage("assets/category-icons/characters.png",at,new Vector2(iconSize));
             ImGui.Dummy(new Vector2(iconSize));ImGui.SameLine();ImGui.BeginGroup();
-            ImGui.TextColored(new Vector4(.57f,.79f,1,1),"EQUINOX · A little more room to play");
+            ImGui.TextColored(new Vector4(.57f,.79f,1,1),"Welcome to EQUINOX");
             ImGui.TextDisabled("Companion "+CompanionVersion);ImGui.EndGroup();
-            ImGui.TextWrapped("Meet Goddess blue: a tighter menu, compact windows and the same familiar tools.");
-            ImGui.TextDisabled("Design preview · example progress");
-            if(ImGui.BeginChild("DesignPreview",new Vector2(0,font*9.5f),true))
-            {
-                if(ImGui.BeginTable("PreviewColumns",2,ImGuiTableFlags.SizingFixedFit))
-                {
-                    ImGui.TableSetupColumn("Menu",ImGuiTableColumnFlags.WidthFixed,font*6.3f);
-                    ImGui.TableSetupColumn("Content",ImGuiTableColumnFlags.WidthStretch);
-                    ImGui.TableNextColumn();
-                    ImGui.TextColored(new Vector4(.57f,.79f,1,1),"EQUINOX");
-                    ImGui.TextUnformatted("My Empire");ImGui.TextUnformatted("Your people");
-                    ImGui.TextUnformatted("Gardening");ImGui.TextUnformatted("Submarines");
-                    ImGui.TextUnformatted("Testing");ImGui.TextUnformatted("Settings");
-                    ImGui.TableNextColumn();
-                    ImGui.TextUnformatted("Adventure");
-                    ImGui.ProgressBar(.3f,new Vector2(-1,0),"6 / 20 done");
-                    ImGui.TextDisabled("This stop · 2 / 3 confirmed");
-                    ImGui.Separator();ImGui.TextUnformatted("Gardening");
-                    ImGui.TextUnformatted("Fashion Report");
-                    ImGui.TextWrapped("Details when you need them.");
-                    ImGui.EndTable();
-                }
-            }
-            ImGui.EndChild();
-            ImGui.TextWrapped("Choose for this installation. You can switch at any time in Settings → Appearance.");
-            if(ImGui.Button("Use the new design")){plugin.SetAppearance(true);plugin.visible=true;plugin.mainWindow.IsOpen=true;plugin.DismissWelcome();}
-            SameLineIfFits(ButtonWidth("Keep the current design"));
-            if(ImGui.Button("Keep the current design")){plugin.SetAppearance(false);plugin.DismissWelcome();}
-            ImGui.TextDisabled(plugin.GoddessAppearance?"Saved choice: Goddess blue":"Saved choice: current design");
-            if(ImGui.IsItemHovered())ImGui.SetTooltip("Your choice is remembered after restarting and updating. Closing this preview keeps the saved choice. Pairing and game settings are unchanged.");
-            if(ImGui.CollapsingHeader("What's new & guide"))
+            ImGui.TextWrapped("Your people, properties and adventures, together.");
+            ImGui.Separator();
+            ImGui.TextWrapped("This is Goddess blue. Choose your window design to open Companion.");
+            if(ImGui.Button("Keep Goddess blue"))plugin.ChooseWelcomeAppearance(true);
+            SameLineIfFits(ButtonWidth("Use classic Dalamud"));
+            if(ImGui.Button("Use classic Dalamud"))plugin.ChooseWelcomeAppearance(false);
+            ImGui.TextWrapped("Both designs receive the same features and updates.");
+            ImGui.TextDisabled(plugin.GoddessAppearance?"Saved choice: Goddess blue":"Saved choice: classic Dalamud");
+            if(ImGui.IsItemHovered())ImGui.SetTooltip("Your choice stays saved after restarting and updating. Closing this welcome keeps it. Change it any time in Settings → Appearance.");
+            ImGui.Separator();
+            ImGui.TextWrapped(plugin.config.PairingKey.Length==64
+                ?"Your pairing and settings are ready. Continue with your shared Journal."
+                :"First time? Open Settings → Connection and paste the pairing key from your Journal's Game connection.");
+            if(ImGui.CollapsingHeader("Quick guide"))
             {
                 ImGui.TextWrapped("Goddess blue applies to Companion, Adventure, Gardening, housing bids, Fashion Report and item tools. Click the arrow halfway down the menu divider to show icons only or icons with names. Your choice stays saved when resizing. Settings and other submenus keep their horizontal tabs, styled to match.");
                 ImGui.TextWrapped("House shortcuts stay on the right of character controls and stack vertically in narrow windows. Adventure keeps portraits left, details in the middle and steps below.");

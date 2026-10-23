@@ -1094,7 +1094,7 @@ public sealed partial class Plugin : IDalamudPlugin
             windows.Draw();
             DrawPluginItemPopup();
         }
-        // The introduction previews the new design even before it is selected.
+        // The actual welcome always wears Goddess blue; other windows use the saved choice.
         using (new EquinoxAppearance(true)) welcomeWindows.Draw();
         TrackPerformance("window drawing", perf);
         perf = System.Diagnostics.Stopwatch.GetTimestamp();

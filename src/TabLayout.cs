@@ -6,6 +6,7 @@ namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
     private readonly Dictionary<string,string> tabPerformanceLabels=[];
+    // Shared by both designs. Add feature sections here, never to one skin only.
     private List<(string Id, string Label, Action Draw)> CompanionTabs()
     {
         var tabs = new List<(string Id, string Label, Action Draw)>
@@ -28,6 +29,13 @@ public sealed partial class Plugin
         var order = TabOrderPolicy.Reconcile(config.TabOrder,tabs.Select(t=>t.Id),config.TabOrderVersion<1);
         if(config.TabOrderVersion<1){config.TabOrderVersion=1;config.TabOrder=order;SaveConfiguration();}
         return order;
+    }
+    // Identical feature execution and performance reporting in blue and classic.
+    private void DrawCompanionSection(string id, Action draw)
+    {
+        if(!tabPerformanceLabels.TryGetValue(id,out var stage))tabPerformanceLabels[id]=stage="Section: "+id;
+        var started=System.Diagnostics.Stopwatch.GetTimestamp();
+        try{draw();}finally{RecordPerformanceElapsed(stage,started);}
     }
     private void DrawOrderedTabs()
     {
@@ -53,9 +61,7 @@ public sealed partial class Plugin
             if(!active)continue;
             if(ImGui.BeginChild("TabContent##"+tab.Id,Vector2.Zero,false))
             {
-                if(!tabPerformanceLabels.TryGetValue(tab.Id,out var stage))tabPerformanceLabels[tab.Id]=stage="Tab: "+tab.Label.Split("###")[0];
-                var started=System.Diagnostics.Stopwatch.GetTimestamp();
-                try{tab.Draw();}finally{RecordPerformanceElapsed(stage,started);}
+                DrawCompanionSection(tab.Id, tab.Draw);
             }
             ImGui.EndChild();
             ImGui.EndTabItem();
