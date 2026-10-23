@@ -19,6 +19,8 @@ internal readonly struct EquinoxAppearance : IDisposable
         (ImGuiCol.FrameBg, Ink(0x1a2c40)), (ImGuiCol.FrameBgHovered, Ink(0x253d56)), (ImGuiCol.FrameBgActive, Ink(0x1f4264)),
         (ImGuiCol.Button, Ink(0x1a2c40)), (ImGuiCol.ButtonHovered, Ink(0x253d56)), (ImGuiCol.ButtonActive, Ink(0x1f4264)),
         (ImGuiCol.Header, Ink(0x1f4264)), (ImGuiCol.HeaderHovered, Ink(0x253d56)), (ImGuiCol.HeaderActive, Ink(0x315a80)),
+        (ImGuiCol.Tab, Ink(0x1a2c40)), (ImGuiCol.TabHovered, Ink(0x315a80)), (ImGuiCol.TabActive, Ink(0x1f4264)),
+        (ImGuiCol.TabUnfocused, Ink(0x101c2b)), (ImGuiCol.TabUnfocusedActive, Ink(0x1a334d)),
         (ImGuiCol.CheckMark, Ink(0x91c9ff)), (ImGuiCol.SliderGrab, Ink(0x91c9ff)), (ImGuiCol.SliderGrabActive, Ink(0xb7dbff)),
         (ImGuiCol.ScrollbarBg, Ink(0x0d1724)), (ImGuiCol.ScrollbarGrab, Ink(0x2d4056)),
         (ImGuiCol.ScrollbarGrabHovered, Ink(0x46627f)), (ImGuiCol.ScrollbarGrabActive, Ink(0x6589b0)),
@@ -41,11 +43,12 @@ internal readonly struct EquinoxAppearance : IDisposable
         ImGui.PushStyleVar(ImGuiStyleVar.ChildRounding, 3 * scale);
         ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, 3 * scale);
         ImGui.PushStyleVar(ImGuiStyleVar.PopupRounding, 4 * scale);
+        ImGui.PushStyleVar(ImGuiStyleVar.TabRounding, 3 * scale);
     }
     public void Dispose()
     {
         if (!enabled) return;
-        ImGui.PopStyleVar(9);
+        ImGui.PopStyleVar(10);
         ImGui.PopStyleColor(Colors.Length);
     }
 }
