@@ -38,7 +38,7 @@ public sealed partial class Plugin
         {
             SettingsSection("Appearance",DrawAppearanceSettings);
             SettingsSection("Optional tools",DrawFeatureSettings);
-            SettingsSection("Market",DrawSellerSettings);
+            SettingsSection("Market",()=>{if(ImGui.Button("Open Market & Seller settings"))OpenSellerSettings();SettingsHelp("One settings page for manual selling, automatic pricing, background checks and display.",false);});
             SettingsSection("Camera",DrawCameraHeightSettings);
             SettingsSection("Tracking",DrawGeneralSettings);
             SettingsSection("Chat",DrawChatMessageSettings);

@@ -21,7 +21,7 @@ public sealed class SellerSettings
     public bool OpenHistory { get; set; } = true;
     public bool ClickSetsPrice { get; set; } = true;
     public bool ClickConfirms { get; set; }
-    public bool CopyPrice { get; set; }
+    public bool CopyPrice { get; set; } = true;
     public bool CtrlPastePrice { get; set; } = true;
     public bool AltTogglesHistory { get; set; } = true;
     public bool LimitNewStacks { get; set; } = true;
@@ -46,8 +46,10 @@ public sealed record SellerOffer(ulong RetainerId, long Price, bool Hq, uint Qua
 public sealed record SellerSale(long Price, bool Hq, uint Quantity, DateTimeOffset At, bool Mannequin = false);
 public sealed record SellerComparison(uint ItemId, uint WorldId, DateTimeOffset At, bool Complete, SellerOffer[] Offers,
     bool HistoryComplete, SellerSale[] History, string Error = "");
-public sealed record SellerDecision(SellerStatus Status, int? Price, string Reason, string Source)
+public sealed record SellerDecision(SellerStatus Status, int? Price, string Reason, string Source, bool Undercut = false, long? LowestCompetitor = null)
 {
+    public bool NeedsAttention => CanApply || Undercut;
+    public SellerStatus VisualStatus => Undercut ? SellerStatus.Update : Status;
     public bool CanApply => Price is > 0 && Status is SellerStatus.Update or SellerStatus.History;
 }
 
@@ -55,6 +57,17 @@ public static class SellerPricing
 {
     public const int MaxPrice = 999_999_999;
     private static double FinitePercent(double value,double fallback,double min,double max)=>double.IsFinite(value)?Math.Clamp(value,min,max):fallback;
+    public static bool TryReadGil(string text,out int price)
+    {
+        price=0;if(string.IsNullOrWhiteSpace(text))return false;
+        var digits=new System.Text.StringBuilder();
+        foreach(var c in text){
+            if(c is >= '0' and <= '9')digits.Append(c);
+            else if(c is ',' or '.' or '\uE049'||char.IsWhiteSpace(c))continue;
+            else return false;
+        }
+        return int.TryParse(digits.ToString(),System.Globalization.NumberStyles.None,System.Globalization.CultureInfo.InvariantCulture,out price)&&price is >0 and <=MaxPrice;
+    }
     public static int Stack(int requested, int available, int maximum) => Math.Max(0, Math.Min(Math.Clamp(requested, 1, 9999), Math.Min(available, maximum)));
     public static int Adjust(long reference, SellerSettings s, int minimum = 1, bool undercut = true)
     {
@@ -79,13 +92,14 @@ public static class SellerPricing
         {
             var ignoreLowest = prices.Length > 1 && s.LowOutlierPercent > 0 &&
                 100m * (prices[1]-prices[0]) / prices[1] > (decimal)FinitePercent(s.LowOutlierPercent,40,0,100);
+            var undercut = prices[0] < current;
             var reference = prices[ignoreLowest ? 1 : 0];
             var price = Adjust(reference, s, minimum);
             var reason = ignoreLowest ? $"Ignored unusually low {prices[0]:N0}; next distinct price {reference:N0}." : $"Lowest competing unit price: {reference:N0}.";
             if (price >= reference && minimum >= reference) reason += " Your minimum prevents undercutting.";
             if (current >= Math.Clamp(minimum,1,MaxPrice) && (current == price || current < price && !s.RaiseCompetitivePrices))
-                return new(SellerStatus.Competitive, current, reason+" Existing price is already competitive.", "Live listings");
-            return new(SellerStatus.Update, price, reason, "Live listings");
+                return new(SellerStatus.Competitive, current, reason+" Your rules keep the current price."+(undercut?" A lower listing exists; review the ignored low-price rule.":""), "Live listings",undercut,prices[0]);
+            return new(SellerStatus.Update, price, reason, "Live listings",undercut,prices[0]);
         }
         // Our own listings are not an empty market. Never repeatedly undercut ourselves.
         if (all.Length > 0) return new(SellerStatus.Competitive, current > 0 ? current : null, "Only your known retainers offer this quality; existing price kept.", "Live listings");

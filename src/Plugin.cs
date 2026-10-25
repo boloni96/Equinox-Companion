@@ -350,7 +350,7 @@ public sealed partial class Plugin : IDalamudPlugin
         RunOptionalTool("Coffer markers",now);
         // Give a coffer click a short uncontested turn before other automatic interactions.
         // Movement-stop handling remains responsive during this brief priority window.
-        if(now>=cofferPriorityUntil)
+        if(now>=cofferPriorityUntil&&sellerRun?.Running!=true)
         {
             RunOptionalTool("Follow portals",now);
             RunOptionalTool("Quest Helper",now);
@@ -1092,6 +1092,7 @@ public sealed partial class Plugin : IDalamudPlugin
         escapePopupWasOpen=ImGui.IsPopupOpen("",ImGuiPopupFlags.AnyPopupId|ImGuiPopupFlags.AnyPopupLevel);
         var escapeDown=Keys[Dalamud.Game.ClientState.Keys.VirtualKey.ESCAPE];
         escapeRequested=escapeDown&&!escapeWasDown;escapeWasDown=escapeDown;
+        HandleSellerEscape();
         var perf = System.Diagnostics.Stopwatch.GetTimestamp();
         using (new EquinoxAppearance(GoddessAppearance))
         {

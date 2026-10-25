@@ -22,3 +22,5 @@ Check(Read([0]) == "", "Empty labels must remain unresolved.");
 Check(Read(Enumerable.Repeat((byte)'x', 2049).ToArray()) == "", "Unterminated labels must not be read past the limit.");
 unsafe { Check(GardenMenuText.Read(null) == "", "Null label must remain unresolved."); }
 Console.WriteLine($"Native garden label regression checks passed: {checks}.");
+
+SellerNativeTests.Run();
