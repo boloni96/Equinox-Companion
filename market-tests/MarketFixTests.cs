@@ -37,6 +37,14 @@ static class MarketFixTests
         check("truncated history rejected",MarketRetainerHistory.Read(bytes.AsSpan(0,100),now).Length==0);
         bytes[8+16]=8;check("bad history flags rejected",MarketRetainerHistory.Read(bytes,now).Length==0);bytes[8+16]=0;
         BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(8+8),uint.MaxValue);check("future sale rejected",MarketRetainerHistory.Read(bytes,now).Length==0);
+        Array.Clear(bytes);
+        for(var i=0;i<20;i++)Row(i,item:(uint)(10+i),qty:(uint)(1+i),net:(uint)(100+i));
+        var full=MarketRetainerHistory.Read(bytes,now,out var historyError);
+        check("sale history captures all twenty different items",historyError.Length==0&&full.Length==20&&full.Select(x=>x.Item).SequenceEqual(Enumerable.Range(10,20).Select(x=>(uint)x)));
+        var fullLedger=MarketRetainerHistory.Merge([],retainer,full,_=>"Item");
+        check("all history rows persisted once across reopens",fullLedger.Length==20&&MarketRetainerHistory.Merge(fullLedger,retainer,full,_=>"Item").Length==20&&fullLedger.Sum(x=>x.Net)==2190);
+        bytes[8+5*52+16]=8;
+        check("diagnostics identify malformed later history row",MarketRetainerHistory.Read(bytes,now,out historyError).Length==0&&historyError.Contains("row 6"));
         var port=new MultiStackPort(now);var run=new SellerRun(port);
         run.Start([new(1,"One"),new(2,"Two")],100,20,true,new(),[1,2],now);
         for(var i=1;i<150&&run.Running;i++){port.Now=now.AddSeconds(i);run.Tick(port.Now);}

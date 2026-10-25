@@ -20,16 +20,13 @@ public sealed partial class Plugin
     private MarketLedger marketLedger=MarketLedger.Empty;
     private Task<MarketLedger>? marketLoad;
     private LatestSnapshotWriter<MarketLedger> marketWriter=null!;
-    private bool marketDirty,marketLoadFailed,marketHooksEnabled,marketBuddyLocked,autoRetainerSuppressed;
-    private DateTimeOffset marketSaveAt,marketPollAt,sellerRequestAt,sellerResultAt,manualEditorAt,manualCompareAt;
+    private bool marketDirty,marketLoadFailed,marketHooksEnabled,marketBuddyLocked;
+    private DateTimeOffset marketSaveAt,marketPollAt,manualEditorAt,manualCompareAt;
     private string sellerNotice="",marketDataError="",sellerLiveError="";
-    private uint sellerRequestItem,sellerRequestWorld;
-    private int sellerExpected=-1,sellerError;
-    private bool sellerHistoryReceived,sellerHistoryRequested;
-    private bool sellerRequestHq,autoRetainerPreviouslySuppressed;
+    private readonly SellerComparisonCapture sellerComparison=new();
+    private bool sellerDispatchingCompare;
     private ulong sellerInventoryRetainer;
     private DateTimeOffset sellerInventorySince;
-    private SellerSale[] sellerHistory=[];
     private MarketStock? manualEditor;
     private ulong manualRetainer;
     private bool manualAutoCompare,manualShowHistory,manualSuspendUntilClose;
@@ -37,6 +34,7 @@ public sealed partial class Plugin
     private DateTimeOffset sellerSelectRetry,marketOrderAt;
     private int? manualPastePrice;
     private readonly ConcurrentQueue<(uint Item,SellerSale[] Sales,DateTimeOffset At)> sellerHistories=new();
+    private readonly ConcurrentQueue<(int Request,SellerReceivedOffer[] Rows,DateTimeOffset At)> sellerOfferings=new();
     private readonly Dictionary<(ulong Retainer,int Slot),(MarketStock Item,SellerDecision Decision,DateTimeOffset At)> sellerReviews=[];
     private unsafe delegate void SellerResultDelegate(InfoProxyItemSearch* proxy,byte count,int error);
     private Hook<SellerResultDelegate>? sellerResultHook;
@@ -57,6 +55,7 @@ public sealed partial class Plugin
             if(ledger.Retainers==null||ledger.Income==null||ledger.Prices==null||ledger.Retainers.Any(x=>x.Stock==null))throw new IOException("Incomplete market ledger; original file preserved");
             return ledger;
         });
+        sellerAutoRetainerPause=new(new SellerAutoRetainerPort());
         sellerRun=new(new SellerPort(this));
         InitializeMarketWindows();
         // Market hooks are installed only while the optional tool is enabled.
@@ -73,10 +72,12 @@ public sealed partial class Plugin
             }catch(Exception ex){sellerLiveError="Live comparison confirmation is unavailable ("+ex.GetType().Name+"). Manual pricing remains available.";Log.Warning(ex,sellerLiveError);}
             EnableRetainerHistory();
             MarketBoard.HistoryReceived+=SellerHistoryReceived;
+            MarketBoard.OfferingsReceived+=SellerOfferingsReceived;
             MarketBoard.PurchaseRequested+=MarketPurchaseRequested;
             MarketBoard.ItemPurchased+=MarketPurchased;
             Addons.RegisterListener(AddonEvent.PostSetup,"RetainerList",SellerBellOpened);
             Addons.RegisterListener(AddonEvent.PostSetup,"RetainerSell",SellerEditorOpened);
+            Addons.RegisterListener(AddonEvent.PreReceiveEvent,"RetainerSell",SellerCompareOpening);
             Addons.RegisterListener(AddonEvent.PostSetup,"RetainerSellList",SellerListOpened);
             Addons.RegisterListener(AddonEvent.PostReceiveEvent,"ItemSearchResult",SellerPriceClicked);
             Addons.RegisterListener(AddonEvent.PostReceiveEvent,new[]{"RetainerSell","ItemSearchResult"},SellerNativeEvent);
@@ -94,10 +95,12 @@ public sealed partial class Plugin
         marketHooksEnabled=false;
         sellerResultHook?.Disable();marketHistoryHook?.Disable();
         MarketBoard.HistoryReceived-=SellerHistoryReceived;
+        MarketBoard.OfferingsReceived-=SellerOfferingsReceived;
         MarketBoard.PurchaseRequested-=MarketPurchaseRequested;
         MarketBoard.ItemPurchased-=MarketPurchased;
         Addons.UnregisterListener(AddonEvent.PostSetup,"RetainerList",SellerBellOpened);
         Addons.UnregisterListener(AddonEvent.PostSetup,"RetainerSell",SellerEditorOpened);
+        Addons.UnregisterListener(AddonEvent.PreReceiveEvent,"RetainerSell",SellerCompareOpening);
         Addons.UnregisterListener(AddonEvent.PostSetup,"RetainerSellList",SellerListOpened);
         Addons.UnregisterListener(AddonEvent.PostReceiveEvent,"ItemSearchResult",SellerPriceClicked);
         Addons.UnregisterListener(AddonEvent.PostReceiveEvent,new[]{"RetainerSell","ItemSearchResult"},SellerNativeEvent);
@@ -113,9 +116,36 @@ public sealed partial class Plugin
     private unsafe void SellerRequestResult(InfoProxyItemSearch* proxy,byte count,int error)
     {
         sellerResultHook!.Original(proxy,count,error);
-        if(config.Seller.Enabled && sellerRequestItem!=0 && proxy!=null && proxy->SearchItemId%1_000_000==sellerRequestItem)
-        {sellerExpected=Math.Min(100,(int)count);sellerError=error;sellerResultAt=DateTimeOffset.UtcNow;TraceSeller("Comparison response",$"Item {sellerRequestItem} · {count} listings · error {error}");}
+        if(config.Seller.Enabled && proxy!=null && sellerComparison.Response(proxy->SearchItemId%1_000_000,count,error,DateTimeOffset.UtcNow))
+            TraceSeller("Comparison response",$"Item {sellerComparison.Item} · {count} listings · error {error}");
     }
+    private void SellerOfferingsReceived(IMarketBoardCurrentOfferings offerings)
+    {
+        if(!config.Seller.Enabled||sellerOfferings.Count>=32)return;
+        var rows=offerings.ItemListings.Select(x=>new SellerReceivedOffer(x.ListingId,x.ItemId%1_000_000,new(x.RetainerId,x.PricePerUnit,x.IsHq,x.ItemQuantity,x.OnMannequin))).ToArray();
+        sellerOfferings.Enqueue((offerings.RequestId,rows,DateTimeOffset.UtcNow));
+    }
+    private void DrainSellerComparison()
+    {
+        while(sellerOfferings.TryDequeue(out var packet))if(sellerComparison.ReceiveOffers(packet.Request,packet.Rows,packet.At))
+            TraceSeller("Comparison listings",$"Item {sellerComparison.Item} · {sellerComparison.ReceivedCount}/{sellerComparison.Expected} fresh listings");
+        while(sellerHistories.TryDequeue(out var h))if(sellerComparison.ReceiveHistory(h.Item,h.Sales,h.At))
+            TraceSeller("Comparison history",$"Item {h.Item} · {h.Sales.Length} recent sales received");
+    }
+    private unsafe void SellerCompareOpening(AddonEvent e,AddonArgs args)
+    {
+        if(!config.Seller.Enabled||sellerDispatchingCompare||args is not AddonReceiveEventArgs ev||(int)ev.AtkEventType!=25||ev.EventParam!=4)return;
+        var item=SellerEditorItem(out _,out _);
+        if(item==null)return;
+        ArmSellerComparison(item->ItemId%1_000_000,(item->Flags&InventoryItem.ItemFlags.HighQuality)!=0);
+    }
+    private void ArmSellerComparison(uint item,bool hq)
+    {
+        sellerComparison.Begin(item,Player.CurrentWorld.RowId,hq,DateTimeOffset.UtcNow);
+        if(!sellerRun.Running)manualCompareAt=sellerComparison.RequestedAt;
+        TraceSeller("Comparison request",$"Item {item} · new listings and history request");
+    }
+
     private void SellerHistoryReceived(IMarketBoardHistory history)
     {
         if(!config.Seller.Enabled || sellerHistories.Count>=32)return;
@@ -133,7 +163,7 @@ public sealed partial class Plugin
     {
         if(!config.Seller.Enabled || sellerRun.Running)return;
         manualEditor=null;manualRetainer=0;manualEditorAt=DateTimeOffset.UtcNow;manualCompareAt=default;manualSuspendUntilClose=false;
-        sellerRequestItem=0;manualInventory=default;marketPollAt=DateTimeOffset.UtcNow;
+        sellerComparison.Clear();manualInventory=default;marketPollAt=DateTimeOffset.UtcNow;
         manualAutoCompare=config.Seller.OpenCompare&&!Keys[Dalamud.Game.ClientState.Keys.VirtualKey.SHIFT];
         manualShowHistory=config.Seller.OpenHistory^(config.Seller.AltTogglesHistory&&Keys[Dalamud.Game.ClientState.Keys.VirtualKey.MENU]);
         manualPastePrice=null;
@@ -153,9 +183,10 @@ public sealed partial class Plugin
         if(manualSuspendUntilClose){TraceSeller("Price click ignored","Editor is held after stopping a run; close and reopen it.");return;}
         if(!AcquireMarketBuddyLock()){TraceSeller("Price click ignored",sellerNotice);return;}
         try {
+            DrainSellerComparison();
             var data=(AtkEventData*)ev.AtkEventData;
             var proxy=InfoProxyItemSearch.Instance();var index=data->ListItemData.SelectedIndex;
-            if(proxy==null || proxy->WaitingForListings || proxy->SearchItemId%1_000_000!=manualEditor.ItemId || index<0 || index>=Math.Min(100,proxy->ListingCount)){TraceSeller("Price click ignored","Comparison identity, loading state or row index is not ready.",new {index,item=manualEditor.ItemId,searchItem=proxy==null?0:proxy->SearchItemId,waiting=proxy!=null&&proxy->WaitingForListings,count=proxy==null?0:proxy->ListingCount});return;}
+            if(proxy==null || !sellerComparison.Ready(proxy->SearchItemId%1_000_000,Player.CurrentWorld.RowId,(int)proxy->ListingCount) || proxy->SearchItemId%1_000_000!=manualEditor.ItemId || index<0 || index>=Math.Min(100,proxy->ListingCount)){TraceSeller("Price click ignored","Comparison identity, loading state or row index is not ready.",new {index,item=manualEditor.ItemId,searchItem=proxy==null?0:proxy->SearchItemId,waiting=proxy!=null&&proxy->WaitingForListings,count=proxy==null?0:proxy->ListingCount,sellerComparison.Expected,sellerComparison.ReceivedCount,sellerComparison.Error});return;}
             var listing=proxy->Listings[index];
             var renderer=data->ListItemData.ListItemRenderer;
             if(renderer!=null&&renderer->UldManager.NodeList!=null&&renderer->UldManager.NodeListCount>=14){
@@ -165,7 +196,7 @@ public sealed partial class Plugin
                     if(candidates.Length==0){TraceSeller("Price click ignored","Displayed price has no matching item/quality offer.",new {clickedPrice,manualEditor.ItemId,manualEditor.Hq});return;}listing=candidates[0];
                 }else {TraceSeller("Price click ignored","Displayed unit price could not be read.",new {nodeType=text==null?-1:(int)text->Type,text=text!=null&&text->Type==NodeType.Text?((AtkTextNode*)text)->NodeText.ToString():""});return;}
             }else {TraceSeller("Price click ignored","Comparison row renderer is unavailable.",new {index,nodeCount=renderer==null?0:renderer->UldManager.NodeListCount});return;}
-            if(listing.UnitPrice is 0 or >SellerPricing.MaxPrice || listing.ItemId%1_000_000!=manualEditor.ItemId || listing.IsMannequin || listing.IsHqItem!=manualEditor.Hq){TraceSeller("Price click ignored","Offer did not match the current item and quality.");return;}
+            if(!sellerComparison.Contains(listing.ListingId,new(listing.RetainerId,listing.UnitPrice,listing.IsHqItem,listing.Quantity,listing.IsMannequin)) || listing.UnitPrice is 0 or >SellerPricing.MaxPrice || listing.ItemId%1_000_000!=manualEditor.ItemId || listing.IsMannequin || listing.IsHqItem!=manualEditor.Hq){TraceSeller("Price click ignored","Offer did not match the current item and quality.");return;}
             var price=SellerPricing.Adjust(listing.UnitPrice,config.Seller,config.Seller.MinimumPrices.GetValueOrDefault(manualEditor.ItemId,1));
             if(config.Seller.CopyPrice)Dalamud.Bindings.ImGui.ImGui.SetClipboardText(price.ToString());
             var applied=config.Seller.ClickSetsPrice&&SetManualSellerPrice(price,config.Seller.ClickConfirms);
@@ -251,40 +282,54 @@ public sealed partial class Plugin
     {
         var edit=(AddonRetainerSell*)SellerAddon("RetainerSell");if(edit==null){TraceSeller("Compare blocked","Price editor is not visible and ready.");return false;}
         if(sellerRun.Running&&sellerResultHook?.IsEnabled!=true){TraceSeller("Compare blocked","Live result hook is unavailable.");return false;}
-        if(SellerAddon("ItemSearchResult")!=null){TraceSeller("Compare blocked","A comparison window is already open.");return false;}
+        if(SellerAddon("ItemSearchResult")!=null){
+            // A native Compare click during the run was observed before the
+            // request. Adopt that request instead of blocking on our own UI.
+            if(sellerComparison.Item==item&&sellerComparison.World==Player.CurrentWorld.RowId)return true;
+            TraceSeller("Compare blocked","A different comparison window is already open.");return false;
+        }
         if(InfoProxyItemSearch.Instance()==null){TraceSeller("Compare blocked","Market search proxy is unavailable.");return false;}
-        if(InfoProxyItemSearch.Instance()->WaitingForListings){TraceSeller("Compare blocked","Market search is still marked as waiting for listings.");return false;}
-        sellerRequestItem=item;sellerRequestWorld=Player.CurrentWorld.RowId;sellerExpected=-1;sellerError=0;
         var slot=SellerEditorItem(out _,out _);
         if(slot==null||slot->ItemId%1_000_000!=item){TraceSeller("Compare blocked","Editor inventory item does not match the request.",new {expected=item,actual=slot==null?0:slot->ItemId});return false;}
-        sellerRequestHq=(slot->Flags&InventoryItem.ItemFlags.HighQuality)!=0;
-        sellerRequestAt=DateTimeOffset.UtcNow;sellerResultAt=default;sellerHistory=[];sellerHistoryReceived=false;sellerHistoryRequested=false;
-        return SellerButton((AtkUnitBase*)edit,edit->ComparePrices,4);
+        // WaitingForListings stays true even after completed searches in the
+        // supplied game trace. The enabled native button accepts a new search.
+        ArmSellerComparison(item,(slot->Flags&InventoryItem.ItemFlags.HighQuality)!=0);
+        sellerDispatchingCompare=true;
+        try {if(SellerButton((AtkUnitBase*)edit,edit->ComparePrices,4))return true;}
+        finally {sellerDispatchingCompare=false;}
+        sellerComparison.Clear();manualCompareAt=default;return false;
     }
     private unsafe SellerComparison? ReadSellerComparison()
     {
-        if(sellerRequestItem==0||sellerExpected<0||sellerResultAt<sellerRequestAt)return null;
-        if(sellerError!=0)return new(sellerRequestItem,sellerRequestWorld,sellerRequestAt,false,[],false,[],"Game comparison failed ("+sellerError+"); existing price kept.");
+        DrainSellerComparison();
+        var capture=sellerComparison;
+        if(capture.Item==0||capture.Expected<0||capture.RespondedAt<capture.RequestedAt)return null;
+        if(capture.Error!=0)return new(capture.Item,capture.World,capture.RequestedAt,false,[],false,[],"Game comparison failed ("+capture.Error+"); existing price kept.");
         var proxy=InfoProxyItemSearch.Instance();var result=(AddonItemSearchResult*)SellerAddon("ItemSearchResult");
-        if(proxy==null||result==null||proxy->WaitingForListings||proxy->SearchItemId%1_000_000!=sellerRequestItem||proxy->ListingCount!=sellerExpected)return null;
+        if(proxy==null||result==null||!capture.Ready(proxy->SearchItemId%1_000_000,Player.CurrentWorld.RowId,(int)proxy->ListingCount))return null;
         var rows=new List<SellerOffer>();
-        for(var i=0;i<sellerExpected;i++){var x=proxy->Listings[i];if(x.ItemId%1_000_000!=sellerRequestItem||x.UnitPrice==0)return null;rows.Add(new(x.RetainerId,x.UnitPrice,x.IsHqItem,x.Quantity,x.IsMannequin));}
-        var emptyQuality=!rows.Any(x=>x.Hq==sellerRequestHq&&!x.Mannequin);
+        for(var i=0;i<capture.Expected;i++){
+            var x=proxy->Listings[i];var offer=new SellerOffer(x.RetainerId,x.UnitPrice,x.IsHqItem,x.Quantity,x.IsMannequin);
+            if(x.ItemId%1_000_000!=capture.Item||!capture.Contains(x.ListingId,offer))return null;
+            rows.Add(offer);
+        }
+        var emptyQuality=!rows.Any(x=>x.Hq==capture.Hq&&!x.Mannequin);
         var wantHistory=(sellerRun.Running?config.Seller.OpenHistory:manualShowHistory) || emptyQuality && config.Seller.UseHistory;
-        if(wantHistory && !sellerHistoryRequested){sellerHistoryRequested=SellerButton((AtkUnitBase*)result,result->History,23);}
-        if(emptyQuality&&config.Seller.UseHistory&&!sellerHistoryReceived)return null;
-        return new(sellerRequestItem,sellerRequestWorld,sellerRequestAt,true,rows.ToArray(),sellerHistoryReceived,sellerHistory);
+        if(wantHistory&&!capture.HistoryRequested)capture.HistoryRequested=SellerButton((AtkUnitBase*)result,result->History,23);
+        if(wantHistory&&!capture.HistoryReceived)return null;
+        return new(capture.Item,capture.World,capture.RequestedAt,true,rows.ToArray(),capture.HistoryReceived,capture.History);
     }
+
     private unsafe bool CancelSellerEditor(ulong retainer,MarketStock item)
     {
         if(SellerAddon("RetainerSell")!=null&&!SellerEditorMatches(retainer,item))return false;
-        if(SellerAddon("RetainerSell")==null){sellerRequestItem=0;return true;}
+        if(SellerAddon("RetainerSell")==null){sellerComparison.Clear();return true;}
         // Do not dismiss an editor the player has changed or opened independently.
         CloseSellerAddon("ItemSearchHistory");
         CloseSellerAddon("ItemSearchResult");
         var edit=(AddonRetainerSell*)SellerAddon("RetainerSell");
         var cancelled=edit!=null&&SellerButton((AtkUnitBase*)edit,edit->Cancel,22);
-        sellerRequestItem=0;return cancelled;
+        sellerComparison.Clear();return cancelled;
     }
     private static unsafe void CloseSellerAddon(string name){var a=SellerAddon(name);if(a!=null)a->Close(true);}
     private bool AcquireMarketBuddyLock()
@@ -296,11 +341,16 @@ public sealed partial class Plugin
             marketBuddyLocked=Pi.GetIpcSubscriber<string,bool>("Marketbuddy.Lock").InvokeFunc("EquinoxSeller");return marketBuddyLocked;
         }catch{sellerNotice="Disable Marketbuddy before using Seller: its pricing lock is unavailable.";return false;}
     }
-    private void ReleaseSellerLocks()
+    private void ReleaseMarketBuddyLock()
     {
         if(marketBuddyLocked){try{Pi.GetIpcSubscriber<string,bool>("Marketbuddy.Unlock").InvokeFunc("EquinoxSeller");}catch{}marketBuddyLocked=false;}
-        if(autoRetainerSuppressed){try{Pi.GetIpcSubscriber<bool,object>("AutoRetainer.SetSuppressed").InvokeAction(autoRetainerPreviouslySuppressed);}catch{}autoRetainerSuppressed=false;}
-        sellerRequestItem=0;
+    }
+    private void ReleaseSellerLocks()
+    {
+        ReleaseMarketBuddyLock();
+        sellerAutoRetainerPause?.Release(DateTimeOffset.UtcNow);
+        if(sellerAutoRetainerPause!=null)TraceAutoRetainerHandoff();
+        sellerComparison.Clear();
     }
     private unsafe void StartSeller(bool apply)
     {
@@ -313,17 +363,18 @@ public sealed partial class Plugin
         var selected=sellerScope switch {0=>all.Where(x=>x.Id==current&&SellerActive(current)).ToArray(),1=>all.Where(x=>config.Seller.SelectedRetainers.Contains(x.Id)).ToArray(),_=>all};
         if(selected.Length==0){sellerNotice="Select a retainer or choose All retainers.";return;}
         if(SellerAddon("RetainerList")==null&&!SellerActive(current)){sellerNotice="Open the summoning-bell retainer list first.";return;}
-        if(Pi.InstalledPlugins.Any(x=>x.IsLoaded&&x.InternalName=="AutoRetainer"))try{
-            if(Pi.GetIpcSubscriber<bool>("AutoRetainer.PluginState.IsBusy").InvokeFunc()){sellerNotice="Wait for AutoRetainer to finish before starting.";return;}
-            autoRetainerPreviouslySuppressed=Pi.GetIpcSubscriber<bool>("AutoRetainer.GetSuppressed").InvokeFunc();
-            Pi.GetIpcSubscriber<bool,object>("AutoRetainer.SetSuppressed").InvokeAction(true);autoRetainerSuppressed=true;
-        }catch{ReleaseSellerLocks();sellerNotice="Disable AutoRetainer before using Seller: its pause connection is unavailable.";return;}
-        if(!AcquireMarketBuddyLock()){ReleaseSellerLocks();TraceSeller("Run blocked",sellerNotice);return;}sellerSelectRetry=default;manualEditor=null;manualSuspendUntilClose=false;sellerNotice="";
+        ReleaseMarketBuddyLock();
+        var handoff=sellerAutoRetainerPause.Acquire(DateTimeOffset.UtcNow);TraceAutoRetainerHandoff();
+        if(handoff.Error.Length>0){sellerNotice=handoff.Error;ReleaseSellerLocks();TraceSeller("Run blocked",sellerNotice);return;}
+        sellerSelectRetry=default;manualEditor=null;manualSuspendUntilClose=false;sellerNotice="";
         TraceSeller("Run requested",apply?"Update prices":"Check prices",new {retainers=selected,character=Player.ContentId,world=Player.CurrentWorld.RowId});
-        sellerRun.Start(selected,Player.ContentId,Player.CurrentWorld.RowId,apply,config.Seller,marketLedger.Retainers.Select(x=>x.Id).Concat(all.Select(x=>x.Id)),DateTimeOffset.UtcNow);
+        try{sellerRun.Start(selected,Player.ContentId,Player.CurrentWorld.RowId,apply,config.Seller,marketLedger.Retainers.Select(x=>x.Id).Concat(all.Select(x=>x.Id)),DateTimeOffset.UtcNow);}
+        catch{ReleaseSellerLocks();throw;}
+        if(!sellerRun.Running)ReleaseSellerLocks();
     }
     private unsafe void UpdateEquinoxMarket(DateTimeOffset now)
     {
+        UpdateSellerAutoRetainer(now);
         if(marketLoad is {IsCompleted:true}) {
             if(marketLoad.IsCompletedSuccessfully)marketLedger=marketLoad.Result;
             else {marketLoadFailed=true;marketDataError="Saved market data could not be read. Existing file kept; tracking is paused.";Log.Error(marketLoad.Exception!,marketDataError);}
@@ -334,7 +385,7 @@ public sealed partial class Plugin
         else if(!marketLoadFailed)marketDataError="";
         if(!config.Seller.Enabled||marketLoad!=null||marketLoadFailed)return;
         try {
-            while(sellerHistories.TryDequeue(out var h))if(h.Item==sellerRequestItem&&h.At>=sellerRequestAt){sellerHistory=h.Sales;sellerHistoryReceived=true;}
+            DrainSellerComparison();
             DrainMarketSales();
             sellerRun.Tick(now);
             UpdateMarketWatch(now);
@@ -354,7 +405,7 @@ public sealed partial class Plugin
     {
         var edit=(AddonRetainerSell*)SellerAddon("RetainerSell");var agent=AgentRetainer.Instance();
         if(manualSuspendUntilClose){if(edit==null){manualSuspendUntilClose=false;manualEditor=null;}else return;}
-        if(edit==null){manualEditor=null;manualEditorAt=default;if(SellerAddon("RetainerList")==null&&SellerAddon("RetainerSellList")==null&&!SellerActive(active))ReleaseSellerLocks();else AcquireMarketBuddyLock();return;}
+        if(edit==null){manualEditor=null;manualEditorAt=default;sellerComparison.Clear();if(SellerAddon("RetainerList")==null&&SellerAddon("RetainerSellList")==null&&!SellerActive(active))ReleaseSellerLocks();else AcquireMarketBuddyLock();return;}
         if(agent==null||!SellerActive(active)){TraceSeller("Manual capture blocked",agent==null?"Retainer agent is unavailable.":"Active retainer identity has not been confirmed.",sellerLastNativeState);return;}
         if(manualEditorAt==default)BeginManualSeller();
         if(!AcquireMarketBuddyLock()){TraceSeller("Manual capture blocked",sellerNotice);return;}
@@ -375,9 +426,6 @@ public sealed partial class Plugin
         if(manualEditor!=null&&manualCompareAt==default&&manualAutoCompare){
             if(BeginSellerComparison(manualEditor.ItemId))manualCompareAt=now;
         }
-        var result=(AddonItemSearchResult*)SellerAddon("ItemSearchResult");
-        if(manualEditor!=null&&manualShowHistory&&result!=null&&!sellerHistoryRequested&&InfoProxyItemSearch.Instance()!=null&&InfoProxyItemSearch.Instance()->SearchItemId%1_000_000==manualEditor.ItemId)
-            sellerHistoryRequested=SellerButton((AtkUnitBase*)result,result->History,23);
         if(manualEditor!=null&&ReadSellerComparison() is {} comparison){
             var decision=SellerPricing.Decide(manualEditor.ItemId,Player.CurrentWorld.RowId,manualEditor.Hq,manualEditor.Price,comparison,marketLedger.Retainers.Select(x=>x.Id).Concat(ReadSellerRetainers().Select(x=>x.Id)).ToHashSet(),config.Seller,now);
             sellerReviews[(active,manualEditor.Slot)]=(manualEditor,decision,now);
@@ -453,6 +501,7 @@ public sealed partial class Plugin
     }
     private sealed class SellerPort(Plugin p):ISellerPort
     {
+        public SellerPreparation Prepare()=>p.PrepareSellerAutomation();
         private (ulong Retainer,int Slot)? requestedEditor;
         private ulong requestedMarket;
         public bool ContextMatches(ulong c,uint w)=>p.SellerContext(c,w);
@@ -524,6 +573,7 @@ public sealed partial class Plugin
     private void DisposeEquinoxMarket()
     {
         DisableMarketHooks();marketWatchClient.Dispose();sellerResultHook?.Dispose();marketHistoryHook?.Dispose();DisposeMarketWindows();
+        if(sellerAutoRetainerPause.RestorePending){Log.Warning("AutoRetainer pause could not be released during Companion unload. Resume it from AutoRetainer's controls.");errorJournal.Record("seller-autoretainer","AutoRetainer pause release failed during Companion unload; resume from AutoRetainer controls.");}
         if(marketLoad==null&&!marketLoadFailed)try{marketWriter.Flush(marketLedger);}catch(Exception ex){Log.Error(ex,"Market ledger could not be saved");}
     }
 }

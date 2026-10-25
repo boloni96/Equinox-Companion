@@ -55,7 +55,7 @@ public sealed class MarketWatchClient:IDisposable
     public MarketWatchClient(HttpMessageHandler? handler=null)
     {
         http=handler==null?new():new(handler);http.Timeout=TimeSpan.FromSeconds(20);
-        http.DefaultRequestHeaders.UserAgent.ParseAdd("EquinoxCompanion-Market/0.5.1.245");
+        http.DefaultRequestHeaders.UserAgent.ParseAdd("EquinoxCompanion-Market/0.5.1.246");
         http.MaxResponseContentBufferSize=8*1024*1024;
     }
     public async Task<MarketWatchBatch> Read(uint world,uint[] items,CancellationToken token)

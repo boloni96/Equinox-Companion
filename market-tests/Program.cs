@@ -109,6 +109,8 @@ ImportFails("invalid HQ flag rejected",header+row.Replace(",1,99,",",2,99,"));
 ImportFails("oversized price rejected",header+row.Replace(",100,",",1000000000,"));
 await MarketWatchTests.Run(Check,now);
 MarketFixTests.Run(Check,now);
+AutoRetainerPauseTests.Run(Check,now);
+ComparisonCaptureTests.Run(Check,now);
 Console.WriteLine($"{tests} market checks passed.");
 
 sealed class FakePort(DateTimeOffset now,MarketStock stock):ISellerPort

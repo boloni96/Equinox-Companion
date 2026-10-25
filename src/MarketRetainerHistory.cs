@@ -10,9 +10,11 @@ public static class MarketRetainerHistory
     // Layout cross-checked against CashFlow and AscendedLedger. The price
     // field is the received after-tax amount, not a listing unit price.
     public const int PacketSize=8+20*52;
-    public static MarketHistorySale[] Read(ReadOnlySpan<byte> packet,DateTimeOffset now)
+    public static MarketHistorySale[] Read(ReadOnlySpan<byte> packet,DateTimeOffset now)=>Read(packet,now,out _);
+    public static MarketHistorySale[] Read(ReadOnlySpan<byte> packet,DateTimeOffset now,out string error)
     {
-        if(packet.Length!=PacketSize)return [];
+        error="";
+        if(packet.Length!=PacketSize){error="Unexpected history packet size.";return [];}
         var result=new List<MarketHistorySale>();var duplicates=new Dictionary<string,int>();
         for(var i=0;i<20;i++){
             var row=packet.Slice(8+i*52,52);
@@ -20,9 +22,9 @@ public static class MarketRetainerHistory
             var net=BinaryPrimitives.ReadUInt32LittleEndian(row[4..]);
             var at=DateTimeOffset.FromUnixTimeSeconds(BinaryPrimitives.ReadUInt32LittleEndian(row[8..]));
             var quantity=BinaryPrimitives.ReadUInt32LittleEndian(row[12..]);
-            if(item>=1_000_000||net==0||quantity is 0 or >9999||net>(long)SellerPricing.MaxPrice*quantity||row[16]>1||row[18]>1||at.Year<2013||at>now.AddMinutes(1))return [];
+            if(item>=1_000_000||net==0||quantity is 0 or >9999||net>(long)SellerPricing.MaxPrice*quantity||row[16]>1||row[18]>1||at.Year<2013||at>now.AddMinutes(1)){error=$"History row {i+1} did not pass validation; existing records kept.";return [];}
             if(row[18]!=0)continue; // Mannequin sets cannot be assigned to one item.
-            var buyer=row.Slice(19,32);var end=buyer.IndexOf((byte)0);if(end<0)return [];
+            var buyer=row.Slice(19,32);var end=buyer.IndexOf((byte)0);if(end<0){error=$"History row {i+1} has an unexpected buyer field; existing records kept.";return [];}
             var key=Convert.ToHexString(SHA256.HashData(buyer[..end]));
             var identity=$"{item}:{row[16]}:{quantity}:{net}:{at.ToUnixTimeSeconds()}:{key}";
             var occurrence=duplicates.GetValueOrDefault(identity);duplicates[identity]=occurrence+1;

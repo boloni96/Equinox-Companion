@@ -43,7 +43,7 @@ Use **Check prices** first, then test a single inexpensive listing before an all
 - [ ] A retainer visit clears its visit reminder without changing listing observation timestamps. Empty retainers receive no visit reminder.
 - [ ] Background checks use each retainer’s home world, distinguish HQ/NQ, exclude known own retainers, and do not turn old/missing/error data green. Tooltips show the upload time, not just the retrieval time.
 - [ ] Highlight colors survive native list refreshes and restore when disabled. Hover reasons in Market match the item.
-- [ ] AutoRetainer busy state blocks Seller; a completed/stopped run restores its previous pause state. Marketbuddy does not also alter prices.
+- [ ] Starting Seller pauses new AutoRetainer scheduling and waits for queued actions to settle before touching the menus; a completed/stopped run restores its previous pause state. Marketbuddy does not also alter prices.
 - [ ] A confirmed market purchase appears once under Spending with quantity, unit cost and tax. Failed/cancelled purchases do not appear.
 - [ ] A supported sale message adds its actual net amount once; an unobserved retainer/quantity remains labelled unknown. Verify receipt parsing on the installed game build.
 - [ ] CSV import, reimport, filtered export and backup succeed without freezing the game. Net totals exclude inferred/imported amounts.
@@ -88,3 +88,23 @@ The local bounded trace includes native window transitions, retainer/item identi
 Retainer names now share the review color. Counts read `13 selling · 6 updates`, or `13 selling · unchecked` when no update is known and data remains uncertain. Known update counts do not include unchecked listings. Empty retainers show `0 selling`.
 
 Close Seller when leaving the bell defaults on under Market & Seller > Windows & highlighting. Retainer transitions keep Seller open; leaving the bell closes it after a one-second settling period. Turning the option off keeps the window open.
+
+## 0.5.1.246: comparison, per-item history and AutoRetainer handoff
+
+Starting Check prices or Update prices now suppresses AutoRetainer scheduling immediately, then waits for existing queued actions to finish and for a short stable idle period. The Seller run starts automatically after that handoff. It never aborts AutoRetainer's task queue or changes its venture, multi-mode or character configuration. Waiting is cancellable with Stop and times out after 45 seconds.
+
+Finishing, stopping, losing the game context, disabling the tool or unloading Companion releases the pause. AutoRetainer stays paused if it was paused before Seller. Temporary IPC restoration errors stay visible and are retried rather than discarded. During a run, losing the verified pause or observing new external automation stops Seller before its next action. Marketbuddy's lock is acquired after AutoRetainer settles so queued work can finish first.
+
+The handoff and restoration status are included in Seller diagnostics. Test with AutoRetainer idle, working on a venture, already paused, and with Stop pressed while waiting. Also verify completion restores its original state. The 245 game trace identified the comparison blocker: `WaitingForListings` remained true with no results window and again after usable listings appeared. Seller now uses the enabled native Compare button and validates a fresh response plus every received listing, including listing identity, before reading or applying prices. It no longer treats that flag as a readiness gate. Manual game Compare clicks start the same request tracking before the game handles the click. Partial, stale, different-item and failed responses cannot supply a price.
+
+Every newly opened item editor and comparison clears its history state. This also covers automatic comparison being bypassed with Shift or disabled in settings, which previously left the first item's history-request flag set. Requested history is awaited before an automatic run moves on. Retainer View sale history is a separate capture: tests verify all 20 different native sale rows and repeated reads without duplicate revenue. Its row count and any validation failure now appear in diagnostics; no change to the verified packet layout was needed.
+
+In-game checks for this update:
+- Open Adjust Price: Compare and History should open. Click a matching-quality price and check the editor/clipboard according to your settings.
+- Close it, open a different item, and repeat. Also try Shift plus the game's Compare button; the second item must show its own history.
+- Run Check prices through several items before Update prices. Check must leave prices unchanged.
+- Open a retainer's View sale history with multiple sold items twice. Confirm all rows appear once in Market.
+
+Automated checks do not replace these native in-game tests. Garden detection and mapping paths are unchanged.
+
+Upstream contracts checked: [suppression API](https://github.com/PunishXIV/AutoRetainerAPI/blob/main/AutoRetainerAPI/AutoRetainerApi.cs), [AutoRetainer scheduling](https://github.com/PunishXIV/AutoRetainer/blob/master/AutoRetainer/Scheduler/SchedulerMain.cs), [busy-state API](https://github.com/PunishXIV/AutoRetainer/blob/master/AutoRetainer/Modules/EzIPCManagers/IPC_PluginState.cs), and [busy-state sources](https://github.com/PunishXIV/AutoRetainer/blob/master/AutoRetainer/Helpers/Utils.cs).

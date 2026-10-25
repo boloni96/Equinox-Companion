@@ -3,6 +3,7 @@ namespace EquinoxCompanion;
 public sealed record SellerRetainerRef(ulong Id,string Name);
 public interface ISellerPort
 {
+    SellerPreparation Prepare()=>new(true);
     bool ContextMatches(ulong character,uint world);
     bool SelectRetainer(SellerRetainerRef retainer);
     bool OpenMarket(ulong retainer);
@@ -20,7 +21,7 @@ public interface ISellerPort
 }
 public sealed class SellerRun(ISellerPort port)
 {
-    public enum Phase { Idle, Select, OpenMarket, ReadStock, NextItem, OpenEditor, Compare, ReadComparison, Commit, Close }
+    public enum Phase { Idle, Prepare, Select, OpenMarket, ReadStock, NextItem, OpenEditor, Compare, ReadComparison, Commit, Close }
     public Phase State { get; private set; }
     public bool Running => State!=Phase.Idle;
     public bool Paused { get; private set; }
@@ -46,11 +47,11 @@ public sealed class SellerRun(ISellerPort port)
         retainers=selected.DistinctBy(x=>x.Id).Take(10).ToArray();character=cid;world=worldId;Apply=apply;
         settings=System.Text.Json.JsonSerializer.Deserialize<SellerSettings>(System.Text.Json.JsonSerializer.Serialize(policy))!;
         own=ownIds.ToHashSet();foreach(var r in retainers)own.Add(r.Id);
-        RetainerIndex=0;ItemIndex=0;items=[];Updated=0;Skipped=0;Paused=false;Move(Phase.Select,now);
+        RetainerIndex=0;ItemIndex=0;items=[];Updated=0;Skipped=0;Paused=false;Move(Phase.Prepare,now);
     }
     public void Pause(DateTimeOffset now)
     {
-        if(!Running)return;Paused=!Paused;deadline=now.AddSeconds(25);next=now;
+        if(!Running)return;Paused=!Paused;deadline=now.AddSeconds(State==Phase.Prepare?45:25);next=now;
         // Pausing after a confirmation does not resubmit it. All other write
         // paths revalidate the live listing and comparison after resuming.
         if(!Paused&&State==Phase.ReadComparison){
@@ -66,10 +67,10 @@ public sealed class SellerRun(ISellerPort port)
         port.Release();
     }
     private static string Describe(Phase phase)=>phase switch {
-        Phase.Select=>"Selecting retainer",Phase.OpenMarket=>"Opening selling list",Phase.ReadStock=>"Reading listings",Phase.NextItem=>"Choosing next listing",
+        Phase.Prepare=>"Pausing other retainer work",Phase.Select=>"Selecting retainer",Phase.OpenMarket=>"Opening selling list",Phase.ReadStock=>"Reading listings",Phase.NextItem=>"Choosing next listing",
         Phase.OpenEditor=>"Opening price editor",Phase.Compare=>"Opening comparison",Phase.ReadComparison=>"Waiting for live prices",Phase.Commit=>"Waiting for confirmed price",Phase.Close=>"Returning to retainer list",_=>"Ready"
     };
-    private void Move(Phase phase,DateTimeOffset now){State=phase;deadline=now.AddSeconds(25);next=now.AddMilliseconds(500);Status=Describe(phase)+"…";}
+    private void Move(Phase phase,DateTimeOffset now){State=phase;deadline=now.AddSeconds(phase==Phase.Prepare?45:25);next=now.AddMilliseconds(500);Status=Describe(phase)+"…";}
     private void Advance(DateTimeOffset now){ItemIndex++;decision=null;Move(Phase.NextItem,now);}
     public void Tick(DateTimeOffset now)
     {
@@ -82,6 +83,7 @@ public sealed class SellerRun(ISellerPort port)
         Status=$"{Describe(State)} · Retainer {RetainerIndex+1}/{retainers.Length} · {retainer.Name} · listing {Math.Min(ItemIndex+1,items.Length)}/{items.Length}";
         if(now>=deadline)
         {
+            if(State==Phase.Prepare){Stop("Stopped: AutoRetainer did not finish its current action within 45 seconds. Its previous pause state is being restored.");return;}
             if(State is Phase.OpenEditor or Phase.Compare or Phase.ReadComparison && item is not null)
             {
                 port.Review(retainer,item,new(SellerStatus.Skipped,null,"Comparison/editor timed out; price kept.","None"),false);Skipped++;
@@ -92,6 +94,11 @@ public sealed class SellerRun(ISellerPort port)
         }
         switch(State)
         {
+            case Phase.Prepare:
+                var preparation=port.Prepare();
+                if(preparation.Error.Length>0){Stop(preparation.Error);break;}
+                if(preparation.Ready)Move(Phase.Select,now);else Status=preparation.Status;
+                break;
             case Phase.Select:
                 if(port.SelectRetainer(retainer))Move(Phase.OpenMarket,now);break;
             case Phase.OpenMarket:

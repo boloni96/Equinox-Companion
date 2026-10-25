@@ -80,9 +80,9 @@ public sealed partial class Plugin
             if(ImGui.Checkbox(r.Name+"###seller-retainer-"+r.Id,ref selected)){if(selected)config.Seller.SelectedRetainers.Add(r.Id);else config.Seller.SelectedRetainers.Remove(r.Id);SaveConfiguration();}
         }
         if(ImGui.Button("Check prices"))StartSeller(false);
-        if(ImGui.IsItemHovered())ImGui.SetTooltip("Visits selected retainers and compares each listing. Does not change any price.");
+        if(ImGui.IsItemHovered())ImGui.SetTooltip("Pauses AutoRetainer and waits for its current action to finish, then compares each selected listing. Does not change prices. AutoRetainer's previous pause state is restored afterward.");
         ImGui.SameLine();if(ImGui.Button("Update prices"))StartSeller(true);
-        if(ImGui.IsItemHovered())ImGui.SetTooltip("Checks live prices again, then applies your rules. Existing stack quantities stay unchanged.");
+        if(ImGui.IsItemHovered())ImGui.SetTooltip("Pauses AutoRetainer, waits for its current action, then checks live prices and applies your rules. Existing stack quantities stay unchanged. Restores AutoRetainer's previous pause state afterward.");
         ImGui.EndDisabled();
         ImGui.SameLine();
         var settingsSize=ImGui.GetFrameHeight();var settingsAt=ImGui.GetCursorScreenPos();
@@ -95,6 +95,7 @@ public sealed partial class Plugin
         }
         if(sellerNotice.Length>0)ImGui.TextColored(SellerColor(SellerStatus.Skipped),sellerNotice);
         else ImGui.TextWrapped(sellerRun.Status);
+        if(sellerAutoRetainerPause.Held||sellerAutoRetainerPause.RestorePending){ImGui.TextDisabled(sellerAutoRetainerPause.RestorePending?"AutoRetainer: restoring…":"AutoRetainer: paused");MarketHelp(sellerAutoRetainerPause.Status+"\nStop or finish Seller to restore the previous pause state. Existing AutoRetainer settings are kept.");}
         if(ImGui.CollapsingHeader("Diagnostics##seller"))DrawSellerDiagnostics();
 
         windowFooter=()=>{if(ImGui.SmallButton("Market"))OpenEquinoxMarket();};
