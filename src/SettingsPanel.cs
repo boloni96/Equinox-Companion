@@ -79,6 +79,7 @@ public sealed partial class Plugin
         SettingsHelp("Held records are incomplete observations. They do not block valid records. Logs are kept locally; repeated issues are limited to once every five minutes.");
         if(optionalToolFailures.Count>0&&ImGui.CollapsingHeader("Optional tools need attention")){foreach(var issue in optionalToolFailures)ImGui.TextWrapped(issue.Key+": "+issue.Value);}
         if(ImGui.CollapsingHeader("Market & Seller"))DrawSellerDiagnostics();
+        if(ImGui.CollapsingHeader("Gil Trader"))DrawGilTradeDiagnostics();
         if(ImGui.CollapsingHeader("Performance"))DrawRecentPerformanceDiagnostics();
         if(ImGui.CollapsingHeader("Tracking & recording"))DrawDiagnosticsTracking();
         if(ImGui.CollapsingHeader("Housing lottery"))ImGui.TextWrapped(lotteryDiagnostic is null?"No lottery observation this session.":System.Text.Json.JsonSerializer.Serialize(lotteryDiagnostic));
@@ -101,6 +102,8 @@ public sealed partial class Plugin
     private void DrawFeatureSettings()
     {
         ImGui.TextUnformatted("Tools on this computer");
+        MessageToggle("Enable Gil Trader", config.EnableGilTrader, SetGilTraderEnabled);
+        SettingsHelp("/eqtrade · send a chosen gil total in repeated trades, or receive from one selected party member. Start each session explicitly. Never resumes after restarting; no Journal connection is needed.");
         MessageToggle("Enable Equinox Market & Seller",config.Seller.Enabled,SetMarketEnabled);
         SettingsHelp("Retainer listings, sales and an optional price updater. Opening a bell never starts price changes. Settings and records stay on this computer.");
         SettingsHelp("These tools are optional and local to this computer. Disabling one keeps its settings. Core character, house and garden tracking is controlled separately under Tracking.");
