@@ -70,7 +70,7 @@ public sealed partial class Plugin
         manual=new {manualEditor,manualRetainer,inventory=manualInventory.ToString(),manualAutoCompare,manualShowHistory,manualSuspendUntilClose,manualEditorAt,manualCompareAt},
         comparison=new {sellerRequestItem,sellerRequestWorld,sellerRequestAt,sellerResultAt,sellerExpected,sellerError,sellerHistoryReceived,sellerHistoryRequested},
         settings=new {config.Seller.OpenCompare,config.Seller.OpenHistory,config.Seller.ClickSetsPrice,config.Seller.CopyPrice,config.Seller.ClickConfirms,config.Seller.OpenAtBell,config.Seller.CloseAtBell},
-        locks=new {marketBuddyLocked,autoRetainerSuppressed,autoRetainerPreviouslySuppressed},
+        locks=new {marketBuddyLocked,autoRetainer=new {sellerAutoRetainerPause.Held,sellerAutoRetainerPause.PreviouslySuppressed,sellerAutoRetainerPause.RestorePending,sellerAutoRetainerPause.Status}},
         relatedPlugins=Pi.InstalledPlugins.Where(x=>x.InternalName.Contains("Market",StringComparison.OrdinalIgnoreCase)||x.InternalName=="AutoRetainer").Select(x=>new {x.InternalName,x.IsLoaded}).ToArray(),
         lastNative=sellerLastNativeState,recent=sellerTrace.Snapshot()
     };

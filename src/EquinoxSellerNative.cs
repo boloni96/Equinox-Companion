@@ -20,13 +20,13 @@ public sealed partial class Plugin
     private MarketLedger marketLedger=MarketLedger.Empty;
     private Task<MarketLedger>? marketLoad;
     private LatestSnapshotWriter<MarketLedger> marketWriter=null!;
-    private bool marketDirty,marketLoadFailed,marketHooksEnabled,marketBuddyLocked,autoRetainerSuppressed;
+    private bool marketDirty,marketLoadFailed,marketHooksEnabled,marketBuddyLocked;
     private DateTimeOffset marketSaveAt,marketPollAt,sellerRequestAt,sellerResultAt,manualEditorAt,manualCompareAt;
     private string sellerNotice="",marketDataError="",sellerLiveError="";
     private uint sellerRequestItem,sellerRequestWorld;
     private int sellerExpected=-1,sellerError;
     private bool sellerHistoryReceived,sellerHistoryRequested;
-    private bool sellerRequestHq,autoRetainerPreviouslySuppressed;
+    private bool sellerRequestHq;
     private ulong sellerInventoryRetainer;
     private DateTimeOffset sellerInventorySince;
     private SellerSale[] sellerHistory=[];
@@ -57,6 +57,7 @@ public sealed partial class Plugin
             if(ledger.Retainers==null||ledger.Income==null||ledger.Prices==null||ledger.Retainers.Any(x=>x.Stock==null))throw new IOException("Incomplete market ledger; original file preserved");
             return ledger;
         });
+        sellerAutoRetainerPause=new(new SellerAutoRetainerPort());
         sellerRun=new(new SellerPort(this));
         InitializeMarketWindows();
         // Market hooks are installed only while the optional tool is enabled.
@@ -296,10 +297,15 @@ public sealed partial class Plugin
             marketBuddyLocked=Pi.GetIpcSubscriber<string,bool>("Marketbuddy.Lock").InvokeFunc("EquinoxSeller");return marketBuddyLocked;
         }catch{sellerNotice="Disable Marketbuddy before using Seller: its pricing lock is unavailable.";return false;}
     }
-    private void ReleaseSellerLocks()
+    private void ReleaseMarketBuddyLock()
     {
         if(marketBuddyLocked){try{Pi.GetIpcSubscriber<string,bool>("Marketbuddy.Unlock").InvokeFunc("EquinoxSeller");}catch{}marketBuddyLocked=false;}
-        if(autoRetainerSuppressed){try{Pi.GetIpcSubscriber<bool,object>("AutoRetainer.SetSuppressed").InvokeAction(autoRetainerPreviouslySuppressed);}catch{}autoRetainerSuppressed=false;}
+    }
+    private void ReleaseSellerLocks()
+    {
+        ReleaseMarketBuddyLock();
+        sellerAutoRetainerPause?.Release(DateTimeOffset.UtcNow);
+        if(sellerAutoRetainerPause!=null)TraceAutoRetainerHandoff();
         sellerRequestItem=0;
     }
     private unsafe void StartSeller(bool apply)
@@ -313,17 +319,18 @@ public sealed partial class Plugin
         var selected=sellerScope switch {0=>all.Where(x=>x.Id==current&&SellerActive(current)).ToArray(),1=>all.Where(x=>config.Seller.SelectedRetainers.Contains(x.Id)).ToArray(),_=>all};
         if(selected.Length==0){sellerNotice="Select a retainer or choose All retainers.";return;}
         if(SellerAddon("RetainerList")==null&&!SellerActive(current)){sellerNotice="Open the summoning-bell retainer list first.";return;}
-        if(Pi.InstalledPlugins.Any(x=>x.IsLoaded&&x.InternalName=="AutoRetainer"))try{
-            if(Pi.GetIpcSubscriber<bool>("AutoRetainer.PluginState.IsBusy").InvokeFunc()){sellerNotice="Wait for AutoRetainer to finish before starting.";return;}
-            autoRetainerPreviouslySuppressed=Pi.GetIpcSubscriber<bool>("AutoRetainer.GetSuppressed").InvokeFunc();
-            Pi.GetIpcSubscriber<bool,object>("AutoRetainer.SetSuppressed").InvokeAction(true);autoRetainerSuppressed=true;
-        }catch{ReleaseSellerLocks();sellerNotice="Disable AutoRetainer before using Seller: its pause connection is unavailable.";return;}
-        if(!AcquireMarketBuddyLock()){ReleaseSellerLocks();TraceSeller("Run blocked",sellerNotice);return;}sellerSelectRetry=default;manualEditor=null;manualSuspendUntilClose=false;sellerNotice="";
+        ReleaseMarketBuddyLock();
+        var handoff=sellerAutoRetainerPause.Acquire(DateTimeOffset.UtcNow);TraceAutoRetainerHandoff();
+        if(handoff.Error.Length>0){sellerNotice=handoff.Error;ReleaseSellerLocks();TraceSeller("Run blocked",sellerNotice);return;}
+        sellerSelectRetry=default;manualEditor=null;manualSuspendUntilClose=false;sellerNotice="";
         TraceSeller("Run requested",apply?"Update prices":"Check prices",new {retainers=selected,character=Player.ContentId,world=Player.CurrentWorld.RowId});
-        sellerRun.Start(selected,Player.ContentId,Player.CurrentWorld.RowId,apply,config.Seller,marketLedger.Retainers.Select(x=>x.Id).Concat(all.Select(x=>x.Id)),DateTimeOffset.UtcNow);
+        try{sellerRun.Start(selected,Player.ContentId,Player.CurrentWorld.RowId,apply,config.Seller,marketLedger.Retainers.Select(x=>x.Id).Concat(all.Select(x=>x.Id)),DateTimeOffset.UtcNow);}
+        catch{ReleaseSellerLocks();throw;}
+        if(!sellerRun.Running)ReleaseSellerLocks();
     }
     private unsafe void UpdateEquinoxMarket(DateTimeOffset now)
     {
+        UpdateSellerAutoRetainer(now);
         if(marketLoad is {IsCompleted:true}) {
             if(marketLoad.IsCompletedSuccessfully)marketLedger=marketLoad.Result;
             else {marketLoadFailed=true;marketDataError="Saved market data could not be read. Existing file kept; tracking is paused.";Log.Error(marketLoad.Exception!,marketDataError);}
@@ -453,6 +460,7 @@ public sealed partial class Plugin
     }
     private sealed class SellerPort(Plugin p):ISellerPort
     {
+        public SellerPreparation Prepare()=>p.PrepareSellerAutomation();
         private (ulong Retainer,int Slot)? requestedEditor;
         private ulong requestedMarket;
         public bool ContextMatches(ulong c,uint w)=>p.SellerContext(c,w);
@@ -524,6 +532,7 @@ public sealed partial class Plugin
     private void DisposeEquinoxMarket()
     {
         DisableMarketHooks();marketWatchClient.Dispose();sellerResultHook?.Dispose();marketHistoryHook?.Dispose();DisposeMarketWindows();
+        if(sellerAutoRetainerPause.RestorePending){Log.Warning("AutoRetainer pause could not be released during Companion unload. Resume it from AutoRetainer's controls.");errorJournal.Record("seller-autoretainer","AutoRetainer pause release failed during Companion unload; resume from AutoRetainer controls.");}
         if(marketLoad==null&&!marketLoadFailed)try{marketWriter.Flush(marketLedger);}catch(Exception ex){Log.Error(ex,"Market ledger could not be saved");}
     }
 }
