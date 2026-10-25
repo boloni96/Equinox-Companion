@@ -10,8 +10,8 @@ Check("normal cheapest price",Price(Compare([200000,250000])).Price==199999);
 Check("gap equal to threshold remains cheapest",Price(Compare([150000,250000])).Price==149999);
 Check("outlier rule can be disabled",Price(Compare([100000,250000]),new(){LowOutlierPercent=0}).Price==99999);
 Check("only one competing listing",Price(Compare([50000])).Price==49999);
-Check("known own listings excluded",Price(Compare([100000,250000]) with {Offers=[new(1,100, false,1),new(9,10000,false,1)]}).Price==9999);
-Check("own-only market keeps price",Price(Compare([]) with {Offers=[new(1,100,false,1)]}).Status==SellerStatus.Competitive);
+Check("known own lowest price matched",Price(Compare([100000,250000]) with {Offers=[new(1,100, false,1),new(9,10000,false,1)]}).Price==100);
+Check("own-only market aligns price",Price(Compare([]) with {Offers=[new(1,100,false,1)]}) is {Status:SellerStatus.Update,Price:100});
 Check("no HQ/NQ mixing",Price(Compare([100000],true)).Price==null);
 Check("failed lookup never treated as empty",Price(Compare([]) with {Complete=false,HistoryComplete=true,History=[new(500,false,1,now)]}).Price==null);
 Check("error preserves existing price",Price(Compare([10]) with {Error="Busy"}).Price==null);
@@ -111,6 +111,7 @@ await MarketWatchTests.Run(Check,now);
 MarketFixTests.Run(Check,now);
 AutoRetainerPauseTests.Run(Check,now);
 ComparisonCaptureTests.Run(Check,now);
+OwnPriceTests.Run(Check,now);
 Console.WriteLine($"{tests} market checks passed.");
 
 sealed class FakePort(DateTimeOffset now,MarketStock stock):ISellerPort

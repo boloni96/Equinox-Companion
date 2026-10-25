@@ -20,11 +20,12 @@ public static class MarketWatchPolicy
         if(data.Error.Length>0)return Unknown(data.Error+" Live comparison is still available.");
         if(data.Uploaded==default||data.Uploaded>now.AddMinutes(5)||now-data.Uploaded>TimeSpan.FromMinutes(Math.Clamp(settings.BackgroundMaxAgeMinutes,5,1440)))
             return Unknown($"Universalis data is old or unverified (uploaded {data.Uploaded.ToLocalTime():g}). Check live prices at the bell.");
-        var competing=data.Offers.Where(x=>x.Hq==item.Hq&&!x.Mannequin&&!ownNames.Contains(x.Retainer)).ToArray();
-        if(competing.Length==0)return Unknown("No competing listings of this quality in cached data. Check live listings/history before deciding.");
+        var offers=data.Offers.Where(x=>x.Hq==item.Hq&&!x.Mannequin).ToArray();
+        if(offers.Length==0)return Unknown("No listings of this quality in cached data. Check live listings/history before deciding.");
         // The cache age is checked above; this is deliberately not a live receipt.
-        var comparison=new SellerComparison(item.ItemId,world,now,true,competing.Select(x=>new SellerOffer(0,x.Price,x.Hq,x.Quantity)).ToArray(),false,[]);
-        var d=SellerPricing.Decide(item.ItemId,world,item.Hq,item.Price,comparison,new HashSet<ulong>(),settings,now);
+        // Synthetic IDs only distinguish known names on this world from other offers.
+        var comparison=new SellerComparison(item.ItemId,world,now,true,offers.Select(x=>new SellerOffer(x.Retainer.Length>0&&ownNames.Contains(x.Retainer)?1UL:0UL,x.Price,x.Hq,x.Quantity)).ToArray(),false,[]);
+        var d=SellerPricing.Decide(item.ItemId,world,item.Hq,item.Price,comparison,new HashSet<ulong>{1},settings,now);
         return d with {Source="Universalis",Reason=$"Universalis estimate · uploaded {data.Uploaded.ToLocalTime():g} · checked {data.Checked.ToLocalTime():g}. {d.Reason} Live verification required before changing a price."};
     }
 
@@ -55,7 +56,7 @@ public sealed class MarketWatchClient:IDisposable
     public MarketWatchClient(HttpMessageHandler? handler=null)
     {
         http=handler==null?new():new(handler);http.Timeout=TimeSpan.FromSeconds(20);
-        http.DefaultRequestHeaders.UserAgent.ParseAdd("EquinoxCompanion-Market/0.5.1.247");
+        http.DefaultRequestHeaders.UserAgent.ParseAdd("EquinoxCompanion-Market/0.5.1.248");
         http.MaxResponseContentBufferSize=8*1024*1024;
     }
     public async Task<MarketWatchBatch> Read(uint world,uint[] items,CancellationToken token)
