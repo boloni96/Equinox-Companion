@@ -95,6 +95,7 @@ public sealed partial class Plugin
         }
         if(sellerNotice.Length>0)ImGui.TextColored(SellerColor(SellerStatus.Skipped),sellerNotice);
         else ImGui.TextWrapped(sellerRun.Status);
+        if(ImGui.CollapsingHeader("Diagnostics##seller"))DrawSellerDiagnostics();
 
         windowFooter=()=>{if(ImGui.SmallButton("Market"))OpenEquinoxMarket();};
     }
@@ -152,6 +153,7 @@ public sealed partial class Plugin
         }
         if(ImGui.CollapsingHeader("Windows & highlighting")){
             Toggle("Open Seller at summoning bells",s.OpenAtBell,v=>s.OpenAtBell=v,"Opens the compact Check prices / Update prices panel when the bell's retainer list appears.");
+            Toggle("Close Seller when leaving the bell",s.CloseAtBell,v=>s.CloseAtBell=v,"Closes Seller after you finish using the summoning bell. It stays open while switching retainers. Turn off to keep Seller open.");
             Toggle("Show selling toolbar",s.ShowToolbar,v=>s.ShowToolbar=v,"Shows stack size and undercut beside the game's selling list.");
             if(s.ShowToolbar)Toggle("Attach toolbar to selling window",s.ToolbarOnTop,v=>s.ToolbarOnTop=v,"On: align with the upper-right area of the game window. Off: drag the toolbar to your preferred location.");
             Toggle("Color retainers and items",s.Highlights,v=>{s.Highlights=v;if(!v)RestoreMarketHighlights();},"Red: suggested update. Green: competitive. Amber: history or uncertain. Blue: checking. Hover a listing for its evidence.");
@@ -292,12 +294,13 @@ public sealed partial class Plugin
             MarketHelp($"{character.Person} / {character.Account}");
             DrawMarketCharacterAction(character);
             if(!ImGui.BeginTable("retainers-"+group.Key,4,ImGuiTableFlags.RowBg|ImGuiTableFlags.SizingStretchProp))continue;
-            ImGui.TableSetupColumn("Retainer");ImGui.TableSetupColumn("Updates / Selling");ImGui.TableSetupColumn("Asking value");ImGui.TableSetupColumn("Visit");ImGui.TableHeadersRow();
+            ImGui.TableSetupColumn("Retainer");ImGui.TableSetupColumn("Selling",ImGuiTableColumnFlags.WidthStretch,1.6f);ImGui.TableSetupColumn("Asking value");ImGui.TableSetupColumn("Visit");ImGui.TableHeadersRow();
             foreach(var r in group){
                 var states=r.Stock.Select(x=>ReviewFor(r.Id,x.Slot)).ToArray();
                 var updates=states.Count(x=>x.NeedsAttention);var unknown=states.Count(x=>x.Status is SellerStatus.Unknown or SellerStatus.Skipped);
-                ImGui.TableNextRow();ImGui.TableNextColumn();if(ImGui.Selectable(r.Name+"##"+r.Id,false))OpenMarketSelling(r.Id,false);MarketHelp("Open this retainer's listings. Order matches the game.");
-                ImGui.TableNextColumn();ImGui.TextColored(SellerColor(AggregateMarketStatus(states.Select(x=>x.VisualStatus).ToArray())),$"{updates}/{r.Stock.Length}"+(unknown>0?" ?":""));MarketHelp($"{updates} need price review; {unknown} uncertain. Hover each item's status for its pricing rules and evidence.");
+                var color=SellerColor(updates>0?SellerStatus.Update:AggregateMarketStatus(states.Select(x=>x.VisualStatus).ToArray()));
+                ImGui.TableNextRow();ImGui.TableNextColumn();ImGui.PushStyleColor(ImGuiCol.Text,color);if(ImGui.Selectable(r.Name+"##"+r.Id,false))OpenMarketSelling(r.Id,false);ImGui.PopStyleColor();MarketHelp("Open this retainer's listings. Order matches the game.");
+                ImGui.TableNextColumn();ImGui.TextColored(color,SellerLabels.Selling(r.Stock.Length,updates,unknown>0));MarketHelp($"{updates} need price review; {unknown} unchecked or skipped. Hover each item's status for its pricing rules and evidence.");
                 ImGui.TableNextColumn();ImGui.TextUnformatted(r.Stock.Sum(x=>x.Total).ToString("N0"));MarketHelp("Total listed value. This is not earned gil.");
                 ImGui.TableNextColumn();ImGui.TextUnformatted(MarketVisitDue(r)?"Due":"—");MarketHelp("Last observed visit: "+DisplayTime.Local(r.LastVisit??r.At));
             }

@@ -78,6 +78,7 @@ public sealed partial class Plugin
         ImGui.TextDisabled($"Queued: {pendingSyncRecords} · ready: {readySyncRecords} · held: {heldSyncRecords}");
         SettingsHelp("Held records are incomplete observations. They do not block valid records. Logs are kept locally; repeated issues are limited to once every five minutes.");
         if(optionalToolFailures.Count>0&&ImGui.CollapsingHeader("Optional tools need attention")){foreach(var issue in optionalToolFailures)ImGui.TextWrapped(issue.Key+": "+issue.Value);}
+        if(ImGui.CollapsingHeader("Market & Seller"))DrawSellerDiagnostics();
         if(ImGui.CollapsingHeader("Performance"))DrawRecentPerformanceDiagnostics();
         if(ImGui.CollapsingHeader("Tracking & recording"))DrawDiagnosticsTracking();
         if(ImGui.CollapsingHeader("Housing lottery"))ImGui.TextWrapped(lotteryDiagnostic is null?"No lottery observation this session.":System.Text.Json.JsonSerializer.Serialize(lotteryDiagnostic));

@@ -44,6 +44,25 @@ static class MarketFixTests
         check("different-price duplicates update independently",port.Writes.SetEquals(new[]{(1UL,1),(1UL,2),(2UL,1),(2UL,2)}));
         check("competitive duplicate stack is left unchanged",port.Stock[(1,0)].Price==50&&port.Stock[(2,0)].Price==50);
         check("automatic update never changes stack size",port.Stock.Values.All(x=>x.Quantity==(uint)(x.Slot+1)));
+        var trace=new SellerTrace();
+        trace.Add(now,"Compare blocked","Waiting for listings",new {item=10});
+        trace.Add(now.AddMilliseconds(500),"Compare blocked","Waiting for listings",new {item=10});
+        check("repeated blocked frames do not flood diagnostics",trace.Snapshot().Length==1);
+        var export=trace.Snapshot();
+        trace.Clear();
+        check("export trace survives clearing live capture",export.Length==1&&trace.Snapshot().Length==0);
+        trace.Add(now,"Price click ignored","Manual item not captured",new {item=10});
+        check("trace export preserves blocked reason and item",System.Text.Json.JsonSerializer.Serialize(trace.Snapshot()).Contains("Manual item not captured")&&System.Text.Json.JsonSerializer.Serialize(trace.Snapshot()).Contains("\"item\":10"));
+        for(var i=0;i<1000;i++)trace.Add(now.AddSeconds(i),"State",i.ToString());
+        check("trace retention bounded",trace.Snapshot().Length==SellerTrace.Capacity);
+        var bell=new SellerBellSession();
+        check("manual Seller away from bell is not closed",!bell.Observe(false,now));
+        check("entering bell stays open",!bell.Observe(true,now));
+        check("retainer transition does not close Seller",!bell.Observe(false,now.AddMilliseconds(100))&&!bell.Observe(true,now.AddMilliseconds(700)));
+        check("bell departure waits for settled state",!bell.Observe(false,now.AddSeconds(1))&&bell.Observe(false,now.AddSeconds(3)));
+        check("bell departure closes only once",!bell.Observe(false,now.AddSeconds(5)));
+        check("selling count has labels",SellerLabels.Selling(13,6,true)=="13 selling · 6 updates");
+        check("unknown data is explicit not question mark",SellerLabels.Selling(13,0,true)=="13 selling · unchecked");
     }
 
     private sealed class MultiStackPort : ISellerPort

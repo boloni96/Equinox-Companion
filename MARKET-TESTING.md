@@ -76,3 +76,15 @@ Install through the normal Companion feed. These are in-game checks, not results
 - Check the selling toolbar in your game theme and UI scale. It attaches near the upper-right of the selling window and remains movable when detached.
 
 Native integration references: [Marketbuddy event handling](https://github.com/chalkos/Marketbuddy/blob/main/Marketbuddy/MarketGuiEventHandler.cs), [FFXIVClientStructs inventory links](https://github.com/aers/FFXIVClientStructs/blob/main/FFXIVClientStructs/FFXIV/Client/Game/InventoryItem.cs), [Allagan Market row highlighting](https://github.com/Critical-Impact/AllaganMarket/blob/main/AllaganMarket/Services/HighlightingService.cs), [CashFlow history layout](https://github.com/NightmareXIV/CashFlow/blob/main/CashFlow/Data/ExplicitStructs/RetainerHistoryData.cs), and [AscendedLedger history interpretation](https://github.com/jkleinne/ascended-ledger/blob/main/AscendedLedger/Services/RetainerHistoryCaptureService.cs).
+
+## 0.5.1.245: diagnose native comparison failure
+
+User verification of 244: automatic runs reach the item editor, but Compare Prices does not open and manual price clicks have no effect. The root cause remains unverified; passing fixture tests did not establish that these native actions work in-game. This version adds evidence without changing the native click or inventory validation rules speculatively.
+
+Seller > Diagnostics > Start fresh trace, then open Adjust Price. If comparison does not open, click the game's Compare Prices button yourself and click a price. Export diagnostics from Seller and use Open export folder to retrieve the JSON. A second fresh trace can capture a Check prices run reaching the editor; Stop before exporting. No general garden recording is required.
+
+The local bounded trace includes native window transitions, retainer/item identity, inventory readiness and symbolic slots, comparison button node/events, search loading state, run phases, manual capture, pricing settings/locks, comparison responses and reasons for ignored clicks. It is copied into the existing export and never sent through pairing.
+
+Retainer names now share the review color. Counts read `13 selling · 6 updates`, or `13 selling · unchecked` when no update is known and data remains uncertain. Known update counts do not include unchecked listings. Empty retainers show `0 selling`.
+
+Close Seller when leaving the bell defaults on under Market & Seller > Windows & highlighting. Retainer transitions keep Seller open; leaving the bell closes it after a one-second settling period. Turning the option off keeps the window open.
