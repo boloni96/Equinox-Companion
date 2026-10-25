@@ -8,6 +8,9 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="Dalamud"><HintPath>$(DALAMUD_HOME)/Dalamud.dll</HintPath></Reference>
+    <Reference Include="FFXIVClientStructs"><HintPath>$(DALAMUD_HOME)/FFXIVClientStructs.dll</HintPath></Reference>
+    <Reference Include="InteropGenerator.Runtime"><HintPath>$(DALAMUD_HOME)/InteropGenerator.Runtime.dll</HintPath></Reference>
+    <Compile Include="../src/SellerNativeInterop.cs" Link="SellerNativeInterop.cs"/>
     <Reference Include="Lumina"><HintPath>$(DALAMUD_HOME)/Lumina.dll</HintPath></Reference>
     <Reference Include="Lumina.Excel"><HintPath>$(DALAMUD_HOME)/Lumina.Excel.dll</HintPath></Reference>
     <Compile Include="../src/GardenMenuText.cs" Link="GardenMenuText.cs" />

@@ -22,7 +22,7 @@ public sealed partial class Plugin
     private LatestSnapshotWriter<MarketLedger> marketWriter=null!;
     private bool marketDirty,marketLoadFailed,marketHooksEnabled,marketBuddyLocked,autoRetainerSuppressed;
     private DateTimeOffset marketSaveAt,marketPollAt,sellerRequestAt,sellerResultAt,manualEditorAt,manualCompareAt;
-    private string sellerNotice="",marketDataError="";
+    private string sellerNotice="",marketDataError="",sellerLiveError="";
     private uint sellerRequestItem,sellerRequestWorld;
     private int sellerExpected=-1,sellerError;
     private bool sellerHistoryReceived,sellerHistoryRequested;
@@ -33,6 +33,8 @@ public sealed partial class Plugin
     private MarketStock? manualEditor;
     private ulong manualRetainer;
     private bool manualAutoCompare,manualShowHistory,manualSuspendUntilClose;
+    private InventoryType manualInventory;
+    private DateTimeOffset sellerSelectRetry,marketOrderAt;
     private int? manualPastePrice;
     private readonly ConcurrentQueue<(uint Item,SellerSale[] Sales,DateTimeOffset At)> sellerHistories=new();
     private readonly Dictionary<(ulong Retainer,int Slot),(MarketStock Item,SellerDecision Decision,DateTimeOffset At)> sellerReviews=[];
@@ -65,15 +67,19 @@ public sealed partial class Plugin
         if(marketHooksEnabled)return;
         marketHooksEnabled=true; // Roll back every subscription if initialization is interrupted.
         try {
-            sellerResultHook??=Interop.HookFromAddress<SellerResultDelegate>(InfoProxyItemSearch.MemberFunctionPointers.ProcessRequestResult,SellerRequestResult);
-            sellerResultHook.Enable();
+            try {
+                sellerResultHook??=Interop.HookFromAddress<SellerResultDelegate>(InfoProxyItemSearch.MemberFunctionPointers.ProcessRequestResult,SellerRequestResult);
+                sellerResultHook.Enable();sellerLiveError="";
+            }catch(Exception ex){sellerLiveError="Live comparison confirmation is unavailable ("+ex.GetType().Name+"). Manual pricing remains available.";Log.Warning(ex,sellerLiveError);}
+            EnableRetainerHistory();
             MarketBoard.HistoryReceived+=SellerHistoryReceived;
             MarketBoard.PurchaseRequested+=MarketPurchaseRequested;
             MarketBoard.ItemPurchased+=MarketPurchased;
             Addons.RegisterListener(AddonEvent.PostSetup,"RetainerList",SellerBellOpened);
-            Addons.RegisterListener(AddonEvent.PreSetup,"RetainerSell",SellerEditorOpened);
+            Addons.RegisterListener(AddonEvent.PostSetup,"RetainerSell",SellerEditorOpened);
             Addons.RegisterListener(AddonEvent.PostSetup,"RetainerSellList",SellerListOpened);
             Addons.RegisterListener(AddonEvent.PostReceiveEvent,"ItemSearchResult",SellerPriceClicked);
+            Addons.RegisterListener(AddonEvent.PreFinalize,new[]{"RetainerList","RetainerSellList"},MarketHighlightFinalizing);
             Chat.LogMessage+=ObserveMarketSale;
             marketHooksEnabled=true;sellerNotice="";
         } catch(Exception e){DisableMarketHooks();sellerNotice="Market tools unavailable: "+e.GetType().Name;Log.Error(e,"Equinox Market initialization failed");}
@@ -85,14 +91,15 @@ public sealed partial class Plugin
         RemoveMarketBar();
         if(!marketHooksEnabled)return;
         marketHooksEnabled=false;
-        sellerResultHook?.Disable();
+        sellerResultHook?.Disable();marketHistoryHook?.Disable();
         MarketBoard.HistoryReceived-=SellerHistoryReceived;
         MarketBoard.PurchaseRequested-=MarketPurchaseRequested;
         MarketBoard.ItemPurchased-=MarketPurchased;
         Addons.UnregisterListener(AddonEvent.PostSetup,"RetainerList",SellerBellOpened);
-        Addons.UnregisterListener(AddonEvent.PreSetup,"RetainerSell",SellerEditorOpened);
+        Addons.UnregisterListener(AddonEvent.PostSetup,"RetainerSell",SellerEditorOpened);
         Addons.UnregisterListener(AddonEvent.PostSetup,"RetainerSellList",SellerListOpened);
         Addons.UnregisterListener(AddonEvent.PostReceiveEvent,"ItemSearchResult",SellerPriceClicked);
+        Addons.UnregisterListener(AddonEvent.PreFinalize,new[]{"RetainerList","RetainerSellList"},MarketHighlightFinalizing);
         Chat.LogMessage-=ObserveMarketSale;
         manualEditor=null;marketActor=null;marketPurchase=null;sellerInventoryRetainer=0;RestoreMarketHighlights();
     }
@@ -114,13 +121,16 @@ public sealed partial class Plugin
     }
     private void SellerBellOpened(AddonEvent e,AddonArgs args)
     {
+        marketPollAt=DateTimeOffset.UtcNow;
         if(config.Seller.Enabled && config.Seller.OpenAtBell && !sellerRun.Running)sellerWindow.IsOpen=true;
     }
-    private void SellerListOpened(AddonEvent e,AddonArgs args)=>marketPollAt=DateTimeOffset.UtcNow.AddSeconds(1);
-    private unsafe void SellerEditorOpened(AddonEvent e,AddonArgs args)
+    private void SellerListOpened(AddonEvent e,AddonArgs args){sellerInventoryRetainer=0;marketPollAt=DateTimeOffset.UtcNow.AddMilliseconds(300);}
+    private void SellerEditorOpened(AddonEvent e,AddonArgs args)=>BeginManualSeller();
+    private void BeginManualSeller()
     {
         if(!config.Seller.Enabled || sellerRun.Running)return;
-        manualEditor=null;manualRetainer=0;manualEditorAt=DateTimeOffset.UtcNow;manualCompareAt=default;
+        manualEditor=null;manualRetainer=0;manualEditorAt=DateTimeOffset.UtcNow;manualCompareAt=default;manualSuspendUntilClose=false;
+        sellerRequestItem=0;manualInventory=default;marketPollAt=DateTimeOffset.UtcNow;
         manualAutoCompare=config.Seller.OpenCompare&&!Keys[Dalamud.Game.ClientState.Keys.VirtualKey.SHIFT];
         manualShowHistory=config.Seller.OpenHistory^(config.Seller.AltTogglesHistory&&Keys[Dalamud.Game.ClientState.Keys.VirtualKey.MENU]);
         manualPastePrice=null;
@@ -140,17 +150,49 @@ public sealed partial class Plugin
             var proxy=InfoProxyItemSearch.Instance();var index=data->ListItemData.SelectedIndex;
             if(proxy==null || proxy->WaitingForListings || proxy->SearchItemId%1_000_000!=manualEditor.ItemId || index<0 || index>=Math.Min(100,proxy->ListingCount))return;
             var listing=proxy->Listings[index];
-            if(listing.UnitPrice is 0 or >SellerPricing.MaxPrice || listing.IsMannequin || listing.IsHqItem!=manualEditor.Hq)return;
+            var renderer=data->ListItemData.ListItemRenderer;
+            if(renderer!=null&&renderer->UldManager.NodeList!=null&&renderer->UldManager.NodeListCount>=14){
+                var text=renderer->UldManager.NodeList[10];
+                if(text!=null&&text->Type==NodeType.Text&&SellerPricing.TryReadGil(((AtkTextNode*)text)->NodeText.ToString(),out var clickedPrice)){
+                    var candidates=proxy->Listings[..(int)Math.Min(100,proxy->ListingCount)].ToArray().Where(x=>x.UnitPrice==clickedPrice&&x.ItemId%1_000_000==manualEditor.ItemId&&x.IsHqItem==manualEditor.Hq&&!x.IsMannequin).ToArray();
+                    if(candidates.Length==0)return;listing=candidates[0];
+                }else return;
+            }else return;
+            if(listing.UnitPrice is 0 or >SellerPricing.MaxPrice || listing.ItemId%1_000_000!=manualEditor.ItemId || listing.IsMannequin || listing.IsHqItem!=manualEditor.Hq)return;
             var price=SellerPricing.Adjust(listing.UnitPrice,config.Seller,config.Seller.MinimumPrices.GetValueOrDefault(manualEditor.ItemId,1));
             if(config.Seller.CopyPrice)Dalamud.Bindings.ImGui.ImGui.SetClipboardText(price.ToString());
-            if(config.Seller.ClickSetsPrice)SetManualSellerPrice(price,config.Seller.ClickConfirms);
+            var applied=config.Seller.ClickSetsPrice&&SetManualSellerPrice(price,config.Seller.ClickConfirms);
+            sellerNotice=$"Selected {price:N0} gil"+(config.Seller.CopyPrice?" · copied":"")+(config.Seller.ClickSetsPrice?(applied?" · applied to editor":" · editor changed or unavailable; not submitted"):"");
         }catch(Exception ex){sellerNotice="Could not use this price; no automatic retry.";Log.Debug(ex,sellerNotice);}
     }
     private static unsafe AtkUnitBase* SellerAddon(string name)
     {var a=(AtkUnitBase*)GardenGui.GetAddonByName(name).Address;return a!=null&&a->IsVisible&&a->IsReady?a:null;}
     private unsafe bool SellerContext(ulong cid,uint world)=>config.Seller.Enabled && Player.IsLoaded && Player.ContentId==cid && Player.CurrentWorld.RowId==world && Player.HomeWorld.RowId==world && !Conditions[ConditionFlag.BetweenAreas] && !Conditions[ConditionFlag.BetweenAreas51] && !Conditions[ConditionFlag.InCombat] && !HelperInCutscene();
     private static unsafe bool SellerActive(ulong id)
-    {var rm=RetainerManager.Instance();var a=AgentRetainer.Instance();return id!=0&&rm!=null&&rm->IsReady&&rm->LastSelectedRetainerId==id&&a!=null&&a->IsAgentActive();}
+    {
+        var rm=RetainerManager.Instance();
+        if(id==0||rm==null||!rm->IsReady||rm->LastSelectedRetainerId!=id||!Conditions[ConditionFlag.OccupiedSummoningBell]||SellerAddon("RetainerList")!=null)return false;
+        // AgentRetainer.IsAgentActive only describes its inventory UI, not
+        // the summoned retainer's greeting or SelectString menu.
+        var ui=UIModule.Instance();var order=ui==null?null:ui->GetItemOrderModule();
+        if(order!=null&&order->ActiveRetainerId==id)return true;
+        var talk=SellerAddon("Talk");var r=rm->GetActiveRetainer();
+        return talk!=null&&r!=null&&talk->AtkValues!=null&&talk->AtkValuesCount>1&&
+            ((int)talk->AtkValues[1].Type&15) is 8 or 10&&TravelMenuText(talk->AtkValues[1].String.Value)==r->NameString;
+    }
+    private static unsafe InventoryItem* SellerEditorItem(out InventoryType inventory,out int slot)
+    {
+        inventory=default;slot=-1;
+        var agent=AgentRetainer.Instance();var manager=InventoryManager.Instance();
+        if(agent==null||manager==null||SellerAddon("RetainerSell")==null)return null;
+        inventory=agent->SellItemInventoryType;slot=agent->SellItemInventorySlot;
+        var container=manager->GetInventoryContainer(inventory);
+        if(container==null||!container->IsLoaded||slot<0||slot>=container->Size)return null;
+        // SetSlotBlocked makes the original slot symbolic while its item is
+        // held in BlockedItems. Reading raw ItemId would read a slot number.
+        var item=SellerNativeInterop.Resolve(container->GetInventorySlot(slot));
+        return item!=null&&item->ItemId>0&&item->Quantity>0?item:null;
+    }
     private unsafe SellerRetainerRef[] ReadSellerRetainers()
     {
         var rm=RetainerManager.Instance();if(!Player.IsLoaded||rm==null||!rm->IsReady)return [];
@@ -165,10 +207,10 @@ public sealed partial class Plugin
         if(DateTimeOffset.UtcNow-sellerInventorySince<TimeSpan.FromSeconds(1))return null;
         var manager=InventoryManager.Instance();var agent=AgentRetainer.Instance();
         var inventory=manager==null?null:manager->GetInventoryContainer(InventoryType.RetainerMarket);
-        if(inventory==null||!inventory->IsLoaded||inventory->Size!=20||inventory->Items==null||agent->SellListEntryCount is <0 or >20)return null;
+        if(agent==null||inventory==null||!inventory->IsLoaded||inventory->Size!=20||inventory->Items==null||agent->SellListEntryCount is <0 or >20)return null;
         var rows=new List<MarketStock>();
         for(short i=0;i<20;i++){
-            var slot=inventory->GetInventorySlot(i);if(slot==null||slot->ItemId==0||slot->Quantity==0)continue;
+            var slot=SellerNativeInterop.Resolve(inventory->GetInventorySlot(i));if(slot==null||slot->ItemId==0||slot->Quantity==0)continue;
             var price=manager->GetRetainerMarketPrice(i);if(price is 0 or >SellerPricing.MaxPrice)return null;
             rows.Add(new(i,slot->ItemId%1_000_000,SearchItemName(slot->ItemId%1_000_000),(slot->Flags&InventoryItem.ItemFlags.HighQuality)!=0,(uint)slot->Quantity,(int)price,DateTimeOffset.UtcNow));
         }
@@ -176,35 +218,35 @@ public sealed partial class Plugin
         if(rows.Count!=agent->SellListEntryCount)return null;
         var entries=agent->SellListEntries[..agent->SellListEntryCount].ToArray();
         foreach(var row in rows)if(!entries.Any(x=>x.InventorySlot==row.Slot&&x.ItemId%1_000_000==row.ItemId&&x.Quantity==row.Quantity))return null;
-        return rows.ToArray();
+        var list=SellerAddon("RetainerSellList");
+        var order=Enumerable.Range(0,20).Select(i=>(Slot:ReadMarketDisplaySlot(list,i),Index:i)).Where(x=>x.Slot>=0).GroupBy(x=>x.Slot).ToDictionary(g=>g.Key,g=>g.First().Index);
+        return rows.Select(x=>x with {DisplayOrder=order.GetValueOrDefault(x.Slot,x.Slot)}).OrderBy(x=>x.DisplayOrder).ToArray();
     }
     private unsafe bool SellerEditorMatches(ulong retainer,MarketStock item,bool checkPrice=true)
     {
         if(!SellerActive(retainer))return false;
         var edit=(AddonRetainerSell*)SellerAddon("RetainerSell");var agent=AgentRetainer.Instance();
         if(edit==null||edit->AskingPrice==null||edit->Quantity==null||agent==null||agent->SellItemInventoryType!=InventoryType.RetainerMarket||agent->SellItemInventorySlot!=item.Slot||edit->Quantity->Value!=item.Quantity)return false;
-        var stock=ReadSellerStock(retainer)?.FirstOrDefault(x=>x.SameItem(item));
-        return stock!=null&&stock.Price==item.Price&&(!checkPrice||edit->AskingPrice->Value==item.Price);
+        var native=SellerEditorItem(out var type,out var slot);
+        return native!=null&&type==InventoryType.RetainerMarket&&slot==item.Slot&&native->ItemId%1_000_000==item.ItemId&&
+            ((native->Flags&InventoryItem.ItemFlags.HighQuality)!=0)==item.Hq&&native->Quantity==item.Quantity&&
+            (!checkPrice||edit->AskingPrice->Value==item.Price);
     }
-    private static unsafe bool SellerButton(AtkUnitBase* addon,AtkComponentButton* button)
+    private static unsafe bool SellerButton(AtkUnitBase* addon,AtkComponentButton* button,uint nodeId)
     {
-        if(addon==null||button==null||!button->IsEnabled||button->OwnerNode==null)return false;
-        var ev=button->OwnerNode->AtkEventManager.Event;var guard=0;
-        while(ev!=null&&guard++<32){if(ev->State.EventType==AtkEventType.ButtonClick&&ev->Listener==(AtkEventListener*)addon){var copy=*ev;var data=new AtkEventData();addon->ReceiveEvent(copy.State.EventType,(int)copy.Param,&copy,&data);return true;}ev=ev->NextEvent;}
-        return false;
+        if(!SellerNativeInterop.ButtonEvent(addon,button,nodeId,out var click))return false;
+        var data=new AtkEventData();addon->ReceiveEvent(click.State.EventType,(int)click.Param,&click,&data);return true;
     }
     private unsafe bool BeginSellerComparison(uint item)
     {
-        var edit=(AddonRetainerSell*)SellerAddon("RetainerSell");if(edit==null||sellerResultHook?.IsEnabled!=true)return false;
+        var edit=(AddonRetainerSell*)SellerAddon("RetainerSell");if(edit==null||(sellerRun.Running&&sellerResultHook?.IsEnabled!=true))return false;
         if(SellerAddon("ItemSearchResult")!=null||InfoProxyItemSearch.Instance()==null||InfoProxyItemSearch.Instance()->WaitingForListings)return false;
         sellerRequestItem=item;sellerRequestWorld=Player.CurrentWorld.RowId;sellerExpected=-1;sellerError=0;
-        var agent=AgentRetainer.Instance();var manager=InventoryManager.Instance();
-        var inv=agent!=null&&manager!=null?manager->GetInventoryContainer(agent->SellItemInventoryType):null;
-        if(inv==null||!inv->IsLoaded||agent->SellItemInventorySlot<0||agent->SellItemInventorySlot>=inv->Size)return false;
-        var slot=inv->GetInventorySlot(agent->SellItemInventorySlot);if(slot==null||slot->ItemId%1_000_000!=item)return false;
+        var slot=SellerEditorItem(out _,out _);
+        if(slot==null||slot->ItemId%1_000_000!=item)return false;
         sellerRequestHq=(slot->Flags&InventoryItem.ItemFlags.HighQuality)!=0;
         sellerRequestAt=DateTimeOffset.UtcNow;sellerResultAt=default;sellerHistory=[];sellerHistoryReceived=false;sellerHistoryRequested=false;
-        return SellerButton((AtkUnitBase*)edit,edit->ComparePrices);
+        return SellerButton((AtkUnitBase*)edit,edit->ComparePrices,4);
     }
     private unsafe SellerComparison? ReadSellerComparison()
     {
@@ -216,7 +258,7 @@ public sealed partial class Plugin
         for(var i=0;i<sellerExpected;i++){var x=proxy->Listings[i];if(x.ItemId%1_000_000!=sellerRequestItem||x.UnitPrice==0)return null;rows.Add(new(x.RetainerId,x.UnitPrice,x.IsHqItem,x.Quantity,x.IsMannequin));}
         var emptyQuality=!rows.Any(x=>x.Hq==sellerRequestHq&&!x.Mannequin);
         var wantHistory=(sellerRun.Running?config.Seller.OpenHistory:manualShowHistory) || emptyQuality && config.Seller.UseHistory;
-        if(wantHistory && !sellerHistoryRequested){sellerHistoryRequested=SellerButton((AtkUnitBase*)result,result->History);}
+        if(wantHistory && !sellerHistoryRequested){sellerHistoryRequested=SellerButton((AtkUnitBase*)result,result->History,23);}
         if(emptyQuality&&config.Seller.UseHistory&&!sellerHistoryReceived)return null;
         return new(sellerRequestItem,sellerRequestWorld,sellerRequestAt,true,rows.ToArray(),sellerHistoryReceived,sellerHistory);
     }
@@ -228,7 +270,7 @@ public sealed partial class Plugin
         CloseSellerAddon("ItemSearchHistory");
         CloseSellerAddon("ItemSearchResult");
         var edit=(AddonRetainerSell*)SellerAddon("RetainerSell");
-        var cancelled=edit!=null&&SellerButton((AtkUnitBase*)edit,edit->Cancel);
+        var cancelled=edit!=null&&SellerButton((AtkUnitBase*)edit,edit->Cancel,22);
         sellerRequestItem=0;return cancelled;
     }
     private static unsafe void CloseSellerAddon(string name){var a=SellerAddon(name);if(a!=null)a->Close(true);}
@@ -250,20 +292,20 @@ public sealed partial class Plugin
     private unsafe void StartSeller(bool apply)
     {
         if(!config.Seller.Enabled||!marketHooksEnabled||marketLoad!=null||marketLoadFailed){sellerNotice="Enable Market and wait for its saved records first.";return;}
+        if(sellerResultHook?.IsEnabled!=true){sellerNotice=sellerLiveError.Length>0?sellerLiveError:"Live comparison confirmation is unavailable. Toggle Market & Seller off and on to retry.";return;}
         if(sellerRun.Running||SellerAddon("RetainerSell")!=null){sellerNotice="Close the current item editor before starting a run.";return;}
         if(!Player.IsLoaded||Player.HomeWorld.RowId!=Player.CurrentWorld.RowId){sellerNotice="Use your home world’s summoning bell.";return;}
-        if(config.EnableFollowThem||config.AutoOpenCoffers){sellerNotice="Stop Helper and automatic coffer opening before starting Seller.";return;}
         var all=ReadSellerRetainers();
         var current=RetainerManager.Instance()==null?0:RetainerManager.Instance()->LastSelectedRetainerId;
         var selected=sellerScope switch {0=>all.Where(x=>x.Id==current&&SellerActive(current)).ToArray(),1=>all.Where(x=>config.Seller.SelectedRetainers.Contains(x.Id)).ToArray(),_=>all};
         if(selected.Length==0){sellerNotice="Select a retainer or choose All retainers.";return;}
-        if(SellerAddon("RetainerList")==null&&!(selected.Length==1&&SellerActive(selected[0].Id))){sellerNotice="Open the summoning-bell retainer list first.";return;}
+        if(SellerAddon("RetainerList")==null&&!SellerActive(current)){sellerNotice="Open the summoning-bell retainer list first.";return;}
         if(Pi.InstalledPlugins.Any(x=>x.IsLoaded&&x.InternalName=="AutoRetainer"))try{
             if(Pi.GetIpcSubscriber<bool>("AutoRetainer.PluginState.IsBusy").InvokeFunc()){sellerNotice="Wait for AutoRetainer to finish before starting.";return;}
             autoRetainerPreviouslySuppressed=Pi.GetIpcSubscriber<bool>("AutoRetainer.GetSuppressed").InvokeFunc();
             Pi.GetIpcSubscriber<bool,object>("AutoRetainer.SetSuppressed").InvokeAction(true);autoRetainerSuppressed=true;
         }catch{ReleaseSellerLocks();sellerNotice="Disable AutoRetainer before using Seller: its pause connection is unavailable.";return;}
-        if(!AcquireMarketBuddyLock()){ReleaseSellerLocks();return;}manualEditor=null;manualSuspendUntilClose=false;sellerNotice="";
+        if(!AcquireMarketBuddyLock()){ReleaseSellerLocks();return;}sellerSelectRetry=default;manualEditor=null;manualSuspendUntilClose=false;sellerNotice="";
         sellerRun.Start(selected,Player.ContentId,Player.CurrentWorld.RowId,apply,config.Seller,marketLedger.Retainers.Select(x=>x.Id).Concat(all.Select(x=>x.Id)),DateTimeOffset.UtcNow);
     }
     private unsafe void UpdateEquinoxMarket(DateTimeOffset now)
@@ -285,6 +327,7 @@ public sealed partial class Plugin
             UpdateMarketBar(now);
             if(now<marketPollAt)return;marketPollAt=now.AddMilliseconds(500);
             if(!Player.IsLoaded){manualEditor=null;sellerInventoryRetainer=0;marketPurchase=null;ReleaseSellerLocks();RestoreMarketHighlights();return;}
+            RememberMarketOrder();
             var rm=RetainerManager.Instance();var active=rm==null?0:rm->LastSelectedRetainerId;
             if(ReadSellerStock(active) is {} stock)RememberMarketStock(active,stock,now);
             RememberMarketVisit(active,now);
@@ -296,41 +339,82 @@ public sealed partial class Plugin
     {
         var edit=(AddonRetainerSell*)SellerAddon("RetainerSell");var agent=AgentRetainer.Instance();
         if(manualSuspendUntilClose){if(edit==null){manualSuspendUntilClose=false;manualEditor=null;}else return;}
-        if(edit==null){manualEditor=null;if(SellerAddon("RetainerList")==null&&SellerAddon("RetainerSellList")==null&&!SellerActive(active))ReleaseSellerLocks();else AcquireMarketBuddyLock();return;}
+        if(edit==null){manualEditor=null;manualEditorAt=default;if(SellerAddon("RetainerList")==null&&SellerAddon("RetainerSellList")==null&&!SellerActive(active))ReleaseSellerLocks();else AcquireMarketBuddyLock();return;}
         if(agent==null||!SellerActive(active))return;
+        if(manualEditorAt==default)BeginManualSeller();
         if(!AcquireMarketBuddyLock())return;
-        if(manualEditor is null && now-manualEditorAt>TimeSpan.FromMilliseconds(300)){
-            if(agent->SellItemInventoryType==InventoryType.RetainerMarket)manualEditor=ReadSellerStock(active)?.FirstOrDefault(x=>x.Slot==agent->SellItemInventorySlot);
-            else {
-                var manager=InventoryManager.Instance();var container=manager==null?null:manager->GetInventoryContainer(agent->SellItemInventoryType);
-                var item=container!=null&&container->IsLoaded&&agent->SellItemInventorySlot>=0&&agent->SellItemInventorySlot<container->Size?container->GetInventorySlot(agent->SellItemInventorySlot):null;
-                if(item!=null&&item->ItemId>0&&edit->AskingPrice!=null&&edit->Quantity!=null){
-                    var id=item->ItemId%1_000_000;var max=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>().GetRowOrDefault(id)?.StackSize??1;
-                    if(config.Seller.LimitNewStacks)edit->Quantity->SetValue(SellerPricing.Stack(config.Seller.NewStackSize,(int)item->Quantity,(int)max));
-                    manualEditor=new(agent->SellItemInventorySlot,id,SearchItemName(id),(item->Flags&InventoryItem.ItemFlags.HighQuality)!=0,(uint)edit->Quantity->Value,edit->AskingPrice->Value,now);
+        if(manualEditor is null && now-manualEditorAt>TimeSpan.FromMilliseconds(150)){
+            var item=SellerEditorItem(out var type,out var slot);
+            if(item!=null&&edit->AskingPrice!=null&&edit->Quantity!=null){
+                var id=item->ItemId%1_000_000;
+                if(type!=InventoryType.RetainerMarket&&config.Seller.LimitNewStacks){
+                    var max=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>().GetRowOrDefault(id)?.StackSize??1;
+                    edit->Quantity->SetValue(SellerPricing.Stack(config.Seller.NewStackSize,item->Quantity,(int)max));
                 }
-            }
-            manualRetainer=active;
-            if(manualEditor!=null&&manualPastePrice is {} paste){SetManualSellerPrice(paste,false);manualPastePrice=null;}
+                manualInventory=type;manualRetainer=active;
+                manualEditor=new(slot,id,SearchItemName(id),(item->Flags&InventoryItem.ItemFlags.HighQuality)!=0,(uint)edit->Quantity->Value,edit->AskingPrice->Value,now);
+                if(manualPastePrice is {} paste){sellerNotice=SetManualSellerPrice(paste,false)?$"Pasted {paste:N0} gil into the editor.":"The editor changed; clipboard price was not applied.";manualPastePrice=null;}
+            }else if(now-manualEditorAt>TimeSpan.FromSeconds(3))sellerNotice="The selected item is not ready yet. Close its price editor and open it again.";
         }
         if(manualEditor!=null&&manualCompareAt==default&&manualAutoCompare){
             if(BeginSellerComparison(manualEditor.ItemId))manualCompareAt=now;
         }
+        var result=(AddonItemSearchResult*)SellerAddon("ItemSearchResult");
+        if(manualEditor!=null&&manualShowHistory&&result!=null&&!sellerHistoryRequested&&InfoProxyItemSearch.Instance()!=null&&InfoProxyItemSearch.Instance()->SearchItemId%1_000_000==manualEditor.ItemId)
+            sellerHistoryRequested=SellerButton((AtkUnitBase*)result,result->History,23);
         if(manualEditor!=null&&ReadSellerComparison() is {} comparison){
-            var decision=SellerPricing.Decide(manualEditor.ItemId,Player.CurrentWorld.RowId,manualEditor.Hq,manualEditor.Price,comparison,marketLedger.Retainers.Select(x=>x.Id).ToHashSet(),config.Seller,now);
+            var decision=SellerPricing.Decide(manualEditor.ItemId,Player.CurrentWorld.RowId,manualEditor.Hq,manualEditor.Price,comparison,marketLedger.Retainers.Select(x=>x.Id).Concat(ReadSellerRetainers().Select(x=>x.Id)).ToHashSet(),config.Seller,now);
             sellerReviews[(active,manualEditor.Slot)]=(manualEditor,decision,now);
         }
     }
-    private unsafe void SetManualSellerPrice(int price,bool confirm)
+    private unsafe bool SetManualSellerPrice(int price,bool confirm)
     {
-        if(manualEditor is not {} item || !SellerActive(manualRetainer))return;
+        if(price is <=0 or >SellerPricing.MaxPrice||manualEditor is not {} item || !SellerActive(manualRetainer))return false;
         var edit=(AddonRetainerSell*)SellerAddon("RetainerSell");var agent=AgentRetainer.Instance();
-        if(edit==null||edit->AskingPrice==null||agent==null||agent->SellItemInventorySlot!=item.Slot)return;
-        var inv=InventoryManager.Instance()->GetInventoryContainer(agent->SellItemInventoryType);
-        var native=inv!=null&&inv->IsLoaded&&item.Slot<inv->Size?inv->GetInventorySlot(item.Slot):null;
-        if(native==null||native->ItemId%1_000_000!=item.ItemId||((native->Flags&InventoryItem.ItemFlags.HighQuality)!=0)!=item.Hq)return;
+        if(edit==null||edit->AskingPrice==null||agent==null||agent->SellItemInventorySlot!=item.Slot)return false;
+        var native=SellerEditorItem(out var type,out var slot);
+        if(native==null||type!=manualInventory||slot!=item.Slot||native->ItemId%1_000_000!=item.ItemId||((native->Flags&InventoryItem.ItemFlags.HighQuality)!=0)!=item.Hq)return false;
         edit->AskingPrice->SetValue(price);
-        if(confirm){CloseSellerAddon("ItemSearchHistory");CloseSellerAddon("ItemSearchResult");SellerButton((AtkUnitBase*)edit,edit->Confirm);}
+        if(edit->AskingPrice->Value!=price)return false;
+        if(confirm){CloseSellerAddon("ItemSearchHistory");CloseSellerAddon("ItemSearchResult");return SellerButton((AtkUnitBase*)edit,edit->Confirm,21);}
+        return true;
+    }
+    private unsafe void OpenMarketItem(MarketRetainer retainer,MarketStock item)
+    {
+        if(sellerRun.Running){sellerNotice="Stop the current price run before editing an item manually.";OpenEquinoxSeller();return;}
+        if(!Player.IsLoaded||Player.ContentId!=retainer.CharacterId||!SellerActive(retainer.Id)||SellerAddon("RetainerSellList")==null){
+            sellerNotice=$"Open {retainer.Name}'s selling list on {retainer.Character} to edit this listing.";OpenEquinoxSeller();return;
+        }
+        if(SellerAddon("RetainerSell")!=null){sellerNotice="Finish or cancel the current price editor first.";return;}
+        var live=ReadSellerStock(retainer.Id)?.FirstOrDefault(x=>x.SameItem(item));
+        if(live==null||live.Price!=item.Price){sellerNotice="This listing changed. Wait for the selling list to refresh.";return;}
+        AgentRetainer.Instance()->OpenRetainerSell(InventoryType.RetainerMarket,(ushort)item.Slot);
+    }
+    private void RememberMarketOrder()
+    {
+        if(!Player.IsLoaded||DateTimeOffset.UtcNow<marketOrderAt)return;marketOrderAt=DateTimeOffset.UtcNow.AddSeconds(3);
+        var order=ReadSellerRetainers();if(order.Length==0)return;
+        var map=order.Select((r,i)=>(r.Id,i)).ToDictionary(x=>x.Id,x=>x.i);
+        var changed=false;
+        var retainers=marketLedger.Retainers.Select(r=>{
+            if(r.CharacterId==Player.ContentId&&map.TryGetValue(r.Id,out var index)&&r.DisplayOrder!=index){changed=true;return r with {DisplayOrder=index};}return r;
+        }).ToArray();
+        if(changed){marketLedger=marketLedger with {Retainers=retainers};DirtyMarket();}
+    }
+    private unsafe void HandleSellerEscape()
+    {
+        if(!config.Seller.Enabled||!escapeRequested||escapePopupWasOpen||!(sellerWindow.IsFocused||equinoxMarketWindow.IsFocused||sellerToolbarFocused)||Dalamud.Bindings.ImGui.ImGui.IsAnyItemActive())return;
+        if(!Conditions[ConditionFlag.OccupiedSummoningBell])return;
+        foreach(var name in new[]{"ItemSearchHistory","ItemSearchResult","RetainerSell","RetainerSellList","RetainerHistory","SelectString","RetainerList"}){
+            var addon=SellerAddon(name);if(addon==null)continue;
+            if(sellerRun.Running)sellerRun.Stop("Stopped with Escape. Confirmed prices are kept.");
+            if(name=="RetainerSell"){
+                var editor=(AddonRetainerSell*)addon;if(!SellerButton(addon,editor->Cancel,22))return;
+            }else addon->Close(true);
+            // Consume once so neither the game nor our launcher closes a
+            // second window on the same physical key press.
+            escapeRequested=false;escapeMinimizedFrame=Dalamud.Bindings.ImGui.ImGui.GetFrameCount();Keys[Dalamud.Game.ClientState.Keys.VirtualKey.ESCAPE]=false;return;
+        }
     }
     private void DirtyMarket(){if(!marketDirty)marketSaveAt=DateTimeOffset.UtcNow.AddSeconds(1);marketDirty=true;}
     private unsafe void RememberMarketVisit(ulong id,DateTimeOffset now)
@@ -346,8 +430,8 @@ public sealed partial class Plugin
         var person=config.SharedRoster?.People.FirstOrDefault(p=>p.Characters.Any(c=>c.ContentId==Player.ContentId.ToString()));
         var character=person?.Characters.FirstOrDefault(c=>c.ContentId==Player.ContentId.ToString());
         var old=marketLedger.Retainers.FirstOrDefault(x=>x.Id==id);
-        var fresh=MarketAccounting.PreserveListingDates(old,new(id,native->NameString,Player.ContentId,Player.CharacterName,Player.HomeWorld.RowId,WorldName(Player.HomeWorld.RowId)??"",person?.Name??"",character?.Account??"",InventoryManager.Instance()->GetRetainerGil(),now,stock));
-        if(old!=null&&old.Gil==fresh.Gil&&old.Stock.SequenceEqual(fresh.Stock)&&now-old.At<TimeSpan.FromMinutes(1))return;
+        var fresh=MarketAccounting.PreserveListingDates(old,new MarketRetainer(id,native->NameString,Player.ContentId,Player.CharacterName,Player.HomeWorld.RowId,WorldName(Player.HomeWorld.RowId)??"",person?.Name??"",character?.Account??"",InventoryManager.Instance()->GetRetainerGil(),now,stock) with {DisplayOrder=Array.FindIndex(ReadSellerRetainers(),r=>r.Id==id)});
+        if(old!=null&&old.Gil==fresh.Gil&&old.DisplayOrder==fresh.DisplayOrder&&old.Stock.SequenceEqual(fresh.Stock)&&now-old.At<TimeSpan.FromMinutes(1))return;
         var recovered=old==null?[]:MarketAccounting.ReconcileOffline(old,fresh,marketLedger.Income);
         marketLedger=marketLedger with {Retainers=[..marketLedger.Retainers.Where(x=>x.Id!=id),fresh with {LastVisit=now}],Income=recovered.Length==0?marketLedger.Income:[..marketLedger.Income,..recovered]};DirtyMarket();
     }
@@ -357,14 +441,17 @@ public sealed partial class Plugin
         private ulong requestedMarket;
         public bool ContextMatches(ulong c,uint w)=>p.SellerContext(c,w);
         public unsafe bool SelectRetainer(SellerRetainerRef r){
-            if(SellerActive(r.Id)&&SellerAddon("RetainerList")==null)return true;
+            if(SellerActive(r.Id))return true;
+            var active=RetainerManager.Instance()==null?0:RetainerManager.Instance()->LastSelectedRetainerId;
+            if(SellerActive(active)){CloseRetainer(active);return false;}
+            if(DateTimeOffset.UtcNow<p.sellerSelectRetry)return false;
             var a=SellerAddon("RetainerList");var rm=RetainerManager.Instance();if(a==null||rm==null||!rm->IsReady)return false;
             for(uint i=0;i<Math.Min(10,(int)rm->GetRetainerCount());i++){var x=rm->GetRetainerBySortedIndex(i);if(x==null||x->RetainerId!=r.Id||!x->Available)continue;
                 var v=stackalloc AtkValue[4];for(var n=0;n<4;n++)v[n]=default;v[0].Type=AtkValueType.Int;v[0].Int=2;v[1].Type=AtkValueType.UInt;v[1].UInt=i;
-                a->FireCallback(4,v,true);return true;}return false;
+                a->FireCallback(4,v,true);p.sellerSelectRetry=DateTimeOffset.UtcNow.AddSeconds(2);return false;}return false;
         }
         public unsafe bool OpenMarket(ulong id){
-            if(!SellerActive(id))return false;if(SellerAddon("RetainerSellList")!=null)return true;
+            if(!SellerActive(id))return false;if(SellerAddon("RetainerSellList")!=null){requestedMarket=0;return true;}
             if(requestedMarket==id)return false;
             var menu=(AddonSelectString*)SellerAddon("SelectString");if(menu==null){p.SellerRetainerTalk(id);return false;}
             var label=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Addon>().GetRowOrDefault(2380)?.Text.ToString();if(string.IsNullOrEmpty(label))return false;
@@ -387,7 +474,7 @@ public sealed partial class Plugin
             if(!p.SellerEditorMatches(r,item)||price is <=0 or >SellerPricing.MaxPrice)return false;
             CloseSellerAddon("ItemSearchHistory");CloseSellerAddon("ItemSearchResult");
             var edit=(AddonRetainerSell*)SellerAddon("RetainerSell");if(edit==null)return false;
-            edit->AskingPrice->SetValue(price);return SellerButton((AtkUnitBase*)edit,edit->Confirm);
+            edit->AskingPrice->SetValue(price);return SellerButton((AtkUnitBase*)edit,edit->Confirm,21);
         }
         public unsafe bool PriceConfirmed(ulong r,MarketStock item,int price)=>SellerAddon("RetainerSell")==null&&p.ReadSellerStock(r)?.Any(x=>x.SameItem(item)&&x.Price==price)==true;
         public bool CancelEditor(ulong r,MarketStock item){var ok=p.CancelSellerEditor(r,item);if(ok)requestedEditor=null;return ok;}
@@ -395,11 +482,15 @@ public sealed partial class Plugin
             if(SellerAddon("RetainerList")!=null)return true;
             if(!SellerActive(id))return false;
             var list=SellerAddon("RetainerSellList");if(list!=null){list->Close(true);return false;}
-            var menu=SellerAddon("SelectString");if(menu!=null){menu->Close(true);return false;}
+            var menu=(AddonSelectString*)SellerAddon("SelectString");if(menu!=null){
+                var quit=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Addon>().GetRowOrDefault(2383)?.Text.ToString();
+                for(var i=0;i<Math.Min(20,(int)menu->PopupMenu.PopupMenu.EntryCount);i++)if(TravelMenuText(menu->PopupMenu.PopupMenu.EntryNames[i].Value)==quit){menu->FireCallbackInt(i);break;}
+                return false;
+            }
             p.SellerRetainerTalk(id);return false;
         }
         public void Review(SellerRetainerRef r,MarketStock item,SellerDecision d,bool applied){
-            p.sellerReviews[(r.Id,item.Slot)]=(applied?item with {Price=d.Price!.Value}:item,applied?d with {Status=SellerStatus.Competitive,Reason="Price update observed in the selling list. "+d.Reason}:d,DateTimeOffset.UtcNow);
+            p.sellerReviews[(r.Id,item.Slot)]=(applied?item with {Price=d.Price!.Value}:item,applied?d with {Status=SellerStatus.Competitive,Undercut=d.LowestCompetitor<d.Price,Reason="Price update observed in the selling list. "+d.Reason}:d,DateTimeOffset.UtcNow);
             var entry=new MarketPriceLog(DateTimeOffset.UtcNow,r.Id,r.Name,item.ItemId,item.Name,item.Hq,item.Price,d.Price,applied?"Updated":d.Status.ToString(),d.Reason);
             p.marketLedger=p.marketLedger with {Prices=[..p.marketLedger.Prices.TakeLast(1999),entry]};p.DirtyMarket();
         }
@@ -416,7 +507,7 @@ public sealed partial class Plugin
     }
     private void DisposeEquinoxMarket()
     {
-        DisableMarketHooks();marketWatchClient.Dispose();sellerResultHook?.Dispose();DisposeMarketWindows();
+        DisableMarketHooks();marketWatchClient.Dispose();sellerResultHook?.Dispose();marketHistoryHook?.Dispose();DisposeMarketWindows();
         if(marketLoad==null&&!marketLoadFailed)try{marketWriter.Flush(marketLedger);}catch(Exception ex){Log.Error(ex,"Market ledger could not be saved");}
     }
 }

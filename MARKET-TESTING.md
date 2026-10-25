@@ -58,3 +58,21 @@ Live Universalis access from the build environment returned HTTP 403, so the net
 ## Cost tracking next
 
 The next accounting step is allocating observed purchase lots to resale stock, then recording confirmed recipe consumption/output and allowing manual missing costs. A cost-complete sale can show profit; incomplete allocations must remain marked unknown. Shared transfers need their own provenance before carrying costs between characters or persons.
+
+
+## 0.5.1.244: native selling and compact organization
+
+Install through the normal Companion feed. These are in-game checks, not results inferred from the automated tests.
+
+- Leave Helper and automatic coffer opening enabled, then open a bell. Check prices should start and show the current phase. Those actions yield during the Seller run; saved settings stay enabled.
+- Open a new listing or Adjust Price. Comparison and recent market history should follow the manual settings. Shift bypasses automatic comparison; Ctrl pastes a price without confirming.
+- Click a comparison row. The matching HQ/NQ adjusted unit price should fill the editor and/or clipboard according to settings. Confirm remains explicit unless enabled in settings. Test a sorted results list too.
+- Check prices across a retainer with duplicate items at different prices, then all retainers. Check must not write prices. Update verifies live offers and handles every listing independently.
+- Retainer selling counts show red updates/total, such as 2/13. A question mark means incomplete or uncertain data. Per-slot highlights must match the rows, including duplicate stacks and mixed HQ/NQ.
+- An ignored unusually low price stays visible as Lower listing. The automatic update continues to respect the gap rule, minimum and exclusions.
+- Open the game's View sale history twice. Sales should appear once, with confirmed net gil and timestamps. Repeated reads must not add revenue again. Mannequin sets are excluded from item-level history capture.
+- Escape from a focused Seller/Market window should dismiss one native retainer window at a time and leave the plugin open. Editing a text field or plugin popup keeps its normal Escape handling.
+- Settings are grouped under Manual selling, Pricing rules, Background checks & visits, Windows & highlighting, and Per-item minimums & exclusions. Hover controls for explanations.
+- Check the selling toolbar in your game theme and UI scale. It attaches near the upper-right of the selling window and remains movable when detached.
+
+Native integration references: [Marketbuddy event handling](https://github.com/chalkos/Marketbuddy/blob/main/Marketbuddy/MarketGuiEventHandler.cs), [FFXIVClientStructs inventory links](https://github.com/aers/FFXIVClientStructs/blob/main/FFXIVClientStructs/FFXIV/Client/Game/InventoryItem.cs), [Allagan Market row highlighting](https://github.com/Critical-Impact/AllaganMarket/blob/main/AllaganMarket/Services/HighlightingService.cs), [CashFlow history layout](https://github.com/NightmareXIV/CashFlow/blob/main/CashFlow/Data/ExplicitStructs/RetainerHistoryData.cs), and [AscendedLedger history interpretation](https://github.com/jkleinne/ascended-ledger/blob/main/AscendedLedger/Services/RetainerHistoryCaptureService.cs).

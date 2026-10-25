@@ -65,7 +65,11 @@ public sealed class SellerRun(ISellerPort port)
         // Stop does not click, confirm or dismiss an unrelated game window.
         port.Release();
     }
-    private void Move(Phase phase,DateTimeOffset now){State=phase;deadline=now.AddSeconds(25);next=now.AddMilliseconds(500);}
+    private static string Describe(Phase phase)=>phase switch {
+        Phase.Select=>"Selecting retainer",Phase.OpenMarket=>"Opening selling list",Phase.ReadStock=>"Reading listings",Phase.NextItem=>"Choosing next listing",
+        Phase.OpenEditor=>"Opening price editor",Phase.Compare=>"Opening comparison",Phase.ReadComparison=>"Waiting for live prices",Phase.Commit=>"Waiting for confirmed price",Phase.Close=>"Returning to retainer list",_=>"Ready"
+    };
+    private void Move(Phase phase,DateTimeOffset now){State=phase;deadline=now.AddSeconds(25);next=now.AddMilliseconds(500);Status=Describe(phase)+"…";}
     private void Advance(DateTimeOffset now){ItemIndex++;decision=null;Move(Phase.NextItem,now);}
     public void Tick(DateTimeOffset now)
     {
@@ -75,7 +79,7 @@ public sealed class SellerRun(ISellerPort port)
         next=now.AddMilliseconds(200);
         var retainer=retainers[RetainerIndex];
         var item=ItemIndex<items.Length?items[ItemIndex]:null;
-        Status=$"Retainer {RetainerIndex+1}/{retainers.Length} · {retainer.Name} · listing {Math.Min(ItemIndex+1,items.Length)}/{items.Length}";
+        Status=$"{Describe(State)} · Retainer {RetainerIndex+1}/{retainers.Length} · {retainer.Name} · listing {Math.Min(ItemIndex+1,items.Length)}/{items.Length}";
         if(now>=deadline)
         {
             if(State is Phase.OpenEditor or Phase.Compare or Phase.ReadComparison && item is not null)
@@ -84,7 +88,7 @@ public sealed class SellerRun(ISellerPort port)
                 if(!port.CancelEditor(retainer.Id,item)){Stop("Stopped: a different listing is open. No window was dismissed.");return;}
                 Advance(now);return;
             }
-            Stop(State==Phase.Commit?"Stopped: price confirmation was not observed. Check the last listing before restarting.":"Stopped: expected retainer window did not become ready.");return;
+            Stop(State==Phase.Commit?"Stopped: price confirmation was not observed. Check the last listing before restarting.":$"Stopped while {Describe(State).ToLowerInvariant()}. No response from the expected game window.");return;
         }
         switch(State)
         {

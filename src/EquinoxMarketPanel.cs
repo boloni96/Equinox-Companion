@@ -7,10 +7,11 @@ using FFXIVClientStructs.FFXIV.Client.Game;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
+    [Dalamud.IoC.PluginService] internal static Dalamud.Plugin.Services.IGameConfig MarketGameConfig { get; private set; }=null!;
     private EquinoxMarketWindow equinoxMarketWindow=null!;
     private EquinoxSellerWindow sellerWindow=null!;
     private bool eqMarketCommand,eqSellerCommand;
-    private bool openMarketSettings,openMarketSelling,marketUpdatesOnly;
+    private bool openMarketSettings,openMarketSelling,marketUpdatesOnly,sellerToolbarFocused;
     private ulong marketFocusRetainer;
     private int sellerScope=2,marketPage,marketDate=2,marketOrder,marketSource;
     private bool marketAttentionOnly;
@@ -52,7 +53,7 @@ public sealed partial class Plugin
     private void DisposeMarketWindows(){if(eqMarketCommand)Commands.RemoveHandler("/eqmarket");if(eqSellerCommand)Commands.RemoveHandler("/eqseller");}
     private void OpenEquinoxMarket(){equinoxMarketWindow.IsOpen=true;minimizedLaunchers.Remove("Equinox Market");}
     private void OpenEquinoxSeller(){sellerWindow.IsOpen=true;minimizedLaunchers.Remove("Equinox Seller");}
-    private static Vector4 SellerColor(SellerStatus status)=>status switch {SellerStatus.Update=>new(1,.35f,.35f,1),SellerStatus.Competitive=>new(.35f,.85f,.50f,1),SellerStatus.Checking=>new(.4f,.75f,1,1),SellerStatus.History or SellerStatus.Skipped=>new(1,.75f,.35f,1),_=>new(.65f,.7f,.75f,1)};
+    private static Vector4 SellerColor(SellerStatus status)=>status switch {SellerStatus.Update=>new(1,.35f,.35f,1),SellerStatus.Competitive=>new(.35f,.85f,.50f,1),SellerStatus.Checking=>new(.4f,.75f,1,1),SellerStatus.History or SellerStatus.Skipped=>new(1,.75f,.35f,1),_=>new(.85f,.7f,.4f,1)};
     private SellerDecision ReviewFor(ulong retainer,int slot)
     {
         var current=MarketRetainerById(retainer)?.Stock.FirstOrDefault(x=>x.Slot==slot);
@@ -85,71 +86,83 @@ public sealed partial class Plugin
         ImGui.EndDisabled();
         ImGui.SameLine();
         var settingsSize=ImGui.GetFrameHeight();var settingsAt=ImGui.GetCursorScreenPos();
-        if(ImGui.InvisibleButton("Seller settings",new Vector2(settingsSize))){openMarketSettings=true;openMarketSelling=false;OpenEquinoxMarket();}
-        if(ImGui.IsItemHovered())ImGui.SetTooltip("Seller settings · pricing, stacks, toolbar and background checks");
+        if(ImGui.InvisibleButton("Market & Seller settings",new Vector2(settingsSize)))OpenSellerSettings();
+        MarketHelp("All Market & Seller settings · manual selling, pricing, checks and display");
         GardenImage("assets/category-icons/options.png",settingsAt,new Vector2(settingsSize));
         if(sellerRun.Running){
             if(ImGui.Button(sellerRun.Paused?"Resume":"Pause"))sellerRun.Pause(DateTimeOffset.UtcNow);
             ImGui.SameLine();if(ImGui.Button("Stop"))sellerRun.Stop("Stopped. Already confirmed changes are kept.");
         }
-        ImGui.TextWrapped(sellerRun.Status);
-        if(sellerNotice.Length>0)ImGui.TextWrapped(sellerNotice);
-        if(ImGui.CollapsingHeader("Pricing & stack size"))DrawSellerSettings(false);
+        if(sellerNotice.Length>0)ImGui.TextColored(SellerColor(SellerStatus.Skipped),sellerNotice);
+        else ImGui.TextWrapped(sellerRun.Status);
+
         windowFooter=()=>{if(ImGui.SmallButton("Market"))OpenEquinoxMarket();};
     }
-    private void DrawSellerSettings()=>DrawSellerSettings(true);
-    private void DrawSellerSettings(bool full)
+    private static void MarketHelp(string text)
+    {
+        if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled)){
+            ImGui.BeginTooltip();ImGui.PushTextWrapPos(ImGui.GetFontSize()*28);ImGui.TextUnformatted(text);ImGui.PopTextWrapPos();ImGui.EndTooltip();
+        }
+    }
+    private void OpenSellerSettings(){openMarketSettings=true;openMarketSelling=false;OpenEquinoxMarket();}
+    private void DrawSellerSettings()
     {
         var s=config.Seller;var dirty=false;
-        if(full){var enabled=s.Enabled;if(ImGui.Checkbox("Enable Equinox Market & Seller",ref enabled))SetMarketEnabled(enabled);}
+        var enabled=s.Enabled;if(ImGui.Checkbox("Enable Market & Seller",ref enabled))SetMarketEnabled(enabled);
+        MarketHelp("Enables the manual selling helpers, price updater and local market records. Turning this off keeps your settings and records.");
         ImGui.BeginDisabled(sellerRun.Running);
-        void Toggle(string label,bool value,Action<bool> set){if(ImGui.Checkbox(label,ref value)){set(value);dirty=true;}}
-        void Number(string label,int value,int min,int max,Action<int> set){ImGui.SetNextItemWidth(100);if(ImGui.InputInt(label,ref value)){set(Math.Clamp(value,min,max));dirty=true;}}
-        void Percent(string label,double value,Action<double> set){var f=(float)value;ImGui.SetNextItemWidth(100);if(ImGui.InputFloat(label,ref f,1,5,"%.1f%%")){set(float.IsFinite(f)?Math.Clamp(f,0,99):0);dirty=true;}}
-        Toggle("Open Seller at summoning bells",s.OpenAtBell,v=>s.OpenAtBell=v);
-        Toggle("Show market toolbar",s.ShowToolbar,v=>s.ShowToolbar=v);
-        if(s.ShowToolbar)Toggle("Toolbar on top of market window",s.ToolbarOnTop,v=>s.ToolbarOnTop=v);
-        SettingsHelp("Uncheck to use a movable toolbar. The Seller and Market windows can also be minimized to icons.");
-        Toggle("Color retainers and items",s.Highlights,v=>{s.Highlights=v;if(!v)RestoreMarketHighlights();});
-        Toggle("Show top-bar price update count",s.ShowMarketBar,v=>{s.ShowMarketBar=v;if(!v)RemoveMarketBar();});
-        Toggle("Remind me to revisit selling retainers",s.VisitReminders,v=>s.VisitReminders=v);
-        if(s.VisitReminders)Number("Visit reminder after days",s.VisitReminderDays,1,14,v=>s.VisitReminderDays=v);
-        SettingsHelp("Default: six days since the last observed visit, while the retainer has known listings. A visit reminder is not proof that the game has stopped selling. Background price checks do not reset visits.");
-        SettingsHelp("Click the top-bar count to open Selling filtered to suggested updates across known retainers. Right-click opens Seller settings. A question mark means some listings are still uncertain.");
-        Toggle("Check listed items on Universalis in the background",s.BackgroundChecks,v=>{s.BackgroundChecks=v;if(!v)StopMarketWatch();});
-        if(s.BackgroundChecks){Number("Background interval (minutes)",s.BackgroundIntervalMinutes,5,120,v=>s.BackgroundIntervalMinutes=v);Number("Maximum data age (minutes)",s.BackgroundMaxAgeMinutes,5,1440,v=>s.BackgroundMaxAgeMinutes=v);}
-        SettingsHelp("Checks known listings on each retainer's home world, even with these windows closed. Cached suggestions only: automatic price changes always use a fresh in-game comparison. Old/missing data stays uncertain.");
-        Toggle("Limit new stacks",s.LimitNewStacks,v=>s.LimitNewStacks=v);
-        if(s.LimitNewStacks)Number("Items per new listing",s.NewStackSize,1,9999,v=>s.NewStackSize=v);
-        SettingsHelp("Only when posting new items. Existing listings keep their quantity. Limited by available items and the item's stack maximum.");
-        Toggle("Undercut by percentage",s.PercentUndercut,v=>s.PercentUndercut=v);
-        if(s.PercentUndercut)Percent("Undercut",s.UndercutPercent,v=>s.UndercutPercent=v);else Number("Gil undercut",s.UndercutGil,0,SellerPricing.MaxPrice,v=>s.UndercutGil=v);
-        Number("Round down to multiple",s.RoundTo,1,1000000,v=>s.RoundTo=v);
-        Percent("Ignore low price beyond gap",s.LowOutlierPercent,v=>s.LowOutlierPercent=v);
-        SettingsHelp("Gap is measured against the next distinct price, per unit and matching HQ/NQ. Example: 100k, 250k, 260k has a 60% gap. At 40%, use 250k before undercutting. Zero disables this rule.");
-        Toggle("Allow raising already competitive prices",s.RaiseCompetitivePrices,v=>s.RaiseCompetitivePrices=v);
-        Toggle("Use recent sales when market is empty",s.UseHistory,v=>s.UseHistory=v);
-        if(s.UseHistory){
-            var rule=(int)s.HistoryRule;ImGui.SetNextItemWidth(190);if(ImGui.Combo("History price",ref rule,"Median recent sale\0Highest supported recent sale\0Latest supported sale\0")){s.HistoryRule=(SellerHistoryRule)rule;dirty=true;}
-            Number("History age in days",s.HistoryDays,1,90,v=>s.HistoryDays=v);
-            Number("Minimum recent sales",s.MinimumHistorySales,1,20,v=>s.MinimumHistorySales=v);
-            Percent("History outlier distance",s.HistoryOutlierPercent,v=>s.HistoryOutlierPercent=Math.Max(1,v));
-            SettingsHelp("Only a successful empty comparison uses history. Prices outside this percentage of the median are excluded. No undercut is applied without competing listings; stale or insufficient history keeps your price.");
+        void Toggle(string label,bool value,Action<bool> set,string help){if(ImGui.Checkbox(label,ref value)){set(value);dirty=true;}MarketHelp(help);}
+        void Number(string label,int value,int min,int max,Action<int> set,string help){ImGui.SetNextItemWidth(100);if(ImGui.InputInt(label,ref value)){set(Math.Clamp(value,min,max));dirty=true;}MarketHelp(help);}
+        void Percent(string label,double value,Action<double> set,string help){var f=(float)value;ImGui.SetNextItemWidth(100);if(ImGui.InputFloat(label,ref f,1,5,"%.1f%%")){set(float.IsFinite(f)?Math.Clamp(f,0,99):0);dirty=true;}MarketHelp(help);}
+        if(ImGui.CollapsingHeader("Manual selling",ImGuiTreeNodeFlags.DefaultOpen)){
+            Toggle("Open Compare Prices",s.OpenCompare,v=>s.OpenCompare=v,"Opens the game's comparison when you open an item's price editor. Hold Shift to skip it for that item.");
+            Toggle("Also open recent sale history",s.OpenHistory,v=>s.OpenHistory=v,"Opens this item's market transaction history beside the comparison. These are market sales, not your own retainer's earnings.");
+            Toggle("Use clicked comparison price",s.ClickSetsPrice,v=>s.ClickSetsPrice=v,"Click a matching HQ/NQ listing to put its unit price, adjusted by your undercut and minimum, into the open price editor.");
+            Toggle("Copy clicked price",s.CopyPrice,v=>s.CopyPrice=v,"Copies the adjusted whole-gil unit price to your clipboard. Works independently of filling the price editor.");
+            Toggle("Confirm price after clicking",s.ClickConfirms,v=>s.ClickConfirms=v,"When Use clicked comparison price is on, clicking a price also confirms the listing. Leave off to review and confirm yourself.");
+            Toggle("Ctrl: paste price when opening an item",s.CtrlPastePrice,v=>s.CtrlPastePrice=v,"Hold Ctrl while opening the price editor to paste a whole-gil clipboard price instead of opening comparison. Does not confirm the listing.");
+            Toggle("Alt: reverse history opening",s.AltTogglesHistory,v=>s.AltTogglesHistory=v,"Hold Alt when opening an item to reverse Also open recent sale history for this item only.");
+            Toggle("Limit new stacks",s.LimitNewStacks,v=>s.LimitNewStacks=v,"Limits the quantity when posting new items. Adjusting an existing listing never changes its quantity.");
+            if(s.LimitNewStacks)Number("Items per new listing",s.NewStackSize,1,9999,v=>s.NewStackSize=v,"Uses the smaller of this amount, your available quantity and the item's stack limit.");
         }
-        if(full&&ImGui.CollapsingHeader("Manual pricing conveniences")){
-            Toggle("Open compare prices automatically",s.OpenCompare,v=>s.OpenCompare=v);SettingsHelp("Hold Shift while opening an item to bypass automatic comparison.");
-            Toggle("Open recent sale history",s.OpenHistory,v=>s.OpenHistory=v);
-            Toggle("Click a comparison to set price",s.ClickSetsPrice,v=>s.ClickSetsPrice=v);
-            Toggle("Confirm after clicking a price",s.ClickConfirms,v=>s.ClickConfirms=v);
-            Toggle("Copy selected adjusted price",s.CopyPrice,v=>s.CopyPrice=v);
-            Toggle("Ctrl: paste clipboard price when opening an item",s.CtrlPastePrice,v=>s.CtrlPastePrice=v);SettingsHelp("Accepts a whole gil amount only. Sets the unit price without confirming the listing.");
-            Toggle("Alt: reverse automatic history opening",s.AltTogglesHistory,v=>s.AltTogglesHistory=v);
+        if(ImGui.CollapsingHeader("Pricing rules")){
+            Toggle("Undercut by percentage",s.PercentUndercut,v=>s.PercentUndercut=v,"Off: subtract a fixed gil amount. On: subtract this percentage of the reference unit price.");
+            if(s.PercentUndercut)Percent("Undercut",s.UndercutPercent,v=>s.UndercutPercent=v,"Example: 1% below 10,000 gil becomes 9,900 gil.");
+            else Number("Gil undercut",s.UndercutGil,0,SellerPricing.MaxPrice,v=>s.UndercutGil=v,"Example: 1 gil below 10,000 becomes 9,999. Zero matches the reference price.");
+            Number("Round down to multiple",s.RoundTo,1,1000000,v=>s.RoundTo=v,"Applied after undercutting. A multiple of 100 rounds 9,999 down to 9,900. Use 1 for no extra rounding.");
+            Percent("Ignore lowest price beyond gap",s.LowOutlierPercent,v=>s.LowOutlierPercent=v,"Automatic checks only: compare the lowest and next distinct matching HQ/NQ unit prices. At 40%, 100k versus 250k is ignored; 250k is used. Zero disables this rule. Your manual price click remains your choice.");
+            Toggle("Allow raising competitive prices",s.RaiseCompetitivePrices,v=>s.RaiseCompetitivePrices=v,"Allows automatic updates to increase your price to the calculated target. Off keeps an already lower price, subject to your item minimum.");
+            Toggle("Use recent sales when comparison is empty",s.UseHistory,v=>s.UseHistory=v,"Only a successfully completed comparison with no matching competing HQ/NQ listings may use history. Errors and timeouts keep the existing price.");
+            if(s.UseHistory){
+                var rule=(int)s.HistoryRule;ImGui.SetNextItemWidth(220);if(ImGui.Combo("History reference",ref rule,"Median recent sale\0Highest supported recent sale\0Latest supported sale\0")){s.HistoryRule=(SellerHistoryRule)rule;dirty=true;}
+                MarketHelp("Choose the middle, highest or most recent price among sales that pass the age and outlier checks. No undercut is applied to history alone.");
+                Number("History age (days)",s.HistoryDays,1,90,v=>s.HistoryDays=v,"Ignore transactions older than this many days.");
+                Number("Minimum recent sales",s.MinimumHistorySales,1,20,v=>s.MinimumHistorySales=v,"Require at least this many usable transactions before suggesting a history-based price.");
+                Percent("History outlier distance",s.HistoryOutlierPercent,v=>s.HistoryOutlierPercent=Math.Max(1,v),"Exclude sale prices too far above or below the median. This reduces the effect of unusually large or small transactions.");
+            }
         }
-        if(full&&ImGui.CollapsingHeader("Item rules")){
-            var id=(int)marketRuleItem;Number("Item ID",id,1,1000000,v=>marketRuleItem=(uint)v);
-            Number("Minimum unit price",marketRuleMinimum,1,SellerPricing.MaxPrice,v=>marketRuleMinimum=v);
+        if(ImGui.CollapsingHeader("Background checks & visits")){
+            Toggle("Check Universalis in the background",s.BackgroundChecks,v=>{s.BackgroundChecks=v;if(!v)StopMarketWatch();},"Checks known listings on each retainer's home world while the plugin runs, even with windows closed. Suggestions are cached; repricing always uses live game comparisons.");
+            if(s.BackgroundChecks){
+                Number("Check interval (minutes)",s.BackgroundIntervalMinutes,5,120,v=>s.BackgroundIntervalMinutes=v,"Minimum interval between background checks of each known item. Requests are paced and yield to gameplay syncing.");
+                Number("Maximum data age (minutes)",s.BackgroundMaxAgeMinutes,5,1440,v=>s.BackgroundMaxAgeMinutes=v,"Older Universalis information stays uncertain instead of being shown as a reliable update suggestion.");
+            }
+            Toggle("Remind me to revisit selling retainers",s.VisitReminders,v=>s.VisitReminders=v,"Adds Visit due for known nonempty retainers after the selected time since an observed visit. Price downloads do not reset this timer.");
+            if(s.VisitReminders)Number("Visit reminder after days",s.VisitReminderDays,1,14,v=>s.VisitReminderDays=v,"A precautionary reminder, not proof that the game stopped selling. Summon the retainer to refresh its observed visit.");
+        }
+        if(ImGui.CollapsingHeader("Windows & highlighting")){
+            Toggle("Open Seller at summoning bells",s.OpenAtBell,v=>s.OpenAtBell=v,"Opens the compact Check prices / Update prices panel when the bell's retainer list appears.");
+            Toggle("Show selling toolbar",s.ShowToolbar,v=>s.ShowToolbar=v,"Shows stack size and undercut beside the game's selling list.");
+            if(s.ShowToolbar)Toggle("Attach toolbar to selling window",s.ToolbarOnTop,v=>s.ToolbarOnTop=v,"On: align with the upper-right area of the game window. Off: drag the toolbar to your preferred location.");
+            Toggle("Color retainers and items",s.Highlights,v=>{s.Highlights=v;if(!v)RestoreMarketHighlights();},"Red: suggested update. Green: competitive. Amber: history or uncertain. Blue: checking. Hover a listing for its evidence.");
+            Toggle("Show top-bar market count",s.ShowMarketBar,v=>{s.ShowMarketBar=v;if(!v)RemoveMarketBar();},"Click the game top-bar count to open Selling. Right-click opens these settings. A question mark means some listings need a fresh check.");
+        }
+        if(ImGui.CollapsingHeader("Per-item minimums & exclusions")){
+            var id=(int)marketRuleItem;Number("Item ID",id,1,1000000,v=>marketRuleItem=(uint)v,"The numeric game item ID. You can also choose a listing's current price as its minimum from the Selling table.");
+            Number("Minimum unit price",marketRuleMinimum,1,SellerPricing.MaxPrice,v=>marketRuleMinimum=v,"Neither automatic suggestions nor manual adjusted price clicks go below this item-specific minimum.");
             if(ImGui.Button("Save minimum")&&marketRuleItem>0){s.MinimumPrices[marketRuleItem]=marketRuleMinimum;dirty=true;}
             ImGui.SameLine();if(ImGui.Button("Exclude item")&&marketRuleItem>0){s.ExcludedItems.Add(marketRuleItem);dirty=true;}
+            MarketHelp("Excluded items are skipped by automatic checks and updates. You can still price them manually.");
             foreach(var item in s.MinimumPrices.Keys.Concat(s.ExcludedItems).Distinct().ToArray()){
                 ImGui.TextUnformatted(SearchItemName(item)+(s.ExcludedItems.Contains(item)?" · excluded":$" · min {s.MinimumPrices[item]:N0}"));ImGui.SameLine();
                 if(ImGui.SmallButton("Remove##rule"+item)){s.MinimumPrices.Remove(item);s.ExcludedItems.Remove(item);dirty=true;}
@@ -159,21 +172,37 @@ public sealed partial class Plugin
     }
     private unsafe void DrawSellerToolbar()
     {
+        sellerToolbarFocused=false;
         if(!config.Seller.Enabled||!config.Seller.ShowToolbar||!Player.IsLoaded)return;
         var a=SellerAddon("RetainerSellList");if(a==null)return;
         var flags=ImGuiWindowFlags.AlwaysAutoResize|ImGuiWindowFlags.NoDecoration|ImGuiWindowFlags.NoFocusOnAppearing;
-        if(config.Seller.ToolbarOnTop){ImGui.SetNextWindowPos(new(a->X+55*a->Scale,a->Y+8*a->Scale),ImGuiCond.Always);flags|=ImGuiWindowFlags.NoMove|ImGuiWindowFlags.NoSavedSettings;}
+        if(config.Seller.ToolbarOnTop){
+            var width=a->RootNode==null?480*a->Scale:a->RootNode->Width*a->Scale;
+            ImGui.SetNextWindowPos(new(a->X+width-40*a->Scale,a->Y+6*a->Scale),ImGuiCond.Always,new Vector2(1,0));flags|=ImGuiWindowFlags.NoMove|ImGuiWindowFlags.NoSavedSettings;
+        }
+        MarketGameConfig.TryGet(Dalamud.Game.Config.SystemConfigOption.ColorThemeType,out uint theme);
+        var light=theme==1;var blue=theme>=2;
+        ImGui.PushStyleColor(ImGuiCol.WindowBg,light?new Vector4(.78f,.77f,.73f,.98f):blue?new Vector4(.08f,.14f,.25f,.98f):new Vector4(.15f,.15f,.15f,.98f));
+        ImGui.PushStyleColor(ImGuiCol.Text,light?new Vector4(.12f,.12f,.12f,1):new Vector4(.92f,.90f,.84f,1));
+        ImGui.PushStyleColor(ImGuiCol.Border,new Vector4(.55f,.51f,.39f,1));
+        ImGui.PushStyleColor(ImGuiCol.FrameBg,light?new Vector4(.88f,.87f,.83f,1):new Vector4(.08f,.08f,.08f,1));
+        ImGui.PushStyleColor(ImGuiCol.Button,light?new Vector4(.67f,.66f,.62f,1):new Vector4(.24f,.24f,.24f,1));
+        ImGui.PushStyleColor(ImGuiCol.ButtonHovered,new Vector4(.4f,.39f,.34f,1));
+        ImGui.PushStyleColor(ImGuiCol.ButtonActive,new Vector4(.5f,.46f,.34f,1));
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding,new Vector2(5,3));
+        ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing,new Vector2(5,2));
         if(ImGui.Begin("##EquinoxSellerToolbar",flags)){
+            sellerToolbarFocused=ImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows);
             ImGui.BeginDisabled(sellerRun.Running);
             var size=config.Seller.NewStackSize;var limit=config.Seller.LimitNewStacks;
-            if(ImGui.Checkbox("Stack",ref limit)){config.Seller.LimitNewStacks=limit;SaveConfiguration();}
+            if(ImGui.Checkbox("Stack",ref limit)){config.Seller.LimitNewStacks=limit;SaveConfiguration();}MarketHelp("Limit the quantity of new listings. Existing stacks keep their quantity.");
             ImGui.SameLine();ImGui.SetNextItemWidth(45);if(ImGui.InputInt("##stack",ref size,0)){config.Seller.NewStackSize=Math.Clamp(size,1,9999);SaveConfiguration();}
             if(ImGui.IsItemHovered())ImGui.SetTooltip("Stack limit for new listings only");
-            ImGui.SameLine();var value=config.Seller.PercentUndercut?(float)config.Seller.UndercutPercent:config.Seller.UndercutGil;ImGui.SetNextItemWidth(55);
+            ImGui.SameLine();ImGui.TextUnformatted("−");ImGui.SameLine();var value=config.Seller.PercentUndercut?(float)config.Seller.UndercutPercent:config.Seller.UndercutGil;ImGui.SetNextItemWidth(55);
             if(ImGui.InputFloat("##undercut",ref value,0,0,"%.0f")&&float.IsFinite(value)){if(config.Seller.PercentUndercut)config.Seller.UndercutPercent=Math.Clamp(value,0,99);else config.Seller.UndercutGil=(int)Math.Clamp(value,0,SellerPricing.MaxPrice);SaveConfiguration();}
             ImGui.SameLine();var mode=config.Seller.PercentUndercut?1:0;ImGui.SetNextItemWidth(50);if(ImGui.Combo("##priceunit",ref mode,"gil\0%\0")){config.Seller.PercentUndercut=mode==1;SaveConfiguration();}
             ImGui.EndDisabled();ImGui.SameLine();if(ImGui.SmallButton(sellerRun.Running?"Stop":"Seller")){if(sellerRun.Running)sellerRun.Stop("Stopped from market toolbar.");else OpenEquinoxSeller();}
-        }ImGui.End();
+        }ImGui.End();ImGui.PopStyleVar(2);ImGui.PopStyleColor(7);
     }
     private static void MarketFilterCombo(string id,string all,IEnumerable<string> values,ref string selected)
     {
@@ -186,10 +215,8 @@ public sealed partial class Plugin
         (marketFocusRetainer==0||r.Id==marketFocusRetainer)&&(marketPerson.Length==0||r.Person==marketPerson)&&(marketAccount.Length==0||r.Account==marketAccount)&&
         (marketCharacter.Length==0||r.Character==marketCharacter)&&(marketRetainerFilter.Length==0||r.Name==marketRetainerFilter)&&(marketWorldFilter.Length==0||r.World==marketWorldFilter);
     private bool MatchesMarketItem(uint id,string name)=>marketFilter.Length==0||id.ToString()==marketFilter||name.Contains(marketFilter,StringComparison.OrdinalIgnoreCase);
-    private void DrawEquinoxMarket()
+    private void DrawLedgerFilters()
     {
-        if(!MarketEnabledUi())return;
-        if(marketDataError.Length>0)ImGui.TextWrapped(marketDataError);
         ImGui.SetNextItemWidth(Math.Min(240,ImGui.GetContentRegionAvail().X));ImGui.InputTextWithHint("##marketfilter","Search items / item ID",ref marketFilter,100);
         if(ImGui.CollapsingHeader("Filters")){
             var all=marketLedger.Retainers;
@@ -200,8 +227,13 @@ public sealed partial class Plugin
             MarketFilterCombo("##world","All worlds",all.Select(x=>x.World),ref marketWorldFilter);
             if(ImGui.SmallButton("Clear filters")){marketPerson=marketAccount=marketCharacter=marketRetainerFilter=marketWorldFilter=marketFilter="";marketFocusRetainer=0;marketAttentionOnly=false;marketUpdatesOnly=false;}
         }
+    }
+    private void DrawEquinoxMarket()
+    {
+        if(!MarketEnabledUi())return;
+        if(marketDataError.Length>0)ImGui.TextWrapped(marketDataError);
         if(ImGui.BeginTabBar("EquinoxMarketPages",ImGuiTabBarFlags.FittingPolicyScroll)){
-            void Tab(string label,Action body){var select=label=="Settings"&&openMarketSettings||label=="Selling"&&openMarketSelling;if(ImGui.BeginTabItem(label,select?ImGuiTabItemFlags.SetSelected:ImGuiTabItemFlags.None)){if(select){openMarketSettings=false;openMarketSelling=false;}if(ImGui.BeginChild("marketbody"+label,new Vector2(0,0),false))body();ImGui.EndChild();ImGui.EndTabItem();}}
+            void Tab(string label,Action body){var select=label=="Settings"&&openMarketSettings||label=="Selling"&&openMarketSelling;if(ImGui.BeginTabItem(label,select?ImGuiTabItemFlags.SetSelected:ImGuiTabItemFlags.None)){if(select){openMarketSettings=false;openMarketSelling=false;}if(ImGui.BeginChild("marketbody"+label,new Vector2(0,0),false)){if(label is not ("Settings" or "Files"))DrawLedgerFilters();body();}ImGui.EndChild();ImGui.EndTabItem();}}
             Tab("Selling",DrawMarketSelling);Tab("Retainers",DrawMarketRetainers);Tab("Sales",DrawMarketIncome);Tab("Summary",DrawMarketSummary);Tab("Spending",DrawMarketSpending);Tab("Price changes",DrawMarketChanges);Tab("Settings",DrawSellerSettings);Tab("Files",DrawMarketFiles);ImGui.EndTabBar();
         }
         windowFooter=()=>{if(ImGui.SmallButton("Seller"))OpenEquinoxSeller();};windowStatus=marketDirty||marketWriter.Busy?"Saving market records…":"Saved on this computer";
@@ -211,43 +243,70 @@ public sealed partial class Plugin
         ImGui.Checkbox("Needs attention only",ref marketAttentionOnly);
         ImGui.SameLine();ImGui.Checkbox("Price updates only",ref marketUpdatesOnly);
         if(marketFocusRetainer!=0){ImGui.TextDisabled("Retainer: "+(MarketRetainerById(marketFocusRetainer)?.Name??"Selected"));ImGui.SameLine();if(ImGui.SmallButton("All retainers"))marketFocusRetainer=0;}
-        if(config.Seller.BackgroundChecks){ImGui.SameLine();ImGui.TextDisabled(marketWatchTask!=null?"Checking prices…":"Background prices");if(ImGui.IsItemHovered())ImGui.SetTooltip(marketWatchNotice+"\nUniversalis is cached; live checks take priority.");}
+        if(config.Seller.BackgroundChecks){if(ImGui.SmallButton("Refresh market data")){marketWatchNext.Clear();marketWatchStock=null;}MarketHelp("Queue a fresh Universalis check for known listings on their own worlds. Requests stay paced; use Seller for live in-game comparisons.");ImGui.SameLine();ImGui.TextDisabled(marketWatchTask!=null?"Checking prices…":"Background prices");if(ImGui.IsItemHovered())ImGui.SetTooltip(marketWatchNotice+"\nUniversalis is cached; live checks take priority.");}
         var retainers=OrderedMarketRetainers();
         var shown=retainers.SelectMany(r=>r.Stock.Where(x=>MatchesMarketItem(x.ItemId,x.Name))).ToArray();
         ImGui.TextDisabled($"{shown.Length} listings · asking value {shown.Sum(x=>x.Total):N0} gil");
         foreach(var r in retainers){
-            var rows=r.Stock.Where(x=>MatchesMarketItem(x.ItemId,x.Name)&&(!marketAttentionOnly||ReviewFor(r.Id,x.Slot).Status!=SellerStatus.Competitive)&&(!marketUpdatesOnly||ReviewFor(r.Id,x.Slot).CanApply)).ToArray();if(rows.Length==0)continue;
-            var needed=rows.Count(x=>ReviewFor(r.Id,x.Slot).CanApply);var color=needed>0?SellerColor(SellerStatus.Update):MarketVisitDue(r)?SellerColor(SellerStatus.History):rows.All(x=>ReviewFor(r.Id,x.Slot).Status==SellerStatus.Competitive)?SellerColor(SellerStatus.Competitive):SellerColor(SellerStatus.Unknown);
-            ImGui.PushStyleColor(ImGuiCol.Text,color);var open=ImGui.CollapsingHeader($"{r.Name} · {r.Character} · {rows.Length} listings"+(needed>0?$" · {needed} updates":"")+(MarketVisitDue(r)?" · Visit due":"")+"###retainer"+r.Id);ImGui.PopStyleColor();
+            var rows=r.Stock.OrderBy(x=>x.DisplayOrder).ThenBy(x=>x.Slot).Where(x=>MatchesMarketItem(x.ItemId,x.Name)&&(!marketAttentionOnly||(ReviewFor(r.Id,x.Slot).NeedsAttention||ReviewFor(r.Id,x.Slot).Status!=SellerStatus.Competitive))&&(!marketUpdatesOnly||ReviewFor(r.Id,x.Slot).NeedsAttention)).ToArray();if(rows.Length==0)continue;
+            var needed=r.Stock.Count(x=>ReviewFor(r.Id,x.Slot).NeedsAttention);var color=needed>0?SellerColor(SellerStatus.Update):MarketVisitDue(r)?SellerColor(SellerStatus.History):rows.All(x=>ReviewFor(r.Id,x.Slot).Status==SellerStatus.Competitive)?SellerColor(SellerStatus.Competitive):SellerColor(SellerStatus.Unknown);
+            ImGui.PushStyleColor(ImGuiCol.Text,color);var open=ImGui.CollapsingHeader($"{r.Name} · {r.Character} · {rows.Length} listings"+(needed>0?$" · {needed}/{r.Stock.Length} to review":"")+(MarketVisitDue(r)?" · Visit due":"")+"###retainer"+r.Id);ImGui.PopStyleColor();
             if(ImGui.IsItemHovered())ImGui.SetTooltip($"{r.Person} / {r.Account} · {r.World}\nLast observed {DisplayTime.Local(r.At)}\nListed value is not earned gil.");
             if(!open)continue;
             DrawMarketCharacterAction(r);
-            foreach(var x in rows){var decision=ReviewFor(r.Id,x.Slot);ImGui.PushID($"{r.Id}/{x.Slot}");
-                ImGui.PushStyleColor(ImGuiCol.Text,SellerColor(decision.Status));if(ImGui.Selectable(x.Name+(x.Hq?" HQ":"")+"##item",false,ImGuiSelectableFlags.None))ImGui.SetClipboardText(x.Name);ImGui.PopStyleColor();ItemRightClick(x.ItemId);
-                if(ImGui.IsItemHovered())ImGui.SetTooltip($"{decision.Status} · {decision.Reason}\nListed {DisplayTime.Local(x.ListedAt)}\nClick to copy · right-click for item actions");
-                ImGui.TextDisabled($"{x.Quantity} × {x.Price:N0} = {x.Total:N0} gil"+(decision.CanApply?$" → {decision.Price:N0} each":""));
-                if(ImGui.BeginPopupContextItem("rule")){if(ImGui.MenuItem("Exclude from automatic pricing")){config.Seller.ExcludedItems.Add(x.ItemId);SaveConfiguration();}if(ImGui.MenuItem("Use current price as minimum")){config.Seller.MinimumPrices[x.ItemId]=x.Price;SaveConfiguration();}ImGui.EndPopup();}ImGui.PopID();
+            if(ImGui.BeginTable("selling-"+r.Id,5,ImGuiTableFlags.RowBg|ImGuiTableFlags.SizingStretchProp|ImGuiTableFlags.Resizable)){
+                ImGui.TableSetupColumn("Item",ImGuiTableColumnFlags.WidthStretch,3);
+                ImGui.TableSetupColumn("Qty",ImGuiTableColumnFlags.WidthFixed,35);
+                ImGui.TableSetupColumn("Each",ImGuiTableColumnFlags.WidthFixed,80);
+                ImGui.TableSetupColumn("Suggested",ImGuiTableColumnFlags.WidthFixed,80);
+                ImGui.TableSetupColumn("Status",ImGuiTableColumnFlags.WidthStretch,1);
+                ImGui.TableHeadersRow();
+                foreach(var x in rows){var decision=ReviewFor(r.Id,x.Slot);ImGui.PushID($"{r.Id}/{x.Slot}");
+                    ImGui.TableNextRow();ImGui.TableNextColumn();
+                    ImGui.PushStyleColor(ImGuiCol.Text,SellerColor(decision.VisualStatus));
+                    if(ImGui.Selectable(x.Name+(x.Hq?" HQ":"")+"##item",false))OpenMarketItem(r,x);
+                    ImGui.PopStyleColor();MarketHelp($"{decision.Reason}\nClick: open this listing's price editor while its retainer is summoned. Right-click: item actions.\nListed {DisplayTime.Local(x.ListedAt)}");ItemRightClick(x.ItemId);
+                    ImGui.TableNextColumn();ImGui.TextUnformatted(x.Quantity.ToString());
+                    ImGui.TableNextColumn();if(ImGui.Selectable(x.Price.ToString("N0"),false))ImGui.SetClipboardText(x.Price.ToString());
+                    MarketHelp($"Click to copy unit price. Stack value: {x.Total:N0} gil. Right-click for item pricing rules.");
+                    if(ImGui.BeginPopupContextItem("rule")){
+                        if(ImGui.MenuItem("Use this price as minimum")){config.Seller.MinimumPrices[x.ItemId]=x.Price;SaveConfiguration();}
+                        if(ImGui.MenuItem("Exclude from automatic pricing")){config.Seller.ExcludedItems.Add(x.ItemId);SaveConfiguration();}
+                        ImGui.EndPopup();
+                    }
+                    ImGui.TableNextColumn();ImGui.TextUnformatted(decision.CanApply?decision.Price!.Value.ToString("N0"):"—");MarketHelp(decision.Source+" · "+decision.Reason);
+                    ImGui.TableNextColumn();ImGui.TextColored(SellerColor(decision.VisualStatus),decision.Undercut&&!decision.CanApply?"Lower listing":decision.Status.ToString());MarketHelp(decision.Reason);
+                    ImGui.PopID();
+                }
+                ImGui.EndTable();
             }
+
         }
         if(retainers.Length==0)ImGui.TextWrapped("Open each retainer’s selling list to record it. Check prices visits selected retainers automatically.");
     }
     private void DrawMarketRetainers()
     {
-        foreach(var r in OrderedMarketRetainers()){
-            var states=r.Stock.Where(x=>MatchesMarketItem(x.ItemId,x.Name)).Select(x=>ReviewFor(r.Id,x.Slot)).ToArray();
-            var updates=states.Count(x=>x.CanApply);var uncertain=states.Count(x=>x.Status is SellerStatus.Unknown or SellerStatus.Skipped or SellerStatus.Checking);
-            var status=updates>0?SellerStatus.Update:MarketVisitDue(r)?SellerStatus.History:states.Length>0&&uncertain==0?SellerStatus.Competitive:SellerStatus.Unknown;
-            ImGui.PushStyleColor(ImGuiCol.Text,SellerColor(status));
-            if(ImGui.Selectable($"{r.Name} · {updates} updates"+(MarketVisitDue(r)?" · Visit due":"")+$"###market-retainer-{r.Id}"))OpenMarketSelling(r.Id,updates>0);
-            ImGui.PopStyleColor();
-            if(ImGui.IsItemHovered())ImGui.SetTooltip($"{r.Person} / {r.Account}\n{r.Stock.Length} known listings · {uncertain} need a fresh check\nLast observed {DisplayTime.Local(r.At)}\nClick to open this retainer's listings.");
-            ImGui.TextDisabled($"{r.Character} · {r.World} · {states.Length} listings");
-            DrawMarketCharacterAction(r);
+        foreach(var group in OrderedMarketRetainers().GroupBy(r=>r.CharacterId)){
+            var character=group.First();ImGui.Separator();
+            ImGui.TextUnformatted($"{character.Character} · {character.World}");
+            MarketHelp($"{character.Person} / {character.Account}");
+            DrawMarketCharacterAction(character);
+            if(!ImGui.BeginTable("retainers-"+group.Key,4,ImGuiTableFlags.RowBg|ImGuiTableFlags.SizingStretchProp))continue;
+            ImGui.TableSetupColumn("Retainer");ImGui.TableSetupColumn("Updates / Selling");ImGui.TableSetupColumn("Asking value");ImGui.TableSetupColumn("Visit");ImGui.TableHeadersRow();
+            foreach(var r in group){
+                var states=r.Stock.Select(x=>ReviewFor(r.Id,x.Slot)).ToArray();
+                var updates=states.Count(x=>x.NeedsAttention);var unknown=states.Count(x=>x.Status is SellerStatus.Unknown or SellerStatus.Skipped);
+                ImGui.TableNextRow();ImGui.TableNextColumn();if(ImGui.Selectable(r.Name+"##"+r.Id,false))OpenMarketSelling(r.Id,false);MarketHelp("Open this retainer's listings. Order matches the game.");
+                ImGui.TableNextColumn();ImGui.TextColored(SellerColor(AggregateMarketStatus(states.Select(x=>x.VisualStatus).ToArray())),$"{updates}/{r.Stock.Length}"+(unknown>0?" ?":""));MarketHelp($"{updates} need price review; {unknown} uncertain. Hover each item's status for its pricing rules and evidence.");
+                ImGui.TableNextColumn();ImGui.TextUnformatted(r.Stock.Sum(x=>x.Total).ToString("N0"));MarketHelp("Total listed value. This is not earned gil.");
+                ImGui.TableNextColumn();ImGui.TextUnformatted(MarketVisitDue(r)?"Due":"—");MarketHelp("Last observed visit: "+DisplayTime.Local(r.LastVisit??r.At));
+            }
+            ImGui.EndTable();
         }
-        if(marketLedger.Retainers.Length==0)ImGui.TextWrapped("Open retainer selling lists to populate this overview.");
+        if(marketLedger.Retainers.Length==0)ImGui.TextWrapped("Open each retainer's selling list to record its listings.");
     }
     private bool MarketVisitDue(MarketRetainer r)=>config.Seller.VisitReminders&&MarketAccounting.VisitDue(r,DateTimeOffset.UtcNow,config.Seller.VisitReminderDays);
-    private MarketRetainer[] OrderedMarketRetainers()=>marketLedger.Retainers.Where(MatchesMarket).OrderByDescending(MarketVisitDue).ThenByDescending(r=>r.Stock.Count(s=>ReviewFor(r.Id,s.Slot).CanApply)).ThenBy(r=>r.World).ThenBy(r=>r.Character).ThenBy(r=>r.Name).ToArray();
+    private MarketRetainer[] OrderedMarketRetainers()=>marketLedger.Retainers.Where(MatchesMarket).OrderBy(r=>r.Person).ThenBy(r=>r.Account).ThenBy(r=>r.World).ThenBy(r=>r.Character).ThenBy(r=>r.DisplayOrder).ThenBy(r=>r.Name).ToArray();
     private void DrawMarketCharacterAction(MarketRetainer r)
     {
         ImGui.PushID("market-travel-"+r.Id);
@@ -271,7 +330,7 @@ public sealed partial class Plugin
     private void MarketDateFilter(bool income=true){ImGui.SetNextItemWidth(130);if(ImGui.Combo("Period",ref marketDate,"Today\0Last 7 days\0Last 30 days\0All recorded\0"))marketPage=0;if(income){ImGui.SetNextItemWidth(150);if(ImGui.Combo("Source",ref marketSource,"All sources\0Confirmed receipts\0Imported history\0Inferred sales\0"))marketPage=0;}}
     private void DrawMarketIncome()
     {
-        MarketDateFilter();var rows=FilteredMarketIncome();
+        MarketDateFilter();ImGui.TextDisabled("Sale history");MarketHelp(marketHistoryStatus+"\nThe game supplies up to 20 recent entries per retainer. Previously recorded sales stay saved.");var rows=FilteredMarketIncome();
         var totals=marketIncomeTotals.Get(rows,"",Environment.TickCount64,()=>(rows.Sum(x=>x.Net??0),rows.Any(x=>x.Net==null)));
         ImGui.TextDisabled($"{rows.Length} records · confirmed net {totals.Net:N0} gil");
         if(totals.Unverified)SettingsHelp("Imported or inferred records have no verified net amount. They are excluded from the confirmed net total. Hover a record to see its evidence.");
@@ -286,7 +345,7 @@ public sealed partial class Plugin
     private void MarketPaging(int count){marketPage=Math.Clamp(marketPage,0,Math.Max(0,(count-1)/80));if(count<=80)return;if(ImGui.SmallButton("Previous")&&marketPage>0)marketPage--;ImGui.SameLine();ImGui.TextDisabled($"{marketPage+1}/{(count+79)/80}");ImGui.SameLine();if(ImGui.SmallButton("Next")&&(marketPage+1)*80<count)marketPage++;}
     private void DrawMarketSummary()
     {
-        MarketDateFilter();var rows=FilteredMarketIncome();
+        MarketDateFilter();ImGui.TextDisabled("Sale history");MarketHelp(marketHistoryStatus+"\nThe game supplies up to 20 recent entries per retainer. Previously recorded sales stay saved.");var rows=FilteredMarketIncome();
         var totals=marketIncomeTotals.Get(rows,"",Environment.TickCount64,()=>(rows.Sum(x=>x.Net??0),rows.Any(x=>x.Net==null)));
         ImGui.TextUnformatted($"Confirmed net: {totals.Net:N0} gil");
         SettingsHelp("Game sale receipts confirm net gil after fees. Recorded gross includes imported and inferred sales; hover a sale for evidence. This is revenue, not profit.");

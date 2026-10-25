@@ -1,12 +1,12 @@
 namespace EquinoxCompanion;
 
-public sealed record MarketStock(int Slot, uint ItemId, string Name, bool Hq, uint Quantity, int Price, DateTimeOffset ListedAt)
+public sealed record MarketStock(int Slot, uint ItemId, string Name, bool Hq, uint Quantity, int Price, DateTimeOffset ListedAt,int DisplayOrder=int.MaxValue)
 {
     public long Total => (long)Price * Quantity;
     public bool SameItem(MarketStock other) => Slot==other.Slot && ItemId==other.ItemId && Hq==other.Hq && Quantity==other.Quantity;
 }
 public sealed record MarketRetainer(ulong Id, string Name, ulong CharacterId, string Character, uint WorldId, string World,
-    string Person, string Account, uint Gil, DateTimeOffset At, MarketStock[] Stock,DateTimeOffset? LastVisit=null);
+    string Person, string Account, uint Gil, DateTimeOffset At, MarketStock[] Stock,DateTimeOffset? LastVisit=null,int DisplayOrder=int.MaxValue);
 public sealed record MarketIncome(string Id, ulong CharacterId, string Character, uint WorldId, string World, ulong RetainerId,
     string Retainer, uint ItemId, string Item, bool Hq, uint Quantity, long? Gross, long? Net, DateTimeOffset At, string Evidence);
 public sealed record MarketPriceLog(DateTimeOffset At, ulong RetainerId, string Retainer, uint ItemId, string Item, bool Hq,

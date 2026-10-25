@@ -8,6 +8,32 @@ public sealed partial class Plugin
 {
     private sealed record MarketActor(ulong Id,string Name,uint World,string WorldName,uint HomeWorld,string HomeWorldName);
     private MarketActor? marketActor;
+    private delegate nint MarketHistoryDelegate(nint agent,nint packet);
+    private Dalamud.Hooking.Hook<MarketHistoryDelegate>? marketHistoryHook;
+    private readonly ConcurrentQueue<(MarketActor Actor,ulong Retainer,string Name,MarketHistorySale[] Sales)> marketRetainerHistories=new();
+    private string marketHistoryStatus="Open a retainer's View sale history in game to record its recent sales.";
+    private unsafe void EnableRetainerHistory()
+    {
+        try {
+            marketHistoryHook??=Interop.HookFromSignature<MarketHistoryDelegate>("40 53 56 57 41 57 48 83 EC 38 48 8B F1",CaptureRetainerHistory);
+            marketHistoryHook.Enable();
+        }catch(Exception ex){marketHistoryStatus="Retainer history capture unavailable; live sale receipts still work.";Log.Warning(ex,marketHistoryStatus);}
+    }
+    private unsafe nint CaptureRetainerHistory(nint agent,nint packet)
+    {
+        var result=marketHistoryHook!.Original(agent,packet);
+        try {
+            var actor=Volatile.Read(ref marketActor);
+            var rm=FFXIVClientStructs.FFXIV.Client.Game.RetainerManager.Instance();
+            var retainer=rm==null?null:rm->GetActiveRetainer();
+            var id=retainer==null?0:retainer->RetainerId;var name=retainer==null?"":retainer->NameString;
+            if(config.Seller.Enabled&&actor!=null&&packet!=0&&id!=0&&SellerActive(id)&&marketRetainerHistories.Count<8){
+                var rows=MarketRetainerHistory.Read(new ReadOnlySpan<byte>((void*)packet,MarketRetainerHistory.PacketSize),DateTimeOffset.UtcNow);
+                if(rows.Length>0)marketRetainerHistories.Enqueue((actor,id,name,rows));
+            }
+        }catch(Exception ex){Log.Warning(ex,"Retainer history capture skipped; existing records kept.");}
+        return result;
+    }
     private readonly Dictionary<uint,MarketSaleReceipt> marketSaleReceipts=[];
     private readonly ConcurrentQueue<(MarketActor Actor,uint Item,bool Hq,long Net,DateTimeOffset At)> marketSaleQueue=new();
     private readonly ConcurrentQueue<MarketExpense> marketPurchaseQueue=new();
@@ -53,6 +79,18 @@ public sealed partial class Plugin
             var one=matches.Length==1?matches[0]:default;
             var row=new MarketIncome(Guid.NewGuid().ToString("N"),sale.Actor.Id,sale.Actor.Name,sale.Actor.HomeWorld,sale.Actor.HomeWorldName,one.r?.Id??0,one.r?.Name??"Unassigned",sale.Item,SearchItemName(sale.Item),sale.Hq,one.x?.Quantity??0,one.x?.Total,sale.Net,sale.At,"Game sale message; net confirmed"+(one.r!=null?"; retainer inferred from one matching listing":"; retainer/quantity not observed"));
             marketLedger=marketLedger with {Income=[..marketLedger.Income,row]};DirtyMarket();
+        }
+        while(marketRetainerHistories.TryDequeue(out var history)){
+            var retainer=MarketRetainerById(history.Retainer);
+            if(retainer==null){
+                var person=config.SharedRoster?.People.FirstOrDefault(p=>p.Characters.Any(c=>c.ContentId==history.Actor.Id.ToString()));
+                var character=person?.Characters.FirstOrDefault(c=>c.ContentId==history.Actor.Id.ToString());
+                retainer=new(history.Retainer,history.Name,history.Actor.Id,history.Actor.Name,history.Actor.HomeWorld,history.Actor.HomeWorldName,person?.Name??"",character?.Account??"",0,DateTimeOffset.UtcNow,[]);
+                marketLedger=marketLedger with {Retainers=[..marketLedger.Retainers,retainer]};
+            }
+            var income=MarketRetainerHistory.Merge(marketLedger.Income,retainer,history.Sales,SearchItemName);
+            if(!marketLedger.Income.SequenceEqual(income)){marketLedger=marketLedger with {Income=income};DirtyMarket();}
+            marketHistoryStatus=$"{history.Name}: {history.Sales.Length} recent sale records read · {DisplayTime.Local(DateTimeOffset.UtcNow)}";
         }
         while(marketPurchaseQueue.TryDequeue(out var purchase)){marketLedger=marketLedger with {Expenses=[..marketLedger.Expenses??[],purchase]};DirtyMarket();}
         if(marketImport is {IsCompleted:true}){
