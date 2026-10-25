@@ -1099,6 +1099,7 @@ public sealed partial class Plugin : IDalamudPlugin
         {
             windows.Draw();
             DrawSellerToolbar();
+            DrawMarketNativeHover();
             DrawPluginItemPopup();
         }
         // The actual welcome always wears Goddess blue; other windows use the saved choice.

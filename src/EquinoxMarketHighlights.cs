@@ -40,7 +40,7 @@ public sealed partial class Plugin
                     var status=needed>0?SellerStatus.Update:AggregateMarketStatus(states.Select(x=>x.VisualStatus).ToArray());
                     var total=native==null?r?.Stock.Length??0:native->MarketItemCount;
                     var uncertain=states.Any(x=>x.Status==SellerStatus.Unknown)||r==null||r.Stock.Length!=total;
-                    var replacement=enabled&&addon->IsVisible?SellerLabels.Selling(total,needed,uncertain):null;
+                    var replacement=enabled&&addon->IsVisible?SellerLabels.Selling(total,needed,uncertain,states.Count(x=>x.Status==SellerStatus.Skipped),states.Any(x=>x.Status==SellerStatus.Checking)):null;
                     PaintMarketText(text,replacement,status,saved,live);
                     // Find the actual retainer name in this row rather than
                     // guessing a text-node ID shared with another game layout.

@@ -41,6 +41,6 @@ public sealed class SellerBellSession
 
 public static class SellerLabels
 {
-    public static string Selling(int total,int updates,bool uncertain)=>total<=0?"0 selling":
-        updates>0?$"{total} selling · {updates} updates":uncertain?$"{total} selling · unchecked":$"{total} selling · 0 updates";
+    public static string Selling(int total,int updates,bool uncertain,int skipped=0,bool checking=false)=>total<=0?"0 selling":
+        updates>0?$"{total} selling · {updates} {(updates==1?"update":"updates")}":checking?$"{total} selling · checking":uncertain?$"{total} selling · unchecked":skipped>0?$"{total} selling · {skipped} skipped":$"{total} selling · 0 updates";
 }
