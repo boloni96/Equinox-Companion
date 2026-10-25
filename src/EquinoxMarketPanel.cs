@@ -15,11 +15,12 @@ public sealed partial class Plugin
     private ulong marketFocusRetainer;
     private int sellerScope=2,marketPage,marketDate=2,marketOrder,marketSource;
     private bool marketAttentionOnly;
-    private string marketFilter="",marketPerson="",marketAccount="",marketCharacter="",marketRetainerFilter="",marketWorldFilter="";
+    private string marketActiveTab="",marketFilter="",marketPerson="",marketAccount="",marketCharacter="",marketRetainerFilter="",marketWorldFilter="";
     private uint marketRuleItem;
     private int marketRuleMinimum=1;
     private readonly UiProjectionCache<MarketIncome[]> marketIncomeView=new(5000);
     private readonly UiProjectionCache<MarketExpense[]> marketExpenseView=new(5000);
+    private readonly UiProjectionCache<MarketPriceLog[]> marketChangesView=new(5000);
     private readonly UiProjectionCache<MarketSummaryRow[]> marketSummaryView=new(5000);
     private readonly UiProjectionCache<(long Net,bool Unverified)> marketIncomeTotals=new(0);
     private readonly UiProjectionCache<long> marketExpenseTotal=new(0);
@@ -57,10 +58,15 @@ public sealed partial class Plugin
     private SellerDecision ReviewFor(ulong retainer,int slot)
     {
         var current=MarketRetainerById(retainer)?.Stock.FirstOrDefault(x=>x.Slot==slot);
-        if(current!=null&&sellerReviews.TryGetValue((retainer,slot),out var r)&&r.Item.SameItem(current)&&r.Item.Price==current.Price&&DateTimeOffset.UtcNow-r.At<=TimeSpan.FromMinutes(5))return r.Decision;
+        if(current!=null&&config.Seller.ExcludedItems.Contains(current.ItemId))return new(SellerStatus.Skipped,null,"Excluded from automatic price updates by your item rule.","Item rule");
+        var hasLive=sellerReviews.TryGetValue((retainer,slot),out var live);
+        if(current!=null&&hasLive&&live.Item.SameItem(current)&&live.Item.Price==current.Price&&DateTimeOffset.UtcNow-live.At<=TimeSpan.FromMinutes(5))return live.Decision;
         if(config.Seller.BackgroundChecks&&current!=null&&marketWatchReviews.TryGetValue((retainer,slot),out var watch)&&watch.Item.SameItem(current)&&watch.Item.Price==current.Price)return watch.Decision;
-        return new(SellerStatus.Unknown,null,"Not compared this session.","None");
+        var why=hasLive?(current!=null&&live.Item.SameItem(current)&&live.Item.Price==current.Price?"The live comparison is over five minutes old.":"This listing changed after its last live comparison."):"No live comparison is recorded for this listing in this session.";
+        why+=config.Seller.BackgroundChecks?" Waiting for usable background data, or run Check prices at the bell.":" Background checks are off; run Check prices at the bell.";
+        return new(SellerStatus.Unknown,null,why,"None");
     }
+
     private bool MarketEnabledUi()
     {
         if(config.Seller.Enabled)return true;
@@ -207,28 +213,70 @@ public sealed partial class Plugin
             ImGui.EndDisabled();ImGui.SameLine();if(ImGui.SmallButton(sellerRun.Running?"Stop":"Seller")){if(sellerRun.Running)sellerRun.Stop("Stopped from market toolbar.");else OpenEquinoxSeller();}
         }ImGui.End();ImGui.PopStyleVar(2);ImGui.PopStyleColor(7);
     }
+    private static void MarketSameLine(float width)
+    {
+        var right=ImGui.GetCursorScreenPos().X+ImGui.GetContentRegionAvail().X;
+        if(ImGui.GetItemRectMax().X+ImGui.GetStyle().ItemSpacing.X+width<=right)ImGui.SameLine();
+    }
     private static void MarketFilterCombo(string id,string all,IEnumerable<string> values,ref string selected)
     {
-        ImGui.SetNextItemWidth(130);if(!ImGui.BeginCombo(id,selected.Length==0?all:selected))return;
-        if(ImGui.Selectable(all,selected.Length==0))selected="";
-        foreach(var s in values.Where(x=>x.Length>0).Distinct().Order())if(ImGui.Selectable(s,s==selected))selected=s;
-        ImGui.EndCombo();
+        ImGui.SetNextItemWidth(Math.Min(150,ImGui.GetContentRegionAvail().X));
+        if(ImGui.BeginCombo(id,selected.Length==0?all:selected)){
+            if(ImGui.Selectable(all,selected.Length==0))selected="";
+            foreach(var value in values.Where(x=>x.Length>0).Distinct().Order())if(ImGui.Selectable(value,value==selected))selected=value;
+            ImGui.EndCombo();
+        }
+        MarketHelp(all+" · "+(selected.Length==0?"no restriction":selected));
+    }
+    private static bool BeginMarketRecords(string id,int columns)
+    {
+        if(!ImGui.BeginTable(id,columns,ImGuiTableFlags.RowBg|ImGuiTableFlags.BordersInnerH|ImGuiTableFlags.SizingStretchProp|ImGuiTableFlags.Resizable|ImGuiTableFlags.ScrollY,new Vector2(0,Math.Max(1,ImGui.GetContentRegionAvail().Y))))return false;
+        ImGui.TableSetupScrollFreeze(0,1);return true;
+    }
+    private void MarketItemName(uint id,string name,bool hq,string help)
+    {
+        if(ImGui.Selectable(name+(hq?" HQ":"")+"##item"))ImGui.SetClipboardText(name);
+        MarketHelp(name+(hq?" · HQ":"")+"\n"+help+"\nClick to copy the item name. Right-click for item actions.");
+        ItemRightClick(id);
+    }
+    private static void MarketNumber(string id,long? amount,string help)
+    {
+        if(amount is {} value){if(ImGui.Selectable(value.ToString("N0")+"##"+id))ImGui.SetClipboardText(value.ToString());}
+        else ImGui.TextDisabled("—");
+        MarketHelp(help+(amount.HasValue?"\nClick to copy.":""));
+    }
+    private string MarketIdentity(MarketRetainer? r,string character,string world)=>
+        (r==null?character+" · "+world:$"{r.Character} · {r.World}\n{r.Person} / {r.Account}");
+    private void MarketRetainerCell(ulong id,string fallback,string character,string world)
+    {
+        var r=MarketRetainerById(id);var name=r?.Name??fallback;
+        if(r!=null){if(ImGui.Selectable(name+"##retainer"))OpenMarketSelling(id,false);}
+        else ImGui.TextUnformatted(name.Length>0?name:"Unassigned");
+        MarketHelp(MarketIdentity(r,character,world)+(r!=null?"\nClick to open this retainer's listings.":"\nRetainer was not observed."));
     }
     private bool MatchesMarket(MarketRetainer r)=>
         (marketFocusRetainer==0||r.Id==marketFocusRetainer)&&(marketPerson.Length==0||r.Person==marketPerson)&&(marketAccount.Length==0||r.Account==marketAccount)&&
         (marketCharacter.Length==0||r.Character==marketCharacter)&&(marketRetainerFilter.Length==0||r.Name==marketRetainerFilter)&&(marketWorldFilter.Length==0||r.World==marketWorldFilter);
     private bool MatchesMarketItem(uint id,string name)=>marketFilter.Length==0||id.ToString()==marketFilter||name.Contains(marketFilter,StringComparison.OrdinalIgnoreCase);
-    private void DrawLedgerFilters()
+    private void DrawLedgerFilters(bool purchases=false)
     {
         ImGui.SetNextItemWidth(Math.Min(240,ImGui.GetContentRegionAvail().X));ImGui.InputTextWithHint("##marketfilter","Search items / item ID",ref marketFilter,100);
-        if(ImGui.CollapsingHeader("Filters")){
+        var activeFilters=(marketPerson.Length>0?1:0)+(marketAccount.Length>0?1:0)+(marketCharacter.Length>0?1:0)+(marketWorldFilter.Length>0?1:0)+(!purchases&&marketRetainerFilter.Length>0?1:0);
+        MarketSameLine(100);if(ImGui.Button((activeFilters>0?$"Filters · {activeFilters}":"Filters")+"###market-filter-button"))ImGui.OpenPopup("market-filters");
+        if(ImGui.IsPopupOpen("market-filters"))ImGui.SetNextWindowSize(new Vector2(ImGui.GetFontSize()*20,0),ImGuiCond.Always);
+        if(ImGui.BeginPopup("market-filters")){
             var all=marketLedger.Retainers;
-            MarketFilterCombo("##person","All persons",all.Select(x=>x.Person),ref marketPerson);ImGui.SameLine();
+            MarketFilterCombo("##person","All persons",all.Select(x=>x.Person),ref marketPerson);MarketSameLine(150);
             MarketFilterCombo("##account","All accounts",all.Where(x=>marketPerson.Length==0||x.Person==marketPerson).Select(x=>x.Account),ref marketAccount);
-            MarketFilterCombo("##char","All characters",all.Select(x=>x.Character),ref marketCharacter);ImGui.SameLine();
-            MarketFilterCombo("##retainer","All retainers",all.Select(x=>x.Name),ref marketRetainerFilter);
+            MarketFilterCombo("##char","All characters",all.Select(x=>x.Character),ref marketCharacter);MarketSameLine(150);
+            if(!purchases)MarketFilterCombo("##retainer","All retainers",all.Select(x=>x.Name),ref marketRetainerFilter);
             MarketFilterCombo("##world","All worlds",all.Select(x=>x.World),ref marketWorldFilter);
             if(ImGui.SmallButton("Clear filters")){marketPerson=marketAccount=marketCharacter=marketRetainerFilter=marketWorldFilter=marketFilter="";marketFocusRetainer=0;marketAttentionOnly=false;marketUpdatesOnly=false;}
+            ImGui.EndPopup();
+        }
+        if(!purchases&&marketFocusRetainer!=0){
+            MarketSameLine(150);if(ImGui.SmallButton((MarketRetainerById(marketFocusRetainer)?.Name??"Selected retainer")+" ×##focus")){marketFocusRetainer=0;marketPage=0;}
+            MarketHelp("This retainer is selected. Click to show all retainers again.");
         }
     }
     private void DrawEquinoxMarket()
@@ -236,33 +284,52 @@ public sealed partial class Plugin
         if(!MarketEnabledUi())return;
         if(marketDataError.Length>0)ImGui.TextWrapped(marketDataError);
         if(ImGui.BeginTabBar("EquinoxMarketPages",ImGuiTabBarFlags.FittingPolicyScroll)){
-            void Tab(string label,Action body){var select=label=="Settings"&&openMarketSettings||label=="Selling"&&openMarketSelling;if(ImGui.BeginTabItem(label,select?ImGuiTabItemFlags.SetSelected:ImGuiTabItemFlags.None)){if(select){openMarketSettings=false;openMarketSelling=false;}if(ImGui.BeginChild("marketbody"+label,new Vector2(0,0),false)){if(label is not ("Settings" or "Files"))DrawLedgerFilters();body();}ImGui.EndChild();ImGui.EndTabItem();}}
-            Tab("Selling",DrawMarketSelling);Tab("Retainers",DrawMarketRetainers);Tab("Sales",DrawMarketIncome);Tab("Summary",DrawMarketSummary);Tab("Spending",DrawMarketSpending);Tab("Price changes",DrawMarketChanges);Tab("Settings",DrawSellerSettings);Tab("Files",DrawMarketFiles);ImGui.EndTabBar();
+            void Tab(string label,Action body){
+                var select=label=="Settings"&&openMarketSettings||label=="Selling"&&openMarketSelling;
+                if(!ImGui.BeginTabItem(label,select?ImGuiTabItemFlags.SetSelected:ImGuiTabItemFlags.None))return;
+                if(select){openMarketSettings=false;openMarketSelling=false;}
+                if(marketActiveTab!=label){marketActiveTab=label;marketPage=0;}
+                var before=MarketViewStamp;
+                // Controls stay above the scrolling records in every tab.
+                if(label is not ("Settings" or "Files"))DrawLedgerFilters(label=="Spending");
+                if(label is "Sales" or "Summary" or "Spending" or "Price changes")MarketDateFilter(label is "Sales" or "Summary");
+                if(before!=MarketViewStamp)marketPage=0;
+                if(ImGui.BeginChild("marketbody"+label,new Vector2(0,0),false))body();
+                ImGui.EndChild();ImGui.EndTabItem();
+            }
+            Tab("Selling",DrawMarketSelling);Tab("Retainers",DrawMarketRetainers);Tab("Sales",DrawMarketIncome);Tab("Summary",DrawMarketSummary);Tab("Spending",DrawMarketSpending);Tab("Price changes",DrawMarketChanges);Tab("Files",DrawMarketFiles);Tab("Settings",DrawSellerSettings);ImGui.EndTabBar();
         }
         windowFooter=()=>{if(ImGui.SmallButton("Seller"))OpenEquinoxSeller();};windowStatus=marketDirty||marketWriter.Busy?"Saving market records…":"Saved on this computer";
     }
     private void DrawMarketSelling()
     {
         ImGui.Checkbox("Needs attention only",ref marketAttentionOnly);
-        ImGui.SameLine();ImGui.Checkbox("Price updates only",ref marketUpdatesOnly);
-        if(marketFocusRetainer!=0){ImGui.TextDisabled("Retainer: "+(MarketRetainerById(marketFocusRetainer)?.Name??"Selected"));ImGui.SameLine();if(ImGui.SmallButton("All retainers"))marketFocusRetainer=0;}
+        MarketSameLine(160);ImGui.Checkbox("Price updates only",ref marketUpdatesOnly);
         if(config.Seller.BackgroundChecks){if(ImGui.SmallButton("Refresh market data")){marketWatchNext.Clear();marketWatchStock=null;}MarketHelp("Queue a fresh Universalis check for known listings on their own worlds. Requests stay paced; use Seller for live in-game comparisons.");ImGui.SameLine();ImGui.TextDisabled(marketWatchTask!=null?"Checking prices…":"Background prices");if(ImGui.IsItemHovered())ImGui.SetTooltip(marketWatchNotice+"\nUniversalis is cached; live checks take priority.");}
-        var retainers=OrderedMarketRetainers();
-        var shown=retainers.SelectMany(r=>r.Stock.Where(x=>MatchesMarketItem(x.ItemId,x.Name))).ToArray();
-        ImGui.TextDisabled($"{shown.Length} listings · asking value {shown.Sum(x=>x.Total):N0} gil");
-        foreach(var r in retainers){
-            var rows=r.Stock.OrderBy(x=>x.DisplayOrder).ThenBy(x=>x.Slot).Where(x=>MatchesMarketItem(x.ItemId,x.Name)&&(!marketAttentionOnly||(ReviewFor(r.Id,x.Slot).NeedsAttention||ReviewFor(r.Id,x.Slot).Status!=SellerStatus.Competitive))&&(!marketUpdatesOnly||ReviewFor(r.Id,x.Slot).NeedsAttention)).ToArray();if(rows.Length==0)continue;
-            var needed=r.Stock.Count(x=>ReviewFor(r.Id,x.Slot).NeedsAttention);var color=needed>0?SellerColor(SellerStatus.Update):MarketVisitDue(r)?SellerColor(SellerStatus.History):rows.All(x=>ReviewFor(r.Id,x.Slot).Status==SellerStatus.Competitive)?SellerColor(SellerStatus.Competitive):SellerColor(SellerStatus.Unknown);
-            ImGui.PushStyleColor(ImGuiCol.Text,color);var open=ImGui.CollapsingHeader($"{r.Name} · {r.Character} · {rows.Length} listings"+(needed>0?$" · {needed}/{r.Stock.Length} to review":"")+(MarketVisitDue(r)?" · Visit due":"")+"###retainer"+r.Id);ImGui.PopStyleColor();
-            if(ImGui.IsItemHovered())ImGui.SetTooltip($"{r.Person} / {r.Account} · {r.World}\nLast observed {DisplayTime.Local(r.At)}\nListed value is not earned gil.");
+        var visible=OrderedMarketRetainers().Select(r=>(Retainer:r,Rows:r.Stock.OrderBy(x=>x.DisplayOrder).ThenBy(x=>x.Slot)
+            .Where(x=>MatchesMarketItem(x.ItemId,x.Name)&&(!marketAttentionOnly||ReviewFor(r.Id,x.Slot).NeedsAttention||ReviewFor(r.Id,x.Slot).Status!=SellerStatus.Competitive)&&(!marketUpdatesOnly||ReviewFor(r.Id,x.Slot).NeedsAttention)).ToArray())).Where(x=>x.Rows.Length>0).ToArray();
+        var shown=visible.SelectMany(x=>x.Rows).ToArray();
+        ImGui.TextDisabled($"{shown.Length} listings shown · asking value {shown.Sum(x=>x.Total):N0} gil");MarketHelp("These totals follow the current item and status filters. Listed value is not earned gil.");
+        foreach(var group in visible.GroupBy(x=>x.Retainer.CharacterId)){
+            var character=group.First().Retainer;ImGui.Separator();
+            ImGui.TextUnformatted($"{character.Character} · {character.World}");MarketHelp($"{character.Person} / {character.Account}");
+            DrawMarketCharacterAction(character,group.Select(x=>x.Retainer).ToArray());
+            foreach(var entry in group){
+            var r=entry.Retainer;var rows=entry.Rows;
+            var states=r.Stock.Select(x=>ReviewFor(r.Id,x.Slot)).ToArray();var needed=states.Count(x=>x.NeedsAttention);
+            var color=SellerColor(needed>0?SellerStatus.Update:AggregateMarketStatus(states.Select(x=>x.VisualStatus).ToArray()));
+            ImGui.PushStyleColor(ImGuiCol.Text,color);
+            var open=ImGui.CollapsingHeader(r.Name+" · "+SellerLabels.Selling(r.Stock.Length,needed,states.Any(x=>x.Status==SellerStatus.Unknown),states.Count(x=>x.Status==SellerStatus.Skipped),states.Any(x=>x.Status==SellerStatus.Checking))+"###retainer"+r.Id);
+            ImGui.PopStyleColor();
+            MarketRetainerHover(r);
             if(!open)continue;
-            DrawMarketCharacterAction(r);
-            if(ImGui.BeginTable("selling-"+r.Id,5,ImGuiTableFlags.RowBg|ImGuiTableFlags.SizingStretchProp|ImGuiTableFlags.Resizable)){
+            var wide=ImGui.GetContentRegionAvail().X>=ImGui.GetFontSize()*38;
+            if(ImGui.BeginTable("selling-"+r.Id+(wide?"Wide":"Compact"),wide?5:4,ImGuiTableFlags.RowBg|ImGuiTableFlags.BordersInnerH|ImGuiTableFlags.SizingStretchProp|ImGuiTableFlags.Resizable)){
                 ImGui.TableSetupColumn("Item",ImGuiTableColumnFlags.WidthStretch,3);
-                ImGui.TableSetupColumn("Qty",ImGuiTableColumnFlags.WidthFixed,35);
-                ImGui.TableSetupColumn("Each",ImGuiTableColumnFlags.WidthFixed,80);
-                ImGui.TableSetupColumn("Suggested",ImGuiTableColumnFlags.WidthFixed,80);
-                ImGui.TableSetupColumn("Status",ImGuiTableColumnFlags.WidthStretch,1);
+                ImGui.TableSetupColumn("Qty",ImGuiTableColumnFlags.WidthFixed,ImGui.GetFontSize()*2.5f);
+                ImGui.TableSetupColumn("Each",ImGuiTableColumnFlags.WidthFixed,ImGui.GetFontSize()*6);
+                ImGui.TableSetupColumn("Suggested",ImGuiTableColumnFlags.WidthFixed,ImGui.GetFontSize()*6);
+                if(wide)ImGui.TableSetupColumn("Status",ImGuiTableColumnFlags.WidthStretch,1);
                 ImGui.TableHeadersRow();
                 foreach(var x in rows){var decision=ReviewFor(r.Id,x.Slot);ImGui.PushID($"{r.Id}/{x.Slot}");
                     ImGui.TableNextRow();ImGui.TableNextColumn();
@@ -278,14 +345,15 @@ public sealed partial class Plugin
                         ImGui.EndPopup();
                     }
                     ImGui.TableNextColumn();ImGui.TextUnformatted(decision.CanApply?decision.Price!.Value.ToString("N0"):"—");MarketHelp(decision.Source+" · "+decision.Reason);
-                    ImGui.TableNextColumn();ImGui.TextColored(SellerColor(decision.VisualStatus),decision.Undercut&&!decision.CanApply?"Lower listing":decision.Status.ToString());MarketHelp(decision.Reason);
+                    if(wide){ImGui.TableNextColumn();ImGui.TextColored(SellerColor(decision.VisualStatus),decision.Undercut&&!decision.CanApply?"Lower listing":decision.Status.ToString());MarketHelp(decision.Reason);}
                     ImGui.PopID();
                 }
                 ImGui.EndTable();
             }
 
         }
-        if(retainers.Length==0)ImGui.TextWrapped("Open each retainer’s selling list to record it. Check prices visits selected retainers automatically.");
+        }
+        if(visible.Length==0)ImGui.TextWrapped(marketLedger.Retainers.Length==0?"Open each retainer’s selling list to record it. Check prices visits selected retainers automatically.":"No listings match these filters.");
     }
     private void DrawMarketRetainers()
     {
@@ -293,15 +361,15 @@ public sealed partial class Plugin
             var character=group.First();ImGui.Separator();
             ImGui.TextUnformatted($"{character.Character} · {character.World}");
             MarketHelp($"{character.Person} / {character.Account}");
-            DrawMarketCharacterAction(character);
-            if(!ImGui.BeginTable("retainers-"+group.Key,4,ImGuiTableFlags.RowBg|ImGuiTableFlags.SizingStretchProp))continue;
+            DrawMarketCharacterAction(character,group.ToArray());
+            if(!ImGui.BeginTable("retainers-"+group.Key,4,ImGuiTableFlags.RowBg|ImGuiTableFlags.BordersInnerH|ImGuiTableFlags.SizingStretchProp|ImGuiTableFlags.Resizable))continue;
             ImGui.TableSetupColumn("Retainer");ImGui.TableSetupColumn("Selling",ImGuiTableColumnFlags.WidthStretch,1.6f);ImGui.TableSetupColumn("Asking value");ImGui.TableSetupColumn("Visit");ImGui.TableHeadersRow();
             foreach(var r in group){
                 var states=r.Stock.Select(x=>ReviewFor(r.Id,x.Slot)).ToArray();
-                var updates=states.Count(x=>x.NeedsAttention);var unknown=states.Count(x=>x.Status is SellerStatus.Unknown or SellerStatus.Skipped);
+                var updates=states.Count(x=>x.NeedsAttention);var unknown=states.Count(x=>x.Status==SellerStatus.Unknown);
                 var color=SellerColor(updates>0?SellerStatus.Update:AggregateMarketStatus(states.Select(x=>x.VisualStatus).ToArray()));
-                ImGui.TableNextRow();ImGui.TableNextColumn();ImGui.PushStyleColor(ImGuiCol.Text,color);if(ImGui.Selectable(r.Name+"##"+r.Id,false))OpenMarketSelling(r.Id,false);ImGui.PopStyleColor();MarketHelp("Open this retainer's listings. Order matches the game.");
-                ImGui.TableNextColumn();ImGui.TextColored(color,SellerLabels.Selling(r.Stock.Length,updates,unknown>0));MarketHelp($"{updates} need price review; {unknown} unchecked or skipped. Hover each item's status for its pricing rules and evidence.");
+                ImGui.TableNextRow();ImGui.TableNextColumn();ImGui.PushStyleColor(ImGuiCol.Text,color);if(ImGui.Selectable(r.Name+"##"+r.Id,false))OpenMarketSelling(r.Id,false);ImGui.PopStyleColor();MarketRetainerHover(r);
+                ImGui.TableNextColumn();ImGui.TextColored(color,SellerLabels.Selling(r.Stock.Length,updates,unknown>0,states.Count(x=>x.Status==SellerStatus.Skipped),states.Any(x=>x.Status==SellerStatus.Checking)));MarketRetainerHover(r);
                 ImGui.TableNextColumn();ImGui.TextUnformatted(r.Stock.Sum(x=>x.Total).ToString("N0"));MarketHelp("Total listed value. This is not earned gil.");
                 ImGui.TableNextColumn();ImGui.TextUnformatted(MarketVisitDue(r)?"Due":"—");MarketHelp("Last observed visit: "+DisplayTime.Local(r.LastVisit??r.At));
             }
@@ -311,15 +379,13 @@ public sealed partial class Plugin
     }
     private bool MarketVisitDue(MarketRetainer r)=>config.Seller.VisitReminders&&MarketAccounting.VisitDue(r,DateTimeOffset.UtcNow,config.Seller.VisitReminderDays);
     private MarketRetainer[] OrderedMarketRetainers()=>marketLedger.Retainers.Where(MatchesMarket).OrderBy(r=>r.Person).ThenBy(r=>r.Account).ThenBy(r=>r.World).ThenBy(r=>r.Character).ThenBy(r=>r.DisplayOrder).ThenBy(r=>r.Name).ToArray();
-    private void DrawMarketCharacterAction(MarketRetainer r)
+    private void DrawMarketCharacterAction(MarketRetainer r,MarketRetainer[] group)
     {
         ImGui.PushID("market-travel-"+r.Id);
-        var visited=r.LastVisit??r.At;
-        ImGui.TextDisabled("Last visit: "+DisplayTime.Local(visited)+(MarketVisitDue(r)?" · Visit due":""));
-        if(ImGui.IsItemHovered())ImGui.SetTooltip("Last observed interaction with this retainer. Visit reminders are a precaution, not a confirmed expiry. Summon and dismiss the retainer at a bell; background market checks do not count as visits.");
         if(Player.IsLoaded&&Player.ContentId==r.CharacterId){
-            if(ImGui.SmallButton("Open Seller")){sellerScope=1;config.Seller.SelectedRetainers=[r.Id];SaveConfiguration();OpenEquinoxSeller();}
-            ImGui.SameLine();ImGui.TextDisabled(Player.CurrentWorld.RowId==r.WorldId?"Use a summoning bell":"Return to "+r.World+" for this retainer");
+            if(ImGui.SmallButton("Open Seller")){sellerScope=1;config.Seller.SelectedRetainers=group.Select(x=>x.Id).ToHashSet();SaveConfiguration();OpenEquinoxSeller();}
+            MarketHelp($"Selects the {group.Length} displayed retainers for this character. Use a summoning bell on {r.World}.");
+            MarketSameLine(190);ImGui.TextDisabled(Player.CurrentWorld.RowId==r.WorldId?"Use a summoning bell":"Return to "+r.World);
         }else{
             var character=config.SharedRoster?.People.SelectMany(p=>p.Characters).FirstOrDefault(c=>c.ContentId==r.CharacterId.ToString(System.Globalization.CultureInfo.InvariantCulture));
             if(character!=null)DrawCharacterTravel(character,false);else ImGui.TextDisabled("Pair this character to enable switching.");
@@ -331,63 +397,45 @@ public sealed partial class Plugin
         return marketLedger.Income.Where(x=>(marketSource switch {1=>x.Net.HasValue,2=>x.Id.StartsWith("allagan:"),3=>x.Id.StartsWith("inferred:"),_=>true})&&x.At>=cutoff&&MatchesMarketItem(x.ItemId,x.Item.Length>0?x.Item:SearchItemName(x.ItemId))&&
             (MarketRetainerById(x.RetainerId) is {} r?MatchesMarket(r):marketPerson.Length==0&&marketAccount.Length==0&&marketRetainerFilter.Length==0&&(marketCharacter.Length==0||x.Character==marketCharacter)&&(marketWorldFilter.Length==0||x.World==marketWorldFilter))).OrderByDescending(x=>x.At).ToArray();
     });
-    private void MarketDateFilter(bool income=true){ImGui.SetNextItemWidth(130);if(ImGui.Combo("Period",ref marketDate,"Today\0Last 7 days\0Last 30 days\0All recorded\0"))marketPage=0;if(income){ImGui.SetNextItemWidth(150);if(ImGui.Combo("Source",ref marketSource,"All sources\0Confirmed receipts\0Imported history\0Inferred sales\0"))marketPage=0;}}
-    private void DrawMarketIncome()
+    private DateTimeOffset MarketCutoff=>marketDate switch {0=>DateTimeOffset.Now.Date,1=>DateTimeOffset.UtcNow.AddDays(-7),2=>DateTimeOffset.UtcNow.AddDays(-30),_=>DateTimeOffset.MinValue};
+    private void MarketDateFilter(bool income=true)
     {
-        MarketDateFilter();ImGui.TextDisabled("Sale history");MarketHelp(marketHistoryStatus+"\nThe game supplies up to 20 recent entries per retainer. Previously recorded sales stay saved.");var rows=FilteredMarketIncome();
-        var totals=marketIncomeTotals.Get(rows,"",Environment.TickCount64,()=>(rows.Sum(x=>x.Net??0),rows.Any(x=>x.Net==null)));
-        ImGui.TextDisabled($"{rows.Length} records · confirmed net {totals.Net:N0} gil");
-        if(totals.Unverified)SettingsHelp("Imported or inferred records have no verified net amount. They are excluded from the confirmed net total. Hover a record to see its evidence.");
-        MarketPaging(rows.Length);
-        foreach(var x in rows.Skip(marketPage*80).Take(80)){
-            var name=x.Item.Length>0?x.Item:SearchItemName(x.ItemId);if(ImGui.Selectable(name+(x.Hq?" HQ":"")+"##sale"+x.Id))ImGui.SetClipboardText(name);ItemRightClick(x.ItemId);
-            var r=MarketRetainerById(x.RetainerId);
-            ImGui.TextDisabled($"{r?.Character??x.Character} · {r?.Name??x.Retainer} · {(x.Net is {} net?$"{net:N0} net":$"{x.Gross:N0} gross")} gil");
-            if(ImGui.IsItemHovered())ImGui.SetTooltip($"{DisplayTime.Local(x.At)} · {r?.World??x.World}\nQuantity: {(x.Quantity==0?"not observed":x.Quantity.ToString())}\n{x.Evidence}");
+        ImGui.SetNextItemWidth(Math.Min(150,ImGui.GetContentRegionAvail().X));
+        if(ImGui.Combo("##market-period",ref marketDate,"Today\0Last 7 days\0Last 30 days\0All recorded\0"))marketPage=0;
+        MarketHelp("Time period for the records and totals below. Today uses this computer's local date.");
+        if(income){
+            MarketSameLine(160);ImGui.SetNextItemWidth(Math.Min(160,ImGui.GetContentRegionAvail().X));
+            if(ImGui.Combo("##market-source",ref marketSource,"All sources\0Confirmed sales\0Imported history\0Inferred sales\0"))marketPage=0;
+            MarketHelp("Confirmed sales have a game-observed net amount. Imported and inferred records remain labelled by their evidence.");
         }
     }
     private void MarketPaging(int count){marketPage=Math.Clamp(marketPage,0,Math.Max(0,(count-1)/80));if(count<=80)return;if(ImGui.SmallButton("Previous")&&marketPage>0)marketPage--;ImGui.SameLine();ImGui.TextDisabled($"{marketPage+1}/{(count+79)/80}");ImGui.SameLine();if(ImGui.SmallButton("Next")&&(marketPage+1)*80<count)marketPage++;}
     private void DrawMarketSummary()
     {
-        MarketDateFilter();ImGui.TextDisabled("Sale history");MarketHelp(marketHistoryStatus+"\nThe game supplies up to 20 recent entries per retainer. Previously recorded sales stay saved.");var rows=FilteredMarketIncome();
+        var rows=FilteredMarketIncome();
         var totals=marketIncomeTotals.Get(rows,"",Environment.TickCount64,()=>(rows.Sum(x=>x.Net??0),rows.Any(x=>x.Net==null)));
         ImGui.TextUnformatted($"Confirmed net: {totals.Net:N0} gil");
-        SettingsHelp("Game sale receipts confirm net gil after fees. Recorded gross includes imported and inferred sales; hover a sale for evidence. This is revenue, not profit.");
-        ImGui.SetNextItemWidth(160);ImGui.Combo("Group",ref marketOrder,"Item\0Retainer\0Character\0World\0");
+        MarketHelp("Game sale receipts confirm net gil after fees. Recorded gross includes imported and inferred sales; hover a sale for evidence. This is revenue, not profit.\n"+marketHistoryStatus);
+        ImGui.SetNextItemWidth(160);if(ImGui.Combo("Group",ref marketOrder,"Item\0Retainer\0Character\0World\0"))marketPage=0;
         var groups=marketSummaryView.Get(rows,marketOrder.ToString(),Environment.TickCount64,()=>rows.GroupBy(x=>marketOrder switch{1=>MarketRetainerById(x.RetainerId)?.Name??x.Retainer,2=>MarketRetainerById(x.RetainerId)?.Character??x.Character,3=>MarketRetainerById(x.RetainerId)?.World??x.World,_=>(x.Item.Length>0?x.Item:SearchItemName(x.ItemId))+(x.Hq?" HQ":"")}).Select(g=>new MarketSummaryRow(g.Key,g.Sum(x=>x.Net??0),g.Sum(x=>x.Gross??0),g.Sum(x=>(long)x.Quantity),g.Count())).OrderByDescending(x=>x.Net).ThenByDescending(x=>x.Gross).ToArray());
         MarketPaging(groups.Length);
-        if(ImGui.BeginTable("marketSummary",4,ImGuiTableFlags.RowBg|ImGuiTableFlags.SizingStretchProp)){
+        if(BeginMarketRecords("marketSummary",4)){
             ImGui.TableSetupColumn("Name");ImGui.TableSetupColumn("Units");ImGui.TableSetupColumn("Recorded gross");ImGui.TableSetupColumn("Confirmed net");ImGui.TableHeadersRow();
-            foreach(var g in groups.Skip(marketPage*80).Take(80)){ImGui.TableNextRow();ImGui.TableNextColumn();ImGui.TextWrapped(g.Name);ImGui.TableNextColumn();ImGui.TextUnformatted(g.Units.ToString("N0"));ImGui.TableNextColumn();ImGui.TextUnformatted(g.Gross.ToString("N0"));ImGui.TableNextColumn();ImGui.TextUnformatted(g.Net.ToString("N0"));}ImGui.EndTable();
+            foreach(var g in groups.Skip(marketPage*80).Take(80)){ImGui.TableNextRow();ImGui.TableNextColumn();ImGui.TextUnformatted(g.Name);MarketHelp(g.Name+$"\n{g.Count} sale records");ImGui.TableNextColumn();ImGui.TextUnformatted(g.Units.ToString("N0"));ImGui.TableNextColumn();ImGui.TextUnformatted(g.Gross.ToString("N0"));ImGui.TableNextColumn();ImGui.TextUnformatted(g.Net.ToString("N0"));}ImGui.EndTable();
         }
-    }
-    private void DrawMarketSpending()
-    {
-        MarketDateFilter(false);var cutoff=marketDate switch{0=>DateTimeOffset.Now.Date,1=>DateTimeOffset.UtcNow.AddDays(-7),2=>DateTimeOffset.UtcNow.AddDays(-30),_=>DateTimeOffset.MinValue};
-        var rows=marketExpenseView.Get(marketLedger.Expenses,MarketViewStamp,Environment.TickCount64,()=>(marketLedger.Expenses??[]).Where(x=>x.At>=cutoff&&MatchesMarketItem(x.ItemId,SearchItemName(x.ItemId))&&(marketCharacter.Length==0||x.Character==marketCharacter)&&(marketWorldFilter.Length==0||x.World==marketWorldFilter)&&(marketPerson.Length==0&&marketAccount.Length==0||marketLedger.Retainers.Any(r=>r.CharacterId==x.CharacterId&&(marketPerson.Length==0||r.Person==marketPerson)&&(marketAccount.Length==0||r.Account==marketAccount)))).OrderByDescending(x=>x.At).ToArray());
-        var spent=marketExpenseTotal.Get(rows,"",Environment.TickCount64,()=>rows.Sum(x=>x.Price*x.Quantity+x.Tax));
-        ImGui.TextUnformatted($"Market purchases: {spent:N0} gil including recorded tax");
-        SettingsHelp("Confirmed purchases recorded while this tool is enabled. Not assigned automatically to crafts or resale stock; historical, vendor and gathered material costs may be missing.");
-        if(marketRetainerFilter.Length>0)ImGui.TextDisabled("Retainer filter does not apply to character purchases.");
-        MarketPaging(rows.Length);foreach(var x in rows.Skip(marketPage*80).Take(80)){ImGui.TextUnformatted(SearchItemName(x.ItemId)+(x.Hq?" HQ":""));ItemRightClick(x.ItemId);ImGui.TextDisabled($"{x.Character} · {x.World} · {x.Quantity} × {x.Price:N0} + {x.Tax:N0} tax");if(ImGui.IsItemHovered())ImGui.SetTooltip(DisplayTime.Local(x.At));}
-    }
-    private void DrawMarketChanges()
-    {
-        foreach(var x in marketLedger.Prices.Reverse().Where(x=>MatchesMarketItem(x.ItemId,x.Item)&&(MarketRetainerById(x.RetainerId) is {} r&&MatchesMarket(r))).Take(200)){
-            ImGui.TextUnformatted($"{x.Retainer} · {x.Item} · {x.Result}");ItemRightClick(x.ItemId);
-            ImGui.TextDisabled($"{x.Before:N0} → {(x.After is {} p?p.ToString("N0"):"kept")} gil");if(ImGui.IsItemHovered())ImGui.SetTooltip($"{DisplayTime.Local(x.At)}\n{x.Reason}");
-        }
-        ImGui.TextDisabled("Latest 200 shown; export includes the retained 2,000 price checks.");
     }
     private void DrawMarketFiles()
     {
+        if(ImGui.CollapsingHeader("Export & backup",ImGuiTreeNodeFlags.DefaultOpen)){
         ImGui.BeginDisabled(marketExport!=null);
-        if(ImGui.Button("Export filtered sales CSV")){var rows=FilteredMarketIncome();var folder=Path.Combine(Pi.GetPluginConfigDirectory(),"exports");marketExport=Task.Run(()=>{Directory.CreateDirectory(folder);var path=Path.Combine(folder,"Equinox-Market-sales-"+DateTime.Now.ToString("yyyyMMdd-HHmmss")+".csv");File.WriteAllText(path,MarketAccounting.Export(rows));return path;});}
-        if(ImGui.Button("Export full market backup")){var ledger=marketLedger;var folder=Path.Combine(Pi.GetPluginConfigDirectory(),"exports");marketExport=Task.Run(()=>{Directory.CreateDirectory(folder);var path=Path.Combine(folder,"Equinox-Market-"+DateTime.Now.ToString("yyyyMMdd-HHmmss")+".json");File.WriteAllText(path,System.Text.Json.JsonSerializer.Serialize(ledger));return path;});}
-        ImGui.EndDisabled();if(ImGui.Button("Open export folder"))OpenDiagnosticFolder(Path.Combine(Pi.GetPluginConfigDirectory(),"exports"));
+        if(ImGui.Button("Sales CSV")){var rows=FilteredMarketIncome();var folder=Path.Combine(Pi.GetPluginConfigDirectory(),"exports");marketExport=Task.Run(()=>{Directory.CreateDirectory(folder);var path=Path.Combine(folder,"Equinox-Market-sales-"+DateTime.Now.ToString("yyyyMMdd-HHmmss")+".csv");File.WriteAllText(path,MarketAccounting.Export(rows));return path;});}
+        MarketHelp("Export the Sales tab’s current filters and time period as CSV.");MarketSameLine(140);
+        if(ImGui.Button("Full backup")){var ledger=marketLedger;var folder=Path.Combine(Pi.GetPluginConfigDirectory(),"exports");marketExport=Task.Run(()=>{Directory.CreateDirectory(folder);var path=Path.Combine(folder,"Equinox-Market-"+DateTime.Now.ToString("yyyyMMdd-HHmmss")+".json");File.WriteAllText(path,System.Text.Json.JsonSerializer.Serialize(ledger));return path;});}
+        MarketHelp("Export all locally recorded retainers, listings, sales, purchases and price checks as JSON.");
+        ImGui.EndDisabled();MarketSameLine(150);if(ImGui.Button("Open export folder"))OpenDiagnosticFolder(Path.Combine(Pi.GetPluginConfigDirectory(),"exports"));
+        }
         if(ImGui.CollapsingHeader("Import Allagan Market sales")){
-            ImGui.TextWrapped("Export Sale History as CSV in Allagan Market, then choose its full file path here. Timestamps use this computer’s local timezone. Existing records are kept.");
-            ImGui.SetNextItemWidth(-1);ImGui.InputTextWithHint("##allagancsv","CSV file path",ref marketImportPath,1024);
+            ImGui.SetNextItemWidth(-1);ImGui.InputTextWithHint("##allagancsv","CSV file path",ref marketImportPath,1024);MarketHelp("Export Sale History as CSV in Allagan Market, then paste the full file path here. Timestamps use this computer’s local timezone. Existing records are kept.");
             ImGui.BeginDisabled(marketImport!=null);if(ImGui.Button("Import sales history"))ImportAllaganSales();ImGui.EndDisabled();
         }
         if(marketFileStatus.Length>0)ImGui.TextWrapped(marketFileStatus);

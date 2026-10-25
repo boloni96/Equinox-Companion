@@ -1,4 +1,4 @@
-# Equinox Market & Seller — 0.5.1.243 test build
+# Equinox Market & Seller — verification checklist
 
 Optional local tools, disabled by default. Open `/eqmarket` or `/eqseller` and enable them. The Options launcher and Settings → Market lead to the same controls. Both appearance styles use the same implementation. Closing a window does not stop a run: use **Stop** or `/eqseller stop`.
 
@@ -108,3 +108,19 @@ In-game checks for this update:
 Automated checks do not replace these native in-game tests. Garden detection and mapping paths are unchanged.
 
 Upstream contracts checked: [suppression API](https://github.com/PunishXIV/AutoRetainerAPI/blob/main/AutoRetainerAPI/AutoRetainerApi.cs), [AutoRetainer scheduling](https://github.com/PunishXIV/AutoRetainer/blob/master/AutoRetainer/Scheduler/SchedulerMain.cs), [busy-state API](https://github.com/PunishXIV/AutoRetainer/blob/master/AutoRetainer/Modules/EzIPCManagers/IPC_PluginState.cs), and [busy-state sources](https://github.com/PunishXIV/AutoRetainer/blob/master/AutoRetainer/Helpers/Utils.cs).
+
+
+## 0.5.1.247: consistent tables and status explanations
+
+Sales, Spending and Price changes use compact, resizable tables like Retainers and Summary. Search, person/account/character/world filters and period controls stay above the scrolling records. Table headings stay visible. Selling groups retainers under one character heading, preserves game retainer order, and uses the displayed character group when opening Seller. Narrow windows put secondary price/status details in hover text. Item names copy on click and retain their right-click actions. Price checks distinguish confirmed updates, suggestions, kept prices and skipped checks; gross amounts are never labelled as confirmed net. Files groups export/backup and import, and Settings remains the last tab.
+
+Hover the native retainer list's selling count, or a retainer/status inside Equinox Market, to see the affected items and their actual reasons. Unknown data, an expired live comparison, changed listings, old background data, exclusions and skipped checks are explained. Skipped checks have their own label; a single update uses the singular. Native hover reads only the visible row and builds its explanation only while hovered; it does not change the game's UI events or pricing automation.
+
+Checks in both Goddess and classic designs:
+- Resize Market to its minimum width; use every tab, filters, pagination and scrolling. Headers and controls must remain accessible, and full clipped names/reasons must be readable on hover.
+- In Sales/Spending, click an item name to copy it and right-click for item actions. Hover amounts for evidence, tax or gross/net detail.
+- In Price changes, confirm Updated is reserved for confirmed writes; competitive prices say Kept and unapplied targets say Suggested.
+- Selling and Retainers retain game order within each character. Open Seller selects the displayed retainers of that character, not only the first one.
+- With Market closed, hover the game's selling count. Verify unchecked/skipped reasons and affected item names. Move or scale the game window, cover it with another window, and close the bell; the tooltip must follow the current native row and disappear when no longer hovered.
+
+The 246 diagnostic run completed all ten retainers (51 confirmed updates, 16 skips), restored AutoRetainer suppression, and captured all 20 native sale records on several retainers. This update changes presentation/reporting and leaves comparison, pricing, AutoRetainer handoff and garden detection paths intact.
