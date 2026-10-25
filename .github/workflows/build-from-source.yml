@@ -2,7 +2,7 @@ name: Build and verify Companion source
 on:
   push:
     branches: [main, fix/followthem-75, feature/equinox-helper-80, feature/equinox-helper-85]
-    paths: ['src/**', 'tests/**', 'native-tests/**', 'scripts/publish_source.py', '.github/workflows/build-from-source.yml']
+    paths: ['src/**', 'tests/**', 'native-tests/**', 'market-tests/**', 'scripts/publish_source.py', '.github/workflows/build-from-source.yml']
   workflow_dispatch:
 permissions:
   contents: write
@@ -32,6 +32,8 @@ jobs:
         run: dotnet run --project tests/GateTests.csproj -c Release
       - name: Verify native garden text decoding
         run: dotnet run --project native-tests/NativeTextTests.csproj -c Release
+      - name: Verify market pricing and cancellation
+        run: dotnet run --project market-tests/SellerTests.csproj -c Release
       - name: Build plugin
         run: dotnet build src/EquinoxCompanion.csproj -c Release -p:RestoreLockedMode=true
       - name: Package verified build

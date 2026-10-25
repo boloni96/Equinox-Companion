@@ -58,6 +58,8 @@ public sealed partial class Plugin
   Row("Testing checklist","/eqtests · /equinox tests","adventure",OpenTesting,testingWindow.IsOpen);
   Row("Adventure","/adventure","adventure",OpenAdventure,adventureWindow.IsOpen);
   Row("Where is it cheapest?","/whereischeap","market-search",()=>OpenMarketSearch(""),marketWindow.IsOpen);
+  Row("Equinox Market","/eqmarket · listings, history and earnings","market-search",OpenEquinoxMarket,equinoxMarketWindow.IsOpen);
+  if(config.Seller.Enabled)Row("Equinox Seller","/eqseller · check and update retainer prices","market-search",OpenEquinoxSeller,sellerWindow.IsOpen);
   Row("Do I already have it?","/doihaveit","item-search",()=>OpenItemSearch(""),itemSearchWindow.IsOpen);
   Row("Housing bids","/bid","housing-bids",OpenBidSearch,bidWindow.IsOpen);
   ImGui.Separator();

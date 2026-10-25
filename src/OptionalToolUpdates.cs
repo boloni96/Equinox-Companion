@@ -6,6 +6,7 @@ public sealed partial class Plugin
     private Dictionary<string,Action<DateTimeOffset>>? optionalToolUpdates;
     private bool OptionalToolHasWork(string name)=>name switch
     {
+        "Equinox Market"=>true,
         "Camera"=>config.RememberCameraHeight||cameraHeightDefaultPending,
         "QuickLoot"=>config.EnableQuickLoot,
         "Coffer markers"=>config.EnableCofferMarkers,
@@ -22,6 +23,7 @@ public sealed partial class Plugin
         if(optionalToolRetry.TryGetValue(name,out var retry)&&now<retry)return;
         optionalToolUpdates??=new()
         {
+            ["Equinox Market"]=UpdateEquinoxMarket,
             ["Camera"]=UpdateCameraTool,["QuickLoot"]=UpdateQuickLoot,["Coffer markers"]=UpdateCofferMarkers,
             ["Follow portals"]=UpdatePortalTool,["Quest Helper"]=UpdateHelper,
             ["FollowThem"]=UpdateFollowThem,["Follow movement"]=UpdateFollowMovementTool

@@ -38,6 +38,7 @@ public sealed partial class Plugin
         {
             SettingsSection("Appearance",DrawAppearanceSettings);
             SettingsSection("Optional tools",DrawFeatureSettings);
+            SettingsSection("Market",DrawSellerSettings);
             SettingsSection("Camera",DrawCameraHeightSettings);
             SettingsSection("Tracking",DrawGeneralSettings);
             SettingsSection("Chat",DrawChatMessageSettings);
@@ -99,6 +100,8 @@ public sealed partial class Plugin
     private void DrawFeatureSettings()
     {
         ImGui.TextUnformatted("Tools on this computer");
+        MessageToggle("Enable Equinox Market & Seller",config.Seller.Enabled,SetMarketEnabled);
+        SettingsHelp("Retainer listings, sales and an optional price updater. Opening a bell never starts price changes. Settings and records stay on this computer.");
         SettingsHelp("These tools are optional and local to this computer. Disabling one keeps its settings. Core character, house and garden tracking is controlled separately under Tracking.");
         MessageToggle("Enable QuickLoot",config.EnableQuickLoot,v=>{
             config.EnableQuickLoot=v;

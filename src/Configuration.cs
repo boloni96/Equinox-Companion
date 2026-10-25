@@ -3,6 +3,7 @@ namespace EquinoxCompanion;
 [Serializable]
 public sealed class Configuration : IPluginConfiguration
 {
+    public SellerSettings Seller { get; set; } = new();
     public AppearancePreference Appearance { get; set; } = new();
     public string CompanionSection { get; set; } = "housing";
     public bool CompanionMenuCollapsed { get; set; }

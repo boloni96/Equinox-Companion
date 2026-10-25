@@ -46,6 +46,8 @@ jobs:
           "DALAMUD_HOME=$refs" >> $env:GITHUB_ENV
       - name: Run transition tests
         run: dotnet run --project tests/GateTests.csproj -c Release
+      - name: Verify market pricing and cancellation
+        run: dotnet run --project market-tests/SellerTests.csproj -c Release
       - name: Build plugin
         run: dotnet build src/EquinoxCompanion.csproj -c Release -p:RestoreLockedMode=true
       - name: Package install ZIP and repository list
