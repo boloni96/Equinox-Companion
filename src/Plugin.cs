@@ -247,6 +247,7 @@ public sealed partial class Plugin : IDalamudPlugin
         fashionCommandRegistered = Commands.AddHandler("/fashionr", new CommandInfo(OnFashionCommand) { HelpMessage = "Open the current Fashion Report V1 picture in game." });
         if (!fashionCommandRegistered) Log.Warning("/fashionr is already registered by another plugin. Use /equinox fashion instead.");
         InitializeMarketSearch();
+        InitializeEquinoxMarket();
         InitializeBidSearch();
         InitializeAdventures();
         InitializeTesting();
@@ -289,6 +290,8 @@ public sealed partial class Plugin : IDalamudPlugin
     private void OnCommand(string command, string args)
     {
         if(args.Trim().Equals("tests",StringComparison.OrdinalIgnoreCase)){OpenTesting();return;}
+        if(args.Trim().Equals("market",StringComparison.OrdinalIgnoreCase)){OpenEquinoxMarket();return;}
+        if(args.Trim().Equals("seller",StringComparison.OrdinalIgnoreCase)){OpenEquinoxSeller();return;}
         if(args.Trim().Equals("adventure",StringComparison.OrdinalIgnoreCase)){OpenAdventure();return;}
         if(args.Trim().Equals("bid",StringComparison.OrdinalIgnoreCase)){OpenBidSearch();return;}
         if(args.Trim().Equals("cheap",StringComparison.OrdinalIgnoreCase) || args.Trim().StartsWith("cheap ",StringComparison.OrdinalIgnoreCase)){OpenMarketSearch(args.Trim()[5..].Trim());return;}
@@ -359,6 +362,7 @@ public sealed partial class Plugin : IDalamudPlugin
         TrackPerformance("sync queue", perf);
         perf = System.Diagnostics.Stopwatch.GetTimestamp();
         UpdateSharedRoster(now);
+        RunOptionalTool("Equinox Market",now);
         UpdateAdventure();
         UpdateTesting(now);
         UpdateShoppingTravel(now);
@@ -1092,6 +1096,7 @@ public sealed partial class Plugin : IDalamudPlugin
         using (new EquinoxAppearance(GoddessAppearance))
         {
             windows.Draw();
+            DrawSellerToolbar();
             DrawPluginItemPopup();
         }
         // The actual welcome always wears Goddess blue; other windows use the saved choice.
@@ -1250,6 +1255,7 @@ public sealed partial class Plugin : IDalamudPlugin
 
     public void Dispose()
     {
+        DisposeEquinoxMarket();
         if (titleLoginProbe.Active) StopTitleLoginCheck("Login check stopped because Companion is unloading.");
         DisposeMaintenanceNotices();
         CancelMarketShopping();

@@ -31,6 +31,8 @@ public sealed partial class Plugin
         minimizedLaunchers.Add(name);
         if(name == "Companion") { mainWindow.IsOpen=false; visible=false; }
         else if(name == "Where is it cheapest?") marketWindow.IsOpen=false;
+        else if(name=="Equinox Market")equinoxMarketWindow.IsOpen=false;
+        else if(name=="Equinox Seller")sellerWindow.IsOpen=false;
         else if(name == "Do I already have it?") itemSearchWindow.IsOpen=false;
         else if(name == "Fashion Report") fashionWindow.IsOpen=false;
         else if(name=="Planting")plantingWindow.IsOpen=false;
@@ -55,6 +57,10 @@ public sealed partial class Plugin
     }
     private void DrawFloatingLaunchers()
     {
+        if(equinoxMarketWindow.IsOpen)minimizedLaunchers.Remove("Equinox Market");
+        if(sellerWindow.IsOpen)minimizedLaunchers.Remove("Equinox Seller");
+        DrawLauncher("Equinox Market",10,"garden-art/assets/category-icons/market-search.png");
+        DrawLauncher("Equinox Seller",11,"garden-art/assets/category-icons/market-search.png");
         if(mainWindow.IsOpen) minimizedLaunchers.Remove("Companion");
         if(fashionWindow.IsOpen) minimizedLaunchers.Remove("Fashion Report");
         if(plantingWindow.IsOpen) minimizedLaunchers.Remove("Planting");
@@ -81,6 +87,8 @@ public sealed partial class Plugin
             if(minimizedLaunchers.Contains(pending))
             {
                 if(pending=="Where is it cheapest?")marketWindow.IsOpen=true;
+                else if(pending=="Equinox Market")OpenEquinoxMarket();
+                else if(pending=="Equinox Seller")OpenEquinoxSeller();
                 else if(pending=="Do I already have it?")itemSearchWindow.IsOpen=true;
                 else if(pending=="Testing")OpenTesting();
                 else if(pending=="Adventure")OpenAdventure();
@@ -169,7 +177,7 @@ public sealed partial class Plugin
     private void DrawFloatingLauncherSettings()
     {
         SettingsHelp("Use the native title-bar collapse triangle or double-click the title bar to minimize to an icon. Single-click reopens its window; double-click closes both. Esc minimizes the focused window to its icon. X closes without an icon. Commands reopen windows. Drag icons to move them.",false);
-        var names = new[] { "Companion", "Fashion Report", "Planting", "Welcome", "New Character", "Do I already have it?", "Where is it cheapest?", "Adventure", "Housing bids", "Testing" };
+        var names = new[] { "Companion", "Fashion Report", "Planting", "Welcome", "New Character", "Do I already have it?", "Where is it cheapest?", "Adventure", "Housing bids", "Testing", "Equinox Market", "Equinox Seller" };
         for (var i = 0; i < names.Length; i++) { ImGui.PushID(i); if(ImGui.CollapsingHeader(names[i]=="Planting"?"Gardening":names[i]))DrawLauncherOptions(names[i], LauncherOptions(names[i], i)); ImGui.PopID(); }
     }
 }

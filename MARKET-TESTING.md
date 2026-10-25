@@ -1,0 +1,60 @@
+# Equinox Market & Seller — 0.5.1.243 test build
+
+Optional local tools, disabled by default. Open `/eqmarket` or `/eqseller` and enable them. The Options launcher and Settings → Market lead to the same controls. Both appearance styles use the same implementation. Closing a window does not stop a run: use **Stop** or `/eqseller stop`.
+
+## Included
+
+- Compact Seller window at the summoning-bell retainer list, with a direct settings button and current/selected/all-retainer scopes for the current character. Check prices does not submit changes; Update prices checks again and applies the snapshotted rules.
+- Stack and undercut toolbar attached above the native selling list, or movable. Stack limits affect new listings only.
+- Matching HQ/NQ unit prices, known own-retainer exclusion, configurable minimums, item exclusions, undercut, rounding and low-price-gap rule. The default 40% rule uses 250,000 from 100,000 / 250,000 / 260,000, then subtracts one gil.
+- A successful empty comparison can use recent matching sales. Default: median, seven-day age limit, at least three sales, 50% median outlier filter. Failed or insufficient comparisons keep the existing price.
+- Manual comparison click-to-price, optional click-to-confirm/copy, Shift bypass, Ctrl clipboard price, Alt history toggle.
+- Selling and Retainers highlight priorities, show character/world and reuse the existing account-aware character switch controls. The optional top-bar count opens Selling; right-click opens settings.
+- Adjustable six-day visit reminders use actual observed retainer interactions. They are a precaution, not an officially verified expiry or proof that selling has stopped. Background checks never reset visits.
+- Listing snapshots, observed sale receipts, confirmed market purchases, filtered summaries, price-change audit, CSV export, full JSON backup and Allagan Market sale-history CSV import.
+- Background Universalis checks batch up to 50 distinct items per world, one request at a time. Default: 15-minute refresh and maximum data age of 60 minutes. They run with Market/Seller windows closed, yield to active gameplay uploads and Seller runs, and back off on errors/rate limits. Known retainer names are excluded on their own world. This is cached advice, never the source for an automatic price submission.
+- Red means update suggested; green means checked and competitive; amber means history-based or skipped; blue means checking. Checks expire after five minutes.
+- Marketbuddy's lock and AutoRetainer's published busy/pause APIs prevent simultaneous repricing. Missing compatibility APIs stop the run rather than continue concurrently.
+
+## Accounting boundaries
+
+Listed value is an asking value. Confirmed net revenue comes only from supported game sale receipts. Offline stock disappearance with a matching retainer gil increase is explicitly **inferred**, without a confirmed net amount or exact sale time. Withdrawals alone never count as sales. Imported history has gross values but no verified net amount. Use the Source filter to distinguish them; imported and native records are not assumed to identify the same transaction. Reimporting the same CSV does not duplicate its rows, including multiple identical sales within one second.
+
+Purchase spending records completed market purchases, including the reported tax. It is not yet assigned to individual resale lots or crafting recipes. Vendor purchases, gathered materials, crystals, shared stock transfers, old inventory and intermediate crafts are not automatically costed. Profit therefore is not claimed.
+
+Records currently stay on this computer in `market-ledger.json`, with a previous-file backup and background writes. They are separate from gameplay observations and the Journal's sync queue. A read failure preserves the file and pauses tracking. Exported sales and backup files are available through **Files → Open export folder**.
+
+## In-game checklist — pending
+
+Use **Check prices** first, then test a single inexpensive listing before an all-retainer update.
+
+- [ ] Disabled tool leaves native selling behavior unchanged.
+- [ ] Enable and open bell: Seller appears; closing it does not disable tracking.
+- [ ] Attached toolbar stays above the selling list at the current game UI scale; movable mode remembers its position.
+- [ ] New listing stack size 1 / 99 works; repricing an existing stack never changes its quantity.
+- [ ] Check prices traverses the chosen retainers, records each listing and performs no confirmations.
+- [ ] Single-retainer Update prices applies the reviewed unit-price rule, then observes the price in the list before continuing.
+- [ ] HQ and NQ comparisons remain separate. Known own listings are excluded.
+- [ ] Empty market loads history; busy/failed comparisons keep the old price and record a reason.
+- [ ] Pause submits nothing; Resume refreshes comparisons; Stop submits no later price and leaves the current window available.
+- [ ] Changing the item/quantity while paused stops the run without dismissing the changed editor. Logging out or changing worlds stops it.
+- [ ] Manual comparison click selects the displayed price; Shift/Ctrl/Alt behavior matches settings. Clipboard paste does not confirm a listing.
+- [ ] Top-bar click opens Selling; right-click opens settings. Retainer priority order, visits and existing character-switch/account confirmation work correctly.
+- [ ] A retainer visit clears its visit reminder without changing listing observation timestamps. Empty retainers receive no visit reminder.
+- [ ] Background checks use each retainer’s home world, distinguish HQ/NQ, exclude known own retainers, and do not turn old/missing/error data green. Tooltips show the upload time, not just the retrieval time.
+- [ ] Highlight colors survive native list refreshes and restore when disabled. Hover reasons in Market match the item.
+- [ ] AutoRetainer busy state blocks Seller; a completed/stopped run restores its previous pause state. Marketbuddy does not also alter prices.
+- [ ] A confirmed market purchase appears once under Spending with quantity, unit cost and tax. Failed/cancelled purchases do not appear.
+- [ ] A supported sale message adds its actual net amount once; an unobserved retainer/quantity remains labelled unknown. Verify receipt parsing on the installed game build.
+- [ ] CSV import, reimport, filtered export and backup succeed without freezing the game. Net totals exclude inferred/imported amounts.
+- [ ] Goddess and classic designs remain usable at minimum size; both windows minimize and reopen through their icons.
+
+## Automated verification
+
+`market-tests/SellerTests.csproj` covers pricing boundaries, freshness, failed requests, history filtering, stop/pause transitions, changed listings, confirmation timeouts, offline accounting and CSV import identity. Existing transition and native garden regressions also run. These tests and a successful build do not replace the pending native in-game checks above.
+
+Live Universalis access from the build environment returned HTTP 403, so the network contract is covered with documented-schema fixtures; actual connectivity must be checked in-game. The game UI click paths and installed sale-message templates are also pending in-game verification.
+
+## Cost tracking next
+
+The next accounting step is allocating observed purchase lots to resale stock, then recording confirmed recipe consumption/output and allowing manual missing costs. A cost-complete sale can show profit; incomplete allocations must remain marked unknown. Shared transfers need their own provenance before carrying costs between characters or persons.
