@@ -37,10 +37,18 @@ public sealed partial class Plugin
                     var r=native==null?null:MarketRetainerById(native->RetainerId);
                     var states=r?.Stock.Select(x=>ReviewFor(r.Id,x.Slot)).ToArray()??[];
                     var needed=states.Count(x=>x.NeedsAttention);
-                    var status=AggregateMarketStatus(states.Select(x=>x.VisualStatus).ToArray());
+                    var status=needed>0?SellerStatus.Update:AggregateMarketStatus(states.Select(x=>x.VisualStatus).ToArray());
                     var total=native==null?r?.Stock.Length??0:native->MarketItemCount;
-                    var replacement=enabled&&addon->IsVisible&&r!=null?$"{needed}/{total}"+(states.Any(x=>x.Status==SellerStatus.Unknown)||r.Stock.Length!=total?" ?":""):null;
+                    var uncertain=states.Any(x=>x.Status==SellerStatus.Unknown)||r==null||r.Stock.Length!=total;
+                    var replacement=enabled&&addon->IsVisible?SellerLabels.Selling(total,needed,uncertain):null;
                     PaintMarketText(text,replacement,status,saved,live);
+                    // Find the actual retainer name in this row rather than
+                    // guessing a text-node ID shared with another game layout.
+                    if(row->UldManager.NodeList!=null)for(var n=0;n<Math.Min(64,(int)row->UldManager.NodeListCount);n++){
+                        var node=row->UldManager.NodeList[n];if(node==null||node->Type!=NodeType.Text||node==(AtkResNode*)text)continue;
+                        var nameText=(AtkTextNode*)node;var plain=TravelMenuText(nameText->NodeText.StringPtr);
+                        if(native!=null&&plain==native->NameString)PaintMarketText(nameText,enabled&&addon->IsVisible&&total>0?plain:null,status,saved,live);
+                    }
                 }else{
                     var text=row->GetTextNodeById(3);if(text==null)continue;
                     var slot=ReadMarketDisplaySlot(addon,index);

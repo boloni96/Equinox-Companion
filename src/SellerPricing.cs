@@ -8,6 +8,7 @@ public sealed class SellerSettings
 {
     public bool Enabled { get; set; }
     public bool OpenAtBell { get; set; } = true;
+    public bool CloseAtBell { get; set; } = true;
     public bool ShowToolbar { get; set; } = true;
     public bool ToolbarOnTop { get; set; } = true;
     public bool Highlights { get; set; } = true;
