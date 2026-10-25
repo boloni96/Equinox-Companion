@@ -19,7 +19,7 @@ public static class SyncValidation
             newer.At > e.At && CanSend(newer, now));
     public static bool SupportedByWebsite(SyncEvent e,int version) => SupportedByWebsite(e.Kind,version) &&
         (e.Kind!="housing.lottery"||(e.Lottery?.Evidence switch {"refund-receipt"=>version>=23,"manual-refund"=>version>=22,_=>true}));
-    public static bool SupportedByWebsite(string kind, int version) => kind == "house.shared-estates" ? version >= 21 : kind is "housing.lottery" or "housing.lottery-result" ? version >= 19 : kind == "garden.batch-order" ? version >= 15 : kind == "character.registered" ? version >= 14 : kind == "submarines.supplies" ? version >= 13 : kind == "garden.plan" ? version >= 12 : kind is "garden.status" or "garden.status.unmapped" ? version >= 11 : kind is "garden.empty.unmapped" or "garden.mapped" ? version >= 10 : kind == "garden.dead" ? version >= 9 : kind == "submarines.cached" ? version >= 7 : kind == "garden.fertilized" ? version >= 6 : kind == "company.observed" ? version >= 4 : kind == "storage.observed" ? version >= 18 : kind == "submarines.observed" ? version >= 16 : version >= 2 ||
+    public static bool SupportedByWebsite(string kind, int version) => kind == "market.retainers" ? version >= 25 : kind == "house.shared-estates" ? version >= 21 : kind is "housing.lottery" or "housing.lottery-result" ? version >= 19 : kind == "garden.batch-order" ? version >= 15 : kind == "character.registered" ? version >= 14 : kind == "submarines.supplies" ? version >= 13 : kind == "garden.plan" ? version >= 12 : kind is "garden.status" or "garden.status.unmapped" ? version >= 11 : kind is "garden.empty.unmapped" or "garden.mapped" ? version >= 10 : kind == "garden.dead" ? version >= 9 : kind == "submarines.cached" ? version >= 7 : kind == "garden.fertilized" ? version >= 6 : kind == "company.observed" ? version >= 4 : kind == "storage.observed" ? version >= 18 : kind == "submarines.observed" ? version >= 16 : version >= 2 ||
         kind is "house.entered" or "garden.tended" or "garden.ready" or "garden.observed" or "garden.planted" or "house.discovered" or "character.updated";
     private static bool Text(string? s) => !string.IsNullOrWhiteSpace(s) && s.Length <= 100;
     public static bool ActorReady(Actor? a) => a is not null &&
@@ -49,6 +49,7 @@ public static class SyncValidation
         }
         if (!Regex.IsMatch(e.Id ?? "", "^[a-f0-9]{32}$")) return "Invalid event identifier.";
         if (e.At.Year < 2020 || e.At > now.AddMinutes(5)) return "Invalid event timestamp or clock ahead.";
+        if (e.Kind == "market.retainers") return "Incomplete or invalid retainer selling-list observation.";
         if (e.Kind == "character.updated") return "Incomplete character/job/FC details.";
         if (e.Kind == "company.observed") return "Incomplete or invalid FC identity/profile details.";
         if (e.Address is null) return "Missing estate address.";
@@ -57,6 +58,7 @@ public static class SyncValidation
     public static bool CanSend(SyncEvent e, DateTimeOffset now)
     {
         if (!Regex.IsMatch(e.Id ?? "", "^[a-f0-9]{32}$") || !ActorReady(e.Actor) || e.At.Year < 2020 || e.At > now.AddMinutes(5)) return false;
+        if(e.Kind=="market.retainers")return e.Address is null && RetainerMarketSnapshot.Valid(e.Market,now);
         if(e.Kind=="house.shared-estates")return e.Address is null && e.SharedEstates is {Evidence:"shared-estate-slots",Houses:{Length:<=2}} shared && shared.Houses.Select(h=>h.HouseId).Distinct().Count()==shared.Houses.Length && shared.Houses.All(h=>h is {Apartment:false,Workshop:false,Room:0,Plot:>=1 and <=60,Ward:>=1 and <=60} && h.WorldId==e.Actor.HomeWorldId && h.TerritoryTypeId>0 && Regex.IsMatch(h.HouseId,"^[A-F0-9]{16}$") && Text(h.WorldName) && Text(h.DistrictName));
         if (e.Kind == "housing.lottery-result") return e.Address is null && HousingLottery.ValidResult(e.LotteryResult,e.At);
         if (e.Kind == "housing.lottery") return e.Address is null && HousingLottery.Valid(e.Lottery);

@@ -16,6 +16,7 @@ public sealed class SellerSettings
     public bool VisitReminders { get; set; } = true;
     public int VisitReminderDays { get; set; } = 6;
     public bool BackgroundChecks { get; set; } = true;
+    public bool SyncToJournal { get; set; } = true;
     public int BackgroundIntervalMinutes { get; set; } = 15;
     public int BackgroundMaxAgeMinutes { get; set; } = 60;
     public bool OpenCompare { get; set; } = true;
