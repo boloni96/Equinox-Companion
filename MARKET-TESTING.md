@@ -6,13 +6,13 @@ Optional local tools, disabled by default. Open `/eqmarket` or `/eqseller` and e
 
 - Compact Seller window at the summoning-bell retainer list, with a direct settings button and current/selected/all-retainer scopes for the current character. Check prices does not submit changes; Update prices checks again and applies the snapshotted rules.
 - Stack and undercut toolbar attached above the native selling list, or movable. Stack limits affect new listings only.
-- Matching HQ/NQ unit prices, known own-retainer exclusion, configurable minimums, item exclusions, undercut, rounding and low-price-gap rule. The default 40% rule uses 250,000 from 100,000 / 250,000 / 260,000, then subtracts one gil.
+- Matching HQ/NQ unit prices, exact known own-retainer price matching, configurable minimums, item exclusions, undercut, rounding and low-price-gap rule. The default 40% rule uses 250,000 from 100,000 / 250,000 / 260,000, then subtracts one gil.
 - A successful empty comparison can use recent matching sales. Default: median, seven-day age limit, at least three sales, 50% median outlier filter. Failed or insufficient comparisons keep the existing price.
 - Manual comparison click-to-price, optional click-to-confirm/copy, Shift bypass, Ctrl clipboard price, Alt history toggle.
 - Selling and Retainers highlight priorities, show character/world and reuse the existing account-aware character switch controls. The optional top-bar count opens Selling; right-click opens settings.
 - Adjustable six-day visit reminders use actual observed retainer interactions. They are a precaution, not an officially verified expiry or proof that selling has stopped. Background checks never reset visits.
 - Listing snapshots, observed sale receipts, confirmed market purchases, filtered summaries, price-change audit, CSV export, full JSON backup and Allagan Market sale-history CSV import.
-- Background Universalis checks batch up to 50 distinct items per world, one request at a time. Default: 15-minute refresh and maximum data age of 60 minutes. They run with Market/Seller windows closed, yield to active gameplay uploads and Seller runs, and back off on errors/rate limits. Known retainer names are excluded on their own world. This is cached advice, never the source for an automatic price submission.
+- Background Universalis checks batch up to 50 distinct items per world, one request at a time. Default: 15-minute refresh and maximum data age of 60 minutes. They run with Market/Seller windows closed, yield to active gameplay uploads and Seller runs, and back off on errors/rate limits. Known retainer names are matched on their own world without undercutting. This is cached advice, never the source for an automatic price submission.
 - Red means update suggested; green means checked and competitive; amber means history-based or skipped; blue means checking. Checks expire after five minutes.
 - Marketbuddy's lock and AutoRetainer's published busy/pause APIs prevent simultaneous repricing. Missing compatibility APIs stop the run rather than continue concurrently.
 
@@ -34,14 +34,14 @@ Use **Check prices** first, then test a single inexpensive listing before an all
 - [ ] New listing stack size 1 / 99 works; repricing an existing stack never changes its quantity.
 - [ ] Check prices traverses the chosen retainers, records each listing and performs no confirmations.
 - [ ] Single-retainer Update prices applies the reviewed unit-price rule, then observes the price in the list before continuing.
-- [ ] HQ and NQ comparisons remain separate. Known own listings are excluded.
+- [ ] HQ and NQ comparisons remain separate. A lowest known own listing is matched exactly, including tied external offers.
 - [ ] Empty market loads history; busy/failed comparisons keep the old price and record a reason.
 - [ ] Pause submits nothing; Resume refreshes comparisons; Stop submits no later price and leaves the current window available.
 - [ ] Changing the item/quantity while paused stops the run without dismissing the changed editor. Logging out or changing worlds stops it.
 - [ ] Manual comparison click selects the displayed price; Shift/Ctrl/Alt behavior matches settings. Clipboard paste does not confirm a listing.
 - [ ] Top-bar click opens Selling; right-click opens settings. Retainer priority order, visits and existing character-switch/account confirmation work correctly.
 - [ ] A retainer visit clears its visit reminder without changing listing observation timestamps. Empty retainers receive no visit reminder.
-- [ ] Background checks use each retainer’s home world, distinguish HQ/NQ, exclude known own retainers, and do not turn old/missing/error data green. Tooltips show the upload time, not just the retrieval time.
+- [ ] Background checks use each retainer’s home world, distinguish HQ/NQ, match known own retainer prices without undercutting, and do not turn old/missing/error data green. Tooltips show the upload time, not just the retrieval time.
 - [ ] Highlight colors survive native list refreshes and restore when disabled. Hover reasons in Market match the item.
 - [ ] Starting Seller pauses new AutoRetainer scheduling and waits for queued actions to settle before touching the menus; a completed/stopped run restores its previous pause state. Marketbuddy does not also alter prices.
 - [ ] A confirmed market purchase appears once under Spending with quantity, unit cost and tax. Failed/cancelled purchases do not appear.
@@ -124,3 +124,24 @@ Checks in both Goddess and classic designs:
 - With Market closed, hover the game's selling count. Verify unchecked/skipped reasons and affected item names. Move or scale the game window, cover it with another window, and close the bell; the tooltip must follow the current native row and disappear when no longer hovered.
 
 The 246 diagnostic run completed all ten retainers (51 confirmed updates, 16 skips), restored AutoRetainer suppression, and captured all 20 native sale records on several retainers. This update changes presentation/reporting and leaves comparison, pricing, AutoRetainer handoff and garden detection paths intact.
+
+
+## 0.5.1.248: own-retainer matches, increase limits and history evidence
+
+When the lowest matching HQ/NQ offer is from a known own retainer, automatic pricing matches it exactly instead of ignoring it or subtracting another undercut. A tie with an outside seller also matches the own price. Fixed/percentage undercut and rounding are bypassed for that match; item minimums, exclusions, freshness and the raising setting remain in force. When an outside seller is cheaper, the existing competitor/gap rules still apply. Manual comparison clicks at a verified own price use the same exact match. Background Universalis estimates recognize known names on the requested world; automatic submissions still require fresh in-game evidence.
+
+Automatic increases now have a configurable maximum: 100% by default (at most doubling the current price). This applies to live offers, own-retainer matches and history-based targets. A larger proposed increase is skipped with the old price preserved and the reason shown on hover. An explicit item minimum may still raise the price to that minimum; explicit manual price clicks are not capped. The supplied Hempen Camise example (50,000 gil current price versus 10,000,000 gil offers) stays unchanged even when automatic raises are enabled. This is an increase limit, not a claim that a seller or transaction is fraudulent.
+
+The empty-market fallback retains its existing default: median of at least three matching-quality sales in the past seven days, after the outlier filter. It fetches recent transactions even if the optional history-window setting is off. The later 246 export contains a manually opened HQ Replica Heavy High Allagan Coat comparison with zero listings and 20 received transactions. It does not contain their dates/quality or the resulting pricing decision, so it cannot prove whether those sales qualified. Opening a manual editor calculates a suggestion and does not automatically submit it. Update prices applies permitted targets; Check prices only reviews them.
+
+A manual suggestion or skip now appears in Seller with its reason on hover. Insufficient-history reasons include the loaded count, matching quality count, age window and required minimum. Diagnostics include pricing settings, recent decisions, up to 20 received sale rows for the decision (without buyer names), and the last 200 persisted price checks so the explanation survives the detailed trace rolling over. The full market backup retains up to 2,000 price checks.
+
+Verify after the normal plugin update:
+- Own retainer at 12,345 gil, second retainer above it: the target is exactly 12,345, even with a percentage undercut or rounding enabled. A second pass must not lower it again.
+- A 50,000-gil listing compared with 10,000,000-gil offers remains unchanged even with Allow raising competitive prices on. Hover the skipped check for the increase limit.
+- A cheaper outside offer uses the existing undercut/gap policy. HQ/NQ, minimums and excluded items remain separate.
+- Click a verified own comparison price manually: editor/clipboard use the exact match according to the existing click settings.
+- With no matching listings, run Check prices for an item with sufficient recent matching sales. Hover its result in Price changes. Then use Update prices to test a confirmed change.
+- An item with old, wrong-quality or insufficient sales stays unchanged and explains the skip. Export Seller diagnostics if the live result differs from that explanation.
+
+Automated checks cover exact matches, duplicate stacks, ties, external offers, minimums, raising, quality, mannequins, unknown IDs, cached estimates, extreme increases from listings or history, configurable cap boundaries and explicit minimums, history quality/age explanations and delayed empty-result history through the actual Seller run state machine. Native game clicks still need the in-game checks above.

@@ -28,6 +28,7 @@ public sealed partial class Plugin
     private ulong sellerInventoryRetainer;
     private DateTimeOffset sellerInventorySince;
     private MarketStock? manualEditor;
+    private SellerDecision? manualDecision;
     private ulong manualRetainer;
     private bool manualAutoCompare,manualShowHistory,manualSuspendUntilClose;
     private InventoryType manualInventory;
@@ -142,7 +143,7 @@ public sealed partial class Plugin
     private void ArmSellerComparison(uint item,bool hq)
     {
         sellerComparison.Begin(item,Player.CurrentWorld.RowId,hq,DateTimeOffset.UtcNow);
-        if(!sellerRun.Running)manualCompareAt=sellerComparison.RequestedAt;
+        if(!sellerRun.Running){manualCompareAt=sellerComparison.RequestedAt;manualDecision=null;}
         TraceSeller("Comparison request",$"Item {item} · new listings and history request");
     }
 
@@ -162,7 +163,7 @@ public sealed partial class Plugin
     private void BeginManualSeller()
     {
         if(!config.Seller.Enabled || sellerRun.Running)return;
-        manualEditor=null;manualRetainer=0;manualEditorAt=DateTimeOffset.UtcNow;manualCompareAt=default;manualSuspendUntilClose=false;
+        manualEditor=null;manualDecision=null;manualRetainer=0;manualEditorAt=DateTimeOffset.UtcNow;manualCompareAt=default;manualSuspendUntilClose=false;
         sellerComparison.Clear();manualInventory=default;marketPollAt=DateTimeOffset.UtcNow;
         manualAutoCompare=config.Seller.OpenCompare&&!Keys[Dalamud.Game.ClientState.Keys.VirtualKey.SHIFT];
         manualShowHistory=config.Seller.OpenHistory^(config.Seller.AltTogglesHistory&&Keys[Dalamud.Game.ClientState.Keys.VirtualKey.MENU]);
@@ -197,13 +198,19 @@ public sealed partial class Plugin
                 }else {TraceSeller("Price click ignored","Displayed unit price could not be read.",new {nodeType=text==null?-1:(int)text->Type,text=text!=null&&text->Type==NodeType.Text?((AtkTextNode*)text)->NodeText.ToString():""});return;}
             }else {TraceSeller("Price click ignored","Comparison row renderer is unavailable.",new {index,nodeCount=renderer==null?0:renderer->UldManager.NodeListCount});return;}
             if(!sellerComparison.Contains(listing.ListingId,new(listing.RetainerId,listing.UnitPrice,listing.IsHqItem,listing.Quantity,listing.IsMannequin)) || listing.UnitPrice is 0 or >SellerPricing.MaxPrice || listing.ItemId%1_000_000!=manualEditor.ItemId || listing.IsMannequin || listing.IsHqItem!=manualEditor.Hq){TraceSeller("Price click ignored","Offer did not match the current item and quality.");return;}
-            var price=SellerPricing.Adjust(listing.UnitPrice,config.Seller,config.Seller.MinimumPrices.GetValueOrDefault(manualEditor.ItemId,1));
+            var own=KnownSellerRetainers();
+            // Sorted rows can share a displayed price. If a verified own offer
+            // is at that same price, match it rather than undercut our other stack.
+            var matchOwn=proxy->Listings[..(int)Math.Min(100,proxy->ListingCount)].ToArray().Any(x=>x.RetainerId!=0&&own.Contains(x.RetainerId)&&x.UnitPrice==listing.UnitPrice&&x.IsHqItem==manualEditor.Hq&&!x.IsMannequin&&
+                sellerComparison.Contains(x.ListingId,new(x.RetainerId,x.UnitPrice,x.IsHqItem,x.Quantity,x.IsMannequin)));
+            var price=SellerPricing.OfferPrice(listing.UnitPrice,matchOwn,config.Seller,config.Seller.MinimumPrices.GetValueOrDefault(manualEditor.ItemId,1));
             if(config.Seller.CopyPrice)Dalamud.Bindings.ImGui.ImGui.SetClipboardText(price.ToString());
             var applied=config.Seller.ClickSetsPrice&&SetManualSellerPrice(price,config.Seller.ClickConfirms);
-            sellerNotice=$"Selected {price:N0} gil"+(config.Seller.CopyPrice?" · copied":"")+(config.Seller.ClickSetsPrice?(applied?" · applied to editor":" · editor changed or unavailable; not submitted"):"");
-            TraceSeller("Price click",sellerNotice,new {price,applied,config.Seller.ClickSetsPrice,config.Seller.CopyPrice,config.Seller.ClickConfirms});
+            sellerNotice=$"Selected {price:N0} gil"+(matchOwn?" · own retainer match":"")+(config.Seller.CopyPrice?" · copied":"")+(config.Seller.ClickSetsPrice?(applied?" · applied to editor":" · editor changed or unavailable; not submitted"):"");
+            TraceSeller("Price click",sellerNotice,new {price,applied,matchOwn,config.Seller.ClickSetsPrice,config.Seller.CopyPrice,config.Seller.ClickConfirms});
         }catch(Exception ex){sellerNotice="Could not use this price; no automatic retry.";TraceSeller("Price click failed",ex.GetType().Name,new {ex.Message,ex.StackTrace});Log.Debug(ex,sellerNotice);}
     }
+    private HashSet<ulong> KnownSellerRetainers()=>marketLedger.Retainers.Select(x=>x.Id).Concat(ReadSellerRetainers().Select(x=>x.Id)).Where(x=>x!=0).ToHashSet();
     private static unsafe AtkUnitBase* SellerAddon(string name)
     {var a=(AtkUnitBase*)GardenGui.GetAddonByName(name).Address;return a!=null&&a->IsVisible&&a->IsReady?a:null;}
     private unsafe bool SellerContext(ulong cid,uint world)=>config.Seller.Enabled && Player.IsLoaded && Player.ContentId==cid && Player.CurrentWorld.RowId==world && Player.HomeWorld.RowId==world && !Conditions[ConditionFlag.BetweenAreas] && !Conditions[ConditionFlag.BetweenAreas51] && !Conditions[ConditionFlag.InCombat] && !HelperInCutscene();
@@ -427,7 +434,8 @@ public sealed partial class Plugin
             if(BeginSellerComparison(manualEditor.ItemId))manualCompareAt=now;
         }
         if(manualEditor!=null&&ReadSellerComparison() is {} comparison){
-            var decision=SellerPricing.Decide(manualEditor.ItemId,Player.CurrentWorld.RowId,manualEditor.Hq,manualEditor.Price,comparison,marketLedger.Retainers.Select(x=>x.Id).Concat(ReadSellerRetainers().Select(x=>x.Id)).ToHashSet(),config.Seller,now);
+            var decision=SellerPricing.Decide(manualEditor.ItemId,Player.CurrentWorld.RowId,manualEditor.Hq,manualEditor.Price,comparison,KnownSellerRetainers(),config.Seller,now);
+            if(decision!=manualDecision){manualDecision=decision;TraceSellerDecision(active,manualEditor,decision,false,"Manual suggestion");}
             sellerReviews[(active,manualEditor.Slot)]=(manualEditor,decision,now);
         }
     }
@@ -555,6 +563,7 @@ public sealed partial class Plugin
             p.SellerRetainerTalk(id);return false;
         }
         public void Review(SellerRetainerRef r,MarketStock item,SellerDecision d,bool applied){
+            p.TraceSellerDecision(r.Id,item,d,applied,"Run");
             p.sellerReviews[(r.Id,item.Slot)]=(applied?item with {Price=d.Price!.Value}:item,applied?d with {Status=SellerStatus.Competitive,Undercut=d.LowestCompetitor<d.Price,Reason="Price update observed in the selling list. "+d.Reason}:d,DateTimeOffset.UtcNow);
             var entry=new MarketPriceLog(DateTimeOffset.UtcNow,r.Id,r.Name,item.ItemId,item.Name,item.Hq,item.Price,d.Price,applied?"Updated":d.Status.ToString(),d.Reason);
             p.marketLedger=p.marketLedger with {Prices=[..p.marketLedger.Prices.TakeLast(1999),entry]};p.DirtyMarket();

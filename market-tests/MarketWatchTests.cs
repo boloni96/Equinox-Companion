@@ -16,8 +16,8 @@ static class MarketWatchTests
         check("wrong background world rejected",Assess(data with {World=21}).Price==null);
         check("wrong background item rejected",Assess(data with {Item=11}).Price==null);
         check("background HQ never mixed",Assess(data with {Offers=[new("Other",10,true,1,false)]}).Price==null);
-        check("own names on requested world excluded",Assess(data,new HashSet<string>{"Other"}).Price==249999);
-        check("own-only cache is uncertain",Assess(data,new HashSet<string>{"Other","Another"}).Status==SellerStatus.Unknown);
+        check("own names on requested world matched",Assess(data,new HashSet<string>{"Other"}).Price==100000);
+        check("own-only cache suggests same own price",Assess(data,new HashSet<string>{"Other","Another"}) is {Status:SellerStatus.Update,Price:100000});
         check("empty cache never uses guessed history",Assess(data with {Offers=[]}).Price==null);
         check("failed cache never green",Assess(data with {Error="Busy"}).Status==SellerStatus.Unknown);
         check("unknown cache never green",Assess(null).Status==SellerStatus.Unknown);

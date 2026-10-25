@@ -101,6 +101,10 @@ public sealed partial class Plugin
         }
         if(sellerNotice.Length>0)ImGui.TextColored(SellerColor(SellerStatus.Skipped),sellerNotice);
         else ImGui.TextWrapped(sellerRun.Status);
+        if(!sellerRun.Running&&manualEditor!=null&&manualDecision is {} d){
+            ImGui.TextColored(SellerColor(d.VisualStatus),d.CanApply?$"Suggested: {d.Price:N0} gil":d.Status==SellerStatus.Competitive?"Price kept":"Skipped");
+            MarketHelp((d.Source=="None"?"":d.Source+"\n")+d.Reason+"\nOpening an item only calculates a suggestion. Update prices applies permitted changes; Check prices does not.");
+        }
         if(sellerAutoRetainerPause.Held||sellerAutoRetainerPause.RestorePending){ImGui.TextDisabled(sellerAutoRetainerPause.RestorePending?"AutoRetainer: restoring…":"AutoRetainer: paused");MarketHelp(sellerAutoRetainerPause.Status+"\nStop or finish Seller to restore the previous pause state. Existing AutoRetainer settings are kept.");}
         if(ImGui.CollapsingHeader("Diagnostics##seller"))DrawSellerDiagnostics();
 
@@ -121,11 +125,11 @@ public sealed partial class Plugin
         ImGui.BeginDisabled(sellerRun.Running);
         void Toggle(string label,bool value,Action<bool> set,string help){if(ImGui.Checkbox(label,ref value)){set(value);dirty=true;}MarketHelp(help);}
         void Number(string label,int value,int min,int max,Action<int> set,string help){ImGui.SetNextItemWidth(100);if(ImGui.InputInt(label,ref value)){set(Math.Clamp(value,min,max));dirty=true;}MarketHelp(help);}
-        void Percent(string label,double value,Action<double> set,string help){var f=(float)value;ImGui.SetNextItemWidth(100);if(ImGui.InputFloat(label,ref f,1,5,"%.1f%%")){set(float.IsFinite(f)?Math.Clamp(f,0,99):0);dirty=true;}MarketHelp(help);}
+        void Percent(string label,double value,Action<double> set,string help,float maximum=99){var f=(float)value;ImGui.SetNextItemWidth(100);if(ImGui.InputFloat(label,ref f,1,5,"%.1f%%")){set(float.IsFinite(f)?Math.Clamp(f,0,maximum):0);dirty=true;}MarketHelp(help);}
         if(ImGui.CollapsingHeader("Manual selling",ImGuiTreeNodeFlags.DefaultOpen)){
             Toggle("Open Compare Prices",s.OpenCompare,v=>s.OpenCompare=v,"Opens the game's comparison when you open an item's price editor. Hold Shift to skip it for that item.");
             Toggle("Also open recent sale history",s.OpenHistory,v=>s.OpenHistory=v,"Opens this item's market transaction history beside the comparison. These are market sales, not your own retainer's earnings.");
-            Toggle("Use clicked comparison price",s.ClickSetsPrice,v=>s.ClickSetsPrice=v,"Click a matching HQ/NQ listing to put its unit price, adjusted by your undercut and minimum, into the open price editor.");
+            Toggle("Use clicked comparison price",s.ClickSetsPrice,v=>s.ClickSetsPrice=v,"Click a matching HQ/NQ listing to put its adjusted unit price into the open editor. A known own retainer at that price is matched exactly, without undercut or rounding; your item minimum still applies.");
             Toggle("Copy clicked price",s.CopyPrice,v=>s.CopyPrice=v,"Copies the adjusted whole-gil unit price to your clipboard. Works independently of filling the price editor.");
             Toggle("Confirm price after clicking",s.ClickConfirms,v=>s.ClickConfirms=v,"When Use clicked comparison price is on, clicking a price also confirms the listing. Leave off to review and confirm yourself.");
             Toggle("Ctrl: paste price when opening an item",s.CtrlPastePrice,v=>s.CtrlPastePrice=v,"Hold Ctrl while opening the price editor to paste a whole-gil clipboard price instead of opening comparison. Does not confirm the listing.");
@@ -137,10 +141,11 @@ public sealed partial class Plugin
             Toggle("Undercut by percentage",s.PercentUndercut,v=>s.PercentUndercut=v,"Off: subtract a fixed gil amount. On: subtract this percentage of the reference unit price.");
             if(s.PercentUndercut)Percent("Undercut",s.UndercutPercent,v=>s.UndercutPercent=v,"Example: 1% below 10,000 gil becomes 9,900 gil.");
             else Number("Gil undercut",s.UndercutGil,0,SellerPricing.MaxPrice,v=>s.UndercutGil=v,"Example: 1 gil below 10,000 becomes 9,999. Zero matches the reference price.");
-            Number("Round down to multiple",s.RoundTo,1,1000000,v=>s.RoundTo=v,"Applied after undercutting. A multiple of 100 rounds 9,999 down to 9,900. Use 1 for no extra rounding.");
+            Number("Round down to multiple",s.RoundTo,1,1000000,v=>s.RoundTo=v,"Applied after undercutting, and to history-based targets. A multiple of 100 rounds 9,999 down to 9,900. Use 1 for no extra rounding. Matching your own retainer skips both rounding and undercutting.");
             Percent("Ignore lowest price beyond gap",s.LowOutlierPercent,v=>s.LowOutlierPercent=v,"Automatic checks only: compare the lowest and next distinct matching HQ/NQ unit prices. At 40%, 100k versus 250k is ignored; 250k is used. Zero disables this rule. Your manual price click remains your choice.");
             Toggle("Allow raising competitive prices",s.RaiseCompetitivePrices,v=>s.RaiseCompetitivePrices=v,"Allows automatic updates to increase your price to the calculated target. Off keeps an already lower price, subject to your item minimum.");
-            Toggle("Use recent sales when comparison is empty",s.UseHistory,v=>s.UseHistory=v,"Only a successfully completed comparison with no matching competing HQ/NQ listings may use history. Errors and timeouts keep the existing price.");
+            Percent("Maximum automatic increase",s.MaximumIncreasePercent,v=>s.MaximumIncreasePercent=v,"Caps any automatic price increase, including own-retainer matches and empty-market history. Default 100% allows at most doubling; 0 blocks increases. Larger suggestions keep your existing price with a hover explanation. Your explicit item minimum can still raise it to that minimum. Manual price clicks remain your choice.",10000);
+            Toggle("Use recent sales when comparison is empty",s.UseHistory,v=>s.UseHistory=v,"Update prices can use recent matching HQ/NQ transactions only after a successful comparison has no matching listings at all. Known own listings are matched instead. History is fetched even when Also open recent sale history is off. Errors and timeouts keep the existing price; hover a skipped result for the reason.");
             if(s.UseHistory){
                 var rule=(int)s.HistoryRule;ImGui.SetNextItemWidth(220);if(ImGui.Combo("History reference",ref rule,"Median recent sale\0Highest supported recent sale\0Latest supported sale\0")){s.HistoryRule=(SellerHistoryRule)rule;dirty=true;}
                 MarketHelp("Choose the middle, highest or most recent price among sales that pass the age and outlier checks. No undercut is applied to history alone.");

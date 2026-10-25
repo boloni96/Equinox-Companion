@@ -21,6 +21,11 @@ public sealed partial class Plugin
         uint CompareNode,bool CompareEnabled,string CompareEvents,int Expected,int Error,string Phase,bool ManualCaptured);
 
     private void TraceSeller(string stage,string message,object? detail=null)=>sellerTrace.Add(DateTimeOffset.UtcNow,stage,message,detail);
+    private void TraceSellerDecision(ulong retainer,MarketStock item,SellerDecision decision,bool applied,string mode)=>
+        TraceSeller("Price decision",$"{item.Name} · {(applied?"Updated":decision.CanApply?"Suggested":decision.Status.ToString())} · {decision.Reason}",
+            new {mode,retainer,item.ItemId,item.Hq,item.Slot,before=item.Price,decision,applied,
+                listings=sellerComparison.Expected,historyReceived=sellerComparison.HistoryReceived,
+                history=sellerComparison.History.Take(20).ToArray()});
     private static unsafe string SellerButtonEvents(AtkComponentButton* button)
     {
         if(button==null||button->OwnerNode==null)return "unavailable";
@@ -70,7 +75,11 @@ public sealed partial class Plugin
         manual=new {manualEditor,manualRetainer,inventory=manualInventory.ToString(),manualAutoCompare,manualShowHistory,manualSuspendUntilClose,manualEditorAt,manualCompareAt},
         comparison=new {sellerComparison.Item,sellerComparison.World,sellerComparison.RequestedAt,sellerComparison.RespondedAt,sellerComparison.Expected,sellerComparison.Error,sellerComparison.ReceivedCount,sellerComparison.PacketRequest,sellerComparison.HistoryReceived,sellerComparison.HistoryRequested,historyRows=sellerComparison.History.Length},
         saleHistory=new {hookEnabled=marketHistoryHook?.IsEnabled==true,status=marketHistoryStatus,queued=marketRetainerHistories.Count,retainers=marketLedger.Retainers.Select(r=>new {r.Name,records=marketLedger.Income.Count(x=>x.RetainerId==r.Id&&x.Id.StartsWith("history:"))}).ToArray()},
-        settings=new {config.Seller.OpenCompare,config.Seller.OpenHistory,config.Seller.ClickSetsPrice,config.Seller.CopyPrice,config.Seller.ClickConfirms,config.Seller.OpenAtBell,config.Seller.CloseAtBell},
+        settings=new {config.Seller.OpenCompare,config.Seller.OpenHistory,config.Seller.ClickSetsPrice,config.Seller.CopyPrice,config.Seller.ClickConfirms,config.Seller.OpenAtBell,config.Seller.CloseAtBell,
+            config.Seller.UseHistory,config.Seller.HistoryRule,config.Seller.HistoryDays,config.Seller.MinimumHistorySales,config.Seller.HistoryOutlierPercent,
+            config.Seller.PercentUndercut,config.Seller.UndercutGil,config.Seller.UndercutPercent,config.Seller.LowOutlierPercent,config.Seller.RoundTo,config.Seller.RaiseCompetitivePrices,config.Seller.MaximumIncreasePercent,config.Seller.MinimumPrices,config.Seller.ExcludedItems},
+        priceChecks=marketLedger.Prices.TakeLast(200).ToArray(),
+        manualDecision,
         locks=new {marketBuddyLocked,autoRetainer=new {sellerAutoRetainerPause.Held,sellerAutoRetainerPause.PreviouslySuppressed,sellerAutoRetainerPause.RestorePending,sellerAutoRetainerPause.Status}},
         relatedPlugins=Pi.InstalledPlugins.Where(x=>x.InternalName.Contains("Market",StringComparison.OrdinalIgnoreCase)||x.InternalName=="AutoRetainer").Select(x=>new {x.InternalName,x.IsLoaded}).ToArray(),
         lastNative=sellerLastNativeState,recent=sellerTrace.Snapshot()
