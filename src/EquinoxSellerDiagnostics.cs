@@ -43,7 +43,7 @@ public sealed partial class Plugin
             selected,order==null?0:order->ActiveRetainerId,SellerActive(selected),agent==null?-1:(int)agent->SellItemInventoryType,slot,inventory!=null&&inventory->IsLoaded,raw!=null&&raw->IsSymbolic,
             item==null?0:item->ItemId,item==null?0:item->Quantity,edit==null||edit->Quantity==null?-1:edit->Quantity->Value,edit==null||edit->AskingPrice==null?-1:edit->AskingPrice->Value,
             proxy==null?0:proxy->SearchItemId,proxy!=null&&proxy->WaitingForListings,proxy==null?-1:(int)proxy->ListingCount,
-            button==null||button->OwnerNode==null?0:button->OwnerNode->NodeId,button!=null&&button->IsEnabled,SellerButtonEvents(button),sellerExpected,sellerError,sellerRun.State.ToString(),manualEditor!=null);
+            button==null||button->OwnerNode==null?0:button->OwnerNode->NodeId,button!=null&&button->IsEnabled,SellerButtonEvents(button),sellerComparison.Expected,sellerComparison.Error,sellerRun.State.ToString(),manualEditor!=null);
     }
     private unsafe void ObserveSellerDiagnostics(DateTimeOffset now)
     {
@@ -68,7 +68,8 @@ public sealed partial class Plugin
         enabled=config.Seller.Enabled,hookEnabled=sellerResultHook?.IsEnabled==true,sellerLiveError,sellerNotice,marketDataError,
         run=new {phase=sellerRun.State.ToString(),sellerRun.Status,sellerRun.Running,sellerRun.Paused,sellerRun.Apply,sellerRun.RetainerIndex,sellerRun.RetainerCount,sellerRun.ItemIndex,sellerRun.ItemCount},
         manual=new {manualEditor,manualRetainer,inventory=manualInventory.ToString(),manualAutoCompare,manualShowHistory,manualSuspendUntilClose,manualEditorAt,manualCompareAt},
-        comparison=new {sellerRequestItem,sellerRequestWorld,sellerRequestAt,sellerResultAt,sellerExpected,sellerError,sellerHistoryReceived,sellerHistoryRequested},
+        comparison=new {sellerComparison.Item,sellerComparison.World,sellerComparison.RequestedAt,sellerComparison.RespondedAt,sellerComparison.Expected,sellerComparison.Error,sellerComparison.ReceivedCount,sellerComparison.PacketRequest,sellerComparison.HistoryReceived,sellerComparison.HistoryRequested,historyRows=sellerComparison.History.Length},
+        saleHistory=new {hookEnabled=marketHistoryHook?.IsEnabled==true,status=marketHistoryStatus,queued=marketRetainerHistories.Count,retainers=marketLedger.Retainers.Select(r=>new {r.Name,records=marketLedger.Income.Count(x=>x.RetainerId==r.Id&&x.Id.StartsWith("history:"))}).ToArray()},
         settings=new {config.Seller.OpenCompare,config.Seller.OpenHistory,config.Seller.ClickSetsPrice,config.Seller.CopyPrice,config.Seller.ClickConfirms,config.Seller.OpenAtBell,config.Seller.CloseAtBell},
         locks=new {marketBuddyLocked,autoRetainer=new {sellerAutoRetainerPause.Held,sellerAutoRetainerPause.PreviouslySuppressed,sellerAutoRetainerPause.RestorePending,sellerAutoRetainerPause.Status}},
         relatedPlugins=Pi.InstalledPlugins.Where(x=>x.InternalName.Contains("Market",StringComparison.OrdinalIgnoreCase)||x.InternalName=="AutoRetainer").Select(x=>new {x.InternalName,x.IsLoaded}).ToArray(),

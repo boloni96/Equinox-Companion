@@ -28,8 +28,12 @@ public sealed partial class Plugin
             var retainer=rm==null?null:rm->GetActiveRetainer();
             var id=retainer==null?0:retainer->RetainerId;var name=retainer==null?"":retainer->NameString;
             if(config.Seller.Enabled&&actor!=null&&packet!=0&&id!=0&&SellerActive(id)&&marketRetainerHistories.Count<8){
-                var rows=MarketRetainerHistory.Read(new ReadOnlySpan<byte>((void*)packet,MarketRetainerHistory.PacketSize),DateTimeOffset.UtcNow);
-                if(rows.Length>0)marketRetainerHistories.Enqueue((actor,id,name,rows));
+                var rows=MarketRetainerHistory.Read(new ReadOnlySpan<byte>((void*)packet,MarketRetainerHistory.PacketSize),DateTimeOffset.UtcNow,out var error);
+                marketHistoryStatus=error.Length>0?error:$"{name}: {rows.Length} recent sale records received.";
+                TraceSeller("Retainer sale history",marketHistoryStatus,new {retainer=id,records=rows.Length,error});
+                if(error.Length==0)marketRetainerHistories.Enqueue((actor,id,name,rows));
+            }else if(config.Seller.Enabled){
+                TraceSeller("Retainer sale history blocked","Retainer identity or history queue is not ready.",new {actorKnown=actor!=null,retainer=id,packetPresent=packet!=0,queued=marketRetainerHistories.Count});
             }
         }catch(Exception ex){Log.Warning(ex,"Retainer history capture skipped; existing records kept.");}
         return result;
