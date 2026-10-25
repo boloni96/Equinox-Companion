@@ -155,6 +155,7 @@ public sealed partial class Plugin
             }
         }
         if(ImGui.CollapsingHeader("Background checks & visits")){
+            Toggle("Sync retainers to Journal",s.SyncToJournal,v=>{s.SyncToJournal=v;marketJournalSource=null;WakeObservationSync();},"Shares observed retainer names, gil, selling items and last visits through your existing pairing. Works with Journal and Market windows closed. Gameplay observations upload first. Notification choices stay in Journal settings.");
             Toggle("Check Universalis in the background",s.BackgroundChecks,v=>{s.BackgroundChecks=v;if(!v)StopMarketWatch();},"Checks known listings on each retainer's home world while the plugin runs, even with windows closed. Suggestions are cached; repricing always uses live game comparisons.");
             if(s.BackgroundChecks){
                 Number("Check interval (minutes)",s.BackgroundIntervalMinutes,5,120,v=>s.BackgroundIntervalMinutes=v,"Minimum interval between background checks of each known item. Requests are paced and yield to gameplay syncing.");

@@ -133,7 +133,7 @@ public sealed partial class Plugin : IDalamudPlugin
             {
                 var result = syncTask.Result;
                 RefreshObservationIndex();
-                foreach (var id in result.Accepted.Distinct()) if (!observations.Acknowledged(id)) config.SentEvents.Add(id);
+                foreach (var id in result.Accepted.Distinct()) if (!config.MarketJournal.Acknowledge(id) && !observations.Acknowledged(id)) config.SentEvents.Add(id);
                 RefreshObservationIndex();
                 lastUploadedCursor=Math.Max(lastUploadedCursor,result.UploadedCursor??0);
                 SaveConfiguration();
@@ -153,9 +153,9 @@ public sealed partial class Plugin : IDalamudPlugin
         if(idleSyncQueue.Unchanged(idleStamp,now)){nextSync=now.AddSeconds(FastGardenSync?1:30);return;}
         idleSyncQueue.Invalidate();
         RefreshObservationIndex();
-        var pending = observations.Pending
+        var pending = observations.Pending.Concat(config.Seller.Enabled && config.Seller.SyncToJournal ? config.MarketJournal.Pending : [])
             .Where(e => e.Kind is "house.entered" or "garden.tended" or "garden.planted" ||
-                (e.Kind is "garden.ready" or "garden.observed" or "garden.unmapped" or "garden.empty.unmapped" or "garden.status" or "garden.status.unmapped" or "garden.mapped" or "garden.empty" or "garden.dead" or "garden.fertilized" ? config.TrackGardens : e.Kind == "character.registered" ? config.SyncCharacterDetails && e.Registration?.PairingScope == RegistrationScope : e.Kind == "character.updated" ? config.SyncCharacterDetails : e.Kind is "collection.observed" or "storage.observed" ? config.SyncCollections : e.Kind == "submarines.cached" ? config.SyncAutoRetainer : e.Kind is "fashion.observed" or "submarines.observed" or "submarines.supplies" ? config.SyncActivities : config.SyncHouseDetails))
+                (e.Kind == "market.retainers" ? config.Seller.Enabled && config.Seller.SyncToJournal : e.Kind is "garden.ready" or "garden.observed" or "garden.unmapped" or "garden.empty.unmapped" or "garden.status" or "garden.status.unmapped" or "garden.mapped" or "garden.empty" or "garden.dead" or "garden.fertilized" ? config.TrackGardens : e.Kind == "character.registered" ? config.SyncCharacterDetails && e.Registration?.PairingScope == RegistrationScope : e.Kind == "character.updated" ? config.SyncCharacterDetails : e.Kind is "collection.observed" or "storage.observed" ? config.SyncCollections : e.Kind == "submarines.cached" ? config.SyncAutoRetainer : e.Kind is "fashion.observed" or "submarines.observed" or "submarines.supplies" ? config.SyncActivities : config.SyncHouseDetails))
             .Select(e=>e.Kind is "house.entered" or "garden.tended" or "garden.planted" ? e with {Actor=WithWorldNames(e.Actor),Address=WithAddressNames(e.Address!)} : e)
             .Where(e => !SyncValidation.SupersededIncompleteCharacter(e, observations.CharacterUpdates(e.Actor.ContentId), now))
             .OrderBy(e => e.Kind == "character.registered" ? 0 : 1).ThenBy(e => e.At).ToArray();

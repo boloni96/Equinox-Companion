@@ -43,7 +43,7 @@ public sealed partial class Plugin
 
     private unsafe void InitializeEquinoxMarket()
     {
-        config.Seller??=new();
+        config.Seller??=new();config.MarketJournal??=new();
         config.Seller.MinimumPrices??=[];config.Seller.ExcludedItems??=[];config.Seller.SelectedRetainers??=[];
         marketWriter=new(ledger=>{
             var target=MarketDataPath;Directory.CreateDirectory(Path.GetDirectoryName(target)!);
@@ -395,6 +395,7 @@ public sealed partial class Plugin
             DrainSellerComparison();
             DrainMarketSales();
             sellerRun.Tick(now);
+            UpdateMarketJournal(now);
             UpdateMarketWatch(now);
             UpdateMarketBar(now);
             if(now<marketPollAt)return;marketPollAt=now.AddMilliseconds(500);
