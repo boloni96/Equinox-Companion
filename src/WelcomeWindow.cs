@@ -64,7 +64,7 @@ public sealed partial class Plugin
                 ImGui.TextWrapped("House shortcuts stay on the right of character controls and stack vertically in narrow windows. Adventure keeps portraits left, details in the middle and steps below.");
                 ImGui.TextWrapped("Adventure shows overall activities done, with separate current-stop confirmation. Its world selector stays compact; Bring here and Cancel bring remain reachable. Window keybinds toggle open and closed.");
                 ImGui.TextWrapped(plugin.config.PairingKey.Length==64?"Your saved pairing and settings are kept.":"Start in Settings → Connection: paste the pairing key from your Journal's Game connection.");
-                ImGui.TextWrapped("/equinox · /adventure · /gardening · /fashionr · /bid · /eqtests. Esc minimises a focused window to its familiar icon. Commands reopen windows; shortcuts toggle them.");
+                ImGui.TextWrapped("/equinox · /adventure · /gardening · /fashionr · /bid · /eqtests · /eqtrade. Esc minimises a focused window to its familiar icon. Commands reopen windows; shortcuts toggle them.");
                 if(ImGui.SmallButton("Open Companion")){plugin.visible=true;plugin.mainWindow.IsOpen=true;plugin.DismissWelcome();}
             }
         }

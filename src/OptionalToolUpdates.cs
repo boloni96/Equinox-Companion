@@ -7,6 +7,7 @@ public sealed partial class Plugin
     private bool OptionalToolHasWork(string name)=>name switch
     {
         "Equinox Market"=>true,
+        "Gil Trader"=>gilTrade.Running,
         "Camera"=>config.RememberCameraHeight||cameraHeightDefaultPending,
         "QuickLoot"=>config.EnableQuickLoot,
         "Coffer markers"=>config.EnableCofferMarkers,
@@ -24,6 +25,7 @@ public sealed partial class Plugin
         optionalToolUpdates??=new()
         {
             ["Equinox Market"]=UpdateEquinoxMarket,
+            ["Gil Trader"]=UpdateGilTrader,
             ["Camera"]=UpdateCameraTool,["QuickLoot"]=UpdateQuickLoot,["Coffer markers"]=UpdateCofferMarkers,
             ["Follow portals"]=UpdatePortalTool,["Quest Helper"]=UpdateHelper,
             ["FollowThem"]=UpdateFollowThem,["Follow movement"]=UpdateFollowMovementTool

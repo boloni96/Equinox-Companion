@@ -3,6 +3,7 @@ namespace EquinoxCompanion;
 [Serializable]
 public sealed class Configuration : IPluginConfiguration
 {
+    public bool EnableGilTrader { get; set; }
     public SellerSettings Seller { get; set; } = new();
     public RetainerMarketOutbox MarketJournal { get; set; } = new();
     public AppearancePreference Appearance { get; set; } = new();

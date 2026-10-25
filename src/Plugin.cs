@@ -248,6 +248,7 @@ public sealed partial class Plugin : IDalamudPlugin
         if (!fashionCommandRegistered) Log.Warning("/fashionr is already registered by another plugin. Use /equinox fashion instead.");
         InitializeMarketSearch();
         InitializeEquinoxMarket();
+        InitializeGilTrader();
         InitializeBidSearch();
         InitializeAdventures();
         InitializeTesting();
@@ -350,7 +351,7 @@ public sealed partial class Plugin : IDalamudPlugin
         RunOptionalTool("Coffer markers",now);
         // Give a coffer click a short uncontested turn before other automatic interactions.
         // Movement-stop handling remains responsive during this brief priority window.
-        if(now>=cofferPriorityUntil&&sellerRun?.Running!=true)
+        if(now>=cofferPriorityUntil&&sellerRun?.Running!=true&&!gilTrade.Running)
         {
             RunOptionalTool("Follow portals",now);
             RunOptionalTool("Quest Helper",now);
@@ -363,6 +364,7 @@ public sealed partial class Plugin : IDalamudPlugin
         perf = System.Diagnostics.Stopwatch.GetTimestamp();
         UpdateSharedRoster(now);
         RunOptionalTool("Equinox Market",now);
+        RunOptionalTool("Gil Trader",now);
         UpdateAdventure();
         UpdateTesting(now);
         UpdateShoppingTravel(now);
@@ -1053,6 +1055,7 @@ public sealed partial class Plugin : IDalamudPlugin
                 syncDiagnostics = new { enabled = config.SyncEnabled, paired = config.PairingKey.Length == 64, endpoint = "https://equinoxjournal.pages.dev", status = syncStatus, pending = pendingSyncRecords, eligible = readySyncRecords, held = heldSyncRecords, historicalHeld = historicalHeldSyncRecords, unsupported = unsupportedSyncRecords, acknowledgedLocal = config.SentEvents.Count, lastSyncReceiptAt, lastSyncBatchSize, lastSyncBatchOldest, lastSyncBatchNewest, nextAttemptAt = nextSync, inFlight = syncTask is not null },
                 gardenPickerDetails=gardenPickerCaptures.ToArray(),
                 marketSellerDiagnostics=ReadSellerDiagnosticExport(),
+                gilTraderDiagnostics=new {enabled=config.EnableGilTrader,stage=gilTrade.Stage.ToString(),gilTrade.Status,gilTrade.Sending,gilTrade.Total,gilTrade.Done,gilTrade.Trades,partner=gilPartnerName,world=gilPartnerWorld,trace=gilTradeDiagnostics.ToArray()},
                 helperDiagnostics = new { character=Player.CharacterName, enabled=config.EnableFollowThem, armed=followSession.Armed, target=config.FollowThem.TargetName, questPermission=helperPermission.Quest, paused=HelperPaused, questPaused=helperPermission.QuestPaused, shareQuest=config.FollowThem.ShareQuestActions, stopOnMovement=config.FollowThem.StopOnMovement, followStatus, helperError, helperLastIssue, observedQuest=helperObservedQuest, followers=helperFollowers.Select(f=>new {f.Name,f.Status,f.Quest,f.QuestPaused,f.Control,f.Updated}).ToArray() },
                 eventExchangeDiagnostics=HelperExchangeDiagnostic(),
                 lotteryDiagnostics = lotteryDiagnostic,
@@ -1302,6 +1305,7 @@ public sealed partial class Plugin : IDalamudPlugin
         Client.TerritoryChanged -= OnCofferTerritoryChanged;
         Pi.UiBuilder.Draw -= Draw;
         DisposeMarketSearch();
+        DisposeGilTrader();
         DisposeBidSearch();
         DisposeAdventures();
         DisposeTesting();
