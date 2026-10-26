@@ -109,7 +109,7 @@ public sealed class SellerRun(ISellerPort port)
                 if(item is null){Move(Phase.Close,now);break;}
                 var current=port.ReadStock(retainer.Id);
                 if(current is null)break;
-                var live=current.FirstOrDefault(x=>x.SameItem(item));
+                var live=current.FirstOrDefault(x=>x.SamePricingItem(item));
                 if(live is null || live.Price!=item.Price)
                 {port.Review(retainer,item,new(SellerStatus.Skipped,null,"Listing changed or sold since this run began.","None"),false);Skipped++;Advance(now);break;}
                 if(settings.ExcludedItems.Contains(item.ItemId)){Skipped++;port.Review(retainer,item,new(SellerStatus.Skipped,null,"Excluded by item rule.","None"),false);Advance(now);break;}
@@ -123,7 +123,7 @@ public sealed class SellerRun(ISellerPort port)
                 if(item is null || !port.EditorMatches(retainer.Id,item)){Stop("Stopped: the selected listing changed.");break;}
                 var result=port.Comparison;
                 if(result is null)break;
-                decision=SellerPricing.Decide(item.ItemId,world,item.Hq,item.Price,result,own,settings,now);
+                decision=SellerPricing.Decide(item.ItemId,world,item.Hq,item.Price,result,own,settings,now,item.Materia);
                 if(!Apply || !decision.CanApply)
                 {port.Review(retainer,item,decision,false);if(decision.Status==SellerStatus.Skipped)Skipped++;if(!port.CancelEditor(retainer.Id,item)){Stop("Stopped: the selected listing changed.");break;}Advance(now);break;}
                 if(port.ApplyPrice(retainer.Id,item,decision.Price!.Value))Move(Phase.Commit,now);

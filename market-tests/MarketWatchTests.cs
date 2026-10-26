@@ -6,7 +6,7 @@ static class MarketWatchTests
 {
     internal static async Task Run(Action<string,bool> check,DateTimeOffset now)
     {
-        var stock=new MarketStock(0,10,"Test",false,99,300000,now);
+        var stock=new MarketStock(0,10,"Test",false,99,300000,now,Materia:"");
         MarketWatchSnapshot data=new(20,10,now.AddMinutes(-10),now,[new("Other",100000,false,1,false),new("Another",250000,false,2,false)]);
         SellerDecision Assess(MarketWatchSnapshot? d,ISet<string>? names=null)=>MarketWatchPolicy.Assess(stock,20,d,names??new HashSet<string>(),new(),now);
         check("background uses same gap rule",Assess(data).Price==249999);

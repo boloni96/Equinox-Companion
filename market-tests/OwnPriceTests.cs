@@ -24,7 +24,7 @@ static class OwnPriceTests
         check("unidentified zero retainer is not own",SellerPricing.Decide(10,20,false,500,new(10,20,now,true,[new(0,123,false,1)],false,[]),new HashSet<ulong>{0},new(),now).Price==122);
         check("manual own reference matches exactly",SellerPricing.OfferPrice(123,true,new(){RoundTo=100,UndercutGil=50})==123);
         check("manual other reference still adjusted",SellerPricing.OfferPrice(123,false,new(){RoundTo=10,UndercutGil=1})==120);
-        var stock=new MarketStock(0,10,"Test",false,99,500,now);
+        var stock=new MarketStock(0,10,"Test",false,99,500,now,Materia:"");
         var cache=new MarketWatchSnapshot(20,10,now,now,[new("Own",123,false,99,false),new("Other",200,false,1,false)]);
         check("background matches own exact price despite rounding",MarketWatchPolicy.Assess(stock,20,cache,new HashSet<string>{"Own"},new(){RoundTo=100},now) is {Price:123,Source:"Universalis"});
         check("background external lower remains competitor",MarketWatchPolicy.Assess(stock,20,cache with {Offers=[new("Own",123,false,1,false),new("Other",100,false,1,false)]},new HashSet<string>{"Own"},new(),now).Price==99);
@@ -71,7 +71,7 @@ static class OwnPriceTests
     {
         public DateTimeOffset Now=now;
         private readonly SellerComparisonCapture capture=new();
-        private MarketStock stock=new(0,10,"Empty market item",false,99,500,now);
+        private MarketStock stock=new(0,10,"Empty market item",false,99,500,now,Materia:"");
         public int Writes;public List<SellerDecision> Reviews=[];
         public bool ContextMatches(ulong c,uint w)=>true;
         public bool SelectRetainer(SellerRetainerRef r)=>true;

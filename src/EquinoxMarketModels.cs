@@ -1,8 +1,9 @@
 namespace EquinoxCompanion;
 
-public sealed record MarketStock(int Slot, uint ItemId, string Name, bool Hq, uint Quantity, int Price, DateTimeOffset ListedAt,int DisplayOrder=int.MaxValue)
+public sealed record MarketStock(int Slot, uint ItemId, string Name, bool Hq, uint Quantity, int Price, DateTimeOffset ListedAt,int DisplayOrder=int.MaxValue,string? Materia=null)
 {
     public long Total => (long)Price * Quantity;
+    public bool SamePricingItem(MarketStock other) => SameItem(other) && Materia==other.Materia;
     public bool SameItem(MarketStock other) => Slot==other.Slot && ItemId==other.ItemId && Hq==other.Hq && Quantity==other.Quantity;
 }
 public sealed record MarketRetainer(ulong Id, string Name, ulong CharacterId, string Character, uint WorldId, string World,

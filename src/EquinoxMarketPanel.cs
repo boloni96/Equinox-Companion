@@ -61,9 +61,9 @@ public sealed partial class Plugin
         var current=MarketRetainerById(retainer)?.Stock.FirstOrDefault(x=>x.Slot==slot);
         if(current!=null&&config.Seller.ExcludedItems.Contains(current.ItemId))return new(SellerStatus.Skipped,null,"Excluded from automatic price updates by your item rule.","Item rule");
         var hasLive=sellerReviews.TryGetValue((retainer,slot),out var live);
-        if(current!=null&&hasLive&&live.Item.SameItem(current)&&live.Item.Price==current.Price&&DateTimeOffset.UtcNow-live.At<=TimeSpan.FromMinutes(5))return live.Decision;
-        if(config.Seller.BackgroundChecks&&current!=null&&marketWatchReviews.TryGetValue((retainer,slot),out var watch)&&watch.Item.SameItem(current)&&watch.Item.Price==current.Price)return watch.Decision;
-        var why=hasLive?(current!=null&&live.Item.SameItem(current)&&live.Item.Price==current.Price?"The live comparison is over five minutes old.":"This listing changed after its last live comparison."):"No live comparison is recorded for this listing in this session.";
+        if(current!=null&&hasLive&&live.Item.SamePricingItem(current)&&live.Item.Price==current.Price&&DateTimeOffset.UtcNow-live.At<=TimeSpan.FromMinutes(5))return live.Decision;
+        if(config.Seller.BackgroundChecks&&current!=null&&marketWatchReviews.TryGetValue((retainer,slot),out var watch)&&watch.Item.SamePricingItem(current)&&watch.Item.Price==current.Price)return watch.Decision;
+        var why=hasLive?(current!=null&&live.Item.SamePricingItem(current)&&live.Item.Price==current.Price?"The live comparison is over five minutes old.":"This listing changed after its last live comparison."):"No live comparison is recorded for this listing in this session.";
         why+=config.Seller.BackgroundChecks?" Waiting for usable background data, or run Check prices at the bell.":" Background checks are off; run Check prices at the bell.";
         return new(SellerStatus.Unknown,null,why,"None");
     }
@@ -143,7 +143,7 @@ public sealed partial class Plugin
             if(s.PercentUndercut)Percent("Undercut",s.UndercutPercent,v=>s.UndercutPercent=v,"Example: 1% below 10,000 gil becomes 9,900 gil.");
             else Number("Gil undercut",s.UndercutGil,0,SellerPricing.MaxPrice,v=>s.UndercutGil=v,"Example: 1 gil below 10,000 becomes 9,999. Zero matches the reference price.");
             Number("Round down to multiple",s.RoundTo,1,1000000,v=>s.RoundTo=v,"Applied after undercutting, and to history-based targets. A multiple of 100 rounds 9,999 down to 9,900. Use 1 for no extra rounding. Matching your own retainer skips both rounding and undercutting.");
-            Percent("Ignore lowest price beyond gap",s.LowOutlierPercent,v=>s.LowOutlierPercent=v,"Automatic checks only: compare the lowest and next distinct matching HQ/NQ unit prices. At 40%, 100k versus 250k is ignored; 250k is used. Zero disables this rule. Your manual price click remains your choice.");
+            Percent("Ignore lowest price beyond gap",s.LowOutlierPercent,v=>s.LowOutlierPercent=v,"Automatic checks only: compare the lowest and next distinct HQ/NQ prices with the same materia types and grades. Plain and melded items never share a price group. At 40%, 100k versus 250k is ignored, unless your minimum number of recent sales supports the plain low price within 10%. Zero disables this rule. Your manual price click remains your choice.");
             Toggle("Allow raising competitive prices",s.RaiseCompetitivePrices,v=>s.RaiseCompetitivePrices=v,"Allows automatic updates to increase your price to the calculated target. Off keeps an already lower price, subject to your item minimum.");
             Percent("Maximum automatic increase",s.MaximumIncreasePercent,v=>s.MaximumIncreasePercent=v,"Caps any automatic price increase, including own-retainer matches and empty-market history. Default 100% allows at most doubling; 0 blocks increases. Larger suggestions keep your existing price with a hover explanation. Your explicit item minimum can still raise it to that minimum. Manual price clicks remain your choice.",10000);
             Toggle("Use recent sales when comparison is empty",s.UseHistory,v=>s.UseHistory=v,"Update prices can use recent matching HQ/NQ transactions only after a successful comparison has no matching listings at all. Known own listings are matched instead. History is fetched even when Also open recent sale history is off. Errors and timeouts keep the existing price; hover a skipped result for the reason.");
@@ -151,7 +151,7 @@ public sealed partial class Plugin
                 var rule=(int)s.HistoryRule;ImGui.SetNextItemWidth(220);if(ImGui.Combo("History reference",ref rule,"Median recent sale\0Highest supported recent sale\0Latest supported sale\0")){s.HistoryRule=(SellerHistoryRule)rule;dirty=true;}
                 MarketHelp("Choose the middle, highest or most recent price among sales that pass the age and outlier checks. No undercut is applied to history alone.");
                 Number("History age (days)",s.HistoryDays,1,90,v=>s.HistoryDays=v,"Ignore transactions older than this many days.");
-                Number("Minimum recent sales",s.MinimumHistorySales,1,20,v=>s.MinimumHistorySales=v,"Require at least this many usable transactions before suggesting a history-based price.");
+                Number("Minimum recent sales",s.MinimumHistorySales,1,20,v=>s.MinimumHistorySales=v,"Require at least this many usable transactions before suggesting a history-based price or supporting an unusually low plain listing. Sales do not reveal materia; unmatched melds need manual review.");
                 Percent("History outlier distance",s.HistoryOutlierPercent,v=>s.HistoryOutlierPercent=Math.Max(1,v),"Exclude sale prices too far above or below the median. This reduces the effect of unusually large or small transactions.");
             }
         }
@@ -347,7 +347,7 @@ public sealed partial class Plugin
                     ImGui.TableNextRow();ImGui.TableNextColumn();
                     ImGui.PushStyleColor(ImGuiCol.Text,SellerColor(decision.VisualStatus));
                     if(ImGui.Selectable(x.Name+(x.Hq?" HQ":"")+"##item",false))OpenMarketItem(r,x);
-                    ImGui.PopStyleColor();MarketHelp($"{decision.Reason}\nClick: open this listing's price editor while its retainer is summoned. Right-click: item actions.\nListed {DisplayTime.Local(x.ListedAt)}");ItemRightClick(x.ItemId);
+                    ImGui.PopStyleColor();MarketHelp($"{SellerMateria.Describe(x.Materia)}\n{decision.Reason}\nClick: open this listing's price editor while its retainer is summoned. Right-click: item actions.\nListed {DisplayTime.Local(x.ListedAt)}");ItemRightClick(x.ItemId);
                     ImGui.TableNextColumn();ImGui.TextUnformatted(x.Quantity.ToString());
                     ImGui.TableNextColumn();if(ImGui.Selectable(x.Price.ToString("N0"),false))ImGui.SetClipboardText(x.Price.ToString());
                     MarketHelp($"Click to copy unit price. Stack value: {x.Total:N0} gil. Right-click for item pricing rules.");

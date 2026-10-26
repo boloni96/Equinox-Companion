@@ -2,7 +2,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 namespace EquinoxCompanion;
 
-public sealed record RetainerMarketItem(int Slot,uint ItemId,string Name,bool Hq,uint Quantity,int Price,DateTimeOffset ListedAt);
+public sealed record RetainerMarketItem(int Slot,uint ItemId,string Name,bool Hq,uint Quantity,int Price,DateTimeOffset ListedAt,string? Materia=null);
 public sealed record RetainerMarketRow(string Id,string Name,int Order,uint Gil,DateTimeOffset ObservedAt,DateTimeOffset? LastVisit,RetainerMarketItem[] Items,uint? JobId=null,int? Level=null,string Job="",DateTimeOffset? ProfileAt=null);
 public sealed record RetainerMarketDetails(RetainerMarketRow[] Retainers);
 
@@ -12,7 +12,7 @@ public static class RetainerMarketSnapshot
     private static bool At(DateTimeOffset at,DateTimeOffset now)=>at.Year>=2020&&at<=now.AddMinutes(5);
     public static bool Valid(RetainerMarketDetails? value,DateTimeOffset now)=>value?.Retainers is {Length:>0 and <=10} rows&&
         rows.All(r=>r!=null&&Regex.IsMatch(r.Id??"","^[1-9]\\d{0,19}$")&&Text(r.Name,80)&&r.Order is >=0 and <=9&&At(r.ObservedAt,now)&&
-            (r.LastVisit==null||At(r.LastVisit.Value,now))&&r.JobId is null or <=255&&r.Level is null or >=0 and <=200&&(r.Job??"").Length<=100&&(r.ProfileAt==null||At(r.ProfileAt.Value,now))&&r.Items is {Length:<=20}&&r.Items.All(i=>i!=null&&i.Slot is >=0 and <20&&i.ItemId is >0 and <1000000&&Text(i.Name,100)&&i.Quantity is >0 and <=9999&&i.Price is >0 and <=999999999&&At(i.ListedAt,now))&&r.Items.Select(i=>i.Slot).Distinct().Count()==r.Items.Length)&&rows.Select(r=>r.Id).Distinct().Count()==rows.Length;
+            (r.LastVisit==null||At(r.LastVisit.Value,now))&&r.JobId is null or <=255&&r.Level is null or >=0 and <=200&&(r.Job??"").Length<=100&&(r.ProfileAt==null||At(r.ProfileAt.Value,now))&&r.Items is {Length:<=20}&&r.Items.All(i=>i!=null&&i.Slot is >=0 and <20&&i.ItemId is >0 and <1000000&&Text(i.Name,100)&&i.Quantity is >0 and <=9999&&i.Price is >0 and <=999999999&&At(i.ListedAt,now)&&(i.Materia==null||SellerMateria.Known(i.Materia)))&&r.Items.Select(i=>i.Slot).Distinct().Count()==r.Items.Length)&&rows.Select(r=>r.Id).Distinct().Count()==rows.Length;
 }
 
 // Bounded current state, not a second activity history. Replacing an unsent

@@ -47,7 +47,7 @@ Check("no stock no listing",SellerPricing.Stack(99,0,99)==0);
 var settings=JsonSerializer.Deserialize<SellerSettings>(JsonSerializer.Serialize(new SellerSettings{NewStackSize=1,MinimumPrices=new(){[10]=99}}))!;
 Check("settings persist",settings.NewStackSize==1&&settings.MinimumPrices[10]==99);
 
-var stock=new MarketStock(0,10,"Test",false,99,300000,now);
+var stock=new MarketStock(0,10,"Test",false,99,300000,now,Materia:"");
 var p=new FakePort(now,stock);var run=new SellerRun(p);
 void Start(bool apply=true,SellerSettings? s=null){p=new FakePort(now,stock);run=new(p);run.Start([new(1,"One"),new(2,"Two")],100,20,apply,s??new(),[1,2],now);}
 void Step(int n=1){for(var i=0;i<n;i++){p.Now=p.Now.AddSeconds(1);run.Tick(p.Now);}}
@@ -59,6 +59,7 @@ Start();Until(SellerRun.Phase.ReadComparison);run.Pause(p.Now);Step(600);Check("
 Start();Until(SellerRun.Phase.Commit);var writes=p.Writes;run.Pause(p.Now);Step(60);run.Pause(p.Now);Step(100);Check("pause after submit never resubmits",p.Writes==2&&writes==1);
 Start();Until(SellerRun.Phase.ReadComparison);p.Context=false;Step(100);Check("character/world change stops",p.Writes==0&&!run.Running&&p.Releases==1);
 Start();Until(SellerRun.Phase.ReadComparison);p.EditorValid=false;Step(100);Check("changed editor cannot be confirmed",p.Writes==0&&!run.Running);
+Start();Until(SellerRun.Phase.NextItem);p.Stocks[1]=stock with {Materia="219"};Step(100);Check("changed materia during run skips the replaced item",run.Skipped==1&&p.Writes==1);
 Start();p.FailComparison=true;Step(100);Check("failed comparisons keep prices and continue",p.Writes==0&&p.Closed==2&&run.Skipped==2);
 Start();p.Empty=true;Step(100);Check("empty market history updates both",p.Writes==2&&p.Stocks.Values.All(x=>x.Price==110));
 Start();p.NeverConfirm=true;Step(100);Check("unconfirmed commit stops without retry",p.Writes==1&&!run.Running&&p.Closed==0);
@@ -112,6 +113,7 @@ MarketFixTests.Run(Check,now);
 AutoRetainerPauseTests.Run(Check,now);
 ComparisonCaptureTests.Run(Check,now);
 OwnPriceTests.Run(Check,now);
+MateriaTests.Run(Check,now);
 Console.WriteLine($"{tests} market checks passed.");
 
 await MarketSharing251Tests.Run(Check,now);

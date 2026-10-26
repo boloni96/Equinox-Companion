@@ -22,6 +22,11 @@ static class PairedMarket251Tests
   Check("conflicting retainer identity excluded",View([local],roster with {People=[new("p2","Other",[other])]}).Length==0);
   Check("same account labels have separate scopes",PairedMarketView.AccountKey(v)!=PairedMarketView.AccountKey(v with {PersonId="p2"}));
   Check("unchanged projections keep semantic equality",PairedMarketView.Same([v],[v with {Stock=[..v.Stock]}])&&!PairedMarketView.Same([v],[v with {Level=81}]));
+  var melded=row with {Items=[new(0,10,"Item",true,1,1197021,old,Materia:"219,219,234,235,250")]};
+  var withMateria=roster with {People=[new("p1","Person",[c with {RetainerMarket=new([melded])}])]};
+  Check("paired stock retains exact materia types and grades",View([],withMateria).Single().Stock.Single().Materia=="219,219,234,235,250");
+  Check("bad shared materia excluded",!RetainerMarketSnapshot.Valid(new([melded with {Items=[melded.Items[0] with {Materia="250,219"}]}]),now));
+  Check("outbox keeps plain distinct from unknown",RetainerMarketSnapshot.Valid(new([melded with {Items=[melded.Items[0] with {Materia=""}]}]),now)&&RetainerMarketSnapshot.Valid(new([melded with {Items=[melded.Items[0] with {Materia=null}]}]),now));
   var source=Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,"../../../../src/GilTraderPanel.cs"));
   var text=File.ReadAllText(source);
   Check("send and receive actions have distinct ImGui IDs from direction controls",text.Contains("Send gil##gil-mode-send")&&text.Contains("Receive##gil-mode-receive")&&text.Contains("Send gil###gil-start")&&!text.Contains("ImGui.Button(\"Send gil\")"));
