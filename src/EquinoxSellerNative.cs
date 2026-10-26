@@ -123,7 +123,7 @@ public sealed partial class Plugin
     private void SellerOfferingsReceived(IMarketBoardCurrentOfferings offerings)
     {
         if(!config.Seller.Enabled||sellerOfferings.Count>=32)return;
-        var rows=offerings.ItemListings.Select(x=>new SellerReceivedOffer(x.ListingId,x.ItemId%1_000_000,new(x.RetainerId,x.PricePerUnit,x.IsHq,x.ItemQuantity,x.OnMannequin))).ToArray();
+        var rows=offerings.ItemListings.Select(x=>new SellerReceivedOffer(x.ListingId,x.ItemId%1_000_000,new(x.RetainerId,x.PricePerUnit,x.IsHq,x.ItemQuantity,x.OnMannequin,SellerMateria.FromParts(x.Materia.Select(m=>(m.MateriaId,m.Index)),x.MateriaCount)))).ToArray();
         sellerOfferings.Enqueue((offerings.RequestId,rows,DateTimeOffset.UtcNow));
     }
     private void DrainSellerComparison()
@@ -138,11 +138,11 @@ public sealed partial class Plugin
         if(!config.Seller.Enabled||sellerDispatchingCompare||args is not AddonReceiveEventArgs ev||(int)ev.AtkEventType!=25||ev.EventParam!=4)return;
         var item=SellerEditorItem(out _,out _);
         if(item==null)return;
-        ArmSellerComparison(item->ItemId%1_000_000,(item->Flags&InventoryItem.ItemFlags.HighQuality)!=0);
+        ArmSellerComparison(item->ItemId%1_000_000,(item->Flags&InventoryItem.ItemFlags.HighQuality)!=0,SellerMateria.FromInventory(item->Materia,item->MateriaGrades));
     }
-    private void ArmSellerComparison(uint item,bool hq)
+    private void ArmSellerComparison(uint item,bool hq,string? materia)
     {
-        sellerComparison.Begin(item,Player.CurrentWorld.RowId,hq,DateTimeOffset.UtcNow);
+        sellerComparison.Begin(item,Player.CurrentWorld.RowId,hq,DateTimeOffset.UtcNow,materia);
         if(!sellerRun.Running){manualCompareAt=sellerComparison.RequestedAt;manualDecision=null;}
         TraceSeller("Comparison request",$"Item {item} · new listings and history request");
     }
@@ -197,12 +197,12 @@ public sealed partial class Plugin
                     if(candidates.Length==0){TraceSeller("Price click ignored","Displayed price has no matching item/quality offer.",new {clickedPrice,manualEditor.ItemId,manualEditor.Hq});return;}listing=candidates[0];
                 }else {TraceSeller("Price click ignored","Displayed unit price could not be read.",new {nodeType=text==null?-1:(int)text->Type,text=text!=null&&text->Type==NodeType.Text?((AtkTextNode*)text)->NodeText.ToString():""});return;}
             }else {TraceSeller("Price click ignored","Comparison row renderer is unavailable.",new {index,nodeCount=renderer==null?0:renderer->UldManager.NodeListCount});return;}
-            if(!sellerComparison.Contains(listing.ListingId,new(listing.RetainerId,listing.UnitPrice,listing.IsHqItem,listing.Quantity,listing.IsMannequin)) || listing.UnitPrice is 0 or >SellerPricing.MaxPrice || listing.ItemId%1_000_000!=manualEditor.ItemId || listing.IsMannequin || listing.IsHqItem!=manualEditor.Hq){TraceSeller("Price click ignored","Offer did not match the current item and quality.");return;}
+            if(!sellerComparison.Contains(listing.ListingId,ReadSellerOffer(listing)) || listing.UnitPrice is 0 or >SellerPricing.MaxPrice || listing.ItemId%1_000_000!=manualEditor.ItemId || listing.IsMannequin || listing.IsHqItem!=manualEditor.Hq){TraceSeller("Price click ignored","Offer did not match the current item and quality.");return;}
             var own=KnownSellerRetainers();
             // Sorted rows can share a displayed price. If a verified own offer
             // is at that same price, match it rather than undercut our other stack.
             var matchOwn=proxy->Listings[..(int)Math.Min(100,proxy->ListingCount)].ToArray().Any(x=>x.RetainerId!=0&&own.Contains(x.RetainerId)&&x.UnitPrice==listing.UnitPrice&&x.IsHqItem==manualEditor.Hq&&!x.IsMannequin&&
-                sellerComparison.Contains(x.ListingId,new(x.RetainerId,x.UnitPrice,x.IsHqItem,x.Quantity,x.IsMannequin)));
+                sellerComparison.Contains(x.ListingId,ReadSellerOffer(x)));
             var price=SellerPricing.OfferPrice(listing.UnitPrice,matchOwn,config.Seller,config.Seller.MinimumPrices.GetValueOrDefault(manualEditor.ItemId,1));
             if(config.Seller.CopyPrice)Dalamud.Bindings.ImGui.ImGui.SetClipboardText(price.ToString());
             var applied=config.Seller.ClickSetsPrice&&SetManualSellerPrice(price,config.Seller.ClickConfirms);
@@ -210,6 +210,7 @@ public sealed partial class Plugin
             TraceSeller("Price click",sellerNotice,new {price,applied,matchOwn,config.Seller.ClickSetsPrice,config.Seller.CopyPrice,config.Seller.ClickConfirms});
         }catch(Exception ex){sellerNotice="Could not use this price; no automatic retry.";TraceSeller("Price click failed",ex.GetType().Name,new {ex.Message,ex.StackTrace});Log.Debug(ex,sellerNotice);}
     }
+    private static SellerOffer ReadSellerOffer(MarketBoardListing row)=>new(row.RetainerId,row.UnitPrice,row.IsHqItem,row.Quantity,row.IsMannequin,SellerMateria.FromPacked(row.Materia,row.MateriaCount));
     private HashSet<ulong> KnownSellerRetainers()=>MarketRetainers.Select(x=>x.Id).Concat(ReadSellerRetainers().Select(x=>x.Id)).Where(x=>x!=0).ToHashSet();
     private static unsafe AtkUnitBase* SellerAddon(string name)
     {var a=(AtkUnitBase*)GardenGui.GetAddonByName(name).Address;return a!=null&&a->IsVisible&&a->IsReady?a:null;}
@@ -258,7 +259,7 @@ public sealed partial class Plugin
         for(short i=0;i<20;i++){
             var slot=SellerNativeInterop.Resolve(inventory->GetInventorySlot(i));if(slot==null||slot->ItemId==0||slot->Quantity==0)continue;
             var price=manager->GetRetainerMarketPrice(i);if(price is 0 or >SellerPricing.MaxPrice)return null;
-            rows.Add(new(i,slot->ItemId%1_000_000,SearchItemName(slot->ItemId%1_000_000),(slot->Flags&InventoryItem.ItemFlags.HighQuality)!=0,(uint)slot->Quantity,(int)price,DateTimeOffset.UtcNow));
+            rows.Add(new(i,slot->ItemId%1_000_000,SearchItemName(slot->ItemId%1_000_000),(slot->Flags&InventoryItem.ItemFlags.HighQuality)!=0,(uint)slot->Quantity,(int)price,DateTimeOffset.UtcNow,Materia:SellerMateria.FromInventory(slot->Materia,slot->MateriaGrades)));
         }
         // A stale inventory from the previous retainer must not become an empty snapshot.
         if(rows.Count!=agent->SellListEntryCount)return null;
@@ -275,7 +276,7 @@ public sealed partial class Plugin
         if(edit==null||edit->AskingPrice==null||edit->Quantity==null||agent==null||agent->SellItemInventoryType!=InventoryType.RetainerMarket||agent->SellItemInventorySlot!=item.Slot||edit->Quantity->Value!=item.Quantity)return false;
         var native=SellerEditorItem(out var type,out var slot);
         return native!=null&&type==InventoryType.RetainerMarket&&slot==item.Slot&&native->ItemId%1_000_000==item.ItemId&&
-            ((native->Flags&InventoryItem.ItemFlags.HighQuality)!=0)==item.Hq&&native->Quantity==item.Quantity&&
+            ((native->Flags&InventoryItem.ItemFlags.HighQuality)!=0)==item.Hq&&native->Quantity==item.Quantity&&SellerMateria.Matches(item.Materia,SellerMateria.FromInventory(native->Materia,native->MateriaGrades))&&
             (!checkPrice||edit->AskingPrice->Value==item.Price);
     }
     private unsafe bool SellerButton(AtkUnitBase* addon,AtkComponentButton* button,uint nodeId)
@@ -300,7 +301,7 @@ public sealed partial class Plugin
         if(slot==null||slot->ItemId%1_000_000!=item){TraceSeller("Compare blocked","Editor inventory item does not match the request.",new {expected=item,actual=slot==null?0:slot->ItemId});return false;}
         // WaitingForListings stays true even after completed searches in the
         // supplied game trace. The enabled native button accepts a new search.
-        ArmSellerComparison(item,(slot->Flags&InventoryItem.ItemFlags.HighQuality)!=0);
+        ArmSellerComparison(item,(slot->Flags&InventoryItem.ItemFlags.HighQuality)!=0,SellerMateria.FromInventory(slot->Materia,slot->MateriaGrades));
         sellerDispatchingCompare=true;
         try {if(SellerButton((AtkUnitBase*)edit,edit->ComparePrices,4))return true;}
         finally {sellerDispatchingCompare=false;}
@@ -316,12 +317,11 @@ public sealed partial class Plugin
         if(proxy==null||result==null||!capture.Ready(proxy->SearchItemId%1_000_000,Player.CurrentWorld.RowId,(int)proxy->ListingCount))return null;
         var rows=new List<SellerOffer>();
         for(var i=0;i<capture.Expected;i++){
-            var x=proxy->Listings[i];var offer=new SellerOffer(x.RetainerId,x.UnitPrice,x.IsHqItem,x.Quantity,x.IsMannequin);
+            var x=proxy->Listings[i];var offer=ReadSellerOffer(x);
             if(x.ItemId%1_000_000!=capture.Item||!capture.Contains(x.ListingId,offer))return null;
             rows.Add(offer);
         }
-        var emptyQuality=!rows.Any(x=>x.Hq==capture.Hq&&!x.Mannequin);
-        var wantHistory=(sellerRun.Running?config.Seller.OpenHistory:manualShowHistory) || emptyQuality && config.Seller.UseHistory;
+        var wantHistory=(sellerRun.Running?config.Seller.OpenHistory:manualShowHistory) || SellerPricing.NeedsHistory(rows,capture.Hq,capture.Materia,KnownSellerRetainers(),config.Seller);
         if(wantHistory&&!capture.HistoryRequested)capture.HistoryRequested=SellerButton((AtkUnitBase*)result,result->History,23);
         if(wantHistory&&!capture.HistoryReceived)return null;
         return new(capture.Item,capture.World,capture.RequestedAt,true,rows.ToArray(),capture.HistoryReceived,capture.History);
@@ -427,7 +427,7 @@ public sealed partial class Plugin
                     edit->Quantity->SetValue(SellerPricing.Stack(config.Seller.NewStackSize,item->Quantity,(int)max));
                 }
                 manualInventory=type;manualRetainer=active;
-                manualEditor=new(slot,id,SearchItemName(id),(item->Flags&InventoryItem.ItemFlags.HighQuality)!=0,(uint)edit->Quantity->Value,edit->AskingPrice->Value,now);
+                manualEditor=new(slot,id,SearchItemName(id),(item->Flags&InventoryItem.ItemFlags.HighQuality)!=0,(uint)edit->Quantity->Value,edit->AskingPrice->Value,now,Materia:SellerMateria.FromInventory(item->Materia,item->MateriaGrades));
                 TraceSeller("Manual item","Captured",new {inventory=type.ToString(),manualRetainer,manualEditor});
                 if(manualPastePrice is {} paste){sellerNotice=SetManualSellerPrice(paste,false)?$"Pasted {paste:N0} gil into the editor.":"The editor changed; clipboard price was not applied.";manualPastePrice=null;}
             }else if(now-manualEditorAt>TimeSpan.FromSeconds(3)){sellerNotice="The selected item is not ready yet. Diagnostics has the blocked item details.";TraceSeller("Manual capture blocked",sellerNotice,sellerLastNativeState);}
@@ -436,7 +436,7 @@ public sealed partial class Plugin
             if(BeginSellerComparison(manualEditor.ItemId))manualCompareAt=now;
         }
         if(manualEditor!=null&&ReadSellerComparison() is {} comparison){
-            var decision=SellerPricing.Decide(manualEditor.ItemId,Player.CurrentWorld.RowId,manualEditor.Hq,manualEditor.Price,comparison,KnownSellerRetainers(),config.Seller,now);
+            var decision=SellerPricing.Decide(manualEditor.ItemId,Player.CurrentWorld.RowId,manualEditor.Hq,manualEditor.Price,comparison,KnownSellerRetainers(),config.Seller,now,manualEditor.Materia);
             if(decision!=manualDecision){manualDecision=decision;TraceSellerDecision(active,manualEditor,decision,false,"Manual suggestion");}
             sellerReviews[(active,manualEditor.Slot)]=(manualEditor,decision,now);
         }
@@ -447,7 +447,7 @@ public sealed partial class Plugin
         var edit=(AddonRetainerSell*)SellerAddon("RetainerSell");var agent=AgentRetainer.Instance();
         if(edit==null||edit->AskingPrice==null||agent==null||agent->SellItemInventorySlot!=item.Slot)return false;
         var native=SellerEditorItem(out var type,out var slot);
-        if(native==null||type!=manualInventory||slot!=item.Slot||native->ItemId%1_000_000!=item.ItemId||((native->Flags&InventoryItem.ItemFlags.HighQuality)!=0)!=item.Hq)return false;
+        if(native==null||type!=manualInventory||slot!=item.Slot||native->ItemId%1_000_000!=item.ItemId||((native->Flags&InventoryItem.ItemFlags.HighQuality)!=0)!=item.Hq||!SellerMateria.Matches(item.Materia,SellerMateria.FromInventory(native->Materia,native->MateriaGrades)))return false;
         edit->AskingPrice->SetValue(price);
         if(edit->AskingPrice->Value!=price)return false;
         if(confirm){CloseSellerAddon("ItemSearchHistory");CloseSellerAddon("ItemSearchResult");return SellerButton((AtkUnitBase*)edit,edit->Confirm,21);}
@@ -460,7 +460,7 @@ public sealed partial class Plugin
             sellerNotice=$"Open {retainer.Name}'s selling list on {retainer.Character} to edit this listing.";OpenEquinoxSeller();return;
         }
         if(SellerAddon("RetainerSell")!=null){sellerNotice="Finish or cancel the current price editor first.";return;}
-        var live=ReadSellerStock(retainer.Id)?.FirstOrDefault(x=>x.SameItem(item));
+        var live=ReadSellerStock(retainer.Id)?.FirstOrDefault(x=>x.SamePricingItem(item));
         if(live==null||live.Price!=item.Price){sellerNotice="This listing changed. Wait for the selling list to refresh.";return;}
         AgentRetainer.Instance()->OpenRetainerSell(InventoryType.RetainerMarket,(ushort)item.Slot);
     }
@@ -545,7 +545,7 @@ public sealed partial class Plugin
         public unsafe bool OpenEditor(ulong r,MarketStock item){
             if(p.SellerEditorMatches(r,item))return true;
             if(SellerAddon("RetainerSell")!=null||requestedEditor==(r,item.Slot))return false;
-            var stock=p.ReadSellerStock(r)?.FirstOrDefault(x=>x.SameItem(item));if(stock==null||stock.Price!=item.Price)return false;
+            var stock=p.ReadSellerStock(r)?.FirstOrDefault(x=>x.SamePricingItem(item));if(stock==null||stock.Price!=item.Price)return false;
             requestedEditor=(r,item.Slot);p.sellerReviews[(r,item.Slot)]=(item,new(SellerStatus.Checking,null,"Checking live market prices…","Live listings"),DateTimeOffset.UtcNow);
             AgentRetainer.Instance()->OpenRetainerSell(InventoryType.RetainerMarket,(ushort)item.Slot);return false;
         }
@@ -558,7 +558,7 @@ public sealed partial class Plugin
             var edit=(AddonRetainerSell*)SellerAddon("RetainerSell");if(edit==null)return false;
             edit->AskingPrice->SetValue(price);return p.SellerButton((AtkUnitBase*)edit,edit->Confirm,21);
         }
-        public unsafe bool PriceConfirmed(ulong r,MarketStock item,int price)=>SellerAddon("RetainerSell")==null&&p.ReadSellerStock(r)?.Any(x=>x.SameItem(item)&&x.Price==price)==true;
+        public unsafe bool PriceConfirmed(ulong r,MarketStock item,int price)=>SellerAddon("RetainerSell")==null&&p.ReadSellerStock(r)?.Any(x=>x.SamePricingItem(item)&&x.Price==price)==true;
         public bool CancelEditor(ulong r,MarketStock item){var ok=p.CancelSellerEditor(r,item);if(ok)requestedEditor=null;return ok;}
         public unsafe bool CloseRetainer(ulong id){
             if(SellerAddon("RetainerList")!=null)return true;

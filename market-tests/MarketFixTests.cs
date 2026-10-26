@@ -80,7 +80,7 @@ static class MarketFixTests
         public HashSet<(ulong,int)> Opened=[],Writes=[];
         public List<SellerDecision> Reviews=[];
         private (ulong,int)? editor;
-        public MultiStackPort(DateTimeOffset now){Now=now;foreach(var id in new[]{1UL,2UL})for(var slot=0;slot<3;slot++)Stock[(id,slot)]=new(slot,10,"Same item",false,(uint)(slot+1),slot==0?50:300+slot,now);}
+        public MultiStackPort(DateTimeOffset now){Now=now;foreach(var id in new[]{1UL,2UL})for(var slot=0;slot<3;slot++)Stock[(id,slot)]=new(slot,10,"Same item",false,(uint)(slot+1),slot==0?50:300+slot,now,Materia:"");}
         public bool ContextMatches(ulong c,uint w)=>true;
         public bool SelectRetainer(SellerRetainerRef r)=>true;
         public bool OpenMarket(ulong r)=>true;

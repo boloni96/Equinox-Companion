@@ -25,7 +25,7 @@ public static class PairedMarketView
             {
                 if(!RetainerMarketSnapshot.Valid(new([r]),now)||!ulong.TryParse(r.Id,out var id))continue;
                 candidates.Add(new(id,r.Name,ulong.Parse(c.ContentId),c.Name,world,c.World,pair.Person.Name,c.Account,r.Gil,r.ObservedAt,
-                    r.Items.Select(i=>new MarketStock(i.Slot,i.ItemId,i.Name,i.Hq,i.Quantity,i.Price,i.ListedAt,i.Slot)).ToArray(),
+                    r.Items.Select(i=>new MarketStock(i.Slot,i.ItemId,i.Name,i.Hq,i.Quantity,i.Price,i.ListedAt,i.Slot,i.Materia)).ToArray(),
                     r.LastVisit,r.Order,pair.Person.Id,SharedCharacterGrouping.AccountKey(c),c.Id,true,r.JobId,r.Level,r.Job,r.ProfileAt));
             }
         }

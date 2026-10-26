@@ -1,0 +1,34 @@
+Equinox Companion 0.5.1.255
+
+Seller: compare matching materia before deciding which prices are unusual
+
+- Compare plain gear with plain gear, and melded gear with the same materia
+  types, grades and count. Scan all returned listings (up to the game's 100),
+  keeping HQ/NQ, mannequins and known own retainers separate as before.
+  Different materia order is equivalent; different grades or types are not.
+- Fix the reported 298,880 plain HQ / 1,197,021 five-materia case: the expensive
+  melds no longer cause the normal plain lowest listing to be discarded.
+- Recent same-quality transactions can support a plain low price within 10%,
+  using the configured recent-sale window and minimum count. History does not
+  report materia and cannot automatically price an unmatched melded setup.
+  In that case keep the current price and explain why in the hover.
+- Apply the same matching to Universalis background checks, including recent
+  transactions. Keep source timestamps, live verification and increase limits.
+- Record materia when observing the selling list. Preserve it in paired stock
+  with Journal/Worker 7.11.244. Older records are unknown, not assumed plain;
+  open each retainer's selling list or run Check prices to refresh its details.
+- Invalidate cached suggestions when materia changes. Bind native/network
+  comparison rows and automatic price confirmations to the observed setup.
+  Manual price clicks remain explicit choices, including other materia builds.
+
+Validation: Release build, transition/sync gates, native checks and market
+regressions pass locally. Tests cover the supplied prices, a matching listing
+at row 100, own retainers, mismatched grades, repeated materia, network/native
+agreement, malformed/unknown metadata, history age/quality/minimum counts,
+background parsing, cache invalidation and unchanged sale accounting.
+Live in-game verification remains necessary. Use Check prices first; N28 in
+the updated shared checklist describes the plain/melded and pairing checks.
+
+Update Companion through the usual installer. Local Seller changes work on
+their own; deploy both Journal and Worker 7.11.244 to retain materia in paired
+stock. No reset, re-pairing, Android APK or garden-rule change is required.

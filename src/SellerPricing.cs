@@ -45,7 +45,7 @@ public sealed class SellerSettings
     public HashSet<ulong> SelectedRetainers { get; set; } = [];
 }
 
-public sealed record SellerOffer(ulong RetainerId, long Price, bool Hq, uint Quantity, bool Mannequin = false);
+public sealed record SellerOffer(ulong RetainerId, long Price, bool Hq, uint Quantity, bool Mannequin = false, string? Materia = "");
 public sealed record SellerSale(long Price, bool Hq, uint Quantity, DateTimeOffset At, bool Mannequin = false);
 public sealed record SellerComparison(uint ItemId, uint WorldId, DateTimeOffset At, bool Complete, SellerOffer[] Offers,
     bool HistoryComplete, SellerSale[] History, string Error = "");
@@ -92,14 +92,20 @@ public static class SellerPricing
         return new(SellerStatus.Skipped,null,$"Suggested {target:N0} gil exceeds your {percent:N0}% automatic increase limit from {current:N0} gil. Existing price kept; review recent matching sales before raising it. "+decision.Reason,decision.Source,decision.Undercut,decision.LowestCompetitor);
     }
     public static SellerDecision Decide(uint item, uint world, bool hq, int current, SellerComparison? result,
-        ISet<ulong> ownRetainers, SellerSettings s, DateTimeOffset now)
+        ISet<ulong> ownRetainers, SellerSettings s, DateTimeOffset now, string? materia = "")
     {
         SellerDecision Skip(string why) => new(SellerStatus.Skipped, null, why, "None");
         if (s.ExcludedItems.Contains(item)) return Skip("Excluded by your item rule.");
         if (result is null || !result.Complete || result.Error.Length > 0) return Skip(result?.Error is {Length: >0} error ? error : "Comparison did not finish; existing price kept.");
         if (result.ItemId != item || result.WorldId != world || result.At > now.AddSeconds(5) || now-result.At > TimeSpan.FromMinutes(5)) return Skip("Comparison belongs to another item/world or is stale.");
         if(result.Offers.Any(x=>x.Price is <=0 or >MaxPrice || x.Quantity==0))return Skip("Comparison contains an invalid listing; existing price kept.");
-        var all = result.Offers.Where(x=>x.Hq == hq && !x.Mannequin).ToArray();
+        if (!SellerMateria.Known(materia)) return Skip("Materia was not recorded for this item. Open this retainer's selling list to refresh it; existing price kept.");
+        var quality = result.Offers.Where(x=>x.Hq == hq && !x.Mannequin).ToArray();
+        var all = quality.Where(x=>SellerMateria.Matches(materia,x.Materia)).ToArray();
+        var recent = RecentSales(result.History, hq, s, now);
+        var context = $"{SellerMateria.Describe(materia)} · {all.Length}/{quality.Length} same-quality listings comparable, across all {result.Offers.Length} returned listings. ";
+        if (result.HistoryComplete && recent.Length > 0)
+            context += $"Latest recent {(hq?"HQ":"NQ")} sale: {recent[0].Price:N0} gil. Sale history does not report materia. ";
         bool Own(SellerOffer offer)=>offer.RetainerId!=0&&ownRetainers.Contains(offer.RetainerId);
         var prices = all.Where(x=>!Own(x)).Select(x=>x.Price).Distinct().Order().ToArray();
         var ownPrice = all.Where(Own).Select(x=>(long?)x.Price).Min();
@@ -107,7 +113,7 @@ public static class SellerPricing
         if (ownPrice is {} match && (prices.Length==0 || match<=prices[0]))
         {
             var price=OfferPrice(match,true,s,minimum);
-            var reason=$"Match your known retainer's {match:N0} gil unit price; no undercut or rounding.";
+            var reason=context+$"Match your known retainer's {match:N0} gil unit price; no undercut or rounding.";
             if(price!=match)reason+=" Your item minimum prevents an exact match.";
             var keep=current>=Math.Clamp(minimum,1,MaxPrice)&&(current==price||current<price&&!s.RaiseCompetitivePrices);
             return LimitIncrease(new(keep?SellerStatus.Competitive:SellerStatus.Update,keep?current:price,
@@ -115,22 +121,29 @@ public static class SellerPricing
         }
         if (prices.Length > 0)
         {
-            var ignoreLowest = prices.Length > 1 && s.LowOutlierPercent > 0 &&
-                100m * (prices[1]-prices[0]) / prices[1] > (decimal)FinitePercent(s.LowOutlierPercent,40,0,100);
+            var lowGap = LowGap(prices, s);
+            // History lacks meld information: it can corroborate a plain low
+            // price, never value a melded item or establish its materia premium.
+            var supporting = materia == "" && s.UseHistory && result.HistoryComplete
+                ? recent.Count(x=>Math.Abs((decimal)x.Price-prices[0]) <= prices[0]*0.10m) : 0;
+            var lowSupported = supporting >= Math.Clamp(s.MinimumHistorySales,1,20);
+            var ignoreLowest = lowGap && !lowSupported;
             var undercut = prices[0] < current;
             var reference = prices[ignoreLowest ? 1 : 0];
             var price = Adjust(reference, s, minimum);
-            var reason = ignoreLowest ? $"Ignored unusually low {prices[0]:N0}; next distinct price {reference:N0}." : $"Lowest competing unit price: {reference:N0}.";
+            var reason = context + (ignoreLowest ? $"Ignored unusually low {prices[0]:N0}; next distinct comparable price {reference:N0}." : $"Lowest comparable competing unit price: {reference:N0}.");
+            if (lowGap && lowSupported) reason += $" Kept the low price: {supporting} recent same-quality sales within 10% support it.";
             if (price >= reference && minimum >= reference) reason += " Your minimum prevents undercutting.";
             if (current >= Math.Clamp(minimum,1,MaxPrice) && (current == price || current < price && !s.RaiseCompetitivePrices))
                 return new(SellerStatus.Competitive, current, reason+" Your rules keep the current price."+(undercut?" A lower listing exists; review the ignored low-price rule.":""), "Live listings",undercut,prices[0]);
             return LimitIncrease(new(SellerStatus.Update, price, reason, "Live listings",undercut,prices[0]),current,minimum,s);
         }
-        if (!s.UseHistory) return Skip("No competing listings; sale-history pricing is disabled.");
+        if (materia != "") return Skip(context+"No listing with the same materia types and grades. Existing price kept; review other melds manually. History cannot price this materia setup.");
+        if (quality.Any(x=>!SellerMateria.Known(x.Materia))) return Skip(context+"Some listings have unknown materia; existing price kept until their details are available.");
+        if (!s.UseHistory) return Skip(context+"No comparable listings; sale-history pricing is disabled.");
         if (!result.HistoryComplete) return Skip("No listings; recent sales did not finish loading.");
         var days=Math.Clamp(s.HistoryDays,1,90);
         var matching=result.History.Where(x=>x.Hq == hq && !x.Mannequin && x.Quantity>0 && x.Price is >0 and <=MaxPrice).ToArray();
-        var recent = matching.Where(x=>x.At<=now.AddSeconds(5) && x.At>=now.AddDays(-days)).OrderByDescending(x=>x.At).Take(20).ToArray();
         var count = Math.Clamp(s.MinimumHistorySales,1,20);
         if (recent.Length < count) return Skip($"No listings; {result.History.Length} sales loaded, {matching.Length} valid {(hq?"HQ":"NQ")} sales, but only {recent.Length}/{count} within {days} days. Existing price kept.");
         static long Median(IEnumerable<long> source) { var a=source.Order().ToArray();return a.Length%2==1?a[a.Length/2]:(a[a.Length/2-1]+a[a.Length/2])/2; }
@@ -140,6 +153,19 @@ public static class SellerPricing
         if (supported.Length < count) return Skip($"No listings; too few sales remain after excluding outliers ({supported.Length}/{count}).");
         var referenceHistory = s.HistoryRule switch { SellerHistoryRule.HighestSupported=>supported.Max(x=>x.Price), SellerHistoryRule.Latest=>supported[0].Price, _=>Median(supported.Select(x=>x.Price)) };
         var target = Adjust(referenceHistory,s,minimum,false);
-        return LimitIncrease(new(current==target?SellerStatus.Competitive:SellerStatus.History,target,$"Empty market · {s.HistoryRule} of {supported.Length} recent { (hq?"HQ":"NQ") } sales. No undercut applied to history.","Recent sales"),current,minimum,s);
+        return LimitIncrease(new(current==target?SellerStatus.Competitive:SellerStatus.History,target,context+$"No comparable listings · {s.HistoryRule} of {supported.Length} recent { (hq?"HQ":"NQ") } sales. No undercut applied to history.","Recent sales"),current,minimum,s);
+    }
+
+    private static SellerSale[] RecentSales(IEnumerable<SellerSale> history, bool hq, SellerSettings s, DateTimeOffset now) => history
+        .Where(x=>x.Hq==hq&&!x.Mannequin&&x.Quantity>0&&x.Price is >0 and <=MaxPrice&&x.At<=now.AddSeconds(5)&&x.At>=now.AddDays(-Math.Clamp(s.HistoryDays,1,90)))
+        .OrderByDescending(x=>x.At).Take(20).ToArray();
+    private static bool LowGap(long[] prices, SellerSettings s) => prices.Length>1&&s.LowOutlierPercent>0&&
+        100m*(prices[1]-prices[0])/prices[1]>(decimal)FinitePercent(s.LowOutlierPercent,40,0,100);
+    public static bool NeedsHistory(IEnumerable<SellerOffer> offers, bool hq, string? materia, ISet<ulong> own, SellerSettings s)
+    {
+        if (!s.UseHistory || materia != "") return false;
+        var matching = offers.Where(x=>x.Hq==hq&&!x.Mannequin&&SellerMateria.Matches(materia,x.Materia)).ToArray();
+        var prices = matching.Where(x=>x.RetainerId==0||!own.Contains(x.RetainerId)).Select(x=>x.Price).Distinct().Order().ToArray();
+        return matching.Length==0 || LowGap(prices,s);
     }
 }
