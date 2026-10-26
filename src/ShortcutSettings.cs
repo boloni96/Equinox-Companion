@@ -31,9 +31,10 @@ public sealed partial class Plugin
         var activate=-1;
         for(var i=0;i<bindings.Length;i++)
         {
+            if(bindings[i].Name=="/cam"&&!OptionalToolAvailable("Camera")){shortcutActivation[i].Reset();continue;}
             var b=bindings[i].Binding;
             if(shortcutActivation[i].Step(b,Down(ShortcutKeyMap.VirtualKey(b.Key)),ctrl,alt,shift,super,blocked)
-                &&bindings.Count(x=>x.Binding.Matches(b.Key,b.Ctrl,b.Alt,b.Shift))==1&&activate<0)activate=i;
+                &&bindings.Count(x=>(x.Name!="/cam"||OptionalToolAvailable("Camera"))&&x.Binding.Matches(b.Key,b.Ctrl,b.Alt,b.Shift))==1&&activate<0)activate=i;
         }
         if(capturingShortcut is not null)
         {
@@ -44,7 +45,7 @@ public sealed partial class Plugin
             if(captured is not null)
             {
                 var name=capturingShortcut;
-                if(Shortcuts().Any(s=>s.Name!=name&&s.Binding.Matches(captured.Key,captured.Ctrl,captured.Alt,captured.Shift)))
+                if(Shortcuts().Any(s=>s.Name!=name&&(s.Name!="/cam"||OptionalToolAvailable("Camera"))&&s.Binding.Matches(captured.Key,captured.Ctrl,captured.Alt,captured.Shift)))
                     shortcutCaptureStatus="Already assigned to another command. Previous shortcut kept.";
                 else
                 {
@@ -88,6 +89,7 @@ public sealed partial class Plugin
         SettingsHelp("Click Set shortcut, press your combination, then release all keys to save. Esc cancels. Use one key with optional Ctrl, Alt or Shift.",false);
         foreach(var (name,binding) in Shortcuts())
         {
+            if(name=="/cam"&&!OptionalToolAvailable("Camera"))continue;
             ImGui.PushID(name);ImGui.TextUnformatted(name+" — "+binding.Label);ImGui.SameLine();
             if(capturingShortcut==name)
             {

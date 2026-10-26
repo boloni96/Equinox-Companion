@@ -128,7 +128,7 @@ public sealed partial class Plugin
     private bool QuickLootConflict()=>Pi.InstalledPlugins.Any(p=>p.IsLoaded&&p.InternalName=="LazyLoot");
     private unsafe void OnQuickLootCommand(string args)
     {
-        if(!config.EnableQuickLoot){PrintEquinox("[QuickLoot] Enable QuickLoot in Settings → Tracking first.");return;}
+        if(!RequireOptionalTool("QuickLoot"))return;
         var value=args.ToLowerInvariant();var s=CurrentQuickLoot;
         if(value is "need" or "greed" or "pass"){QueueQuickLoot(Enum.Parse<QuickLootRoll>(value,true));return;}
         if(value is "on" or "off" or "toggle")

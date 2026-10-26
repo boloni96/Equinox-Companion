@@ -48,7 +48,7 @@ public sealed partial class Plugin
   if(!ImGui.BeginPopup("EquinoxWindows"))return;
   ImGui.TextDisabled("OPEN A WINDOW");ImGui.Separator();
   void Row(string name,string command,string icon,Action open,bool isOpen=false){
-   if(isOpen)return;
+   if(isOpen || !OptionalToolAvailable(name))return;
    var compact=GoddessAppearance||welcomeWindow.IsOpen;
    var size=ImGui.GetTextLineHeight()*(compact?1.2f:1.65f);var at=ImGui.GetCursorScreenPos();ImGui.Dummy(new Vector2(size));
    GardenImage("assets/category-icons/"+icon+".png",at,new Vector2(size));

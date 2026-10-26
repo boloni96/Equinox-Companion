@@ -28,6 +28,7 @@ public sealed partial class Plugin
     }
     private void MinimizeLauncher(string name)
     {
+        if (!OptionalToolAvailable(name)) { ForgetOptionalLauncher(name); return; }
         minimizedLaunchers.Add(name);
         if(name == "Companion") { mainWindow.IsOpen=false; visible=false; }
         else if(name == "Where is it cheapest?") marketWindow.IsOpen=false;
@@ -108,6 +109,7 @@ public sealed partial class Plugin
     }
     private void DrawLauncher(string name, int index, string? artwork)
     {
+        if (!OptionalToolAvailable(name)) { ForgetOptionalLauncher(name); return; }
         var o = LauncherOptions(name, index);
         if (!minimizedLaunchers.Contains(name)) return;
         var display = ImGui.GetIO().DisplaySize;
@@ -182,7 +184,7 @@ public sealed partial class Plugin
     {
         SettingsHelp("Use the native title-bar collapse triangle or double-click the title bar to minimize to an icon. Single-click reopens its window; double-click closes both. Esc minimizes the focused window to its icon. X closes without an icon. Commands reopen windows. Drag icons to move them.",false);
         var names = new[] { "Companion", "Fashion Report", "Planting", "Welcome", "New Character", "Do I already have it?", "Where is it cheapest?", "Adventure", "Housing bids", "Testing", "Equinox Market", "Equinox Seller", "Gil Trader" };
-        for (var i = 0; i < names.Length; i++) { ImGui.PushID(i); if(ImGui.CollapsingHeader(names[i]=="Planting"?"Gardening":names[i]))DrawLauncherOptions(names[i], LauncherOptions(names[i], i)); ImGui.PopID(); }
+        for (var i = 0; i < names.Length; i++) { if(!OptionalToolAvailable(names[i]))continue; ImGui.PushID(i); if(ImGui.CollapsingHeader(names[i]=="Planting"?"Gardening":names[i]))DrawLauncherOptions(names[i], LauncherOptions(names[i], i)); ImGui.PopID(); }
     }
 }
 
