@@ -5,7 +5,8 @@ internal enum GilTradeStage { Stopped, Waiting, Opening, Offering, Locking, Conf
 internal sealed record GilTradeFrame(
     ulong Character, bool Ready, bool PartnerNearby, uint PartnerEntity, uint Wallet,
     bool TradeOpen, uint TradePartner, bool ItemsPresent, uint LocalGil, uint RemoteGil,
-    int LocalState, int RemoteState, bool SyncPending, bool Confirmation, bool OtherDialog, bool TradeReady = true);
+    int LocalState, int RemoteState, bool SyncPending, bool Confirmation, bool OtherDialog, bool TradeReady = true,
+    bool CompletionObserved = false);
 
 // No native pointers, persisted permission or network requests. One explicit Start
 // authorizes one direction with one player on this character, for this session.
@@ -24,6 +25,7 @@ internal sealed class GilTradeRun
     internal string Status { get; private set; } = "Choose a player nearby.";
     internal bool FinalConfirmationSent { get; private set; }
     private uint walletBefore, stableOffer;
+    private bool bothConfirming, completionEvidence;
     private DateTimeOffset started, stageAt, stableAt;
 
     internal bool Start(bool sending, uint total, GilTradeFrame frame, DateTimeOffset now)
@@ -39,15 +41,16 @@ internal sealed class GilTradeRun
         { Status = "Your wallet is full."; return false; }
         Sending = sending; Total = sending ? total : 0; Done = 0; Trades = 0; ThisTrade = 0;
         Character = frame.Character; PartnerEntity = frame.PartnerEntity; walletBefore = frame.Wallet;
-        FinalConfirmationSent = false; stableOffer = 0; started = now;
+        FinalConfirmationSent = false; bothConfirming = completionEvidence = false; stableOffer = 0; started = now;
         Move(GilTradeStage.Waiting, now, sending ? "Ready to send." : "Waiting for your selected player…");
         return true;
     }
 
     internal void Stop(string reason)
     {
+        var mightSettle = FinalConfirmationSent || Stage == GilTradeStage.Settling;
         Stage = GilTradeStage.Stopped;
-        Status = reason + (FinalConfirmationSent ? " The last trade may still settle; check your wallet before starting again." : "");
+        Status = reason + (mightSettle ? " The last trade may still settle; check your wallet before starting again." : "");
     }
     private void Move(GilTradeStage stage, DateTimeOffset now, string status) { Stage = stage; stageAt = now; Status = status; }
     private GilTradeAction Halt(string why) { Stop(why); return GilTradeAction.None; }
@@ -56,16 +59,38 @@ internal sealed class GilTradeRun
         if (!Running) return GilTradeAction.None;
         if (f.Character != Character) return Halt("Stopped: character changed.");
 
-        // After our final Yes, only an exact wallet delta AND a closed trade can
-        // credit a transfer. A click, closed/cancelled window or unrelated gain cannot.
+        // A manual click or another plugin may confirm between our polls. The
+        // typed completion receipt is captured separately for this locked offer.
+        if (Stage is GilTradeStage.Locking or GilTradeStage.Confirming)
+        {
+            var readable = f.TradeOpen && f.TradeReady && !f.SyncPending;
+            var matches = readable && f.TradePartner == PartnerEntity && !f.ItemsPresent &&
+                f.LocalState is >= 4 and <= 6 && f.RemoteState is >= 4 and <= 6 &&
+                (Sending ? f.LocalGil == ThisTrade && f.RemoteGil == 0 : f.RemoteGil == ThisTrade && f.LocalGil == 0);
+            if (matches && f.LocalState >= 5 && f.RemoteState >= 5) bothConfirming = true;
+            var nativeConfirmed = matches && f.LocalState == 6;
+            if (f.CompletionObserved || nativeConfirmed || bothConfirming && (!f.TradeOpen || f.Wallet != walletBefore))
+            {
+                if (readable && f.LocalState >= 3 && f.RemoteState >= 3 && !matches)
+                    return Halt("Stopped: the completed trade no longer matches the locked offer.");
+                // Native state 6 means our side accepted, not that the other
+                // side completed. External confirmation still needs its receipt.
+                completionEvidence = f.CompletionObserved;
+                Move(GilTradeStage.Settling, now, "Checking the completed gil transfer…");
+            }
+        }
+
+        // Confirmation evidence, an exact wallet delta AND a closed trade are
+        // required. A closed/cancelled window or unrelated gain alone cannot count.
         if (Stage == GilTradeStage.Settling)
         {
+            completionEvidence |= f.CompletionObserved;
             var delta = Sending ? (long)walletBefore - f.Wallet : (long)f.Wallet - walletBefore;
             if (delta != 0 && delta != ThisTrade) return Halt("Stopped: unexpected wallet change; completion is unverified.");
-            if (!f.TradeOpen && !f.Confirmation && delta == ThisTrade)
+            if (completionEvidence && !f.TradeOpen && !f.Confirmation && delta == ThisTrade)
             {
                 Done += ThisTrade; Trades++; walletBefore = f.Wallet; FinalConfirmationSent = false;
-                ThisTrade = 0; stableOffer = 0;
+                ThisTrade = 0; stableOffer = 0; bothConfirming = completionEvidence = false;
                 if (Sending && Done == Total) Move(GilTradeStage.Complete, now, $"Sent {Done:N0} gil · {Trades} completed trades.");
                 else if (!f.Ready || !f.PartnerNearby || f.PartnerEntity != PartnerEntity || f.OtherDialog)
                     Stop("Trade completed. Stopped because the character or selected player is no longer ready.");
@@ -159,6 +184,7 @@ internal sealed class GilTradeRun
             if (f.LocalState < 4) return Halt("Stopped: the accepted offer was unlocked.");
             if (f.RemoteState < 4 || !f.Confirmation) return GilTradeAction.None;
             FinalConfirmationSent = true;
+            completionEvidence = true;
             Move(GilTradeStage.Settling, now, "Confirming the gil transfer…");
             return GilTradeAction.Confirm;
         }

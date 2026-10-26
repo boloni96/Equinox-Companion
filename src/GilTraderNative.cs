@@ -1,4 +1,5 @@
 using System.Numerics;
+using Dalamud.Game.Chat;
 using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using FFXIVClientStructs.FFXIV.Client.Game;
@@ -10,6 +11,7 @@ namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
     private readonly GilTradeRun gilTrade = new();
+    private readonly GilTradeCompletionCapture gilTradeCompletion = new();
     private ulong gilPartnerContent;
     private uint gilPartnerWorld, gilSessionWorld, gilSessionTerritory;
     private string gilPartnerName = "", gilTradePrompt = "", gilTradeNotice = "";
@@ -43,6 +45,8 @@ public sealed partial class Plugin
         gilTradeDiagnostics.Enqueue($"{DateTimeOffset.Now:HH:mm:ss} · {message}");
         while (gilTradeDiagnostics.Count > 40) gilTradeDiagnostics.Dequeue();
     }
+    private void ObserveGilTradeCompletion(ILogMessage message) =>
+        gilTradeCompletion.Observe(message.LogMessageId, DateTimeOffset.UtcNow);
     private IPlayerCharacter? GilTradePartner()
     {
         if (gilPartnerRequiresParty && (gilPartnerContent == 0 || !FollowParty.Any(x => x.ContentId == gilPartnerContent &&
@@ -81,7 +85,8 @@ public sealed partial class Plugin
             inv == null ? 0 : (int)inv->TradeLocalState, inv == null ? 0 : (int)inv->TradeRemoteState,
             inv == null || inv->TradeIsSyncPending, confirmation,
             yesno != null && !confirmation || SellerAddon("SelectOk") != null || SellerAddon("SelectString") != null || SellerAddon("SelectIconString") != null,
-            offersReady);
+            offersReady, gilTradeCompletion.Completed(Player.IsLoaded ? Player.ContentId : 0,
+                gilTrade.PartnerEntity, gilTrade.ThisTrade, DateTimeOffset.UtcNow));
     }
     private unsafe void StartGilTrade()
     {
@@ -100,7 +105,7 @@ public sealed partial class Plugin
             TraceGilTrade($"Start state · ready {frame.Ready} · nearby {frame.PartnerNearby} · wallet {frame.Wallet:N0} · trade open {frame.TradeOpen} · other dialog {frame.OtherDialog}");
             return;
         }
-        gilTradeOwned = false; gilTradePoll = default; gilTradeLastDiagnosticFrame = null;
+        gilTradeOwned = false; gilTradePoll = default; gilTradeLastDiagnosticFrame = null; gilTradeCompletion.Clear();
         TraceGilTrade($"Started {(gilReceive ? "receiving" : $"sending {gilTotal:N0}")} · {gilPartnerName} @ {WorldName(gilPartnerWorld)}");
         } catch (Exception ex) { Reject("Could not read the game's trade state. See Details."); Log.Error(ex, "Gil Trader could not start"); TraceGilTrade(ex.GetType().Name); }
     }
@@ -116,6 +121,7 @@ public sealed partial class Plugin
     {
         if (!gilTrade.Running) return;
         gilTrade.Stop(reason);
+        gilTradeCompletion.Clear();
         try { CancelOwnedGilTrade(); } catch (Exception ex) { Log.Warning(ex, "Gil Trader cancellation could not be confirmed"); }
         TraceGilTrade(gilTrade.Status);
     }
@@ -130,12 +136,12 @@ public sealed partial class Plugin
             var frame = ReadGilTradeFrame(); var before = gilTrade.Stage; var trades = gilTrade.Trades;
             if (frame != gilTradeLastDiagnosticFrame)
             {
-                TraceGilTrade($"{before} · offer {frame.LocalGil:N0}/{frame.RemoteGil:N0} gil · native states {frame.LocalState}/{frame.RemoteState} · open {frame.TradeOpen} · ready {frame.TradeReady} · syncing {frame.SyncPending} · items {frame.ItemsPresent} · confirmation {frame.Confirmation}");
+                TraceGilTrade($"{before} · offer {frame.LocalGil:N0}/{frame.RemoteGil:N0} gil · native states {frame.LocalState}/{frame.RemoteState} · open {frame.TradeOpen} · ready {frame.TradeReady} · syncing {frame.SyncPending} · items {frame.ItemsPresent} · confirmation {frame.Confirmation} · completed receipt {frame.CompletionObserved} · wallet {frame.Wallet:N0}");
                 gilTradeLastDiagnosticFrame = frame;
             }
             if (frame.TradeOpen && frame.TradePartner == gilTrade.PartnerEntity && frame.Character == gilTrade.Character) gilTradeOwned = true;
             var action = gilTrade.Step(frame, now);
-            if (trades != gilTrade.Trades) TraceGilTrade($"Completed trade {gilTrade.Trades} · total {gilTrade.Done:N0} gil");
+            if (trades != gilTrade.Trades) { gilTradeCompletion.Clear(); TraceGilTrade($"Completed trade {gilTrade.Trades} · total {gilTrade.Done:N0} gil"); }
             if (action != GilTradeAction.None)
             {
                 var inv = InventoryManager.Instance();
@@ -151,6 +157,7 @@ public sealed partial class Plugin
                     case GilTradeAction.LockOffer:
                         var addon = SellerAddon("Trade");
                         if (!GilTradeNative.TradeButtonEvent(addon, out var click)) { StopGilTrade("The game's Trade button is unavailable; no confirmation was sent."); return; }
+                        gilTradeCompletion.Arm(gilTrade.Character, gilTrade.PartnerEntity, gilTrade.ThisTrade, now);
                         var data = new AtkEventData(); addon->ReceiveEvent(click.State.EventType, (int)click.Param, &click, &data); break;
                     case GilTradeAction.Confirm:
                         var dialog = (AddonSelectYesno*)SellerAddon("SelectYesno");
@@ -163,6 +170,7 @@ public sealed partial class Plugin
             }
             if (!gilTrade.Running)
             {
+                gilTradeCompletion.Clear();
                 CancelOwnedGilTrade(); TraceGilTrade(gilTrade.Status);
                 PrintEquinox("Gil Trader · " + gilTrade.Status);
             }

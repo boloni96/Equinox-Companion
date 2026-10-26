@@ -29,6 +29,7 @@ public sealed partial class Plugin
     private void InitializeGilTrader()
     {
         gilTraderWindow = new(this); windows.AddWindow(gilTraderWindow);
+        Chat.LogMessage += ObserveGilTradeCompletion;
         gilTraderCommand = Commands.AddHandler("/eqtrade", new CommandInfo((_, args) =>
         {
             if (args.Trim().Equals("stop", StringComparison.OrdinalIgnoreCase)) StopGilTrade("Stopped by command.");
@@ -39,6 +40,8 @@ public sealed partial class Plugin
     private void DisposeGilTrader()
     {
         StopGilTrade("Companion unloaded.");
+        Chat.LogMessage -= ObserveGilTradeCompletion;
+        gilTradeCompletion.Clear();
         if (gilTraderCommand) Commands.RemoveHandler("/eqtrade");
     }
     private void OpenGilTrader() { gilTraderWindow.IsOpen = true; minimizedLaunchers.Remove("Gil Trader"); }

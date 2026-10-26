@@ -1,0 +1,25 @@
+Equinox Companion 0.5.1.254
+
+Gil Trader: count confirmations completed between polls
+
+- Observe the game's typed Trade complete log event for the current locked
+  offer. A manual confirmation or another plugin accepting the popup no longer
+  leaves the receiving client stopped after a successful first transfer.
+- Bind completion to the current character, selected partner and locked amount.
+  Keep exact wallet-delta and closed-window checks. Receipts arriving just before
+  or after the wallet update can settle once; stale, duplicate and cancelled
+  scopes cannot credit another trade.
+- Handle native confirmation already accepted without sending another Yes.
+  External confirmation still needs the game completion receipt. Missing proof
+  has a bounded wait and never counts an unrelated wallet change as success.
+- Clear capture on stop, completion, new offers and plugin disposal. Extend the
+  bounded diagnostic trace with completion receipt state and wallet amount.
+
+Validation: 80 new completion/capture checks, existing Gil Trader and native
+offer suites, full transition/market regressions and Release build passed
+locally. Cases include the reported 5/5 -> 5/6 -> closed sequence, a second
+partial trade, delayed/duplicate receipts, cancellation, wrong amounts,
+different partners, character changes and Stop. Live in-game verification
+remains necessary; automated tests transfer no gil.
+
+Companion-only update. Update both clients; no Journal or Worker deployment.
