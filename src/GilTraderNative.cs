@@ -15,6 +15,7 @@ public sealed partial class Plugin
     private string gilPartnerName = "", gilTradePrompt = "", gilTradeNotice = "";
     private DateTimeOffset gilTradePoll;
     private readonly Queue<string> gilTradeDiagnostics = new();
+    private GilTradeFrame? gilTradeLastDiagnosticFrame;
     private bool gilTradeOwned;
     private bool gilPartnerRequiresParty = true;
     private sealed record GilTradeCandidate(string Name, uint World, ulong ContentId = 0, bool Party = false);
@@ -40,7 +41,7 @@ public sealed partial class Plugin
     private void TraceGilTrade(string message)
     {
         gilTradeDiagnostics.Enqueue($"{DateTimeOffset.Now:HH:mm:ss} · {message}");
-        while (gilTradeDiagnostics.Count > 20) gilTradeDiagnostics.Dequeue();
+        while (gilTradeDiagnostics.Count > 40) gilTradeDiagnostics.Dequeue();
     }
     private IPlayerCharacter? GilTradePartner()
     {
@@ -67,14 +68,20 @@ public sealed partial class Plugin
         if (gilTrade.Running) ready &= Player.CurrentWorld.RowId == gilSessionWorld && Client.TerritoryType == gilSessionTerritory;
         var nearby = self != null && partner != null && Vector3.DistanceSquared(self.Position, partner.Position) <= 25;
         var items = false; uint local = 0, remote = 0;
-        if (inv != null && open) GilTradeNative.Offers(inv, out items, out local, out remote);
+        var offersReady = false;
+        if (trade != null && trade->IsReady && inv != null)
+        {
+            var stage = AtkStage.Instance();
+            var numbers = stage == null ? null : stage->GetNumberArrayData(NumberArrayType.Trade);
+            offersReady = GilTradeNative.Offers(inv, numbers, out items, out local, out remote);
+        }
         var correctName = inv != null && inv->TradePartnerNameString == gilPartnerName;
         return new(Player.IsLoaded ? Player.ContentId : 0, ready, nearby, partner?.EntityId ?? 0, inv == null ? 0 : inv->GetGil(),
             open, inv == null || !correctName ? 0 : inv->TradePartnerEntityId, items, local, remote,
             inv == null ? 0 : (int)inv->TradeLocalState, inv == null ? 0 : (int)inv->TradeRemoteState,
             inv == null || inv->TradeIsSyncPending, confirmation,
             yesno != null && !confirmation || SellerAddon("SelectOk") != null || SellerAddon("SelectString") != null || SellerAddon("SelectIconString") != null,
-            trade != null && inv != null);
+            offersReady);
     }
     private unsafe void StartGilTrade()
     {
@@ -93,7 +100,7 @@ public sealed partial class Plugin
             TraceGilTrade($"Start state · ready {frame.Ready} · nearby {frame.PartnerNearby} · wallet {frame.Wallet:N0} · trade open {frame.TradeOpen} · other dialog {frame.OtherDialog}");
             return;
         }
-        gilTradeOwned = false; gilTradePoll = default;
+        gilTradeOwned = false; gilTradePoll = default; gilTradeLastDiagnosticFrame = null;
         TraceGilTrade($"Started {(gilReceive ? "receiving" : $"sending {gilTotal:N0}")} · {gilPartnerName} @ {WorldName(gilPartnerWorld)}");
         } catch (Exception ex) { Reject("Could not read the game's trade state. See Details."); Log.Error(ex, "Gil Trader could not start"); TraceGilTrade(ex.GetType().Name); }
     }
@@ -121,6 +128,11 @@ public sealed partial class Plugin
             if (!config.EnableGilTrader) { StopGilTrade("Gil Trader disabled."); return; }
             if (!gilTraderWindow.IsOpen && !minimizedLaunchers.Contains("Gil Trader")) { StopGilTrade("Gil Trader closed."); return; }
             var frame = ReadGilTradeFrame(); var before = gilTrade.Stage; var trades = gilTrade.Trades;
+            if (frame != gilTradeLastDiagnosticFrame)
+            {
+                TraceGilTrade($"{before} · offer {frame.LocalGil:N0}/{frame.RemoteGil:N0} gil · native states {frame.LocalState}/{frame.RemoteState} · open {frame.TradeOpen} · ready {frame.TradeReady} · syncing {frame.SyncPending} · items {frame.ItemsPresent} · confirmation {frame.Confirmation}");
+                gilTradeLastDiagnosticFrame = frame;
+            }
             if (frame.TradeOpen && frame.TradePartner == gilTrade.PartnerEntity && frame.Character == gilTrade.Character) gilTradeOwned = true;
             var action = gilTrade.Step(frame, now);
             if (trades != gilTrade.Trades) TraceGilTrade($"Completed trade {gilTrade.Trades} · total {gilTrade.Done:N0} gil");
