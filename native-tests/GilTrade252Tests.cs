@@ -14,6 +14,9 @@ internal static unsafe class GilTrade252Tests
         InventoryManager inventory = default;
         var values = stackalloc int[133];
         for (var i = 0; i < 133; i++) values[i] = 0;
+        // Deliberately nonzero presentation data with empty inventory slots.
+        // UI templates/stale decorations must not be treated as offered items.
+        for (var i = 0; i < 10; i++) { values[i * 6] = 42; values[i * 6 + 1] = 1; }
         NumberArrayData numbers = default; numbers.Size = 133; numbers.IntArray = values;
         var sender = new GilTradeRun(); var receiver = new GilTradeRun();
         sender.Start(true, 1_000_123, idle, time); receiver.Start(false, 0, idle, time);
@@ -23,7 +26,9 @@ internal static unsafe class GilTrade252Tests
             var senderIdle = idle with { Wallet = idle.Wallet - sent };
             var receiverIdle = idle with { Wallet = idle.Wallet + sent };
             Check(sender.Step(senderIdle, time) == GilTradeAction.Request, "start next exact trade");
-            var open = senderIdle with { TradeOpen = true, TradePartner = 22, LocalState = 3, RemoteState = 3 };
+            values[60] = values[61] = 0;
+            Check(GilTradeNative.Offers(&inventory, &numbers, out var openingItems, out _, out _), "read newly opened trade");
+            var open = senderIdle with { TradeOpen = true, TradePartner = 22, LocalState = 3, RemoteState = 3, ItemsPresent = openingItems };
             Check(sender.Step(open, time.AddMilliseconds(100)) == GilTradeAction.SetGil, "set amount once");
             Check(sender.Step(open with { TradeReady = false }, time.AddMilliseconds(200)) == GilTradeAction.None && sender.Running,
                 "missing UI offer waits without accepting");

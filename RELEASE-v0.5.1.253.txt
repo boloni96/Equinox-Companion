@@ -1,0 +1,19 @@
+Equinox Companion 0.5.1.253
+
+Gil Trader: correct the empty-slot item check
+
+- Fix a 0.5.1.252 regression where nonzero presentation values in the Trade
+  window caused empty trades to stop with "An item was added", before gil
+  could be offered. Detect items using the actual inventory trade slots.
+- Keep the displayed gil counters from 0.5.1.252. Actual items on either side,
+  changed amounts, wrong partners and unverified wallet changes still stop
+  the session; no trade safeguards or confirmation checks are bypassed.
+
+Validation: the new empty-slot regression fails against 0.5.1.252. Native
+fixtures cover all five item slots on both sides, including partial records.
+The two-client simulation includes nonzero UI slot decorations and verifies
+1,000,000 gil followed by a partial remainder. Release build and all three
+regression suites are required for publication. Live game verification is
+still needed; automated tests do not transfer real gil.
+
+Update both clients. No Journal or Background Worker deployment is required.

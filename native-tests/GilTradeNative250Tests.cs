@@ -28,6 +28,10 @@ internal static unsafe class GilTradeNative250Tests
             Check(items, "every remote item slot checked"); inventory.TradeItemsRemote[i] = default;
             inventory.TradeItemsLocal[i].Quantity = 1; GilTradeNative.Offers(&inventory, &numbers, out items, out _, out _);
             Check(items, "every local item slot checked even if partially loaded"); inventory.TradeItemsLocal[i] = default;
+            inventory.TradeItemsLocal[i].ItemId = 99; GilTradeNative.Offers(&inventory, &numbers, out items, out _, out _);
+            Check(items, "every local item ID checked independently"); inventory.TradeItemsLocal[i] = default;
+            inventory.TradeItemsRemote[i].Quantity = 1; GilTradeNative.Offers(&inventory, &numbers, out items, out _, out _);
+            Check(items, "every remote item quantity checked independently"); inventory.TradeItemsRemote[i] = default;
         }
         inventory.TradeItemsLocal[5].ItemId = 99; GilTradeNative.Offers(&inventory, &numbers, out items, out _, out _);
         Check(items, "unknown currency slot rejected");
@@ -43,9 +47,9 @@ internal static unsafe class GilTradeNative250Tests
         for (var i = 0; i < 10; i++)
         {
             values[i * 6] = 42; GilTradeNative.Offers(&inventory, &numbers, out items, out _, out _);
-            Check(items, "every displayed item icon checked independently"); values[i * 6] = 0;
+            Check(!items, "UI icon alone does not establish an offered inventory item"); values[i * 6] = 0;
             values[i * 6 + 1] = 1; GilTradeNative.Offers(&inventory, &numbers, out items, out _, out _);
-            Check(items, "every displayed item quantity checked independently"); values[i * 6 + 1] = 0;
+            Check(!items, "UI placeholder quantity alone does not establish an offered inventory item"); values[i * 6 + 1] = 0;
         }
         Check(!GilTradeNative.Offers(&inventory, null, out _, out _, out _), "missing number array is not a ready offer");
         numbers.Size = 64;
