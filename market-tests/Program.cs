@@ -114,6 +114,7 @@ AutoRetainerPauseTests.Run(Check,now);
 ComparisonCaptureTests.Run(Check,now);
 OwnPriceTests.Run(Check,now);
 MateriaTests.Run(Check,now);
+ManualPriceTests.Run(Check,now);
 Console.WriteLine($"{tests} market checks passed.");
 
 await MarketSharing251Tests.Run(Check,now);

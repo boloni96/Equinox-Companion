@@ -188,26 +188,33 @@ public sealed partial class Plugin
             var data=(AtkEventData*)ev.AtkEventData;
             var proxy=InfoProxyItemSearch.Instance();var index=data->ListItemData.SelectedIndex;
             if(proxy==null || !sellerComparison.Ready(proxy->SearchItemId%1_000_000,Player.CurrentWorld.RowId,(int)proxy->ListingCount) || proxy->SearchItemId%1_000_000!=manualEditor.ItemId || index<0 || index>=Math.Min(100,proxy->ListingCount)){TraceSeller("Price click ignored","Comparison identity, loading state or row index is not ready.",new {index,item=manualEditor.ItemId,searchItem=proxy==null?0:proxy->SearchItemId,waiting=proxy!=null&&proxy->WaitingForListings,count=proxy==null?0:proxy->ListingCount,sellerComparison.Expected,sellerComparison.ReceivedCount,sellerComparison.Error});return;}
-            var listing=proxy->Listings[index];
             var renderer=data->ListItemData.ListItemRenderer;
+            int clickedPrice;
             if(renderer!=null&&renderer->UldManager.NodeList!=null&&renderer->UldManager.NodeListCount>=14){
                 var text=renderer->UldManager.NodeList[10];
-                if(text!=null&&text->Type==NodeType.Text&&SellerPricing.TryReadGil(((AtkTextNode*)text)->NodeText.ToString(),out var clickedPrice)){
-                    var candidates=proxy->Listings[..(int)Math.Min(100,proxy->ListingCount)].ToArray().Where(x=>x.UnitPrice==clickedPrice&&x.ItemId%1_000_000==manualEditor.ItemId&&x.IsHqItem==manualEditor.Hq&&!x.IsMannequin).ToArray();
-                    if(candidates.Length==0){TraceSeller("Price click ignored","Displayed price has no matching item/quality offer.",new {clickedPrice,manualEditor.ItemId,manualEditor.Hq});return;}listing=candidates[0];
-                }else {TraceSeller("Price click ignored","Displayed unit price could not be read.",new {nodeType=text==null?-1:(int)text->Type,text=text!=null&&text->Type==NodeType.Text?((AtkTextNode*)text)->NodeText.ToString():""});return;}
+                if(text==null||text->Type!=NodeType.Text||!SellerPricing.TryReadGil(((AtkTextNode*)text)->NodeText.ToString(),out clickedPrice))
+                {TraceSeller("Price click ignored","Displayed unit price could not be read.",new {nodeType=text==null?-1:(int)text->Type,text=text!=null&&text->Type==NodeType.Text?((AtkTextNode*)text)->NodeText.ToString():""});return;}
             }else {TraceSeller("Price click ignored","Comparison row renderer is unavailable.",new {index,nodeCount=renderer==null?0:renderer->UldManager.NodeListCount});return;}
-            if(!sellerComparison.Contains(listing.ListingId,ReadSellerOffer(listing)) || listing.UnitPrice is 0 or >SellerPricing.MaxPrice || listing.ItemId%1_000_000!=manualEditor.ItemId || listing.IsMannequin || listing.IsHqItem!=manualEditor.Hq){TraceSeller("Price click ignored","Offer did not match the current item and quality.");return;}
+            // A sorted UI row is identified by its displayed unit price. Keep
+            // only same-item rows confirmed by this search's network capture;
+            // the manual policy decides whether the other quality is allowed.
+            var offers=proxy->Listings[..(int)Math.Min(100,proxy->ListingCount)].ToArray()
+                .Where(x=>x.ItemId%1_000_000==manualEditor.ItemId&&x.UnitPrice==clickedPrice&&!x.IsMannequin&&sellerComparison.Contains(x.ListingId,ReadSellerOffer(x)))
+                .Select(ReadSellerOffer).ToArray();
             var own=KnownSellerRetainers();
-            // Sorted rows can share a displayed price. If a verified own offer
-            // is at that same price, match it rather than undercut our other stack.
-            var matchOwn=proxy->Listings[..(int)Math.Min(100,proxy->ListingCount)].ToArray().Any(x=>x.RetainerId!=0&&own.Contains(x.RetainerId)&&x.UnitPrice==listing.UnitPrice&&x.IsHqItem==manualEditor.Hq&&!x.IsMannequin&&
-                sellerComparison.Contains(x.ListingId,ReadSellerOffer(x)));
-            var price=SellerPricing.OfferPrice(listing.UnitPrice,matchOwn,config.Seller,config.Seller.MinimumPrices.GetValueOrDefault(manualEditor.ItemId,1));
+            var choice=SellerPricing.ManualClickPrice(clickedPrice,manualEditor.Hq,offers,own,config.Seller,config.Seller.MinimumPrices.GetValueOrDefault(manualEditor.ItemId,1));
+            if(choice is not {} selected){
+                sellerNotice=offers.Any(x=>x.Hq!=manualEditor.Hq)&&!config.Seller.ManualAllowOtherQuality
+                    ?"Different quality: enable Allow HQ/NQ crossover on manual clicks in Market & Seller settings to use this price."
+                    :"The selected price has no verified listing for this item; no change made.";
+                TraceSeller("Price click ignored",sellerNotice,new {clickedPrice,manualEditor.ItemId,manualEditor.Hq,config.Seller.ManualAllowOtherQuality});return;
+            }
+            var (price,matchOwn)=selected;
+            var qualityOverride=offers.All(x=>x.Hq!=manualEditor.Hq);
             if(config.Seller.CopyPrice)Dalamud.Bindings.ImGui.ImGui.SetClipboardText(price.ToString());
             var applied=config.Seller.ClickSetsPrice&&SetManualSellerPrice(price,config.Seller.ClickConfirms);
-            sellerNotice=$"Selected {price:N0} gil"+(matchOwn?" · own retainer match":"")+(config.Seller.CopyPrice?" · copied":"")+(config.Seller.ClickSetsPrice?(applied?" · applied to editor":" · editor changed or unavailable; not submitted"):"");
-            TraceSeller("Price click",sellerNotice,new {price,applied,matchOwn,config.Seller.ClickSetsPrice,config.Seller.CopyPrice,config.Seller.ClickConfirms});
+            sellerNotice=$"Selected {price:N0} gil"+(qualityOverride?(manualEditor.Hq?" · NQ price for HQ item":" · HQ price for NQ item"):"")+(matchOwn?" · own retainer match":"")+(config.Seller.CopyPrice?" · copied":"")+(config.Seller.ClickSetsPrice?(applied?" · applied to editor":" · editor changed or unavailable; not submitted"):"");
+            TraceSeller("Price click",sellerNotice,new {price,applied,matchOwn,qualityOverride,config.Seller.ManualAllowOtherQuality,config.Seller.ClickSetsPrice,config.Seller.CopyPrice,config.Seller.ClickConfirms});
         }catch(Exception ex){sellerNotice="Could not use this price; no automatic retry.";TraceSeller("Price click failed",ex.GetType().Name,new {ex.Message,ex.StackTrace});Log.Debug(ex,sellerNotice);}
     }
     private static SellerOffer ReadSellerOffer(MarketBoardListing row)=>new(row.RetainerId,row.UnitPrice,row.IsHqItem,row.Quantity,row.IsMannequin,SellerMateria.FromPacked(row.Materia,row.MateriaCount));

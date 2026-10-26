@@ -130,7 +130,8 @@ public sealed partial class Plugin
         if(ImGui.CollapsingHeader("Manual selling",ImGuiTreeNodeFlags.DefaultOpen)){
             Toggle("Open Compare Prices",s.OpenCompare,v=>s.OpenCompare=v,"Opens the game's comparison when you open an item's price editor. Hold Shift to skip it for that item.");
             Toggle("Also open recent sale history",s.OpenHistory,v=>s.OpenHistory=v,"Opens this item's market transaction history beside the comparison. These are market sales, not your own retainer's earnings.");
-            Toggle("Use clicked comparison price",s.ClickSetsPrice,v=>s.ClickSetsPrice=v,"Click a matching HQ/NQ listing to put its adjusted unit price into the open editor. A known own retainer at that price is matched exactly, without undercut or rounding; your item minimum still applies.");
+            Toggle("Use clicked comparison price",s.ClickSetsPrice,v=>s.ClickSetsPrice=v,"Click a verified listing to put its adjusted unit price into the open editor. Quality must match unless HQ/NQ crossover below is enabled. A known own retainer at that price is matched exactly, without undercut or rounding; your item minimum still applies.");
+            Toggle("Allow HQ/NQ crossover on manual clicks",s.ManualAllowOtherQuality,v=>s.ManualAllowOtherQuality=v,"Manual clicks only: use an NQ listing's price for your HQ item, or an HQ price for NQ. Your item and its quality stay unchanged. Applies to both filling and copying the clicked price. Automatic checks still match quality and materia. Off by default.");
             Toggle("Copy clicked price",s.CopyPrice,v=>s.CopyPrice=v,"Copies the adjusted whole-gil unit price to your clipboard. Works independently of filling the price editor.");
             Toggle("Confirm price after clicking",s.ClickConfirms,v=>s.ClickConfirms=v,"When Use clicked comparison price is on, clicking a price also confirms the listing. Leave off to review and confirm yourself.");
             Toggle("Ctrl: paste price when opening an item",s.CtrlPastePrice,v=>s.CtrlPastePrice=v,"Hold Ctrl while opening the price editor to paste a whole-gil clipboard price instead of opening comparison. Does not confirm the listing.");
@@ -138,11 +139,14 @@ public sealed partial class Plugin
             Toggle("Limit new stacks",s.LimitNewStacks,v=>s.LimitNewStacks=v,"Limits the quantity when posting new items. Adjusting an existing listing never changes its quantity.");
             if(s.LimitNewStacks)Number("Items per new listing",s.NewStackSize,1,9999,v=>s.NewStackSize=v,"Uses the smaller of this amount, your available quantity and the item's stack limit.");
         }
-        if(ImGui.CollapsingHeader("Pricing rules")){
+        if(ImGui.CollapsingHeader("Price calculation")){
             Toggle("Undercut by percentage",s.PercentUndercut,v=>s.PercentUndercut=v,"Off: subtract a fixed gil amount. On: subtract this percentage of the reference unit price.");
             if(s.PercentUndercut)Percent("Undercut",s.UndercutPercent,v=>s.UndercutPercent=v,"Example: 1% below 10,000 gil becomes 9,900 gil.");
             else Number("Gil undercut",s.UndercutGil,0,SellerPricing.MaxPrice,v=>s.UndercutGil=v,"Example: 1 gil below 10,000 becomes 9,999. Zero matches the reference price.");
             Number("Round down to multiple",s.RoundTo,1,1000000,v=>s.RoundTo=v,"Applied after undercutting, and to history-based targets. A multiple of 100 rounds 9,999 down to 9,900. Use 1 for no extra rounding. Matching your own retainer skips both rounding and undercutting.");
+        }
+        if(ImGui.CollapsingHeader("Automatic pricing rules")){
+            MarketHelp("For Check prices, Update prices and background suggestions. Quality and materia always match; manual HQ/NQ crossover does not change these rules.");
             Percent("Ignore lowest price beyond gap",s.LowOutlierPercent,v=>s.LowOutlierPercent=v,"Automatic checks only: compare the lowest and next distinct HQ/NQ prices with the same materia types and grades. Plain and melded items never share a price group. At 40%, 100k versus 250k is ignored, unless your minimum number of recent sales supports the plain low price within 10%. Zero disables this rule. Your manual price click remains your choice.");
             Toggle("Allow raising competitive prices",s.RaiseCompetitivePrices,v=>s.RaiseCompetitivePrices=v,"Allows automatic updates to increase your price to the calculated target. Off keeps an already lower price, subject to your item minimum.");
             Percent("Maximum automatic increase",s.MaximumIncreasePercent,v=>s.MaximumIncreasePercent=v,"Caps any automatic price increase, including own-retainer matches and empty-market history. Default 100% allows at most doubling; 0 blocks increases. Larger suggestions keep your existing price with a hover explanation. Your explicit item minimum can still raise it to that minimum. Manual price clicks remain your choice.",10000);
