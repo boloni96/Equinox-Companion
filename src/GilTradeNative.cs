@@ -1,4 +1,5 @@
 using FFXIVClientStructs.FFXIV.Client.Game;
+using FFXIVClientStructs.FFXIV.Client.UI.Arrays;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 
 namespace EquinoxCompanion;
@@ -7,18 +8,26 @@ internal static unsafe class GilTradeNative
     internal static bool PromptMatches(string actual, string expected) =>
         !string.IsNullOrWhiteSpace(expected) && string.Equals(actual.Trim(), expected.Trim(), StringComparison.Ordinal);
 
-    internal static void Offers(InventoryManager* inv, out bool items, out uint localGil, out uint remoteGil)
+    internal static bool Offers(InventoryManager* inv, NumberArrayData* numbers, out bool items, out uint localGil, out uint remoteGil)
     {
         items = inv == null; localGil = remoteGil = 0;
-        if (inv == null) return;
+        if (inv == null || numbers == null || numbers->IntArray == null || numbers->Size < sizeof(TradeNumberArray) / sizeof(int)) return false;
+        var view = (TradeNumberArray*)numbers->IntArray;
         for (var i = 0; i < 5; i++)
             items |= inv->TradeItemsLocal[i].ItemId != 0 || inv->TradeItemsRemote[i].ItemId != 0 ||
-                inv->TradeItemsLocal[i].Quantity != 0 || inv->TradeItemsRemote[i].Quantity != 0;
+                inv->TradeItemsLocal[i].Quantity != 0 || inv->TradeItemsRemote[i].Quantity != 0 ||
+                view->ItemsGive[i].IconId != 0 || view->ItemsGive[i].Quantity != 0 ||
+                view->ItemsReviece[i].IconId != 0 || view->ItemsReviece[i].Quantity != 0;
         // Currency slot is separate from the five item slots. Reject malformed
         // records rather than silently treating an unknown item as currency.
         items |= inv->TradeItemsLocal[5].ItemId > 1 || inv->TradeItemsRemote[5].ItemId > 1;
         items |= inv->TradeItemsLocal[5].Quantity < 0 || inv->TradeItemsRemote[5].Quantity < 0;
-        localGil = (uint)Math.Max(0, inv->TradeItemsLocal[5].Quantity); remoteGil = (uint)Math.Max(0, inv->TradeItemsRemote[5].Quantity);
+        // These are the counters rendered by Trade, not the inventory copies of
+        // currency slot 5 (which can remain zero after SetTradeGilAmount).
+        // Read only while the current Trade addon is ready; never substitute the
+        // requested amount or a wallet balance for an observed offer.
+        localGil = view->SendGilCount; remoteGil = view->ReceiveGilCount;
+        return true;
     }
 
     internal static bool TradeButtonEvent(AtkUnitBase* addon, out AtkEvent click)

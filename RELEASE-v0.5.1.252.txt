@@ -1,0 +1,20 @@
+Equinox Companion 0.5.1.252
+
+Gil Trader: verify the offer displayed by the game
+
+- Read both offered gil amounts from the Trade window's typed number array.
+  The inventory currency-slot copy can remain zero after filling an offer,
+  causing the sender to cancel instead of pressing Trade.
+- Wait when the current trade window's data is unavailable. Keep exact partner,
+  amount, direction, item, confirmation and wallet-change checks. Never infer
+  acceptance from the requested amount or a closed window alone.
+- Check item slots in both the inventory and displayed offer. Keep a bounded
+  diagnostic trace of displayed amounts and native states while trading.
+
+Validation: native array fixtures and two-client state simulation cover a
+1,000,000 gil trade followed by a partial remainder, stale currency copies,
+missing UI data, unexpected items, and a changed displayed amount. Full build
+and regression suites are required for publication. Live game verification
+is still needed; no real gil was transferred during automated tests.
+
+Companion-only update. Journal and Background Worker 7.11.243 remain compatible.
