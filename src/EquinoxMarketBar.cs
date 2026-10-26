@@ -18,11 +18,11 @@ public sealed partial class Plugin
         if(!config.Seller.Enabled||!config.Seller.ShowMarketBar){RemoveMarketBar();return;}
         if(now<marketBarNext)return;marketBarNext=now.AddSeconds(2);
         marketBar??=QuickLootBar.Get("Equinox Market");marketBar.Shown=Player.IsLoaded;
-        var rows=marketLedger.Retainers.SelectMany(r=>r.Stock.Select(s=>(Retainer:r,Stock:s,Decision:ReviewFor(r.Id,s.Slot)))).ToArray();
+        var rows=MarketRetainers.SelectMany(r=>r.Stock.Select(s=>(Retainer:r,Stock:s,Decision:ReviewFor(r.Id,s.Slot)))).ToArray();
         var updates=rows.Count(x=>x.Decision.NeedsAttention);var unknown=rows.Count(x=>x.Decision.Status is SellerStatus.Unknown or SellerStatus.Skipped or SellerStatus.Checking);
         var undercuts=rows.Count(x=>x.Decision.CanApply&&x.Decision.Price<x.Stock.Price);
         var estimated=rows.Count(x=>x.Decision.CanApply&&x.Decision.Source=="Universalis");
-        var visits=marketLedger.Retainers.Count(MarketVisitDue);
+        var visits=MarketRetainers.Count(MarketVisitDue);
         var label=rows.Length==0?"Market: no listings":$"Market: {updates} updates"+(visits>0?$" · {visits} visits":"")+(unknown>0?" · ?":"");
         var color=(ushort)(updates>0?17:visits>0?31:unknown>0||rows.Length==0?0:45);
         var key=label+"/"+color;

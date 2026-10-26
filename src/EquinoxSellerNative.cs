@@ -210,7 +210,7 @@ public sealed partial class Plugin
             TraceSeller("Price click",sellerNotice,new {price,applied,matchOwn,config.Seller.ClickSetsPrice,config.Seller.CopyPrice,config.Seller.ClickConfirms});
         }catch(Exception ex){sellerNotice="Could not use this price; no automatic retry.";TraceSeller("Price click failed",ex.GetType().Name,new {ex.Message,ex.StackTrace});Log.Debug(ex,sellerNotice);}
     }
-    private HashSet<ulong> KnownSellerRetainers()=>marketLedger.Retainers.Select(x=>x.Id).Concat(ReadSellerRetainers().Select(x=>x.Id)).Where(x=>x!=0).ToHashSet();
+    private HashSet<ulong> KnownSellerRetainers()=>MarketRetainers.Select(x=>x.Id).Concat(ReadSellerRetainers().Select(x=>x.Id)).Where(x=>x!=0).ToHashSet();
     private static unsafe AtkUnitBase* SellerAddon(string name)
     {var a=(AtkUnitBase*)GardenGui.GetAddonByName(name).Address;return a!=null&&a->IsVisible&&a->IsReady?a:null;}
     private unsafe bool SellerContext(ulong cid,uint world)=>config.Seller.Enabled && Player.IsLoaded && Player.ContentId==cid && Player.CurrentWorld.RowId==world && Player.HomeWorld.RowId==world && !Conditions[ConditionFlag.BetweenAreas] && !Conditions[ConditionFlag.BetweenAreas51] && !Conditions[ConditionFlag.InCombat] && !HelperInCutscene();
@@ -375,7 +375,7 @@ public sealed partial class Plugin
         if(handoff.Error.Length>0){sellerNotice=handoff.Error;ReleaseSellerLocks();TraceSeller("Run blocked",sellerNotice);return;}
         sellerSelectRetry=default;manualEditor=null;manualSuspendUntilClose=false;sellerNotice="";
         TraceSeller("Run requested",apply?"Update prices":"Check prices",new {retainers=selected,character=Player.ContentId,world=Player.CurrentWorld.RowId});
-        try{sellerRun.Start(selected,Player.ContentId,Player.CurrentWorld.RowId,apply,config.Seller,marketLedger.Retainers.Select(x=>x.Id).Concat(all.Select(x=>x.Id)),DateTimeOffset.UtcNow);}
+        try{sellerRun.Start(selected,Player.ContentId,Player.CurrentWorld.RowId,apply,config.Seller,MarketRetainers.Select(x=>x.Id).Concat(all.Select(x=>x.Id)),DateTimeOffset.UtcNow);}
         catch{ReleaseSellerLocks();throw;}
         if(!sellerRun.Running)ReleaseSellerLocks();
     }
@@ -396,6 +396,7 @@ public sealed partial class Plugin
             DrainMarketSales();
             sellerRun.Tick(now);
             UpdateMarketJournal(now);
+        UpdateMarketHistorySync(now);
             UpdateMarketWatch(now);
             UpdateMarketBar(now);
             if(now<marketPollAt)return;marketPollAt=now.AddMilliseconds(500);
@@ -463,14 +464,21 @@ public sealed partial class Plugin
         if(live==null||live.Price!=item.Price){sellerNotice="This listing changed. Wait for the selling list to refresh.";return;}
         AgentRetainer.Instance()->OpenRetainerSell(InventoryType.RetainerMarket,(ushort)item.Slot);
     }
-    private void RememberMarketOrder()
+    private unsafe void RememberMarketOrder()
     {
         if(!Player.IsLoaded||DateTimeOffset.UtcNow<marketOrderAt)return;marketOrderAt=DateTimeOffset.UtcNow.AddSeconds(3);
-        var order=ReadSellerRetainers();if(order.Length==0)return;
-        var map=order.Select((r,i)=>(r.Id,i)).ToDictionary(x=>x.Id,x=>x.i);
+        var manager=RetainerManager.Instance();if(manager==null||!manager->IsReady)return;
+        var map=new Dictionary<ulong,(int Order,byte Job,byte Level)>();
+        for(uint i=0;i<Math.Min(10,(int)manager->GetRetainerCount());i++){
+            var n=manager->GetRetainerBySortedIndex(i);if(n!=null&&n->Available&&n->RetainerId!=0)map[n->RetainerId]=((int)i,n->ClassJob,n->Level);
+        }
         var changed=false;
         var retainers=marketLedger.Retainers.Select(r=>{
-            if(r.CharacterId==Player.ContentId&&map.TryGetValue(r.Id,out var index)&&r.DisplayOrder!=index){changed=true;return r with {DisplayOrder=index};}return r;
+            if(r.CharacterId==Player.ContentId&&map.TryGetValue(r.Id,out var profile)){
+                if(r.DisplayOrder!=profile.Order||r.JobId!=profile.Job||r.Level!=profile.Level){
+                    changed=true;return r with {DisplayOrder=profile.Order,JobId=profile.Job,Level=profile.Level,Job=DataManager.GetExcelSheet<Lumina.Excel.Sheets.ClassJob>().GetRowOrDefault(profile.Job)?.Abbreviation.ToString()??"",ProfileAt=DateTimeOffset.UtcNow};
+                }
+            }return r;
         }).ToArray();
         if(changed){marketLedger=marketLedger with {Retainers=retainers};DirtyMarket();}
     }
@@ -503,8 +511,8 @@ public sealed partial class Plugin
         var person=config.SharedRoster?.People.FirstOrDefault(p=>p.Characters.Any(c=>c.ContentId==Player.ContentId.ToString()));
         var character=person?.Characters.FirstOrDefault(c=>c.ContentId==Player.ContentId.ToString());
         var old=marketLedger.Retainers.FirstOrDefault(x=>x.Id==id);
-        var fresh=MarketAccounting.PreserveListingDates(old,new MarketRetainer(id,native->NameString,Player.ContentId,Player.CharacterName,Player.HomeWorld.RowId,WorldName(Player.HomeWorld.RowId)??"",person?.Name??"",character?.Account??"",InventoryManager.Instance()->GetRetainerGil(),now,stock) with {DisplayOrder=Array.FindIndex(ReadSellerRetainers(),r=>r.Id==id)});
-        if(old!=null&&old.Gil==fresh.Gil&&old.DisplayOrder==fresh.DisplayOrder&&old.Stock.SequenceEqual(fresh.Stock)&&now-old.At<TimeSpan.FromMinutes(1))return;
+        var fresh=MarketAccounting.PreserveListingDates(old,new MarketRetainer(id,native->NameString,Player.ContentId,Player.CharacterName,Player.HomeWorld.RowId,WorldName(Player.HomeWorld.RowId)??"",person?.Name??"",character?.Account??"",InventoryManager.Instance()->GetRetainerGil(),now,stock) with {DisplayOrder=Array.FindIndex(ReadSellerRetainers(),r=>r.Id==id),JobId=native->ClassJob,Level=native->Level,Job=DataManager.GetExcelSheet<Lumina.Excel.Sheets.ClassJob>().GetRowOrDefault(native->ClassJob)?.Abbreviation.ToString()??"",ProfileAt=now});
+        if(old!=null&&old.Gil==fresh.Gil&&old.JobId==fresh.JobId&&old.Level==fresh.Level&&old.DisplayOrder==fresh.DisplayOrder&&old.Stock.SequenceEqual(fresh.Stock)&&now-old.At<TimeSpan.FromMinutes(1))return;
         var recovered=old==null?[]:MarketAccounting.ReconcileOffline(old,fresh,marketLedger.Income);
         marketLedger=marketLedger with {Retainers=[..marketLedger.Retainers.Where(x=>x.Id!=id),fresh with {LastVisit=now}],Income=recovered.Length==0?marketLedger.Income:[..marketLedger.Income,..recovered]};DirtyMarket();
     }

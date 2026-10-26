@@ -9,7 +9,7 @@ public sealed partial class Plugin
         var rows=FilteredMarketIncome();
         var totals=marketIncomeTotals.Get(rows,"",Environment.TickCount64,()=>(rows.Sum(x=>x.Net??0),rows.Any(x=>x.Net==null)));
         ImGui.TextDisabled($"{rows.Length} sales · {totals.Net:N0} gil confirmed net");
-        MarketHelp(marketHistoryStatus+"\nThe game supplies up to 20 recent entries per retainer; previously recorded sales stay saved. Net is revenue after fees, not profit. Imported/inferred records without confirmed net are excluded from this total.");
+        MarketHelp(marketSharedStatus+"\n"+marketHistoryStatus+"\nThe game supplies up to 20 recent entries per retainer; previously recorded sales stay saved. Net is revenue after fees, not profit. Imported/inferred records without confirmed net are excluded from this total.");
         if(rows.Length==0){ImGui.TextDisabled("No sales match these filters.");return;}
         MarketPaging(rows.Length);
         if(!BeginMarketRecords("marketSales",4))return;
@@ -19,7 +19,7 @@ public sealed partial class Plugin
         ImGui.TableSetupColumn("Net gil",ImGuiTableColumnFlags.WidthFixed,ImGui.GetFontSize()*6);
         ImGui.TableHeadersRow();
         foreach(var x in rows.Skip(marketPage*80).Take(80)){
-            ImGui.PushID(x.Id);ImGui.TableNextRow();ImGui.TableNextColumn();
+            ImGui.PushID(x.CharacterId+":"+x.Id);ImGui.TableNextRow();ImGui.TableNextColumn();
             var name=x.Item.Length>0?x.Item:SearchItemName(x.ItemId);
             var details=$"{DisplayTime.Local(x.At)}\n{x.Evidence}";
             MarketItemName(x.ItemId,name,x.Hq,details);
@@ -34,7 +34,7 @@ public sealed partial class Plugin
     private void DrawMarketSpending()
     {
         var cutoff=MarketCutoff;
-        var rows=marketExpenseView.Get(marketLedger.Expenses,MarketViewStamp,Environment.TickCount64,()=>(marketLedger.Expenses??[]).Where(x=>x.At>=cutoff&&MatchesMarketItem(x.ItemId,SearchItemName(x.ItemId))&&(marketCharacter.Length==0||x.Character==marketCharacter)&&(marketWorldFilter.Length==0||x.World==marketWorldFilter)&&(marketPerson.Length==0&&marketAccount.Length==0||marketLedger.Retainers.Any(r=>r.CharacterId==x.CharacterId&&(marketPerson.Length==0||r.Person==marketPerson)&&(marketAccount.Length==0||r.Account==marketAccount)))).OrderByDescending(x=>x.At).ToArray());
+        var rows=marketExpenseView.Get(MarketHistoryLedger.Expenses,MarketViewStamp,Environment.TickCount64,()=>(MarketHistoryLedger.Expenses??[]).Where(x=>x.At>=cutoff&&MatchesMarketItem(x.ItemId,SearchItemName(x.ItemId))&&(marketCharacter.Length==0||x.CharacterId.ToString()==marketCharacter)&&(marketWorldFilter.Length==0||x.World==marketWorldFilter)&&MatchesMarketOwner(x.CharacterId)).OrderByDescending(x=>x.At).ToArray());
         var spent=marketExpenseTotal.Get(rows,"",Environment.TickCount64,()=>rows.Sum(x=>x.Price*x.Quantity+x.Tax));
         ImGui.TextDisabled($"{rows.Length} purchases · {spent:N0} gil spent");
         MarketHelp("Confirmed market purchases, including recorded tax. Character purchases are not attributed to a retainer. Historical, vendor and gathered costs may be missing; these costs are not assigned automatically to crafts or resale stock.");
@@ -47,11 +47,11 @@ public sealed partial class Plugin
         ImGui.TableSetupColumn("Total gil",ImGuiTableColumnFlags.WidthFixed,ImGui.GetFontSize()*6);
         ImGui.TableHeadersRow();
         foreach(var x in rows.Skip(marketPage*80).Take(80)){
-            ImGui.PushID(x.Id);ImGui.TableNextRow();ImGui.TableNextColumn();
+            ImGui.PushID(x.CharacterId+":"+x.Id);ImGui.TableNextRow();ImGui.TableNextColumn();
             var details=$"{DisplayTime.Local(x.At)}\n{x.Quantity:N0} × {x.Price:N0} gil + {x.Tax:N0} gil tax";
             MarketItemName(x.ItemId,SearchItemName(x.ItemId),x.Hq,details);
             ImGui.TableNextColumn();if(ImGui.Selectable(x.Character+"##character"))ImGui.SetClipboardText(x.Character);
-            var owner=marketLedger.Retainers.FirstOrDefault(r=>r.CharacterId==x.CharacterId);
+            var owner=MarketRetainers.FirstOrDefault(r=>r.CharacterId==x.CharacterId);
             MarketHelp(MarketIdentity(owner,x.Character,x.World)+"\nPurchased on "+x.World+"\nClick to copy the character name.");
             ImGui.TableNextColumn();ImGui.TextUnformatted(x.Quantity.ToString("N0"));
             ImGui.TableNextColumn();MarketNumber("total",x.Price*x.Quantity+x.Tax,details);
@@ -63,7 +63,7 @@ public sealed partial class Plugin
     private void DrawMarketChanges()
     {
         var cutoff=MarketCutoff;
-        var rows=marketChangesView.Get(marketLedger.Prices,MarketViewStamp,Environment.TickCount64,()=>marketLedger.Prices.Reverse().Where(x=>x.At>=cutoff&&MatchesMarketItem(x.ItemId,x.Item)&&(MarketRetainerById(x.RetainerId) is {} r&&MatchesMarket(r))).ToArray());
+        var rows=marketChangesView.Get(MarketHistoryLedger.Prices,MarketViewStamp,Environment.TickCount64,()=>MarketHistoryLedger.Prices.Reverse().Where(x=>x.At>=cutoff&&MatchesMarketItem(x.ItemId,x.Item)&&(MarketRetainerById(x.RetainerId) is {} r&&MatchesMarket(r))).ToArray());
         ImGui.TextDisabled($"{rows.Length} price checks · newest first");
         MarketHelp("Updated means the game confirmed a price change. Suggestions, skipped checks and kept prices are separate outcomes. Hover a result for its reason. Up to 2,000 retained checks are included in the full market backup.");
         if(rows.Length==0){ImGui.TextDisabled("No price checks match these filters.");return;}

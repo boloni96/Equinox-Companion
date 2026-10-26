@@ -8,13 +8,15 @@ public sealed partial class Plugin
 {
     private GilTraderWindow gilTraderWindow = null!;
     private bool gilTraderCommand, gilReceive;
+    private int gilTargetSource;
+    private string gilNameSearch = "";
     private int gilTotal = 1_000_000;
     private sealed class GilTraderWindow(Plugin p) : Window("Gil Trader · Equinox###EquinoxGilTrader")
     {
         public override void OnOpen()
         {
-            Size ??= new(390, 255); SizeCondition = ImGuiCond.FirstUseEver;
-            SizeConstraints = new() { MinimumSize = new(300, 220), MaximumSize = new(float.MaxValue) };
+            Size ??= new(390, 315); SizeCondition = ImGuiCond.FirstUseEver;
+            SizeConstraints = new() { MinimumSize = new(300, 260), MaximumSize = new(float.MaxValue) };
             RespectCloseHotkey = false; AllowPinning = true;
         }
         public override void Draw() => p.DrawWindowWithLauncher(p.DrawGilTrader);
@@ -31,7 +33,7 @@ public sealed partial class Plugin
         {
             if (args.Trim().Equals("stop", StringComparison.OrdinalIgnoreCase)) StopGilTrade("Stopped by command.");
             else OpenGilTrader();
-        }) { HelpMessage = "Gil Trader: send or receive gil with a nearby party member. /eqtrade stop stops the session." });
+        }) { HelpMessage = "Gil Trader: send or receive gil with a selected nearby player. /eqtrade stop stops the session." });
         if (!gilTraderCommand) Log.Warning("/eqtrade is already registered. Open Gil Trader from the window launcher.");
     }
     private void DisposeGilTrader()
@@ -50,36 +52,39 @@ public sealed partial class Plugin
     {
         if (!config.EnableGilTrader)
         {
-            ImGui.TextWrapped("Trade gil with someone in your party. Each session starts only when you choose Send or Receive.");
+            ImGui.TextWrapped("Trade gil with a nearby player. Choose someone from your party, nearby players or friends, or find them by name. Each session starts only when you choose Send or Receive.");
             if (ImGui.Button("Enable Gil Trader")) SetGilTraderEnabled(true);
             return;
         }
         ImGui.BeginDisabled(gilTrade.Running);
         ImGui.SetNextItemWidth(-1);
-        if (ImGui.BeginCombo("##gil-partner", gilPartnerName.Length == 0 ? "Choose party member" : gilPartnerName))
+        ImGui.Combo("##gil-target-source", ref gilTargetSource, "Party\0Nearby players\0Friends\0Find by name\0");
+        if (gilTargetSource == 3) { ImGui.SetNextItemWidth(-1); ImGui.InputTextWithHint("##gil-name-search", "Player name", ref gilNameSearch, 80); }
+        ImGui.SetNextItemWidth(-1);
+        if (ImGui.BeginCombo("##gil-partner", gilPartnerName.Length == 0 ? "Choose player" : gilPartnerName + " @ " + WorldName(gilPartnerWorld)))
         {
             var any = false;
-            foreach (var member in FollowParty)
+            foreach (var member in GilTradeCandidates(gilTargetSource, gilNameSearch))
             {
-                if (member.ContentId == 0 || member.ContentId == Player.ContentId) continue;
                 any = true;
-                if (ImGui.Selectable(member.Name.TextValue + "##" + member.ContentId, gilPartnerContent == member.ContentId))
+                if (ImGui.Selectable(member.Name + " @ " + WorldName(member.World) + "##gil-target-" + member.World + ":" + member.Name,
+                    gilPartnerName == member.Name && gilPartnerWorld == member.World))
                 {
-                    gilPartnerContent = member.ContentId; gilPartnerName = member.Name.TextValue; gilPartnerWorld = member.World.RowId;
+                    gilPartnerContent = member.ContentId; gilPartnerName = member.Name; gilPartnerWorld = member.World; gilPartnerRequiresParty = member.Party;
                     gilTradeNotice = "";
                 }
-                if (ImGui.IsItemHovered()) ImGui.SetTooltip(WorldName(member.World.RowId) ?? "Home world unavailable");
+                if (ImGui.IsItemHovered()) ImGui.SetTooltip("Home world: " + WorldName(member.World) + "\nStand beside this player to trade. They do not need Equinox.");
             }
-            if (!any) ImGui.TextDisabled("Invite them to your party first.");
+            if (!any) ImGui.TextDisabled(gilTargetSource == 0 ? "No party members. Choose Nearby players instead." : gilTargetSource == 2 ? "No cached friends. Open the game's Friends List, or choose Nearby players." : "No nearby players match. Stand beside them first.");
             ImGui.EndCombo();
         }
-        if (ImGui.IsItemHovered()) ImGui.SetTooltip(gilPartnerName.Length == 0 ? "Invite them using the game's party menu, then select them here." : $"{gilPartnerName} · {WorldName(gilPartnerWorld)}\nStand nearby. Only this party member is allowed for this session.");
-        if (ImGui.RadioButton("Send gil", !gilReceive)) gilReceive = false;
-        ImGui.SameLine(); if (ImGui.RadioButton("Receive", gilReceive)) gilReceive = true;
+        if (ImGui.IsItemHovered()) ImGui.SetTooltip(gilPartnerName.Length == 0 ? "Choose a player and check their home world before starting." : $"{gilPartnerName} · {WorldName(gilPartnerWorld)}\nStand nearby. Only this player is allowed for this session.");
+        if (ImGui.RadioButton("Send gil##gil-mode-send", !gilReceive)) gilReceive = false;
+        ImGui.SameLine(); if (ImGui.RadioButton("Receive##gil-mode-receive", gilReceive)) gilReceive = true;
         if (gilReceive)
         {
-            ImGui.TextDisabled("Receive only from the selected party member.");
-            if (ImGui.IsItemHovered()) ImGui.SetTooltip("Start receiving before they start sending. Your side must contain no gil or items. Stops after 60 seconds without progress, leaving the party, or changing area. This permission is never saved.");
+            ImGui.TextDisabled("Receive only from the selected player.");
+            if (ImGui.IsItemHovered()) ImGui.SetTooltip("Start receiving before they start sending. Your side must contain no gil or items. Stops after 60 seconds without progress, moving away or changing area. Party selection also stops if they leave the party. This permission is never saved.");
         }
         else
         {
@@ -88,7 +93,7 @@ public sealed partial class Plugin
             if (ImGui.IsItemHovered()) ImGui.SetTooltip("The total to send, divided into trades of at most 1,000,000 gil. The final trade sends only the remainder. The amount is checked against your character’s wallet.");
             ImGui.TextDisabled($"{gilTotal:N0} gil · {(gilTotal + (long)GilTradeRun.TradeLimit - 1) / GilTradeRun.TradeLimit:N0} trades");
         }
-        if (ImGui.Button(gilReceive ? "Start receiving" : "Send gil")) StartGilTrade();
+        if (ImGui.Button(gilReceive ? "Start receiving###gil-start" : "Send gil###gil-start")) StartGilTrade();
         ImGui.EndDisabled();
         ImGui.SameLine(); ImGui.BeginDisabled(!gilTrade.Running);
         if (ImGui.Button("Stop")) StopGilTrade("Stopped. Confirmed transfers are kept.");

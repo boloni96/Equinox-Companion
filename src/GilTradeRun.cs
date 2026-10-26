@@ -8,7 +8,7 @@ internal sealed record GilTradeFrame(
     int LocalState, int RemoteState, bool SyncPending, bool Confirmation, bool OtherDialog, bool TradeReady = true);
 
 // No native pointers, persisted permission or network requests. One explicit Start
-// authorizes one direction with one party member on this character, for this session.
+// authorizes one direction with one player on this character, for this session.
 internal sealed class GilTradeRun
 {
     internal const uint TradeLimit = 1_000_000, WalletLimit = 999_999_999;
@@ -21,7 +21,7 @@ internal sealed class GilTradeRun
     internal uint Done { get; private set; }
     internal int Trades { get; private set; }
     internal uint ThisTrade { get; private set; }
-    internal string Status { get; private set; } = "Choose a party member nearby.";
+    internal string Status { get; private set; } = "Choose a player nearby.";
     internal bool FinalConfirmationSent { get; private set; }
     private uint walletBefore, stableOffer;
     private DateTimeOffset started, stageAt, stableAt;
@@ -30,7 +30,7 @@ internal sealed class GilTradeRun
     {
         if (Running) return false;
         if (frame.Character == 0 || !frame.Ready || !frame.PartnerNearby || frame.PartnerEntity == 0)
-        { Status = "Stand beside the selected party member before starting."; return false; }
+        { Status = "Stand beside the selected player before starting."; return false; }
         if (frame.TradeOpen || frame.Confirmation || frame.OtherDialog)
         { Status = "Close the existing trade or dialog before starting."; return false; }
         if (sending && (total == 0 || total > WalletLimit || total > frame.Wallet))
@@ -40,7 +40,7 @@ internal sealed class GilTradeRun
         Sending = sending; Total = sending ? total : 0; Done = 0; Trades = 0; ThisTrade = 0;
         Character = frame.Character; PartnerEntity = frame.PartnerEntity; walletBefore = frame.Wallet;
         FinalConfirmationSent = false; stableOffer = 0; started = now;
-        Move(GilTradeStage.Waiting, now, sending ? "Ready to send." : "Waiting for your selected party member…");
+        Move(GilTradeStage.Waiting, now, sending ? "Ready to send." : "Waiting for your selected player…");
         return true;
     }
 
@@ -68,14 +68,14 @@ internal sealed class GilTradeRun
                 ThisTrade = 0; stableOffer = 0;
                 if (Sending && Done == Total) Move(GilTradeStage.Complete, now, $"Sent {Done:N0} gil · {Trades} completed trades.");
                 else if (!f.Ready || !f.PartnerNearby || f.PartnerEntity != PartnerEntity || f.OtherDialog)
-                    Stop("Trade completed. Stopped because the character or party is no longer ready.");
+                    Stop("Trade completed. Stopped because the character or selected player is no longer ready.");
                 else Move(GilTradeStage.Between, now, Sending ? "Trade completed; preparing the next one…" : $"Received {Done:N0} gil · waiting for the next trade…");
             }
             else if (now - stageAt > TimeSpan.FromSeconds(12)) return Halt("Stopped: completion was not confirmed.");
             return GilTradeAction.None;
         }
         if (!f.Ready) return Halt("Stopped: game state changed.");
-        if (!f.PartnerNearby || f.PartnerEntity != PartnerEntity) return Halt("Stopped: the selected party member left or moved away.");
+        if (!f.PartnerNearby || f.PartnerEntity != PartnerEntity) return Halt("Stopped: the selected player left or moved away.");
         if (now - started > TimeSpan.FromMinutes(30)) return Halt("Stopped: session expired.");
         if (f.OtherDialog) return Halt("Stopped: another game dialog needs your attention.");
         if (f.TradeOpen && (!f.TradeReady || f.SyncPending))
@@ -93,7 +93,7 @@ internal sealed class GilTradeRun
         if (Stage == GilTradeStage.Between)
         {
             if (now - stageAt < TimeSpan.FromSeconds(2)) return GilTradeAction.None;
-            Move(GilTradeStage.Waiting, now, Sending ? "Ready for the next trade." : "Waiting for your selected party member…");
+            Move(GilTradeStage.Waiting, now, Sending ? "Ready for the next trade." : "Waiting for your selected player…");
         }
         if (Stage == GilTradeStage.Waiting)
         {

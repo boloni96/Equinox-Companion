@@ -70,7 +70,7 @@ static class MarketFixTests
         check("bell departure waits for settled state",!bell.Observe(false,now.AddSeconds(1))&&bell.Observe(false,now.AddSeconds(3)));
         check("bell departure closes only once",!bell.Observe(false,now.AddSeconds(5)));
         check("selling count has labels",SellerLabels.Selling(13,6,true)=="13 selling · 6 updates");
-        check("unknown data is explicit not question mark",SellerLabels.Selling(13,0,true)=="13 selling · unchecked");
+        check("unknown data is explicit not question mark",SellerLabels.Selling(13,0,true)=="13 selling · uncertain");
     }
 
     private sealed class MultiStackPort : ISellerPort

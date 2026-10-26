@@ -29,10 +29,10 @@ public sealed partial class Plugin
             marketWatchTask=null;marketWatchCancel?.Dispose();marketWatchCancel=null;marketWatchStock=null;
         }
         if(!config.Seller.BackgroundChecks){if(marketWatchCancel!=null)StopMarketWatch();return;}
-        if(!ReferenceEquals(marketWatchStock,marketLedger.Retainers)||now>=marketWatchRebuildAt){
-            marketWatchStock=marketLedger.Retainers;marketWatchRebuildAt=now.AddSeconds(30);marketWatchReviews.Clear();
+        if(!ReferenceEquals(marketWatchStock,MarketRetainers)||now>=marketWatchRebuildAt){
+            marketWatchStock=MarketRetainers;marketWatchRebuildAt=now.AddSeconds(30);marketWatchReviews.Clear();
             var active=new HashSet<(uint World,uint Item)>();
-            foreach(var group in marketLedger.Retainers.GroupBy(x=>x.WorldId)){
+            foreach(var group in MarketRetainers.GroupBy(x=>x.WorldId)){
                 var ownNames=group.Select(x=>x.Name).Where(x=>x.Length>0).ToHashSet(StringComparer.Ordinal);
                 foreach(var retainer in group)foreach(var item in retainer.Stock){
                     active.Add((group.Key,item.ItemId));
@@ -45,7 +45,7 @@ public sealed partial class Plugin
         // Never share a queue with gameplay sync, and do not start extra work while it is uploading.
         if(marketWatchTask!=null||now<marketWatchPoll||!Player.IsLoaded||sellerRun.Running||syncTask!=null)return;
         marketWatchPoll=now.AddSeconds(10);
-        var due=marketLedger.Retainers.SelectMany(r=>r.Stock.Where(x=>!config.Seller.ExcludedItems.Contains(x.ItemId)).Select(x=>(World:r.WorldId,Item:x.ItemId))).Where(x=>x.World!=0).Distinct()
+        var due=MarketRetainers.SelectMany(r=>r.Stock.Where(x=>!config.Seller.ExcludedItems.Contains(x.ItemId)).Select(x=>(World:r.WorldId,Item:x.ItemId))).Where(x=>x.World!=0).Distinct()
             .Where(x=>marketWatchNext.GetValueOrDefault(x)<=now).OrderBy(x=>marketWatchNext.GetValueOrDefault(x)).ToArray();
         if(due.Length==0)return;
         var world=due[0].World;var ids=due.Where(x=>x.World==world).Take(50).Select(x=>x.Item).ToArray();

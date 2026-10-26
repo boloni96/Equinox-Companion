@@ -3,6 +3,7 @@ using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.UI;
+using FFXIVClientStructs.FFXIV.Client.UI.Info;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 
 namespace EquinoxCompanion;
@@ -15,6 +16,26 @@ public sealed partial class Plugin
     private DateTimeOffset gilTradePoll;
     private readonly Queue<string> gilTradeDiagnostics = new();
     private bool gilTradeOwned;
+    private bool gilPartnerRequiresParty = true;
+    private sealed record GilTradeCandidate(string Name, uint World, ulong ContentId = 0, bool Party = false);
+
+    private unsafe GilTradeCandidate[] GilTradeCandidates(int source, string search)
+    {
+        IEnumerable<GilTradeCandidate> candidates;
+        if (source == 0) candidates = FollowParty.Where(x => x.ContentId != 0 && x.ContentId != Player.ContentId)
+            .Select(x => new GilTradeCandidate(x.Name.TextValue, x.World.RowId, x.ContentId, true)).ToArray();
+        else if (source == 2)
+        {
+            var friends = InfoProxyFriendList.Instance(); var rows = new List<GilTradeCandidate>();
+            if (friends != null) foreach (var friend in friends->CharDataSpan)
+                rows.Add(new(friend.NameString, friend.HomeWorld, friend.ContentId));
+            candidates = rows;
+        }
+        else candidates = Objects.OfType<IPlayerCharacter>().Where(x => x.EntityId != Objects.LocalPlayer?.EntityId && x.IsTargetable)
+            .Select(x => new GilTradeCandidate(x.Name.TextValue, x.HomeWorld.RowId)).ToArray();
+        return candidates.Where(x => x.World > 0 && !string.IsNullOrWhiteSpace(x.Name) && (source != 3 || x.Name.Contains(search.Trim(), StringComparison.OrdinalIgnoreCase)))
+            .DistinctBy(x => (x.Name, x.World)).OrderBy(x => x.Name).ThenBy(x => x.World).ToArray();
+    }
 
     private void TraceGilTrade(string message)
     {
@@ -23,9 +44,10 @@ public sealed partial class Plugin
     }
     private IPlayerCharacter? GilTradePartner()
     {
-        if (gilPartnerContent == 0 || !FollowParty.Any(x => x.ContentId == gilPartnerContent &&
-            x.World.RowId == gilPartnerWorld && x.Name.TextValue == gilPartnerName)) return null;
-        return Objects.OfType<IPlayerCharacter>().FirstOrDefault(x => x.Name.TextValue == gilPartnerName && x.HomeWorld.RowId == gilPartnerWorld && x.IsTargetable);
+        if (gilPartnerRequiresParty && (gilPartnerContent == 0 || !FollowParty.Any(x => x.ContentId == gilPartnerContent &&
+            x.World.RowId == gilPartnerWorld && x.Name.TextValue == gilPartnerName))) return null;
+        var matches = Objects.OfType<IPlayerCharacter>().Where(x => x.Name.TextValue == gilPartnerName && x.HomeWorld.RowId == gilPartnerWorld && x.IsTargetable && x.EntityId != Objects.LocalPlayer?.EntityId).Take(2).ToArray();
+        return matches.Length == 1 ? matches[0] : null;
     }
     private unsafe GilTradeFrame ReadGilTradeFrame()
     {
@@ -57,14 +79,23 @@ public sealed partial class Plugin
     private unsafe void StartGilTrade()
     {
         gilTradeNotice = "";
-        if (!config.EnableGilTrader) return;
+        TraceGilTrade($"{(gilReceive ? "Receive" : "Send")} pressed · requested {gilTotal:N0} gil · {gilPartnerName} @ {WorldName(gilPartnerWorld)} · {(gilPartnerRequiresParty ? "party" : "nearby player")}");
+        void Reject(string reason) { gilTradeNotice = reason; TraceGilTrade("Not started · " + reason); }
+        if (!config.EnableGilTrader) { Reject("Enable Gil Trader first."); return; }
+        try {
         gilTradePrompt = DataManager.GetExcelSheet<Lumina.Excel.Sheets.Addon>().GetRowOrDefault(102223)?.Text.ExtractText() ?? "";
-        if (string.IsNullOrWhiteSpace(gilTradePrompt)) { gilTradeNotice = "The game's trade confirmation text is unavailable."; return; }
-        if (followSession.Armed) { gilTradeNotice = "Stop active following before starting a trade."; return; }
+        if (string.IsNullOrWhiteSpace(gilTradePrompt)) { Reject("The game's trade confirmation text is unavailable."); return; }
+        if (followSession.Armed) { Reject("Stop active following before starting a trade."); return; }
         gilSessionWorld = Player.CurrentWorld.RowId; gilSessionTerritory = Client.TerritoryType;
-        if (!gilTrade.Start(!gilReceive, (uint)Math.Max(0, gilTotal), ReadGilTradeFrame(), DateTimeOffset.UtcNow)) return;
+        var frame = ReadGilTradeFrame();
+        if (!gilTrade.Start(!gilReceive, (uint)Math.Max(0, gilTotal), frame, DateTimeOffset.UtcNow)) {
+            Reject(gilTrade.Status);
+            TraceGilTrade($"Start state · ready {frame.Ready} · nearby {frame.PartnerNearby} · wallet {frame.Wallet:N0} · trade open {frame.TradeOpen} · other dialog {frame.OtherDialog}");
+            return;
+        }
         gilTradeOwned = false; gilTradePoll = default;
         TraceGilTrade($"Started {(gilReceive ? "receiving" : $"sending {gilTotal:N0}")} · {gilPartnerName} @ {WorldName(gilPartnerWorld)}");
+        } catch (Exception ex) { Reject("Could not read the game's trade state. See Details."); Log.Error(ex, "Gil Trader could not start"); TraceGilTrade(ex.GetType().Name); }
     }
     private unsafe void CancelOwnedGilTrade()
     {
@@ -102,7 +133,7 @@ public sealed partial class Plugin
                 switch (action)
                 {
                     case GilTradeAction.Request:
-                        if (GilTradePartner() is not { } target) { StopGilTrade("Selected party member is no longer nearby."); return; }
+                        if (GilTradePartner() is not { } target) { StopGilTrade("Selected player is no longer nearby."); return; }
                         Targets.Target = target; gilTradeOwned = true; inv->SendTradeRequest(target.EntityId); break;
                     case GilTradeAction.SetGil: inv->SetTradeGilAmount(gilTrade.ThisTrade); break;
                     case GilTradeAction.LockOffer:

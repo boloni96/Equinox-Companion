@@ -11,7 +11,7 @@ public sealed partial class Plugin
     private void DrawMarketRetainerHover(MarketRetainer? retainer,int total,string name)
     {
         ImGui.BeginTooltip();ImGui.PushTextWrapPos(ImGui.GetFontSize()*30);
-        ImGui.TextUnformatted(name);
+        ImGui.TextUnformatted(retainer==null?name:MarketRetainerLabel(retainer));
         if(retainer==null){
             ImGui.TextWrapped(total==0?"No items selling.":$"{total} selling · listings have not been recorded on this computer. Open this retainer's selling list or run Check prices.");
         }else{
@@ -21,7 +21,7 @@ public sealed partial class Plugin
             var unknown=rows.Count(x=>x.Decision.Status==SellerStatus.Unknown);
             var skipped=rows.Count(x=>x.Decision.Status==SellerStatus.Skipped);
             var competitive=rows.Count(x=>x.Decision.Status==SellerStatus.Competitive&&!x.Decision.NeedsAttention);
-            ImGui.TextWrapped($"{total} selling · {updates} to review · {competitive} competitive · {unknown} unchecked · {skipped} skipped");
+            ImGui.TextWrapped($"{total} selling · {updates} to review · {competitive} competitive · {unknown} uncertain · {skipped} skipped");
             if(total!=rows.Length)ImGui.TextWrapped($"Game shows {total} selling; {rows.Length} listings are recorded. Reopen the selling list to refresh its contents.");
             var unresolved=rows.Where(x=>x.Decision.Status is SellerStatus.Unknown or SellerStatus.Skipped or SellerStatus.Checking||x.Decision.NeedsAttention)
                 .OrderBy(x=>x.Decision.Status is SellerStatus.Unknown or SellerStatus.Skipped?0:1)
@@ -37,7 +37,8 @@ public sealed partial class Plugin
             if(unresolved.Length==0&&rows.Length>0)ImGui.TextWrapped("Recorded comparisons keep these prices under your current rules. This is a snapshot, not a guarantee that nobody has listed a cheaper item since.");
             var lastLive=retainer.Stock.Select(x=>sellerReviews.TryGetValue((retainer.Id,x.Slot),out var review)?review.At:default).DefaultIfEmpty().Max();
             if(lastLive!=default)ImGui.TextWrapped("Last live review: "+DisplayTime.Local(lastLive));
-            ImGui.TextWrapped("Last retainer visit: "+DisplayTime.Local(retainer.LastVisit??retainer.At));
+            ImGui.TextWrapped("Stock observed: "+DisplayTime.Local(retainer.At)+(retainer.Paired?" · paired record":" · this computer"));
+            ImGui.TextWrapped("Last retainer visit: "+(retainer.LastVisit is {} visit?DisplayTime.Local(visit):"Not recorded"));
             if(MarketVisitDue(retainer))ImGui.TextWrapped("Visit due: a precautionary reminder, not a confirmed expiry.");
             ImGui.TextWrapped("Open Equinox Market → Selling for every item's reason. Check prices refreshes live comparisons without changing prices.");
         }

@@ -114,6 +114,8 @@ ComparisonCaptureTests.Run(Check,now);
 OwnPriceTests.Run(Check,now);
 Console.WriteLine($"{tests} market checks passed.");
 
+await MarketSharing251Tests.Run(Check,now);
+
 sealed class FakePort(DateTimeOffset now,MarketStock stock):ISellerPort
 {
  public DateTimeOffset Now=now;public bool Context=true,EditorValid=true,FailComparison,Empty,NeverConfirm,Timeout;

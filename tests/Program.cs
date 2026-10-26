@@ -1800,3 +1800,4 @@ Check("blank festival quest observation passes upload validation", EventQuestPol
 OwnedCompany200Tests.Run();
 
 await DiagnosticExportTests.Run();
+PairedMarket251Tests.Run();

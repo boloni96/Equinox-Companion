@@ -20,7 +20,7 @@ internal static class Appearance239Tests
         migrated.CompanionMenuCollapsed=false;
         Check(!JsonSerializer.Deserialize<Configuration>(JsonSerializer.Serialize(migrated.Snapshot()))!.CompanionMenuCollapsed,"expanded menu survives snapshot and restart");
         Check(AppearancePolicy.Dismiss(reloaded.Appearance).GoddessBlue,"closing preview keeps new choice");
-        Check(!AppearancePolicy.Dismiss(new()).GoddessBlue&&!AppearancePolicy.NeedsChoice(AppearancePolicy.Dismiss(new())),"closing first preview keeps current and prevents repeated prompt");
+        Check(AppearancePolicy.Dismiss(new()).GoddessBlue&&!AppearancePolicy.NeedsChoice(AppearancePolicy.Dismiss(new())),"closing welcome selects Goddess Blue and prevents repeated prompt");
         Check(!AppearancePolicy.Choose(false).GoddessBlue&&!AppearancePolicy.NeedsChoice(AppearancePolicy.Choose(false)),"explicit current choice remembered");
         Check(AppearancePolicy.SelectSection("person:goddess",["housing","person:goddess","settings"])=="person:goddess","paired person retained");
         Check(AppearancePolicy.SelectSection("person:removed",["housing","settings"])=="housing","removed person has safe fallback");
