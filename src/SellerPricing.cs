@@ -22,6 +22,7 @@ public sealed class SellerSettings
     public bool OpenCompare { get; set; } = true;
     public bool OpenHistory { get; set; } = true;
     public bool ClickSetsPrice { get; set; } = true;
+    public bool ManualAllowOtherQuality { get; set; }
     public bool ClickConfirms { get; set; }
     public bool CopyPrice { get; set; } = true;
     public bool CtrlPastePrice { get; set; } = true;
@@ -84,6 +85,20 @@ public static class SellerPricing
     public static int OfferPrice(long reference, bool own, SellerSettings s, int minimum = 1) => own
         ? (int)Math.Clamp(reference, Math.Clamp(minimum, 1, MaxPrice), MaxPrice)
         : Adjust(reference, s, minimum);
+
+    // The caller supplies only current, verified listings of the editor's base
+    // item. A deliberate click may cross HQ/NQ when opted in; automatic Decide
+    // never reads this setting. Manual clicks may also choose another meld.
+    public static (int Price, bool MatchOwn)? ManualClickPrice(long reference, bool editorHq,
+        IEnumerable<SellerOffer> verifiedOffers, ISet<ulong> ownRetainers, SellerSettings settings, int minimum = 1)
+    {
+        if (reference is <= 0 or > MaxPrice) return null;
+        var candidates = verifiedOffers.Where(x => x.Price == reference && x.Quantity > 0 && !x.Mannequin &&
+            (settings.ManualAllowOtherQuality || x.Hq == editorHq)).ToArray();
+        if (candidates.Length == 0) return null;
+        var matchOwn = candidates.Any(x => x.RetainerId != 0 && ownRetainers.Contains(x.RetainerId));
+        return (OfferPrice(reference, matchOwn, settings, minimum), matchOwn);
+    }
     private static SellerDecision LimitIncrease(SellerDecision decision,int current,int minimum,SellerSettings settings)
     {
         if(!decision.CanApply||decision.Price is not {} target||current<=0||target<=current||target<=Math.Clamp(minimum,1,MaxPrice))return decision;

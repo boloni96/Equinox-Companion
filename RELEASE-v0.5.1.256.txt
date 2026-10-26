@@ -1,0 +1,33 @@
+Equinox Companion 0.5.1.256
+
+Optional HQ/NQ crossover for manual price clicks
+
+Market & Seller settings > Manual selling now includes:
+  Allow HQ/NQ crossover on manual clicks
+
+Off by default, preserving existing settings. Turn it on to explicitly use
+an NQ comparison price for an HQ item, or an HQ price for an NQ item. It applies
+to copying the adjusted price and filling the open editor. Existing undercut,
+rounding, item minimum and click-confirmation settings remain in effect.
+The item's quality and quantity are never changed. Known own-retainer prices
+are matched exactly rather than undercut. A blocked cross-quality click now
+explains the setting to enable instead of silently doing nothing.
+
+Automatic pricing retains its existing quality, materia, history and increase
+rules. The manual switch cannot enable cross-quality automatic suggestions or
+updates. Settings now separate Manual selling, shared Price calculation, and
+Automatic pricing rules. Both Companion designs use the same settings/actions.
+
+Validation: 21 new manual-pricing checks, all existing market and paired-history
+checks, transition/sync and native suites, plus the Release build. Covers both
+quality directions, opt-in persistence, strict defaults, own-retainer matching,
+invalid rows/prices, mannequins, minimums, rounding and automatic-rule isolation.
+No live prices were changed by tests; in-game verification is still needed.
+
+Test: with Confirm price after clicking off, enable the new manual option,
+open an HQ item's price editor and click an NQ comparison price. Verify the
+adjusted value appears in the editor/clipboard and the item stays HQ. Switch
+the option off and repeat: it should explain why the price was not selected.
+
+Companion-only update through the normal installer. No Journal, Worker or APK
+deployment is needed; existing 7.11.244 packages remain current.
