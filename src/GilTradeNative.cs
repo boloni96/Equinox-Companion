@@ -13,11 +13,12 @@ internal static unsafe class GilTradeNative
         items = inv == null; localGil = remoteGil = 0;
         if (inv == null || numbers == null || numbers->IntArray == null || numbers->Size < sizeof(TradeNumberArray) / sizeof(int)) return false;
         var view = (TradeNumberArray*)numbers->IntArray;
+        // Item presence comes from the actual offered inventory slots. The
+        // number array also holds empty-slot presentation/template values;
+        // nonzero icons or quantities there do not establish an offered item.
         for (var i = 0; i < 5; i++)
             items |= inv->TradeItemsLocal[i].ItemId != 0 || inv->TradeItemsRemote[i].ItemId != 0 ||
-                inv->TradeItemsLocal[i].Quantity != 0 || inv->TradeItemsRemote[i].Quantity != 0 ||
-                view->ItemsGive[i].IconId != 0 || view->ItemsGive[i].Quantity != 0 ||
-                view->ItemsReviece[i].IconId != 0 || view->ItemsReviece[i].Quantity != 0;
+                inv->TradeItemsLocal[i].Quantity != 0 || inv->TradeItemsRemote[i].Quantity != 0;
         // Currency slot is separate from the five item slots. Reject malformed
         // records rather than silently treating an unknown item as currency.
         items |= inv->TradeItemsLocal[5].ItemId > 1 || inv->TradeItemsRemote[5].ItemId > 1;
