@@ -38,8 +38,8 @@ public sealed partial class Plugin
         {
             SettingsSection("Appearance",DrawAppearanceSettings);
             SettingsSection("Optional tools",DrawFeatureSettings);
-            SettingsSection("Market",()=>{if(ImGui.Button("Open Market & Seller settings"))OpenSellerSettings();SettingsHelp("One settings page for manual selling, automatic pricing, background checks and display.",false);});
-            SettingsSection("Camera",DrawCameraHeightSettings);
+            if(config.Seller.Enabled)SettingsSection("Market",()=>{if(ImGui.Button("Open Market & Seller settings"))OpenSellerSettings();SettingsHelp("One settings page for manual selling, automatic pricing, background checks and display.",false);});
+            if(OptionalToolAvailable("Camera"))SettingsSection("Camera",DrawCameraHeightSettings);
             SettingsSection("Tracking",DrawGeneralSettings);
             SettingsSection("Chat",DrawChatMessageSettings);
             SettingsSection("Keybinds",DrawShortcutSettings);
@@ -78,8 +78,8 @@ public sealed partial class Plugin
         ImGui.TextDisabled($"Queued: {pendingSyncRecords} · ready: {readySyncRecords} · held: {heldSyncRecords}");
         SettingsHelp("Held records are incomplete observations. They do not block valid records. Logs are kept locally; repeated issues are limited to once every five minutes.");
         if(optionalToolFailures.Count>0&&ImGui.CollapsingHeader("Optional tools need attention")){foreach(var issue in optionalToolFailures)ImGui.TextWrapped(issue.Key+": "+issue.Value);}
-        if(ImGui.CollapsingHeader("Market & Seller"))DrawSellerDiagnostics();
-        if(ImGui.CollapsingHeader("Gil Trader"))DrawGilTradeDiagnostics();
+        if(config.Seller.Enabled&&ImGui.CollapsingHeader("Market & Seller"))DrawSellerDiagnostics();
+        if(config.EnableGilTrader&&ImGui.CollapsingHeader("Gil Trader"))DrawGilTradeDiagnostics();
         if(ImGui.CollapsingHeader("Performance"))DrawRecentPerformanceDiagnostics();
         if(ImGui.CollapsingHeader("Tracking & recording"))DrawDiagnosticsTracking();
         if(ImGui.CollapsingHeader("Housing lottery"))ImGui.TextWrapped(lotteryDiagnostic is null?"No lottery observation this session.":System.Text.Json.JsonSerializer.Serialize(lotteryDiagnostic));
@@ -103,13 +103,14 @@ public sealed partial class Plugin
     {
         ImGui.TextUnformatted("Tools on this computer");
         MessageToggle("Enable Gil Trader", config.EnableGilTrader, SetGilTraderEnabled);
-        SettingsHelp("/eqtrade · send a chosen gil total in repeated trades, or receive from one selected party member. Start each session explicitly. Never resumes after restarting; no Journal connection is needed.");
+        SettingsHelp("Shows Gil Trader in the window menu and enables /eqtrade. Send a chosen gil total or receive from a selected nearby player. Disabling closes the window and stops the session; confirmed trades are kept.");
         MessageToggle("Enable Equinox Market & Seller",config.Seller.Enabled,SetMarketEnabled);
-        SettingsHelp("Retainer listings, sales and an optional price updater. Opening a bell never starts price changes. Settings and records stay on this computer.");
-        SettingsHelp("These tools are optional and local to this computer. Disabling one keeps its settings. Core character, house and garden tracking is controlled separately under Tracking.");
+        SettingsHelp("Shows Market and Seller in the window menu and enables their commands. Seller opens at a summoning bell only when this and Open Seller at summoning bells are checked. Opening a bell never starts price changes. Disabling stops Seller, closes both windows and removes their icons. Settings and saved market records are kept; paired market sharing has its own setting.");
+        SettingsHelp("Choose which tools are available on this computer. Disabled tools stay out of menus and cannot be opened by commands. Core character, house and garden tracking is controlled separately under Tracking.",false);
         MessageToggle("Enable QuickLoot",config.EnableQuickLoot,v=>{
             config.EnableQuickLoot=v;
             if(!v){config.QuickLoot.Automatic=false;StopQuickLoot("QuickLoot disabled.");quickLootBarEntry?.Remove();quickLootBarEntry=null;}
+            HideDisabledOptionalWindows();
         });
         SettingsHelp("Disabled by default. Enable to show the QuickLoot tab and its loot settings. Disabling hides the tab, stops rolling and removes its top-bar entry; your rules are kept.");
         ImGui.Separator();
@@ -118,10 +119,14 @@ public sealed partial class Plugin
         if(config.EnableCofferMarkers&&ImGui.CollapsingHeader("Coffer appearance & automatic opening")) DrawCofferSettings();
         ImGui.Separator();
         MessageToggle("Enable Equinox Helper", config.EnableFollowThem, v => {
+            config.EnableFollowThem = v;
             if (!v) StopFollowThem("FollowThem disabled.");
-            config.EnableFollowThem = v; RefreshFollowBar();
+            HideDisabledOptionalWindows(); RefreshFollowBar();
         });
         SettingsHelp("Disabled on installation. Enables the Helper tab (FollowThem and optional Quest Helper) and clickable top-bar entry. Settings stay on this PC and are never paired. Disabling stops FollowThem; your selected character and portal settings are kept.");
+        ImGui.Separator();
+        MessageToggle("Enable camera tools", OptionalToolAvailable("Camera"), SetCameraToolsEnabled);
+        SettingsHelp("Shows Camera settings and the /cam keybind. /cam can then toggle saved/game height. Disabling restores game height and disables the command and keybind; your saved height and shortcut are kept.");
     }
     private void DrawGeneralSettings()
     {

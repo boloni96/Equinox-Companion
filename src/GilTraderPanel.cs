@@ -44,21 +44,17 @@ public sealed partial class Plugin
         gilTradeCompletion.Clear();
         if (gilTraderCommand) Commands.RemoveHandler("/eqtrade");
     }
-    private void OpenGilTrader() { gilTraderWindow.IsOpen = true; minimizedLaunchers.Remove("Gil Trader"); }
+    private void OpenGilTrader() { if(!RequireOptionalTool("Gil Trader"))return; gilTraderWindow.IsOpen = true; minimizedLaunchers.Remove("Gil Trader"); }
     private void SetGilTraderEnabled(bool enabled)
     {
         config.EnableGilTrader = enabled;
         if (!enabled) StopGilTrade("Gil Trader disabled.");
+        HideDisabledOptionalWindows();
         SaveConfiguration();
     }
     private unsafe void DrawGilTrader()
     {
-        if (!config.EnableGilTrader)
-        {
-            ImGui.TextWrapped("Trade gil with a nearby player. Choose someone from your party, nearby players or friends, or find them by name. Each session starts only when you choose Send or Receive.");
-            if (ImGui.Button("Enable Gil Trader")) SetGilTraderEnabled(true);
-            return;
-        }
+        if (!config.EnableGilTrader) return;
         ImGui.BeginDisabled(gilTrade.Running);
         ImGui.SetNextItemWidth(-1);
         ImGui.Combo("##gil-target-source", ref gilTargetSource, "Party\0Nearby players\0Friends\0Find by name\0");

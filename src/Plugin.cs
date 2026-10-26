@@ -219,6 +219,7 @@ public sealed partial class Plugin : IDalamudPlugin
         catch (Exception ex) { errorJournal.Record("plugin", "Garden integer callback observer unavailable", exceptionType:ex.GetType().Name); Log.Error(ex, "Garden integer callback observer unavailable"); }
         config = Pi.GetPluginConfig() as Configuration ?? new();
         configurationWriter = new(snapshot => Pi.SavePluginConfig(snapshot));
+        if (OptionalToolAvailability.InitializeCamera(config)) SaveConfiguration();
         config.FollowThem ??= new();
         config.PairingKey = config.PairingKey.Trim().ToLowerInvariant();
         if(!System.Text.RegularExpressions.Regex.IsMatch(config.InstallationId??"", "^[a-f0-9]{32}$")){config.InstallationId=Guid.NewGuid().ToString("N");SaveConfiguration();}
@@ -1092,6 +1093,7 @@ public sealed partial class Plugin : IDalamudPlugin
             }
             return;
         }
+        HideDisabledOptionalWindows();
         UpdateShortcuts();
         mainWindow.IsOpen = visible;
         escapePopupWasOpen=ImGui.IsPopupOpen("",ImGuiPopupFlags.AnyPopupId|ImGuiPopupFlags.AnyPopupLevel);

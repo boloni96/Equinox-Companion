@@ -92,6 +92,7 @@ public sealed partial class Plugin
     private void ToggleFollowThem()
     {
         if (followSession.Armed) { StopFollowThem(); return; }
+        if(!RequireOptionalTool("Helper"))return;
         if(HelperPolicy.HasLeaderRole(helperFollowers)){helperWindowOpen=true;FollowChatNotice("You are being followed. Use Helper Controls to pause or end those sessions before starting as a follower.");return;}
         if(followStopPending||followStopUnconfirmed){FollowChatNotice("Stop is awaiting confirmation. Tap and release a movement key before restarting.");return;}
         if (string.IsNullOrWhiteSpace(config.FollowThem.TargetName) || config.FollowThem.HomeWorld == 0)

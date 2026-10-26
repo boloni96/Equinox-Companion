@@ -112,6 +112,7 @@ public sealed partial class Plugin
     private unsafe void SetMarketEnabled(bool enabled)
     {
         config.Seller.Enabled=enabled;SaveConfiguration();
+        HideDisabledOptionalWindows();
         if(enabled)EnableMarketHooks();else DisableMarketHooks();
     }
     private unsafe void SellerRequestResult(InfoProxyItemSearch* proxy,byte count,int error)
@@ -156,7 +157,7 @@ public sealed partial class Plugin
     {
         marketPollAt=DateTimeOffset.UtcNow;
         TraceSeller("Bell","Retainer list opened");
-        if(config.Seller.Enabled && config.Seller.OpenAtBell && !sellerRun.Running)sellerWindow.IsOpen=true;
+        if(config.Seller.Enabled && config.Seller.OpenAtBell && !sellerRun.Running)OpenEquinoxSeller();
     }
     private void SellerListOpened(AddonEvent e,AddonArgs args){sellerInventoryRetainer=0;marketPollAt=DateTimeOffset.UtcNow.AddMilliseconds(300);}
     private void SellerEditorOpened(AddonEvent e,AddonArgs args)=>BeginManualSeller();

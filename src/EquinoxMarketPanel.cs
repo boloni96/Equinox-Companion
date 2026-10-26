@@ -53,8 +53,8 @@ public sealed partial class Plugin
         InitializeMarketHistorySync();
     }
     private void DisposeMarketWindows(){DisposeMarketHistorySync();if(eqMarketCommand)Commands.RemoveHandler("/eqmarket");if(eqSellerCommand)Commands.RemoveHandler("/eqseller");}
-    private void OpenEquinoxMarket(){equinoxMarketWindow.IsOpen=true;minimizedLaunchers.Remove("Equinox Market");}
-    private void OpenEquinoxSeller(){sellerWindow.IsOpen=true;minimizedLaunchers.Remove("Equinox Seller");}
+    private void OpenEquinoxMarket(){if(!RequireOptionalTool("Equinox Market"))return;equinoxMarketWindow.IsOpen=true;minimizedLaunchers.Remove("Equinox Market");}
+    private void OpenEquinoxSeller(){if(!RequireOptionalTool("Equinox Seller"))return;sellerWindow.IsOpen=true;minimizedLaunchers.Remove("Equinox Seller");}
     private static Vector4 SellerColor(SellerStatus status)=>status switch {SellerStatus.Update=>new(1,.35f,.35f,1),SellerStatus.Competitive=>new(.35f,.85f,.50f,1),SellerStatus.Checking=>new(.4f,.75f,1,1),SellerStatus.History or SellerStatus.Skipped=>new(1,.75f,.35f,1),_=>new(.85f,.7f,.4f,1)};
     private SellerDecision ReviewFor(ulong retainer,int slot)
     {
@@ -68,16 +68,9 @@ public sealed partial class Plugin
         return new(SellerStatus.Unknown,null,why,"None");
     }
 
-    private bool MarketEnabledUi()
-    {
-        if(config.Seller.Enabled)return true;
-        ImGui.TextWrapped("Equinox Market & Seller are optional tools on this computer.");
-        if(ImGui.Button("Enable Market & Seller"))SetMarketEnabled(true);
-        return false;
-    }
     private void DrawEquinoxSeller()
     {
-        if(!MarketEnabledUi())return;
+        if(!config.Seller.Enabled)return;
         if(marketLoad!=null)ImGui.TextDisabled("Loading saved market records…");
         if(marketDataError.Length>0)ImGui.TextWrapped(marketDataError);
         ImGui.BeginDisabled(sellerRun.Running);
@@ -117,12 +110,11 @@ public sealed partial class Plugin
             ImGui.BeginTooltip();ImGui.PushTextWrapPos(ImGui.GetFontSize()*28);ImGui.TextUnformatted(text);ImGui.PopTextWrapPos();ImGui.EndTooltip();
         }
     }
-    private void OpenSellerSettings(){openMarketSettings=true;openMarketSelling=false;OpenEquinoxMarket();}
+    private void OpenSellerSettings(){if(!RequireOptionalTool("Equinox Market"))return;openMarketSettings=true;openMarketSelling=false;OpenEquinoxMarket();}
     private void DrawSellerSettings()
     {
         var s=config.Seller;var dirty=false;
-        var enabled=s.Enabled;if(ImGui.Checkbox("Enable Market & Seller",ref enabled))SetMarketEnabled(enabled);
-        MarketHelp("Enables the manual selling helpers, price updater and local market records. Turning this off keeps your settings and records.");
+        if(!s.Enabled)return;
         ImGui.BeginDisabled(sellerRun.Running);
         void Toggle(string label,bool value,Action<bool> set,string help){if(ImGui.Checkbox(label,ref value)){set(value);dirty=true;}MarketHelp(help);}
         void Number(string label,int value,int min,int max,Action<int> set,string help){ImGui.SetNextItemWidth(100);if(ImGui.InputInt(label,ref value)){set(Math.Clamp(value,min,max));dirty=true;}MarketHelp(help);}
@@ -296,7 +288,7 @@ public sealed partial class Plugin
     }
     private void DrawEquinoxMarket()
     {
-        if(!MarketEnabledUi())return;
+        if(!config.Seller.Enabled)return;
         if(config.SyncEnabled&&config.SharedRoster is {MarketProjectionVersion:0}){ImGui.TextDisabled("Paired Market needs Journal / Worker 7.11.243.");MarketHelp("Update both Cloudflare deployments. Existing local records stay available; no re-pairing is needed.");}
         if(marketDataError.Length>0)ImGui.TextWrapped(marketDataError);
         if(ImGui.BeginTabBar("EquinoxMarketPages",ImGuiTabBarFlags.FittingPolicyScroll)){

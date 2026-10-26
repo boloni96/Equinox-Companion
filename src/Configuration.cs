@@ -14,6 +14,7 @@ public sealed class Configuration : IPluginConfiguration
     public Dictionary<string,string> TestingDraftBases { get; set; } = [];
     public string TestingTesterId { get; set; } = "";
     public string TestingTesterName { get; set; } = "";
+    public bool? EnableCameraTools { get; set; }
     public bool RememberCameraHeight { get; set; }
     public Shortcut CameraShortcut { get; set; } = new();
     public float PreferredCameraHeight { get; set; }

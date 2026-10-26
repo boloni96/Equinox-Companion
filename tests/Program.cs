@@ -1801,3 +1801,4 @@ OwnedCompany200Tests.Run();
 
 await DiagnosticExportTests.Run();
 PairedMarket251Tests.Run();
+OptionalTools257Tests.Run();

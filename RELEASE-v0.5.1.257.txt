@@ -1,0 +1,11 @@
+Optional tools appear only after enabling them in Settings → Optional tools.
+
+Disabled Market, Seller and Gil Trader no longer open an enable screen. Their menu entries, minimized icons and tool-specific settings stay hidden. Commands explain where to enable the tool without opening a window or changing your settings.
+
+Disabling Market closes Market and Seller, stops repricing, removes highlighting and restores other plugins' pause/lock state. Saved records and pricing rules are retained. The bell opens Seller only while Market & Seller and Open Seller at summoning bells are enabled; it does not start price changes. Disabling Gil Trader closes it and stops the current session.
+
+Camera tools now have an availability checkbox under Optional tools. Existing camera setups are kept on update. Disabling hides Camera settings and its shortcut, blocks /cam, and restores normal game height when safe. Your saved height, shortcut and saved-height preference remain remembered. QuickLoot and Helper retain their opt-in tabs and stop when disabled.
+
+Both Goddess Blue and classic Dalamud use the same availability rules. Core tracking, gardening, pairing and saved records are unchanged. No Journal, Worker or Android update is required.
+
+Validation: Release build, transition/sync regression tests, native tests and market tests. In-game check: disable Market & Seller, visit a bell and try /eqseller (no window); enable it in Optional tools and visit the bell again; minimize then disable Seller and Gil Trader and check that their icons disappear. Repeat with either design.

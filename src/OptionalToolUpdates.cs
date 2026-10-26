@@ -8,7 +8,7 @@ public sealed partial class Plugin
     {
         "Equinox Market"=>true,
         "Gil Trader"=>gilTrade.Running,
-        "Camera"=>config.RememberCameraHeight||cameraHeightDefaultPending,
+        "Camera"=>OptionalToolAvailable("Camera")&&config.RememberCameraHeight||cameraHeightDefaultPending,
         "QuickLoot"=>config.EnableQuickLoot,
         "Coffer markers"=>config.EnableCofferMarkers,
         "Quest Helper"=>config.EnableFollowThem||helperPermission.Active||helperTextAdvanceOwned||helperNativeEscapeUntil!=default||helperSceneHook?.IsEnabled==true||helperStatusTask is not null||helperLeaderTask is not null||helperControlTask is not null||helperSendTask is not null||helperFollowers.Length>0,
