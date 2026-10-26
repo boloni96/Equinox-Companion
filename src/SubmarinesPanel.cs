@@ -35,15 +35,21 @@ public sealed partial class Plugin
     }
     private void DrawSubmarinesContents()
     {
-        SettingsHelp("Open the FC workshop voyage panel to refresh timers. Character and account order follows your Persons tabs.",false);
-        ImGui.TextWrapped(config.SyncAutoRetainer?autoRetainerStatus:"Background submarine sync is off. Enable it in Settings > Tracking.");
-        if(ImGui.TreeNode("Colour rules / reserve reminders")){
-            ImGui.TextWrapped("Green: voyaging or Voyage Complete. Yellow: dispatch or a confirmed unlocked empty slot. Orange: repairs or low reserves for a recorded fleet. Grey: no fleet evidence; stock alone never creates maintenance warnings. Counts are last recorded values.");
+        ImGui.TextDisabled(config.SyncAutoRetainer?"Paired fleets":"Background sync off");
+        if(ImGui.IsItemHovered())ImGui.SetTooltip(autoRetainerStatus+"\nOpen the FC workshop voyage panel to refresh observed timers. Offline records keep their observation time.");
+        SameLineIfFits(ButtonWidth("Options"));
+        if(ImGui.SmallButton("Options"))ImGui.OpenPopup("submarine-options");
+        if(ImGui.BeginPopup("submarine-options")){
+            ImGui.TextWrapped("Reserve reminders for recorded fleets");
             DrawCommittedInteger("Ceruleum reserve",config.SubmarineFuelReserve,1,100000,v=>config.SubmarineFuelReserve=v);
             DrawCommittedInteger("Repair-kit reserve",config.SubmarineRepairReserve,1,100000,v=>config.SubmarineRepairReserve=v);
             DrawCommittedInteger("Free inventory slots reserve",config.SubmarineSpaceReserve,1,140,v=>config.SubmarineSpaceReserve=v);
-            ImGui.TreePop();
+            ImGui.TextWrapped("Green: voyaging or returned. Yellow: dispatch or registration. Orange: repairs or low supplies. Grey: no fleet evidence.");
+            ImGui.EndPopup();
         }
+        SameLineIfFits(ButtonWidth("Refresh"));
+        if(ImGui.SmallButton("Refresh")){autoRetainerForceRead=true;autoRetainerCharacters.Clear();nextAutoRetainerRead=default;nextRosterRead=default;}
+        if(ImGui.IsItemHovered())ImGui.SetTooltip("Read available cached records and refresh the paired Journal. Offline characters retain their last recorded values.");
         var index=submarineDisplayCache.Get(config.SharedRoster,
             $"{config.Discoveries.Count}:{config.Discoveries.LastOrDefault()?.Id}",Environment.TickCount64,BuildSubmarineDisplay);
         var (direct,caches,supplies)=index;
@@ -56,8 +62,6 @@ public sealed partial class Plugin
         }
         var attention=submarineAttentionCache.Get(index,$"{now}:{config.SubmarineFuelReserve}:{config.SubmarineRepairReserve}:{config.SubmarineSpaceReserve}",Environment.TickCount64,
             ()=>(config.SharedRoster?.People??[]).SelectMany(p=>p.Characters).GroupBy(c=>c.Id).ToDictionary(g=>g.Key,g=>Attention(g.First())));
-        if(ImGui.SmallButton("Refresh submarine data")){autoRetainerForceRead=true;autoRetainerCharacters.Clear();nextAutoRetainerRead=default;nextRosterRead=default;}
-        if(ImGui.IsItemHovered())ImGui.SetTooltip("Read available cached records and refresh the paired Journal. Offline characters retain their last recorded values.");
         var represented=new HashSet<string>();var shown=0;
         var people=config.SharedRoster?.People??[];
         int PersonRank(SharedPerson p){var i=config.TabOrder.IndexOf("person:"+p.Id);return i<0?int.MaxValue:i;}
@@ -80,11 +84,7 @@ public sealed partial class Plugin
                 shown+=rows.Length;
                 ImGui.SetNextItemOpen(false,ImGuiCond.Once);
                 if(!SubmarineBar($"{account.First().Account} · {rows.Length} characters###account-{account.Key}",SubmarineAttention.Combine(rows.Select(c=>attention[c.Id].Level))))continue;
-                foreach(var group in rows.GroupBy(SharedCharacterGrouping.Group))
-                {
-                ImGui.PushID(group.Key);ImGui.SetNextItemOpen(false,ImGuiCond.Once);
-                if(SubmarineBar($"{group.Key} · {group.Count()}###group",SubmarineAttention.Combine(group.Select(c=>attention[c.Id].Level)))){
-                foreach(var c in group)
+                foreach(var c in rows)
                 {
                     ImGui.PushID(c.Id);
                     ImGui.SetNextItemOpen(false,ImGuiCond.Once);
@@ -93,30 +93,27 @@ public sealed partial class Plugin
                     var returnTimes=(observed?.Submarines.Select(s=>s.ReturnTime)??cache?.Data.Submarines.Select(s=>s.ReturnTime)??[]).Where(t=>t>0).ToArray();
                     var timer=returnTimes.Length>0?" · "+VoyageTimer(returnTimes.Min()):"";
                     var status=attention[c.Id];
-                    var expanded=SubmarineBar($"{c.Name} · {c.World}{timer} · {status.Text}###character",status.Level);
-                    if(ImGui.IsItemHovered())ImGui.SetTooltip(SubmarineSupplyStatus.Summary(supply)+(supply is null?"":"\n"+SubmarineSupplyStatus.Freshness(supply,DateTimeOffset.UtcNow)));
+                    var expanded=SubmarineBar($"{c.Name} · {c.World}{timer}###character",status.Level);
+                    if(ImGui.IsItemHovered())ImGui.SetTooltip(status.Text+"\n"+SharedCharacterGrouping.Group(c)+"\n"+SubmarineSupplyStatus.Summary(supply)+(supply is null?"":"\n"+SubmarineSupplyStatus.Freshness(supply,DateTimeOffset.UtcNow)));
                     if(expanded)
                     {
                         DrawCharacterTravel(c);
-                        ImGui.TextWrapped(status.Text);
-                        ImGui.TextWrapped(SubmarineSupplyStatus.Summary(supply));
-                        if(supply is not null)ImGui.TextWrapped(SubmarineSupplyStatus.Freshness(supply,DateTimeOffset.UtcNow));
+                        if(status.Level>=2)ImGui.TextWrapped(status.Text);
+                        ImGui.TextDisabled(SubmarineSupplyStatus.Summary(supply));
+                        if(ImGui.IsItemHovered())ImGui.SetTooltip(supply is null?"Open the workshop to record supplies.":SubmarineSupplyStatus.Freshness(supply,DateTimeOffset.UtcNow));
                         var fcIconSize=ImGui.GetFontSize()*1.5f;
                         GardenImage("assets/category-icons/free-company.png",ImGui.GetCursorScreenPos(),new System.Numerics.Vector2(fcIconSize));
                         ImGui.Dummy(new System.Numerics.Vector2(fcIconSize));ImGui.SameLine();
                         ImGui.TextWrapped((observed?.FcName??cache?.FcName??"Free Company")+" · FC fleet");
-                        var knownSlots=observed?.Slots;
+                        if(ImGui.IsItemHovered())ImGui.SetTooltip(observed is not null?"Workshop observed "+DisplayTime.Local(observed.At):cache is not null?"Cache imported "+DisplayTime.Local(cache.ImportedAt)+"; game observation time unknown.":"No workshop observation.");
+                        var knownSlots=observed?.Slots??cache?.Data.Slots;
                         var registered=observed?.Submarines.Length??cache?.Data.Submarines.Length??0;
-                        if(knownSlots is {} capacity && capacity>registered)ImGui.TextWrapped($"A new submarine can be registered! ({registered}/{capacity})");
-                        for(var slot=registered;slot<4;slot++)ImGui.TextDisabled($"Submarine {slot+1}: "+(knownSlots is null?"unlock status not recorded":slot<knownSlots?"unlocked · ready to register":"locked · explore "+new[]{"workshop","J · Unidentified Derelict","O · The Wreckage of Discovery I","T · Purgatory"}[slot]));
-                        if(cache is not null)
-                        {
-                            var v=cache.Data;
-                            ImGui.TextWrapped($"Submarine capacity: {v.Slots?.ToString()??"unknown"} slots");
-                            if(supply?.Observed==true)ImGui.TextWrapped($"Cached supplies: {v.Ceruleum?.ToString()??"?"} tanks · {v.RepairKits?.ToString()??"?"} repairs · {v.InventorySpace?.ToString()??"?"} free inventory slots");
-                            ImGui.TextDisabled($"Cache imported {DisplayTime.Local(cache.ImportedAt)}; game observation time unknown.");
+                        ImGui.TextDisabled($"{registered}/{knownSlots?.ToString()??"?"} registered");
+                        if(ImGui.IsItemHovered()){
+                            ImGui.BeginTooltip();
+                            for(var slot=registered;slot<4;slot++)ImGui.TextUnformatted($"Slot {slot+1}: "+(knownSlots is null?"unlock status not recorded":slot<knownSlots?"unlocked · ready to register":"locked · explore "+new[]{"workshop","J · Unidentified Derelict","O · The Wreckage of Discovery I","T · Purgatory"}[slot]));
+                            ImGui.EndTooltip();
                         }
-                        if(observed is not null)ImGui.TextDisabled($"Workshop observed {DisplayTime.Local(observed.At)}");
                         var names=(observed?.Submarines.Select(s=>s.Name)??cache?.Data.Submarines.Select(s=>s.Name)??[]).Distinct(StringComparer.OrdinalIgnoreCase);
                         foreach(var name in names)
                         {
@@ -124,29 +121,27 @@ public sealed partial class Plugin
                             var saved=cache?.Data.Submarines.FirstOrDefault(s=>s.Name.Equals(name,StringComparison.OrdinalIgnoreCase));
                             var rank=live?.Rank??saved?.Rank??0;var returns=live?.ReturnTime??saved?.ReturnTime??0;
                             var subStatus=SubmarineAttention.Evaluate([returns],[live?.NeedsRepair],supply,null,now,config.SubmarineFuelReserve,config.SubmarineRepairReserve,config.SubmarineSpaceReserve);
-                            if(!SubmarineBar($"{name} · rank {rank} · {VoyageTimer(returns)} · {subStatus.Text}###sub-{name}",subStatus.Level))continue;
+                            var subOpen=SubmarineBar($"{name} · R{rank} · {VoyageTimer(returns)}###sub-{name}",subStatus.Level);
+                            if(ImGui.IsItemHovered())ImGui.SetTooltip(subStatus.Text+"\nExpand for parts and voyage details.");
+                            if(!subOpen)continue;
                             ImGui.TextWrapped(live?.NeedsRepair is {} repair?(repair?"Observed repair needed":"No broken parts at last workshop observation"):"Part condition not recorded — open workshop to refresh");
                             if(live is not null)
                             {
-                                ImGui.TextUnformatted("Workshop timer: "+VoyageTimer(live.ReturnTime));
-                                ImGui.TextUnformatted("Route sector IDs: "+string.Join(", ",live.Route.Where(x=>x>0)));
-                                ImGui.TextUnformatted("Workshop part IDs: "+string.Join(", ",live.Parts));
+                                ImGui.TextDisabled("Workshop observation · hover for route and part IDs");
+                                if(ImGui.IsItemHovered())ImGui.SetTooltip("Route: "+string.Join(", ",live.Route.Where(x=>x>0))+"\nParts: "+string.Join(", ",live.Parts));
                             }
                             if(saved is not null)
                             {
                                 if(live is not null)ImGui.TextUnformatted("Cached timer: "+VoyageTimer(saved.ReturnTime));
                                 ImGui.TextUnformatted($"Cached EXP: {saved.CurrentExp:N0} / {saved.NextLevelExp:N0}");
                                 foreach(var part in saved.PartItems.Select((id,i)=>i<saved.PartNames.Length&&saved.PartNames[i].Length>0?saved.PartNames[i]:$"Item #{id}"))ImGui.TextUnformatted(part);
-                                ImGui.TextUnformatted("Cached route sector IDs: "+string.Join(", ",saved.Route.Where(x=>x>0)));
+                                if(ImGui.IsItemHovered())ImGui.SetTooltip("Cached route: "+string.Join(", ",saved.Route.Where(x=>x>0)));
                             }
                             ImGui.TreePop();
                         }
                         ImGui.TreePop();
                     }
                     ImGui.PopID();
-                }
-                ImGui.TreePop();}
-                ImGui.PopID();
                 }
                 ImGui.TreePop();
             }

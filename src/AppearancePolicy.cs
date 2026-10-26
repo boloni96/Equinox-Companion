@@ -7,7 +7,7 @@ public static class AppearancePolicy
     public const int Revision = 1;
     public static bool NeedsChoice(AppearancePreference? choice) => choice is null || choice.ChoiceRevision < Revision;
     public static AppearancePreference Choose(bool goddessBlue) => new(goddessBlue, Revision);
-    public static AppearancePreference Dismiss(AppearancePreference? choice) => new(choice?.GoddessBlue ?? false, Revision);
+    public static AppearancePreference Dismiss(AppearancePreference? choice) => Choose(true);
     public static string SelectSection(string? selected, IEnumerable<string> available)
     {
         var ids = available.ToArray();

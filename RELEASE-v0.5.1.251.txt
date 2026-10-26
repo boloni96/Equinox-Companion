@@ -1,0 +1,40 @@
+Equinox Companion 0.5.1.251
+
+Paired Market, retainer profiles and trading fixes
+
+- Market now receives paired retainers and uses Journal Person / Account /
+  Character identities. Current selling lists, visits, gil, job and level are
+  shared. The newest observed stock wins, including empty lists; level/order
+  updates do not pretend to be a fresh selling-list observation.
+- Sales, purchases and price checks use separate authenticated, paged history.
+  Confirmed updates remain distinct from suggestions, and game history replaces
+  matching chat receipts/offline estimates without counting the sale twice.
+  History download/upload and file work run outside the game update thread.
+  Gameplay observations retain upload priority. Automation controls stay local.
+- Background Universalis checks cover paired listings on their own home worlds.
+  Hover explains Equinox check time versus upstream upload age; stale data stays
+  uncertain. Background data never authorizes an automatic price write.
+- Fix Gil Trader Send control sharing its ImGui ID with its direction selector.
+  Add Party, Nearby, Friends and Find by name. Selection requires an exact nearby
+  name/home-world match; active sessions remain bound to one game entity. Other
+  players can use ordinary game trade controls without Companion. Start failures
+  and button presses appear in Details and diagnostic exports.
+- Distinct Market, Seller and Gil Trader icons in the launcher and minimized view.
+- Submarines keeps person tabs fixed, removes an extra classification accordion,
+  shows concise character/fleet rows and puts observation/slot details on hover.
+  Fleet membership, detection, supply thresholds and voyage rules are unchanged.
+- Welcome restores the Goddess dedication. Blue/classic choices open Companion;
+  Close/X keep Blue without opening Companion. Both designs share all features.
+
+Update both paired clients normally. Deploy Journal and Background Worker
+7.11.243 for paired Market projection and history; keep existing bindings,
+secrets and pairing. No Android APK update or new connection is required.
+
+Validation: Release build, transition/sync regressions, native garden/seller/trade
+checks and market checks pass locally. New regressions cover paired identity,
+stock/metadata freshness, duplicate receipts, history retry acknowledgements,
+64-bit IDs and the Send control ID. Journal/Worker tests cover authentication,
+closed-browser projection, durable pagination and metadata merges.
+No live game transfer, native window rendering or live paired-client session was
+performed here. Shared checklist N25-N27 covers those checks. Use a small first
+transfer (for example 100 gil) with the intended test partner.

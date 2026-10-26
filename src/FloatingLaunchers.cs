@@ -61,9 +61,9 @@ public sealed partial class Plugin
         if(equinoxMarketWindow.IsOpen)minimizedLaunchers.Remove("Equinox Market");
         if(sellerWindow.IsOpen)minimizedLaunchers.Remove("Equinox Seller");
         if(gilTraderWindow.IsOpen)minimizedLaunchers.Remove("Gil Trader");
-        DrawLauncher("Gil Trader",12,"garden-art/assets/category-icons/market-search.png");
-        DrawLauncher("Equinox Market",10,"garden-art/assets/category-icons/market-search.png");
-        DrawLauncher("Equinox Seller",11,"garden-art/assets/category-icons/market-search.png");
+        DrawLauncher("Gil Trader",12,"garden-art/assets/category-icons/gil-trader.png");
+        DrawLauncher("Equinox Market",10,"garden-art/assets/category-icons/market.png");
+        DrawLauncher("Equinox Seller",11,"garden-art/assets/category-icons/seller.png");
         if(mainWindow.IsOpen) minimizedLaunchers.Remove("Companion");
         if(fashionWindow.IsOpen) minimizedLaunchers.Remove("Fashion Report");
         if(plantingWindow.IsOpen) minimizedLaunchers.Remove("Planting");

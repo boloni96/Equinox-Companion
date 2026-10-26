@@ -17,16 +17,17 @@ public static class MarketWatchPolicy
         if(settings.ExcludedItems.Contains(item.ItemId))return Unknown("Excluded from price updates by your item rule.");
         if(data==null)return Unknown("Waiting for a background price check.");
         if(data.World!=world||data.Item!=item.ItemId)return Unknown("Background price belongs to another item or world.");
-        if(data.Error.Length>0)return Unknown(data.Error+" Live comparison is still available.");
+        var checkedText=$"Equinox last checked: {data.Checked.ToLocalTime():g}. Market data uploaded: {(data.Uploaded==default?"not reported":data.Uploaded.ToLocalTime().ToString("g"))}. ";
+        if(data.Error.Length>0)return Unknown(checkedText+data.Error+" Live comparison is still available.");
         if(data.Uploaded==default||data.Uploaded>now.AddMinutes(5)||now-data.Uploaded>TimeSpan.FromMinutes(Math.Clamp(settings.BackgroundMaxAgeMinutes,5,1440)))
-            return Unknown($"Universalis data is old or unverified (uploaded {data.Uploaded.ToLocalTime():g}). Check live prices at the bell.");
+            return Unknown(checkedText+"Old market data. Universalis has not supplied a recent upload; requesting it again does not perform an in-game search. Check live prices at the bell.");
         var offers=data.Offers.Where(x=>x.Hq==item.Hq&&!x.Mannequin).ToArray();
-        if(offers.Length==0)return Unknown("No listings of this quality in cached data. Check live listings/history before deciding.");
+        if(offers.Length==0)return Unknown(checkedText+"No listings of this quality in cached data. Check live listings/history before deciding.");
         // The cache age is checked above; this is deliberately not a live receipt.
         // Synthetic IDs only distinguish known names on this world from other offers.
         var comparison=new SellerComparison(item.ItemId,world,now,true,offers.Select(x=>new SellerOffer(x.Retainer.Length>0&&ownNames.Contains(x.Retainer)?1UL:0UL,x.Price,x.Hq,x.Quantity)).ToArray(),false,[]);
         var d=SellerPricing.Decide(item.ItemId,world,item.Hq,item.Price,comparison,new HashSet<ulong>{1},settings,now);
-        return d with {Source="Universalis",Reason=$"Universalis estimate · uploaded {data.Uploaded.ToLocalTime():g} · checked {data.Checked.ToLocalTime():g}. {d.Reason} Live verification required before changing a price."};
+        return d with {Source="Universalis",Reason=checkedText+$"{d.Reason} Live verification required before changing a price."};
     }
 
     public static MarketWatchSnapshot Parse(JsonElement root,uint world,uint item,DateTimeOffset checkedAt)
@@ -56,7 +57,7 @@ public sealed class MarketWatchClient:IDisposable
     public MarketWatchClient(HttpMessageHandler? handler=null)
     {
         http=handler==null?new():new(handler);http.Timeout=TimeSpan.FromSeconds(20);
-        http.DefaultRequestHeaders.UserAgent.ParseAdd("EquinoxCompanion-Market/0.5.1.248");
+        http.DefaultRequestHeaders.UserAgent.ParseAdd("EquinoxCompanion-Market/0.5.1.251");
         http.MaxResponseContentBufferSize=8*1024*1024;
     }
     public async Task<MarketWatchBatch> Read(uint world,uint[] items,CancellationToken token)

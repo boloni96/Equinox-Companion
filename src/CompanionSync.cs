@@ -65,7 +65,7 @@ public sealed partial class CompanionSync : IDisposable
             if (response.StatusCode == HttpStatusCode.Unauthorized) return new(null, "Shared profiles: pairing key invalid or revoked.", Unauthorized: true);
             if (response.StatusCode == HttpStatusCode.NotFound) return new(null, "Shared profiles are not available on this server yet. Check the Journal deployment.");
             if (!response.IsSuccessStatusCode) return new(null, $"Shared profiles unavailable (HTTP {(int)response.StatusCode}); showing saved copy.");
-            await response.Content.LoadIntoBufferAsync(1000000);
+            await response.Content.LoadIntoBufferAsync(8000000);
             var roster = JsonSerializer.Deserialize<SharedRoster>(await response.Content.ReadAsStringAsync(cancel.Token), Json);
             if (roster is null || roster.People is null || roster.People.Length > 100 || roster.People.Any(p => p is null || p.Characters is null || p.Accounts is {Length:>100} || p.Accounts?.Any(a=>a is null||string.IsNullOrWhiteSpace(a.Id)||string.IsNullOrWhiteSpace(a.Name))==true || p.Characters.Any(c => c is null || c.Houses is null)))
                 return new(null, "Invalid shared profile response; showing saved copy.");

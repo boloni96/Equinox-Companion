@@ -6,7 +6,8 @@ public sealed record MarketStock(int Slot, uint ItemId, string Name, bool Hq, ui
     public bool SameItem(MarketStock other) => Slot==other.Slot && ItemId==other.ItemId && Hq==other.Hq && Quantity==other.Quantity;
 }
 public sealed record MarketRetainer(ulong Id, string Name, ulong CharacterId, string Character, uint WorldId, string World,
-    string Person, string Account, uint Gil, DateTimeOffset At, MarketStock[] Stock,DateTimeOffset? LastVisit=null,int DisplayOrder=int.MaxValue);
+    string Person, string Account, uint Gil, DateTimeOffset At, MarketStock[] Stock,DateTimeOffset? LastVisit=null,int DisplayOrder=int.MaxValue,
+    string PersonId="",string AccountId="",string SharedCharacterId="",bool Paired=false,uint? JobId=null,int? Level=null,string Job="",DateTimeOffset? ProfileAt=null);
 public sealed record MarketIncome(string Id, ulong CharacterId, string Character, uint WorldId, string World, ulong RetainerId,
     string Retainer, uint ItemId, string Item, bool Hq, uint Quantity, long? Gross, long? Net, DateTimeOffset At, string Evidence);
 public sealed record MarketPriceLog(DateTimeOffset At, ulong RetainerId, string Retainer, uint ItemId, string Item, bool Hq,
