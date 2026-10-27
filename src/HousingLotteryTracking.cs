@@ -15,10 +15,7 @@ public sealed partial class Plugin
     private LotteryResult? lotteryLastResult;
     private (LotteryBid Bid,ulong Character,uint World,ulong Target,long Amount,DateTimeOffset At)? lotteryRefund;
     private (LotteryBid Bid, ulong Character, ulong Target, uint World, DateTimeOffset At)? lotteryPlacard;
-    private string lotteryPendingBuyer="unknown";
-    private ulong lotteryPendingCharacter;
-    private uint lotteryPendingWorld;
-    private DateTimeOffset lotteryPendingAt;
+    private LotteryBuyerContext? lotteryBuyerContext;
     private void InitializeLottery()
     {
         foreach(var name in new[]{"ContentsInfoDetail","SelectYesNoTextScroll","SelectYesno","SelectOk","SelectString","Talk","HousingSignBoard"})
@@ -30,7 +27,7 @@ public sealed partial class Plugin
     private void UpdateLottery(DateTimeOffset now)
     {
         var id=Player.IsLoaded?Player.ContentId:0;
-        if(id==0){lotteryBidNotices.Reset();lotteryLogin.Reset();lotteryPlacard=null;lotteryRefund=null;return;}
+        if(id==0){lotteryBidNotices.Reset();lotteryLogin.Reset();lotteryPlacard=null;lotteryRefund=null;lotteryBuyerContext=null;return;}
         if(LotteryLoaded&&config.SyncHouseDetails&&now>=nextLotteryVisibleCheck){nextLotteryVisibleCheck=now.AddMilliseconds(500);ObserveSafely("housing-lottery",()=>PollLotteryViews(now));}
         lotteryBidNotices.Due(id,"",now);
         if(lotteryLogin.Due(id,now,config.NotifyHousingLottery,!LotteryLoaded))
@@ -47,7 +44,7 @@ public sealed partial class Plugin
     private static unsafe string LotteryText(AtkUnitBase* addon,int i)
     {
         if(addon==null||addon->AtkValues==null||i<0||i>=addon->AtkValuesCount)return "";
-        var v=&addon->AtkValues[i];return ((int)v->Type&15) is 8 or 10 && v->String.Value!=null?v->String.ToString():"";
+        var v=&addon->AtkValues[i];return ((int)v->Type&15) is 8 or 10 ?LotteryMenuText.Read(v->String.Value):"";
     }
     private unsafe void ObserveLotteryAddon(AddonEvent type,AddonArgs args)
     {
@@ -59,26 +56,8 @@ public sealed partial class Plugin
             {
                 CaptureLotteryPlacard(addon,now);
             }
-            else if(args.AddonName=="ContentsInfoDetail")
-            {
-                // Match the displayed labels instead of hard-coded AtkValue offsets.
-                var texts=new List<string>();
-                for(var i=0;i<Math.Min((int)addon->AtkValuesCount,256);i++){var text=LotteryText(addon,i);if(text.Length>0)texts.Add(text);}
-                if(addon->UldManager.NodeList!=null&&addon->UldManager.NodeListCount<=512)
-                    for(var i=0;i<addon->UldManager.NodeListCount;i++){
-                        var node=addon->UldManager.NodeList[i];
-                        if(node!=null&&node->Type==NodeType.Text&&node->IsVisible())texts.Add(((AtkTextNode*)node)->NodeText.ToString());
-                    }
-                var bid=HousingLottery.ParseTimers(string.Join("\n",texts.Distinct()),now);
-                if(bid is not null)RecordLottery(bid,now);
-            }
-            else if(args.AddonName is "SelectYesNoTextScroll" or "SelectYesno" && HousingLottery.EntryConfirmation(LotteryText(addon,0)))
-            {
-                // The buyer can appear after a line break in either confirmation layout.
-                // Read the whole prompt, not just its first line; mixed choices stay unknown.
-                lotteryPendingBuyer=HousingLottery.Buyer(LotteryText(addon,0));
-                lotteryPendingAt=now;lotteryPendingCharacter=Player.ContentId;lotteryPendingWorld=Player.CurrentWorld.RowId;
-            }
+            else if(args.AddonName=="ContentsInfoDetail")CaptureLotteryTimers(addon,now);
+            else if(args.AddonName is "SelectYesNoTextScroll" or "SelectYesno")CaptureLotteryBuyer(addon,now);
             if(args.AddonName is "HousingSignBoard" or "SelectYesno" or "SelectOk" or "SelectString" or "Talk" or "SelectYesNoTextScroll")
                 ObservePublicLotteryResult(addon,now);
             if(args.AddonName is "SelectYesno" or "SelectOk" or "SelectString" or "Talk" or "SelectYesNoTextScroll" && HousingLottery.Result(LotteryVisibleText(addon)) is {} result)
@@ -92,6 +71,28 @@ public sealed partial class Plugin
             }
         }
         catch(Exception ex){errorJournal.Record("housing-lottery","Lottery view could not be read; existing entries kept.",exceptionType:ex.GetType().Name);}
+    }
+    private unsafe void CaptureLotteryTimers(AtkUnitBase* addon,DateTimeOffset now)
+    {
+        var bid=HousingLottery.ParseTimers(LotteryVisibleText(addon),now);
+        if(bid is not null)RecordLottery(bid,now);
+    }
+    private unsafe void CaptureLotteryBuyer(AtkUnitBase* addon,DateTimeOffset now)
+    {
+        var text=LotteryVisibleText(addon);
+        if(!HousingLottery.EntryConfirmation(text))return;
+        lotteryBuyerContext=null;
+        var buyer=HousingLottery.Buyer(text);
+        var board=(AtkUnitBase*)GardenGui.GetAddonByName("HousingSignBoard").Address;
+        if(board!=null&&board->IsVisible)CaptureLotteryPlacard(board,now);
+        if(lotteryPlacard is not {} plot||plot.Character!=Player.ContentId||plot.World!=Player.CurrentWorld.RowId||
+            Targets.Target?.GameObjectId!=plot.Target||now-plot.At>TimeSpan.FromMinutes(1))
+        {
+            lotteryDiagnostic=new{at=now,state="Entry type seen; exact placard context unavailable",buyer};
+            return;
+        }
+        lotteryBuyerContext=new(Player.ContentId,plot.World,plot.Bid.District,plot.Bid.Ward,plot.Bid.Plot,plot.Bid.CycleStart,buyer,now);
+        lotteryDiagnostic=new{at=now,state="Entry type captured; awaiting submission receipt",buyer,plot.Bid.District,plot.Bid.Ward,plot.Bid.Plot,plot.World};
     }
     private unsafe void CaptureLotteryPlacard(AtkUnitBase* addon,DateTimeOffset now)
     {
@@ -107,13 +108,21 @@ public sealed partial class Plugin
     private unsafe void PollLotteryViews(DateTimeOffset now)
     {
         if(Client.ClientLanguage!=Dalamud.Game.ClientLanguage.English)return;
+        // Timer text can arrive after PostSetup/Refresh. It must not depend on
+        // an open placard: it also repairs the buyer of already saved tickets.
+        var timers=(AtkUnitBase*)GardenGui.GetAddonByName("ContentsInfoDetail").Address;
+        if(timers!=null&&timers->IsVisible)CaptureLotteryTimers(timers,now);
         var board=(AtkUnitBase*)GardenGui.GetAddonByName("HousingSignBoard").Address;
         if(board!=null&&board->IsVisible)CaptureLotteryPlacard(board,now);
         if(lotteryPlacard is not {} plot||plot.Character!=Player.ContentId||plot.World!=Player.CurrentWorld.RowId||Targets.Target?.GameObjectId!=plot.Target||now-plot.At>TimeSpan.FromMinutes(1)){lotteryPlacard=null;return;}
         foreach(var name in new[]{"SelectOk","SelectYesno","SelectString","Talk","SelectYesNoTextScroll"})
         {
             var addon=(AtkUnitBase*)GardenGui.GetAddonByName(name).Address;
-            if(addon!=null&&addon->IsVisible)ObservePublicLotteryResult(addon,now);
+            if(addon!=null&&addon->IsVisible)
+            {
+                if(name is "SelectYesno" or "SelectYesNoTextScroll")CaptureLotteryBuyer(addon,now);
+                ObservePublicLotteryResult(addon,now);
+            }
         }
     }
     private static unsafe string LotteryVisibleText(AtkUnitBase* addon)
@@ -125,7 +134,7 @@ public sealed partial class Plugin
             for(var i=0;i<addon->UldManager.NodeListCount;i++)
             {
                 var node=addon->UldManager.NodeList[i];
-                if(node!=null&&node->Type==NodeType.Text&&node->IsVisible())texts.Add(((AtkTextNode*)node)->NodeText.ToString());
+                if(node!=null&&node->Type==NodeType.Text&&node->IsVisible())texts.Add(LotteryMenuText.Read(((AtkTextNode*)node)->NodeText.StringPtr));
             }
         return string.Join("\n",texts.Distinct());
     }
@@ -176,10 +185,15 @@ public sealed partial class Plugin
         ObserveLotteryRefundReceipt(text,DateTimeOffset.UtcNow);
         var m=Regex.Match(text,@"^You (?:have )?submitted a lottery entry for plot (\d+), ward (\d+), ([^.]+)\. Your lottery number is (\d+)",RegexOptions.IgnoreCase);
         if(!m.Success)return;var now=DateTimeOffset.UtcNow;
-        var buyer=lotteryPendingCharacter==Player.ContentId&&lotteryPendingWorld==Player.CurrentWorld.RowId&&now-lotteryPendingAt<TimeSpan.FromMinutes(5)?lotteryPendingBuyer:"unknown";
-        var bid=HousingLottery.Parse($"Plot {m.Groups[1].Value}, {m.Groups[2].Value} Ward, {m.Groups[3].Value}",$"Lottery Number: {m.Groups[4].Value}",buyer,now,"submission");
-        if(bid is not null)RecordLottery(bid,now);
-        lotteryPendingBuyer="unknown";lotteryPendingCharacter=0;lotteryPendingWorld=0;
+        var bid=HousingLottery.Parse($"Plot {m.Groups[1].Value}, {m.Groups[2].Value} Ward, {m.Groups[3].Value}",$"Lottery Number: {m.Groups[4].Value}","unknown",now,"submission");
+        if(bid is not null)
+        {
+            var buyer=lotteryBuyerContext?.Match(Player.ContentId,Player.CurrentWorld.RowId,bid,now)??"unknown";
+            bid=bid with {Buyer=buyer};
+            RecordLottery(bid,now);
+            lotteryDiagnostic=new{at=now,state="Entry receipt recorded",buyer,bid.District,bid.Ward,bid.Plot,bid.Entry};
+        }
+        lotteryBuyerContext=null;
     }
     private void RecordLottery(LotteryBid bid,DateTimeOffset now)
     {
@@ -193,3 +207,4 @@ public sealed partial class Plugin
         KeepDiscovery(new(Guid.NewGuid().ToString("N"),"housing.lottery",now,WithWorldNames(actor),null,Lottery:bid));
     }
 }
+

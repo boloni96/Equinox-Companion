@@ -1,0 +1,11 @@
+Housing lottery buyer type
+
+Fixes FC/private detection in the English entry confirmation. The selected purpose ("free company plot" or "personal plot") takes precedence over the general housing rules, which mention both types. Formatting and line wrapping are decoded, and the full confirmation is read instead of relying on one text slot.
+
+A captured type is attached only to a matching submission receipt for the same character, world, district, ward, plot and lottery cycle. Unknown or conflicting evidence remains unknown. Merely belonging to an FC does not turn a private entry into an FC entry.
+
+For a bid already recorded as Type unknown, log into its bidder and open Duty → Timers → Estate → Housing Lottery Status. Leave it open briefly so the current entry and Type of Entry can be read. This recovery no longer requires an open placard and is retried while the timer data loads. The repaired observation follows the existing Companion sync to the paired plugin and Journal; the Journal does not need to be open.
+
+The release does not change live records by guessing a type. Existing bids need their timer entry observed or a fresh confirmed submission.
+
+Includes the .261 all-inventory trade shortcut and stack/menu corrections. No Journal, Worker or Android deployment required.

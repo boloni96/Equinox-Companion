@@ -29,7 +29,14 @@ public static class HousingLottery
     }
     public static string Buyer(string text)
     {
-        var fc=Regex.IsMatch(text,@"\bfree\s+company\b",RegexOptions.IgnoreCase);
+        // Generic housing terms mention both types. Prefer the actual purchase
+        // purpose in the question, not eligibility rules further down the dialog.
+        var choices=Regex.Matches(text,@"\benter\s+(?:the|this)\s+lottery\s+for\s+(?:this|the|a)\s+(?<buyer>free\s+company|personal|private|individual)\s+(?:plot|house|estate)\b",RegexOptions.IgnoreCase)
+            .Cast<Match>().Select(m=>Regex.IsMatch(m.Groups["buyer"].Value,@"^free\s+company$",RegexOptions.IgnoreCase)?"fc":"private").Distinct().ToArray();
+        if(choices.Length>0)return choices.Length==1?choices[0]:"unknown";
+        var labelled=Regex.Match(text,@"Type of Entry:\s*([^\r\n]+)",RegexOptions.IgnoreCase);
+        if(labelled.Success)text=labelled.Groups[1].Value;
+        var fc=Regex.IsMatch(text,@"\bfree\s+compan(?:y|ies)\b",RegexOptions.IgnoreCase);
         var personal=Regex.IsMatch(text,@"\b(?:personal|private|individual)\b",RegexOptions.IgnoreCase);
         return fc==personal?"unknown":fc?"fc":"private";
     }
@@ -105,3 +112,11 @@ public sealed class LotteryLogin
         printed=true;return true;
     }
 }
+
+public sealed record LotteryBuyerContext(ulong Character,uint World,string District,int Ward,int Plot,string CycleStart,string Buyer,DateTimeOffset At)
+{
+    public string Match(ulong character,uint world,LotteryBid receipt,DateTimeOffset now) =>
+        Character!=0&&Character==character&&World==world&&District==receipt.District&&Ward==receipt.Ward&&Plot==receipt.Plot&&
+        CycleStart==receipt.CycleStart&&now>=At&&now-At<=TimeSpan.FromMinutes(5)&&Buyer is "fc" or "private"?Buyer:"unknown";
+}
+
