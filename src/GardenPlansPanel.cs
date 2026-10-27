@@ -91,7 +91,7 @@ public sealed partial class Plugin
     {
         nextRosterRead=default;
         plantingHouseId=config.SyncEnabled&&config.PairingKey.Length==64?SharedGardenLocation.Match(currentAddress,GardenPlanSources()):null;
-        if(plantingHouseId is null){if(config.NotifyPlantingUnavailable)PrintEquinox("[Equinox] /gardening is available only at an identified paired house. Open its placard and allow sync, then try again.");return;}
+        if(plantingHouseId is null){if(config.NotifyPlantingUnavailable)PrintEquinox("[Equinox] /gardening needs a house recorded in your Journal. If this house is already saved, open its placard and allow sync, then try again.");return;}
         gardenSelectionFollow.Reset();
         plantingWindow.IsOpen=true;
     }
@@ -100,20 +100,7 @@ public sealed partial class Plugin
         $"{config.Discoveries.Count}:{config.Discoveries.LastOrDefault()?.Id}",Environment.TickCount64,BuildGardenPlanSources);
     private SharedGardenPlan[] BuildGardenPlanSources()
     {
-        var saved=config.SharedRoster?.GardenPlans??[];var result=saved.ToList();
-        var houses=(config.SharedRoster?.People??[]).SelectMany(p=>p.Characters).SelectMany(c=>c.Houses).DistinctBy(h=>h.Id);
-        foreach(var house in houses)for(var batch=1;batch<=(house.Size=="Large"?3:house.Size=="Medium"?2:1);batch++)
-        {
-            var care=config.SharedRoster?.GardenCare?.FirstOrDefault(c=>c.HouseId==house.Id&&c.Batch==batch);
-            var existing=result.FindIndex(p=>p.HouseId==house.Id&&p.Batch==batch);
-            var plan=existing>=0?result[existing]:new SharedGardenPlan(house.Id,house.Name,house.World,house.District,house.Ward,house.Plot,batch,"",DateTimeOffset.MinValue,[],house.GameHouseId,house.Size=="Large"?3:house.Size=="Medium"?2:1,PhysicalPatch:care?.PhysicalPatch??config.SharedRoster?.GardenBatchOrders?.FirstOrDefault(o=>o.HouseId==house.Id)?.Order.ElementAtOrDefault(batch-1)??batch);
-            var beds=Enumerable.Range(1,8).Select(number=>{
-                var bed=plan.Beds.FirstOrDefault(b=>b.Bed==number);if(bed is not null)return bed;
-                var b=care?.Beds.FirstOrDefault(b=>b.Bed==number);
-                return new SharedGardenBed(number,"","","actual",b?.Empty==true?"Empty":b?.Crop is {Length:>0}?b.Crop:"Not synced yet",b?.Soil??"",b?.Planted,b?.Watered,0,b?.Ready??false,b?.NextTend,b?.HarvestAt,ObservedAt:b?.ObservedAt,TendedBy:b?.TendedBy??"",WiltHours:b?.WiltHours,DeadConfirmedAt:b?.DeadConfirmedAt,LastClearedAt:b?.LastClearedAt,LastFertilized:b?.LastFertilized,KeepMature:b?.KeepMature??false,WiltedAt:b?.WiltedAt,GrowingObservedAt:b?.GrowingObservedAt);
-            }).ToArray();
-            plan=plan with {Beds=beds};if(existing>=0)result[existing]=plan;else result.Add(plan);
-        }
+        var result=GardenPlanSourceBuilder.Build(config.SharedRoster);
         var projected=result.Select(p=>{var revision=config.SharedRoster?.GardenPlanRevisions?.FirstOrDefault(r=>r.HouseId==p.HouseId&&r.Batch==p.Batch);
             if(p.At==DateTimeOffset.MinValue&&revision is not null)p=p with {At=revision.At};
             var assignedAt=config.SharedRoster?.GardenBatchOrders?.FirstOrDefault(o=>o.HouseId==p.HouseId)?.At;
@@ -155,7 +142,7 @@ public sealed partial class Plugin
     private void DrawGardenPlans()
     {
         var plans=GardenPlanSources();plantingHouseId=config.SyncEnabled&&config.PairingKey.Length==64?SharedGardenLocation.Match(currentAddress,plans):null;
-        if(plantingHouseId is null){ImGui.TextWrapped("Visit an identified paired house to view its Gardening guide. No guide is shown outside or while loading.");return;}
+        if(plantingHouseId is null){ImGui.TextWrapped("Visit a house recorded in your Journal to view its Gardening guide. No guide is shown outside or while loading.");return;}
         if(previousPlantingHouse!=plantingHouseId){plantingBatch=1;previousPlantingHouse=plantingHouseId;}
         // Switch once when the game target changes. Manual tabs stay usable until
         // another bed is selected. Partial calibration must not move its own tab.
