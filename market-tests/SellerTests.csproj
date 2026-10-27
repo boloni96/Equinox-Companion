@@ -1,4 +1,4 @@
 <Project Sdk="Microsoft.NET.Sdk">
 <PropertyGroup><TargetFramework>net10.0</TargetFramework><OutputType>Exe</OutputType><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup>
 <ItemGroup><Compile Include="../src/SellerPricing.cs"/><Compile Include="../src/SellerRun.cs"/><Compile Include="../src/EquinoxMarketModels.cs"/><Compile Include="../src/MarketSaleReceipt.cs"/><Compile Include="../src/MarketSalesImport.cs"/><Compile Include="../src/MarketWatch.cs"/><Compile Include="../src/MarketRetainerHistory.cs"/><Compile Include="../src/SellerDiagnostics.cs"/><Compile Include="../src/SellerAutoRetainerPause.cs"/><Compile Include="../src/SellerComparisonCapture.cs"/></ItemGroup>
-<ItemGroup><Compile Include="../src/MarketHistorySharing.cs"/><Compile Include="../src/SellerMateria.cs"/></ItemGroup></Project>
+<ItemGroup><Compile Include="../src/MarketHistorySharing.cs"/><Compile Include="../src/SellerMateria.cs"/></ItemGroup><ItemGroup><Compile Include="../src/MarketPriceReview.cs" /></ItemGroup></Project>

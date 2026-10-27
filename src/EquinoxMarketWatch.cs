@@ -21,9 +21,9 @@ public sealed partial class Plugin
     {
         if(marketWatchTask is {IsCompleted:true}){
             if(marketWatchTask.IsCompletedSuccessfully){
-                var batch=marketWatchTask.Result;marketWatchNotice=batch.Error.Length>0?batch.Error:$"Background prices checked {DisplayTime.Local(now)}";
+                var batch=marketWatchTask.Result;marketWatchNotice=MarketWatchPolicy.Summary(batch);
                 marketWatchPoll=now+batch.RetryAfter;
-                foreach(var item in marketWatchRequest.Items)marketWatchNext[(marketWatchRequest.World,item)]=now.AddMinutes(batch.Error.Length>0?5:Math.Clamp(config.Seller.BackgroundIntervalMinutes,5,120));
+                foreach(var item in marketWatchRequest.Items)marketWatchNext[(marketWatchRequest.World,item)]=MarketWatchPolicy.NextCheck(batch,item,now,config.Seller.BackgroundIntervalMinutes);
                 foreach(var item in batch.Items)marketWatchCache[(item.World,item.Item)]=item;
             }else{_ = marketWatchTask.Exception;marketWatchPoll=now.AddMinutes(1);}
             marketWatchTask=null;marketWatchCancel?.Dispose();marketWatchCancel=null;marketWatchStock=null;

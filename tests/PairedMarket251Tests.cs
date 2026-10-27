@@ -27,6 +27,12 @@ static class PairedMarket251Tests
   Check("paired stock retains exact materia types and grades",View([],withMateria).Single().Stock.Single().Materia=="219,219,234,235,250");
   Check("bad shared materia excluded",!RetainerMarketSnapshot.Valid(new([melded with {Items=[melded.Items[0] with {Materia="250,219"}]}]),now));
   Check("outbox keeps plain distinct from unknown",RetainerMarketSnapshot.Valid(new([melded with {Items=[melded.Items[0] with {Materia=""}]}]),now)&&RetainerMarketSnapshot.Valid(new([melded with {Items=[melded.Items[0] with {Materia=null}]}]),now));
+  var priced=melded with {PriceReview=new(MarketPriceReviews.Key([new(0,10,"Item",true,1,1197021,old,Materia:"219,219,234,235,250")]),now,now.AddMinutes(5),1,0,0,0,"Universalis")};
+  var pricedRoster=roster with {People=[new("p1","Person",[c with {RetainerMarket=new([priced])}])]};
+  Check("paired price summary survives projection",View([],pricedRoster).Single().PriceReview?.Updates==1);
+  var sameLocal=View([],pricedRoster).Single() with {PriceReview=null,At=now};
+  Check("newer stock timestamp does not lose matching price summary",View([sameLocal],pricedRoster).Single().PriceReview?.Updates==1);
+  Check("changed stock drops incompatible shared price summary",View([sameLocal with {Stock=[sameLocal.Stock[0] with {Price=1}]}],pricedRoster).Single().PriceReview==null);
   var source=Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,"../../../../src/GilTraderPanel.cs"));
   var text=File.ReadAllText(source);
   Check("send and receive actions have distinct ImGui IDs from direction controls",text.Contains("Send gil##gil-mode-send")&&text.Contains("Receive##gil-mode-receive")&&text.Contains("Send gil###gil-start")&&!text.Contains("ImGui.Button(\"Send gil\")"));

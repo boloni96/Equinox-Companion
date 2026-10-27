@@ -27,7 +27,7 @@ public sealed partial class Plugin
         var rows=marketJournalGroups[pending.Value];marketJournalPending.RemoveFirst();if(rows.Length==0)return;
         var first=rows.OrderByDescending(r=>r.At).First();if(rows.Any(r=>r.WorldId!=first.WorldId))return;
         var details=new RetainerMarketDetails(rows.Select((r,i)=>new RetainerMarketRow(r.Id.ToString(),r.Name,i,r.Gil,r.At,r.LastVisit,
-            r.Stock.OrderBy(x=>x.Slot).Select(x=>new RetainerMarketItem(x.Slot,x.ItemId,x.Name,x.Hq,x.Quantity,x.Price,x.ListedAt,x.Materia)).ToArray(),r.JobId,r.Level,r.Job,r.ProfileAt)).ToArray());
+            r.Stock.OrderBy(x=>x.Slot).Select(x=>new RetainerMarketItem(x.Slot,x.ItemId,x.Name,x.Hq,x.Quantity,x.Price,x.ListedAt,x.Materia)).ToArray(),r.JobId,r.Level,r.Job,r.ProfileAt,r.PriceReview)).ToArray());
         var actor=new Actor(first.CharacterId.ToString(),first.Character,first.WorldId,first.WorldId,first.World,first.World);
         if(config.MarketJournal.Put(actor,details,now)){WakeObservationSync();SaveConfiguration();}
     }
