@@ -1,0 +1,13 @@
+Ctrl + right-click trade from all supported inventories
+
+The existing shortcut now works from the Armoury Chest and any other loaded inventory container where the game offers an enabled Trade action. It no longer assumes four regular bags or 35 slots: it validates the selected container's current capacity and item identity.
+
+Linked inventory slots are resolved without confusing them with a different item. Both the clicked slot and resolved item are rechecked before choosing Trade; moving an item or repointing a linked slot cancels the pending click. The game's disabled/unavailable Trade actions remain unavailable.
+
+Fixes menu selection by using the same OnMenuSelected route as a normal click, including Dalamud's mapping for plugin-added entries. Raw callbacks could use the wrong action index on item-specific menus. Menu resolution now waits for the menu to finish populating. A leftover item menu closes after an increased trade offer or after its quantity prompt is dismissed; it never closes an active quantity prompt or accepts the trade.
+
+Keep your existing Settings → Optional tools → Ctrl + right-click items into trade setting enabled. Normal inventory trading continues to use the same menu path. Quantity prompts and final trade acceptance remain manual.
+
+In-game checks: open a trade and Ctrl + right-click a tradable item in the Armoury Chest; repeat from the regular inventory and any other container offering Trade. An item without an enabled Trade action must stay in place.
+
+Companion only; no Journal, Worker or Android deployment.

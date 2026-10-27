@@ -1,3 +1,4 @@
+using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using AtkType = FFXIVClientStructs.FFXIV.Component.GUI.AtkValueType;
@@ -8,6 +9,46 @@ namespace EquinoxCompanion;
 // numeric prompt confirmation or trade acceptance is invoked by this feature.
 internal static unsafe class TradeItemShortcutNative
 {
+    // Eligibility comes from the game's enabled Trade menu action, not a list
+    // of bag IDs. Validate each container's actual capacity before reading it.
+    internal static bool ContainerSlotAvailable(InventoryContainer* container, InventoryType type, int slot) =>
+        type != InventoryType.Invalid && container != null && container->IsLoaded &&
+        container->Items != null && container->Type == type && slot >= 0 && slot < container->Size;
+
+    internal static bool CaptureItem(InventoryItem* source, InventoryItem* contextItem,
+        InventoryType type, int slot, out TradeItemShortcutTarget target,
+        SellerNativeInterop.LinkedItemReader? readLinked = null)
+    {
+        target = default;
+        if (source == null || contextItem == null || type == InventoryType.Invalid || slot < 0 ||
+            source->Container != type || source->Slot != slot) return false;
+        var item = SellerNativeInterop.Resolve(source, readLinked);
+        if (item == null || (contextItem != source && contextItem != item) ||
+            item->ItemId == 0 || item->Quantity <= 0) return false;
+        // Preserve both the clicked view slot and the resolved item. A linked
+        // slot being repointed, even to an identical item, cancels the request.
+        target = new(0, 0, 0, (nint)source, (uint)type, slot, item->ItemId, (byte)item->Flags, item->Quantity)
+        {
+            ResolvedItemPointer = (nint)item,
+            ResolvedInventory = (uint)item->Container,
+            ResolvedSlot = item->Slot
+        };
+        return true;
+    }
+
+    internal static long OfferedQuantity(InventoryManager* inventory, TradeItemShortcutTarget target)
+    {
+        if (inventory == null) return 0;
+        long quantity = 0;
+        for (var i = 0; i < 5; i++)
+        {
+            var item = inventory->TradeItemsLocal[i];
+            if (item.ItemId == target.ItemId && (byte)item.Flags == target.Flags && item.Quantity > 0)
+                quantity += item.Quantity;
+        }
+        return quantity;
+    }
+
     internal static int NativeEntry(AgentInventoryContext* agent, IReadOnlySet<string> labels)
     {
         if (agent == null || agent->ContextItemCount is < 1 or > 32 ||
@@ -65,10 +106,34 @@ internal static unsafe class TradeItemShortcutNative
 
 internal readonly record struct TradeItemShortcutTarget(
     ulong Character, uint Partner, nint TradeAddon, nint ItemPointer,
-    uint Inventory, int Slot, uint ItemId, byte Flags, int Quantity);
+    uint Inventory, int Slot, uint ItemId, byte Flags, int Quantity)
+{
+    internal nint ResolvedItemPointer { get; init; }
+    internal uint ResolvedInventory { get; init; }
+    internal int ResolvedSlot { get; init; }
+}
 
 internal sealed record TradeItemShortcutRequest(TradeItemShortcutTarget Target, string Label, long Created)
 {
     internal bool Matches(TradeItemShortcutTarget current, long now) =>
         now >= Created && now - Created <= 750 && Target == current;
+}
+
+internal enum TradeItemMenuDecision { Wait, Close, Forget }
+
+internal sealed class TradeItemMenuCleanup(nint menu, TradeItemShortcutTarget target, long offeredBefore, long created)
+{
+    internal nint Menu { get; } = menu;
+    internal TradeItemShortcutTarget Target { get; } = target;
+    internal long OfferedBefore { get; } = offeredBefore;
+    private bool sawQuantity;
+
+    internal TradeItemMenuDecision Step(long now, bool sameContext, bool quantityVisible, bool offerIncreased)
+    {
+        if (!sameContext || now < created || now - created > 300_000) return TradeItemMenuDecision.Forget;
+        if (quantityVisible) { sawQuantity = true; return TradeItemMenuDecision.Wait; }
+        if (offerIncreased || sawQuantity) return TradeItemMenuDecision.Close;
+        // An action with no observed effect remains manual; never hide an error.
+        return now - created > 3000 ? TradeItemMenuDecision.Forget : TradeItemMenuDecision.Wait;
+    }
 }

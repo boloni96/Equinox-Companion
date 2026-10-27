@@ -103,7 +103,7 @@ public sealed partial class Plugin
     {
         ImGui.TextUnformatted("Tools on this computer");
         MessageToggle("Ctrl + right-click items into trade", config.EnableTradeItemShortcut, SetTradeItemShortcutEnabled);
-        SettingsHelp("With a trade already open, hold Ctrl and right-click an item in your inventory to choose its Trade action. Stacks keep the game's quantity prompt. You still review and accept the trade. Does nothing outside a trade or while automatic Gil Trader is running. This shortcut is independent of Enable Gil Trader.\n\n" + tradeItemShortcutStatus);
+        SettingsHelp("With a trade already open, hold Ctrl and right-click an item in your inventory, Armoury Chest or any other container with an enabled Trade action. Stacks keep the game's quantity prompt. The item menu closes after adding the item or dismissing that prompt. You still review and accept the trade. Does nothing outside a trade or while automatic Gil Trader is running. This shortcut is independent of Enable Gil Trader.\n\n" + tradeItemShortcutStatus);
         MessageToggle("Enable Gil Trader", config.EnableGilTrader, SetGilTraderEnabled);
         SettingsHelp("Shows Gil Trader in the window menu and enables /eqtrade. Send a chosen gil total or receive from a selected nearby player. Disabling closes the window and stops the session; confirmed trades are kept.");
         MessageToggle("Enable Equinox Market & Seller",config.Seller.Enabled,SetMarketEnabled);
