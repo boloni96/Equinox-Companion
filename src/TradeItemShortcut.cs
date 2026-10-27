@@ -6,7 +6,7 @@ using Dalamud.Game.Gui.ContextMenu;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using FFXIVClientStructs.FFXIV.Component.GUI;
-using AtkType = FFXIVClientStructs.FFXIV.Component.GUI.ValueType;
+using AtkType = FFXIVClientStructs.FFXIV.Component.GUI.AtkValueType;
 
 namespace EquinoxCompanion;
 
@@ -109,7 +109,7 @@ public sealed partial class Plugin
             var agent = AgentInventoryContext.Instance();
             var index = TradeItemShortcutNative.NativeEntry(agent, tradeItemLabelsTask.Result);
             if (index < 0) { tradeItemShortcutStatus = "This item's Trade action is unavailable; the normal menu remains open."; return; }
-            var label = TradeItemShortcutNative.Read(agent->EventParams[agent->ContexItemStartIndex + index].String);
+            var label = TradeItemShortcutNative.Read(agent->EventParams[agent->ContexItemStartIndex + index].String.Value);
             pendingTradeItemShortcut = new(target, label, now);
             tradeItemShortcutStatus = "Waiting for the item menu.";
         }

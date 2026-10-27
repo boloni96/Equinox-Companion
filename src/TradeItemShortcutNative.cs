@@ -1,6 +1,6 @@
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using FFXIVClientStructs.FFXIV.Component.GUI;
-using AtkType = FFXIVClientStructs.FFXIV.Component.GUI.ValueType;
+using AtkType = FFXIVClientStructs.FFXIV.Component.GUI.AtkValueType;
 
 namespace EquinoxCompanion;
 
@@ -17,8 +17,8 @@ internal static unsafe class TradeItemShortcutNative
         for (var i = 0; i < agent->ContextItemCount; i++)
         {
             var value = agent->EventParams[agent->ContexItemStartIndex + i];
-            if (value.Type is not (AtkType.String or AtkType.ManagedString) ||
-                !labels.Contains(Read(value.String))) continue;
+            if (value.Type is not (AtkType.String.Value or AtkType.ManagedString) ||
+                !labels.Contains(Read(value.String.Value))) continue;
             if (found >= 0 || (agent->ContextItemDisabledMask & (1u << i)) != 0 ||
                 (agent->ContextItemSubmenuMask & (1u << i)) != 0) return -1;
             found = i;
@@ -39,8 +39,8 @@ internal static unsafe class TradeItemShortcutNative
         for (var i = 0; i < count; i++)
         {
             var value = values[8 + i];
-            if (value.Type is not (AtkType.String or AtkType.ManagedString) ||
-                !string.Equals(Read(value.String), label, StringComparison.Ordinal)) continue;
+            if (value.Type is not (AtkType.String.Value or AtkType.ManagedString) ||
+                !string.Equals(Read(value.String.Value), label, StringComparison.Ordinal)) continue;
             if (found >= 0 || ((values[2].UInt | values[3].UInt) & (1u << i)) != 0) return -1;
             if (valueCount == 8 + count * 2)
             {

@@ -3,7 +3,7 @@ using System.Text;
 using EquinoxCompanion;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using FFXIVClientStructs.FFXIV.Component.GUI;
-using AtkType = FFXIVClientStructs.FFXIV.Component.GUI.ValueType;
+using AtkType = FFXIVClientStructs.FFXIV.Component.GUI.AtkValueType;
 
 internal static unsafe class TradeItemShortcut260Tests
 {
@@ -21,8 +21,8 @@ internal static unsafe class TradeItemShortcut260Tests
             for (var i = 0; i < 16; i++) values[i] = default;
             values[0].Type = AtkType.UInt; values[0].UInt = 3;
             values[2].Type = values[3].Type = AtkType.UInt;
-            values[8].Type = values[9].Type = values[10].Type = AtkType.String;
-            values[8].String = custom; values[9].String = discard; values[10].String = trade;
+            values[8].Type = values[9].Type = values[10].Type = AtkType.String.Value;
+            values[8].String.Value = custom; values[9].String.Value = discard; values[10].String.Value = trade;
             for (var i = 11; i < 14; i++) values[i].Type = AtkType.Int;
             Check(TradeItemShortcutNative.DisplayedEntry(values, 11, "Trade") == 2, "uses shifted display index, not native index");
             Check(TradeItemShortcutNative.DisplayedEntry(values, 14, "Trade") == 2, "enabled menu with disabled-state array");
@@ -32,9 +32,9 @@ internal static unsafe class TradeItemShortcut260Tests
             Check(TradeItemShortcutNative.DisplayedEntry(values, 14, "Trade") == -1, "submenu must not fire");
             values[3].UInt = 0; values[2].UInt = 4;
             Check(TradeItemShortcutNative.DisplayedEntry(values, 14, "Trade") == -1, "return entry must not fire");
-            values[2].UInt = 0; values[8].String = trade;
+            values[2].UInt = 0; values[8].String.Value = trade;
             Check(TradeItemShortcutNative.DisplayedEntry(values, 14, "Trade") == -1, "ambiguous plugin label must not select anything");
-            values[8].String = custom; values[10].String = local;
+            values[8].String.Value = custom; values[10].String.Value = local;
             Check(TradeItemShortcutNative.DisplayedEntry(values, 14, "交換") == 2, "exact localized native label");
             Check(TradeItemShortcutNative.DisplayedEntry(values, 14, "Trade") == -1, "never fall back to Discard or plugin action");
             Check(TradeItemShortcutNative.DisplayedEntry(values, 12, "交換") == -1, "malformed menu length rejected");
@@ -44,15 +44,15 @@ internal static unsafe class TradeItemShortcut260Tests
 
             AgentInventoryContext agent = default;
             agent.ContexItemStartIndex = 8; agent.ContextItemCount = 2;
-            agent.EventParams[8].Type = agent.EventParams[9].Type = AtkType.String;
-            agent.EventParams[8].String = discard; agent.EventParams[9].String = trade;
+            agent.EventParams[8].Type = agent.EventParams[9].Type = AtkType.String.Value;
+            agent.EventParams[8].String.Value = discard; agent.EventParams[9].String.Value = trade;
             var labels = new HashSet<string>(StringComparer.Ordinal) { "Trade" };
             Check(TradeItemShortcutNative.NativeEntry(&agent, labels) == 1, "native enabled Trade found");
             agent.ContextItemDisabledMask = 2;
             Check(TradeItemShortcutNative.NativeEntry(&agent, labels) == -1, "disabled native Trade rejected even if rendered enabled");
             agent.ContextItemDisabledMask = 0; agent.ContextItemSubmenuMask = 2;
             Check(TradeItemShortcutNative.NativeEntry(&agent, labels) == -1, "native submenu rejected");
-            agent.ContextItemSubmenuMask = 0; agent.EventParams[8].String = trade;
+            agent.ContextItemSubmenuMask = 0; agent.EventParams[8].String.Value = trade;
             Check(TradeItemShortcutNative.NativeEntry(&agent, labels) == -1, "ambiguous native labels rejected");
             agent.ContexItemStartIndex = 97;
             Check(TradeItemShortcutNative.NativeEntry(&agent, labels) == -1, "native parameter overrun rejected");
