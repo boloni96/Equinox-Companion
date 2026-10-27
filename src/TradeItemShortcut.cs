@@ -4,15 +4,16 @@ using Dalamud.Game.Addon.Lifecycle.AddonArgTypes;
 using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Game.Gui.ContextMenu;
 using FFXIVClientStructs.FFXIV.Client.Game;
+using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using FFXIVClientStructs.FFXIV.Component.GUI;
-using AtkType = FFXIVClientStructs.FFXIV.Component.GUI.AtkValueType;
 
 namespace EquinoxCompanion;
 
 public sealed partial class Plugin
 {
     private TradeItemShortcutRequest? pendingTradeItemShortcut;
+    private TradeItemMenuCleanup? tradeItemMenuCleanup;
     private Task<HashSet<string>>? tradeItemLabelsTask;
     private string tradeItemShortcutStatus = "No shortcut used this session.";
     private int tradeItemShortcutActions;
@@ -29,6 +30,7 @@ public sealed partial class Plugin
     private void DisposeTradeItemShortcut()
     {
         pendingTradeItemShortcut = null;
+        tradeItemMenuCleanup = null;
         ContextMenu.OnMenuOpened -= OnTradeItemShortcutMenu;
         Addons.UnregisterListener(AddonEvent.PreFinalize, TradeShortcutAddons, OnTradeItemShortcutClosed);
     }
@@ -37,6 +39,7 @@ public sealed partial class Plugin
     {
         config.EnableTradeItemShortcut = enabled;
         pendingTradeItemShortcut = null;
+        tradeItemMenuCleanup = null;
         if (enabled) PrepareTradeItemShortcutLabels();
         SaveConfiguration();
     }
@@ -60,7 +63,11 @@ public sealed partial class Plugin
         });
     }
 
-    private void OnTradeItemShortcutClosed(AddonEvent _, AddonArgs __) => pendingTradeItemShortcut = null;
+    private void OnTradeItemShortcutClosed(AddonEvent _, AddonArgs __)
+    {
+        pendingTradeItemShortcut = null;
+        tradeItemMenuCleanup = null;
+    }
 
     private unsafe bool ReadTradeItemShortcutTarget(out TradeItemShortcutTarget target)
     {
@@ -73,16 +80,16 @@ public sealed partial class Plugin
         var inv = InventoryManager.Instance();
         var agent = AgentInventoryContext.Instance();
         if (trade == null || inv == null || agent == null || inv->TradePartnerEntityId is 0 or 0xE0000000 ||
-            (int)inv->TradeLocalState != 3 || (int)inv->TradeRemoteState != 3 || inv->TradeIsSyncPending ||
-            (uint)agent->TargetInventoryId > 3 || agent->TargetInventorySlotId is < 0 or >= 35) return false;
+            (int)inv->TradeLocalState != 3 || (int)inv->TradeRemoteState != 3 || inv->TradeIsSyncPending) return false;
+        var container = inv->GetInventoryContainer(agent->TargetInventoryId);
+        if (!TradeItemShortcutNative.ContainerSlotAvailable(container, agent->TargetInventoryId, agent->TargetInventorySlotId)) return false;
         var hasRoom = false;
         for (var i = 0; i < 5; i++) hasRoom |= inv->TradeItemsLocal[i].ItemId == 0 && inv->TradeItemsLocal[i].Quantity == 0;
         if (!hasRoom) return false;
         var item = inv->GetInventorySlot(agent->TargetInventoryId, agent->TargetInventorySlotId);
-        if (item == null || item != agent->TargetInventorySlot || item->IsSymbolic || item->ItemId == 0 ||
-            item->Quantity <= 0 || item->Container != agent->TargetInventoryId || item->Slot != agent->TargetInventorySlotId) return false;
-        target = new(Player.ContentId, inv->TradePartnerEntityId, (nint)trade, (nint)item,
-            (uint)item->Container, item->Slot, item->ItemId, (byte)item->Flags, item->Quantity);
+        if (!TradeItemShortcutNative.CaptureItem(item, agent->TargetInventorySlot,
+            agent->TargetInventoryId, agent->TargetInventorySlotId, out target)) return false;
+        target = target with { Character = Player.ContentId, Partner = inv->TradePartnerEntityId, TradeAddon = (nint)trade };
         return true;
     }
 
@@ -91,6 +98,7 @@ public sealed partial class Plugin
         // Any new menu invalidates an older click, including another inventory
         // slot or a plugin-supplied item menu.
         pendingTradeItemShortcut = null;
+        tradeItemMenuCleanup = null;
         if (!config.EnableTradeItemShortcut || args.MenuType != ContextMenuType.Inventory || openingPluginItem != 0 ||
             args.AgentPtr != (nint)AgentInventoryContext.Instance()) return;
         var focused = ShortcutKeyboard.OwnGameFocused();
@@ -106,11 +114,9 @@ public sealed partial class Plugin
             }
             var now = Environment.TickCount64;
             if (now - tradeItemShortcutLastAction < 250 || !ReadTradeItemShortcutTarget(out var target)) return;
-            var agent = AgentInventoryContext.Instance();
-            var index = TradeItemShortcutNative.NativeEntry(agent, tradeItemLabelsTask.Result);
-            if (index < 0) { tradeItemShortcutStatus = "This item's Trade action is unavailable; the normal menu remains open."; return; }
-            var label = TradeItemShortcutNative.Read(agent->EventParams[agent->ContexItemStartIndex + index].String.Value);
-            pendingTradeItemShortcut = new(target, label, now);
+            // Capture the clicked item now; menu labels can finish populating
+            // after OnMenuOpened, especially with item-specific plugin entries.
+            pendingTradeItemShortcut = new(target, "", now);
             tradeItemShortcutStatus = "Waiting for the item menu.";
         }
         catch (Exception ex)
@@ -123,6 +129,7 @@ public sealed partial class Plugin
 
     private unsafe void UpdateTradeItemShortcut(DateTimeOffset _)
     {
+        UpdateTradeItemMenuCleanup();
         var request = pendingTradeItemShortcut;
         if (request is null) return;
         var now = Environment.TickCount64;
@@ -135,21 +142,50 @@ public sealed partial class Plugin
         }
         var menu = SellerAddon("ContextMenu");
         if (menu == null) return; // Bounded by the request's 750 ms lifetime.
-        pendingTradeItemShortcut = null; // One callback at most, including if it throws.
         var agent = AgentInventoryContext.Instance();
-        if (tradeItemLabelsTask?.IsCompletedSuccessfully != true ||
-            TradeItemShortcutNative.NativeEntry(agent, tradeItemLabelsTask.Result) < 0) return;
-        var index = TradeItemShortcutNative.DisplayedEntry(menu->AtkValues, menu->AtkValuesCount, request.Label);
-        if (index < 0) { tradeItemShortcutStatus = "Trade menu could not be identified safely; choose Trade manually."; return; }
-        var values = stackalloc AtkValue[5];
-        for (var i = 0; i < 5; i++) { values[i] = default; values[i].Type = AtkType.Int; }
-        values[1].Int = index;
-        values[2].Type = AtkType.UInt;
+        if (tradeItemLabelsTask?.IsCompletedSuccessfully != true) return;
+        var nativeIndex = TradeItemShortcutNative.NativeEntry(agent, tradeItemLabelsTask.Result);
+        if (nativeIndex < 0) { tradeItemShortcutStatus = "Waiting for an enabled Trade action; unavailable items remain manual."; return; }
+        var label = TradeItemShortcutNative.Read(agent->EventParams[agent->ContexItemStartIndex + nativeIndex].String.Value);
+        var index = TradeItemShortcutNative.DisplayedEntry(menu->AtkValues, menu->AtkValuesCount, label);
+        if (index < 0) { tradeItemShortcutStatus = "Waiting for the item menu to finish loading."; return; }
+        pendingTradeItemShortcut = null; // Select only once, including if it throws.
+        var cleanup = new TradeItemMenuCleanup((nint)menu, current,
+            TradeItemShortcutNative.OfferedQuantity(InventoryManager.Instance(), current), now);
+        tradeItemMenuCleanup = cleanup;
         tradeItemShortcutLastAction = now;
-        menu->FireCallback(5, values);
+        // OnMenuSelected is the real click route, including Dalamud's mapping
+        // from display indices to native indices. A raw FireCallback bypasses
+        // that mapping and can select the wrong action on item-specific menus.
+        ((AddonContextMenu*)menu)->OnMenuSelected(index, 0);
         tradeItemShortcutActions++;
-        tradeItemShortcutStatus = "Selected Trade. Choose the stack quantity if asked, then review and accept the trade yourself.";
-        // Leave both the normal quantity prompt and final acceptance to the
-        // player. Closing ContextMenu here can cancel the game's quantity prompt.
+        tradeItemShortcutStatus = "Selected Trade. Choose the amount if asked; final acceptance stays manual.";
+        // Do not close immediately: stacks may open their quantity dialog on
+        // the next frame. Cleanup only follows an observed offer or dismissed prompt.
+    }
+
+    private unsafe void UpdateTradeItemMenuCleanup()
+    {
+        var cleanup = tradeItemMenuCleanup;
+        if (cleanup is null) return;
+        var menu = SellerAddon("ContextMenu");
+        var trade = SellerAddon("Trade");
+        var inv = InventoryManager.Instance();
+        var agent = AgentInventoryContext.Instance();
+        var same = config.EnableTradeItemShortcut && !gilTrade.Running &&
+            Player.IsLoaded && Player.ContentId == cleanup.Target.Character &&
+            menu != null && (nint)menu == cleanup.Menu && trade != null && (nint)trade == cleanup.Target.TradeAddon &&
+            inv != null && inv->TradePartnerEntityId == cleanup.Target.Partner &&
+            agent != null && (uint)agent->TargetInventoryId == cleanup.Target.Inventory &&
+            agent->TargetInventorySlotId == cleanup.Target.Slot;
+        var decision = cleanup.Step(Environment.TickCount64, same, SellerAddon("InputNumeric") != null,
+            inv != null && TradeItemShortcutNative.OfferedQuantity(inv, cleanup.Target) > cleanup.OfferedBefore);
+        if (decision == TradeItemMenuDecision.Wait) return;
+        tradeItemMenuCleanup = null;
+        if (decision == TradeItemMenuDecision.Close)
+        {
+            menu->Hide(false, true, 0);
+            tradeItemShortcutStatus = "Item menu closed. Review the offered items before accepting the trade.";
+        }
     }
 }
