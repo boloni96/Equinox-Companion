@@ -12,7 +12,7 @@ public sealed partial class Plugin
  private ulong maintenanceTaskCharacter;
  private DateTimeOffset maintenanceNextCheck;
  private bool maintenanceFailureShown;
- private void ResetMaintenanceLogin(){lotteryLogin.Reset();lotteryBidNotices.Reset();nextLotteryReminderCheck=default;lotteryPendingCharacter=0;lotteryPlacard=null;maintenanceSession.Reset();maintenanceTask=null;maintenanceFailureShown=false;maintenanceNextCheck=default;}
+ private void ResetMaintenanceLogin(){lotteryLogin.Reset();lotteryBidNotices.Reset();nextLotteryReminderCheck=default;lotteryBuyerContext=null;lotteryPlacard=null;maintenanceSession.Reset();maintenanceTask=null;maintenanceFailureShown=false;maintenanceNextCheck=default;}
  private void UpdateMaintenanceNotices(DateTimeOffset now)
  {
   if(!Player.IsLoaded||Player.ContentId==0)return;
@@ -50,3 +50,4 @@ public sealed partial class Plugin
  }
  private void DisposeMaintenanceNotices(){maintenanceStop.Cancel();maintenanceStop.Dispose();maintenanceService.Dispose();foreach(var link in maintenanceLinks.Values)Chat.RemoveChatLinkHandler(link.Id);}
 }
+
