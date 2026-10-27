@@ -128,12 +128,15 @@ public sealed partial class Plugin
     {
         // Any new menu invalidates an older click, including another inventory
         // slot or a plugin-supplied item menu.
+        if (pendingTradeItemShortcut is {} previous)
+            RecordTradeItemShortcut(previous.Target, "Cancelled", "Another item menu opened before this click completed.");
         pendingTradeItemShortcut = null;
         tradeItemMenuCleanup = null;
         if (!config.EnableTradeItemShortcut || args.MenuType != ContextMenuType.Inventory || openingPluginItem != 0 ||
             args.AgentPtr != (nint)AgentInventoryContext.Instance()) return;
         var focused = ShortcutKeyboard.OwnGameFocused();
         if (!ShortcutKeyboard.Down(0x11, focused) || ShortcutKeyboard.Down(0x10, focused) || ShortcutKeyboard.Down(0x12, focused)) return;
+        if (SellerAddon("Trade") == null) return;
         try
         {
             var now = Environment.TickCount64;
