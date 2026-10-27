@@ -21,7 +21,7 @@ internal static unsafe class TradeItemShortcut260Tests
             for (var i = 0; i < 16; i++) values[i] = default;
             values[0].Type = AtkType.UInt; values[0].UInt = 3;
             values[2].Type = values[3].Type = AtkType.UInt;
-            values[8].Type = values[9].Type = values[10].Type = AtkType.String.Value;
+            values[8].Type = values[9].Type = values[10].Type = AtkType.String;
             values[8].String.Value = custom; values[9].String.Value = discard; values[10].String.Value = trade;
             for (var i = 11; i < 14; i++) values[i].Type = AtkType.Int;
             Check(TradeItemShortcutNative.DisplayedEntry(values, 11, "Trade") == 2, "uses shifted display index, not native index");
@@ -44,7 +44,7 @@ internal static unsafe class TradeItemShortcut260Tests
 
             AgentInventoryContext agent = default;
             agent.ContexItemStartIndex = 8; agent.ContextItemCount = 2;
-            agent.EventParams[8].Type = agent.EventParams[9].Type = AtkType.String.Value;
+            agent.EventParams[8].Type = agent.EventParams[9].Type = AtkType.String;
             agent.EventParams[8].String.Value = discard; agent.EventParams[9].String.Value = trade;
             var labels = new HashSet<string>(StringComparer.Ordinal) { "Trade" };
             Check(TradeItemShortcutNative.NativeEntry(&agent, labels) == 1, "native enabled Trade found");
