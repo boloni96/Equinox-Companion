@@ -8,7 +8,7 @@ public sealed partial class Plugin
     {
         "Equinox Market"=>true,
         "Gil Trader"=>gilTrade.Running,
-        "Trade item shortcut"=>pendingTradeItemShortcut is not null||tradeItemMenuCleanup is not null,
+        "Trade item shortcut"=>pendingTradeItemShortcut is not null||tradeItemMenuCleanup is not null||tradeItemOfferWatch is not null,
         "Camera"=>OptionalToolAvailable("Camera")&&config.RememberCameraHeight||cameraHeightDefaultPending,
         "QuickLoot"=>config.EnableQuickLoot,
         "Coffer markers"=>config.EnableCofferMarkers,
@@ -52,3 +52,4 @@ public sealed partial class Plugin
         UpdateFollowPortalRelay(now);
     }
 }
+
