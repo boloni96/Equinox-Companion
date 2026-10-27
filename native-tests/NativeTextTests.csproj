@@ -7,6 +7,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../src/TradeItemShortcutNative.cs" Link="TradeItemShortcutNative.cs" />
     <Compile Include="../src/GilTradeNative.cs" Link="GilTradeNative.cs" />
     <Compile Include="../src/GilTradeRun.cs" Link="GilTradeRun.cs" />
     <Reference Include="Dalamud"><HintPath>$(DALAMUD_HOME)/Dalamud.dll</HintPath></Reference>
