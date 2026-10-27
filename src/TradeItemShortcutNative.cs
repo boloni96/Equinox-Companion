@@ -115,8 +115,17 @@ internal readonly record struct TradeItemShortcutTarget(
 
 internal sealed record TradeItemShortcutRequest(TradeItemShortcutTarget Target, string Label, long Created)
 {
+    internal const long Lifetime = 2500;
+    internal nint Menu { get; private set; }
+    internal void BindMenu(nint menu) { if (Menu == 0 && menu != 0) Menu = menu; }
+    // OnMenuOpened runs BEFORE the game opens/replaces ContextMenu. Closing
+    // the old addon must not cancel the request for the incoming menu.
+    internal bool MenuClosed(nint menu) => Menu != 0 && Menu == menu;
+    internal bool Expired(long now) => now < Created || now - Created > Lifetime;
     internal bool Matches(TradeItemShortcutTarget current, long now) =>
-        now >= Created && now - Created <= 750 && Target == current;
+        !Expired(now) && Target == current;
+    internal bool Ready(long now, bool syncPending, long lastAction) =>
+        !Expired(now) && now - Created >= 50 && Menu != 0 && !syncPending && now - lastAction >= 250;
 }
 
 internal enum TradeItemMenuDecision { Wait, Close, Forget }
@@ -137,3 +146,31 @@ internal sealed class TradeItemMenuCleanup(nint menu, TradeItemShortcutTarget ta
         return now - created > 3000 ? TradeItemMenuDecision.Forget : TradeItemMenuDecision.Wait;
     }
 }
+
+internal enum TradeItemOfferDecision { Wait, Added, NoOffer, Cancelled }
+
+// Confirmation survives ContextMenu closing: the native action can finish
+// adding the item on a later frame, or after the player's quantity choice.
+internal sealed class TradeItemOfferWatch(TradeItemShortcutTarget target, long offeredBefore, long created)
+{
+    internal TradeItemShortcutTarget Target { get; } = target;
+    internal long OfferedBefore { get; } = offeredBefore;
+    private bool sawQuantity;
+    private long? quantityDismissed;
+    internal TradeItemOfferDecision Step(long now, bool sameTrade, bool quantityVisible, bool offerIncreased)
+    {
+        if (!sameTrade || now < created || now - created > 300_000) return TradeItemOfferDecision.Cancelled;
+        if (offerIncreased) return TradeItemOfferDecision.Added;
+        if (quantityVisible) { sawQuantity = true; return TradeItemOfferDecision.Wait; }
+        if (sawQuantity)
+        {
+            quantityDismissed ??= now;
+            return now - quantityDismissed.Value > 1500 ? TradeItemOfferDecision.NoOffer : TradeItemOfferDecision.Wait;
+        }
+        return now - created > 3000 ? TradeItemOfferDecision.NoOffer : TradeItemOfferDecision.Wait;
+    }
+}
+
+internal sealed record TradeItemShortcutTrace(DateTimeOffset At, uint ItemId, string ItemName,
+    uint Inventory, int Slot, int Quantity, string Stage, string Detail);
+

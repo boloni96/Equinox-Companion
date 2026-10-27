@@ -62,7 +62,7 @@ internal static unsafe class TradeItemShortcut260Tests
         var request = new TradeItemShortcutRequest(target, "Trade", 1000);
         Check(request.Matches(target, 1050), "unchanged stack accepted");
         Check(!request.Matches(target, 999), "invalid monotonic time rejected");
-        Check(!request.Matches(target, 1751), "stale click expires");
+        Check(!request.Matches(target, 3501), "stale click expires after bounded trade-sync wait");
         Check(!request.Matches(target with { Character = 11 }, 1050), "different character rejected");
         Check(!request.Matches(target with { Partner = 21 }, 1050), "different trade partner rejected");
         Check(!request.Matches(target with { TradeAddon = 31 }, 1050), "replacement trade window rejected");
@@ -75,3 +75,4 @@ internal static unsafe class TradeItemShortcut260Tests
         Console.WriteLine($"Trade item shortcut regression checks passed: {checks}.");
     }
 }
+

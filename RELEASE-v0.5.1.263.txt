@@ -1,0 +1,11 @@
+Inventory trade shortcut timing and diagnostics
+
+Ctrl + right-click no longer immediately discards a click just because the previous item is still syncing or the 250 ms action spacing has not elapsed. It waits for up to 2.5 seconds, only while the same character, partner, trade, inventory item and clicked menu remain valid. Closing that menu or changing the item cancels the pending action.
+
+The incoming click is now bound to the newly opened ContextMenu. Finalizing an older menu during replacement cannot cancel it. Native Trade eligibility is still required; untradeable items, disabled Trade entries, full offers and locked trades remain blocked.
+
+Settings → Diagnostics → Item trade shortcut now shows recent attempts with item names and exact skip/wait reasons. Hover for details. Export diagnostics includes the last 32 stages, inventory slots and native menu details when selection fails. No diagnostic recording needs to be started. An observed item addition is counted separately from merely selecting Trade; adding an item never means the final trade was accepted.
+
+Keeps the game's quantity prompt for stacks and manual final acceptance. Uses the existing Ctrl + right-click setting. Includes .262 FC/private housing lottery corrections. No Journal, Worker or Android deployment needed.
+
+Automated tests cover menu replacement, sync waits, fast successive clicks, cancellation, stale/replaced items and delayed offers. The specific items reported as failing still require an in-game retest; the release does not assert that all reported items were reproduced in-game.

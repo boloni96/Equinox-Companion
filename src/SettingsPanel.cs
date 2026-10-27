@@ -80,6 +80,17 @@ public sealed partial class Plugin
         if(optionalToolFailures.Count>0&&ImGui.CollapsingHeader("Optional tools need attention")){foreach(var issue in optionalToolFailures)ImGui.TextWrapped(issue.Key+": "+issue.Value);}
         if(config.Seller.Enabled&&ImGui.CollapsingHeader("Market & Seller"))DrawSellerDiagnostics();
         if(config.EnableGilTrader&&ImGui.CollapsingHeader("Gil Trader"))DrawGilTradeDiagnostics();
+        if((config.EnableTradeItemShortcut||tradeItemShortcutTrace.Count>0)&&ImGui.CollapsingHeader("Item trade shortcut"))
+        {
+            ImGui.TextWrapped(tradeItemShortcutStatus);
+            ImGui.TextDisabled($"Trade selected: {tradeItemShortcutActions} · Items added to offer: {tradeItemShortcutConfirmed}");
+            SettingsHelp("Added means observed in your trade offer, not handed to the other player. Final acceptance remains manual. The last 32 shortcut stages are included in Export diagnostics; no recording needs to be started.");
+            foreach(var attempt in tradeItemShortcutTrace.TakeLast(8).Reverse())
+            {
+                ImGui.TextWrapped($"{attempt.At.ToLocalTime():HH:mm:ss} · {attempt.ItemName} · {attempt.Stage}");
+                SettingsHelp($"Item {attempt.ItemId} · inventory {attempt.Inventory} · slot {attempt.Slot} · quantity {attempt.Quantity}\n{attempt.Detail}");
+            }
+        }
         if(ImGui.CollapsingHeader("Performance"))DrawRecentPerformanceDiagnostics();
         if(ImGui.CollapsingHeader("Tracking & recording"))DrawDiagnosticsTracking();
         if(ImGui.CollapsingHeader("Housing lottery"))ImGui.TextWrapped(lotteryDiagnostic is null?"No lottery observation this session.":System.Text.Json.JsonSerializer.Serialize(lotteryDiagnostic));
@@ -153,5 +164,6 @@ public sealed partial class Plugin
         SettingsHelp("Open the Armoire, Glamour Dresser and each retainer to refresh their stored contents. Current state and unsent records are kept; older acknowledged history is pruned after 60 days.");
     }
 }
+
 
 

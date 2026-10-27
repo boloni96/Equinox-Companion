@@ -1,7 +1,7 @@
 name: Build and verify Companion source
 on:
   push:
-    branches: [main, fix/lottery-buyer-262, feature/all-inventory-trade-261, feature/ctrl-trade-260, fix/followthem-75, feature/equinox-helper-80, feature/equinox-helper-85]
+    branches: [main, fix/trade-clicks-263, fix/lottery-buyer-262, feature/all-inventory-trade-261, feature/ctrl-trade-260, fix/followthem-75, feature/equinox-helper-80, feature/equinox-helper-85]
     paths: ['src/**', 'tests/**', 'native-tests/**', 'market-tests/**', 'scripts/publish_source.py', '.github/workflows/build-from-source.yml']
   workflow_dispatch:
 permissions:
@@ -59,4 +59,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: python scripts/publish_source.py
+
 
