@@ -406,6 +406,7 @@ public sealed partial class Plugin
             UpdateMarketJournal(now);
         UpdateMarketHistorySync(now);
             UpdateMarketWatch(now);
+            UpdateMarketReviews(now);
             UpdateMarketBar(now);
             if(now<marketPollAt)return;marketPollAt=now.AddMilliseconds(500);
             ObserveSellerDiagnostics(now);
@@ -446,7 +447,7 @@ public sealed partial class Plugin
         if(manualEditor!=null&&ReadSellerComparison() is {} comparison){
             var decision=SellerPricing.Decide(manualEditor.ItemId,Player.CurrentWorld.RowId,manualEditor.Hq,manualEditor.Price,comparison,KnownSellerRetainers(),config.Seller,now,manualEditor.Materia);
             if(decision!=manualDecision){manualDecision=decision;TraceSellerDecision(active,manualEditor,decision,false,"Manual suggestion");}
-            sellerReviews[(active,manualEditor.Slot)]=(manualEditor,decision,now);
+            sellerReviews[(active,manualEditor.Slot)]=(manualEditor,decision,comparison.At);
         }
     }
     private unsafe bool SetManualSellerPrice(int price,bool confirm)
@@ -521,6 +522,7 @@ public sealed partial class Plugin
         var old=marketLedger.Retainers.FirstOrDefault(x=>x.Id==id);
         var fresh=MarketAccounting.PreserveListingDates(old,new MarketRetainer(id,native->NameString,Player.ContentId,Player.CharacterName,Player.HomeWorld.RowId,WorldName(Player.HomeWorld.RowId)??"",person?.Name??"",character?.Account??"",InventoryManager.Instance()->GetRetainerGil(),now,stock) with {DisplayOrder=Array.FindIndex(ReadSellerRetainers(),r=>r.Id==id),JobId=native->ClassJob,Level=native->Level,Job=DataManager.GetExcelSheet<Lumina.Excel.Sheets.ClassJob>().GetRowOrDefault(native->ClassJob)?.Abbreviation.ToString()??"",ProfileAt=now});
         if(old!=null&&old.Gil==fresh.Gil&&old.JobId==fresh.JobId&&old.Level==fresh.Level&&old.DisplayOrder==fresh.DisplayOrder&&old.Stock.SequenceEqual(fresh.Stock)&&now-old.At<TimeSpan.FromMinutes(1))return;
+        fresh=fresh with {PriceReview=MarketPriceReviews.Merge(old?.PriceReview,null,fresh.Stock)};
         var recovered=old==null?[]:MarketAccounting.ReconcileOffline(old,fresh,marketLedger.Income);
         marketLedger=marketLedger with {Retainers=[..marketLedger.Retainers.Where(x=>x.Id!=id),fresh with {LastVisit=now}],Income=recovered.Length==0?marketLedger.Income:[..marketLedger.Income,..recovered]};DirtyMarket();
     }

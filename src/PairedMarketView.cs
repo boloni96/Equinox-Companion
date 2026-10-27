@@ -26,14 +26,14 @@ public static class PairedMarketView
                 if(!RetainerMarketSnapshot.Valid(new([r]),now)||!ulong.TryParse(r.Id,out var id))continue;
                 candidates.Add(new(id,r.Name,ulong.Parse(c.ContentId),c.Name,world,c.World,pair.Person.Name,c.Account,r.Gil,r.ObservedAt,
                     r.Items.Select(i=>new MarketStock(i.Slot,i.ItemId,i.Name,i.Hq,i.Quantity,i.Price,i.ListedAt,i.Slot,i.Materia)).ToArray(),
-                    r.LastVisit,r.Order,pair.Person.Id,SharedCharacterGrouping.AccountKey(c),c.Id,true,r.JobId,r.Level,r.Job,r.ProfileAt));
+                    r.LastVisit,r.Order,pair.Person.Id,SharedCharacterGrouping.AccountKey(c),c.Id,true,r.JobId,r.Level,r.Job,r.ProfileAt,r.PriceReview));
             }
         }
         return candidates.GroupBy(r=>r.Id).Where(g=>g.Select(r=>(r.CharacterId,r.WorldId)).Distinct().Count()==1)
             .Select(g=>{
                 var stock=g.OrderByDescending(r=>r.At).ThenBy(r=>r.Paired).First();
                 var profile=g.Where(r=>r.ProfileAt!=null).OrderByDescending(r=>r.ProfileAt).FirstOrDefault();
-                return stock with {DisplayOrder=profile?.DisplayOrder??stock.DisplayOrder,LastVisit=g.Max(r=>r.LastVisit),JobId=profile?.JobId??stock.JobId,Level=profile?.Level??stock.Level,Job=profile?.Job??stock.Job,ProfileAt=profile?.ProfileAt??stock.ProfileAt};
+                return stock with {PriceReview=g.Select(x=>x.PriceReview).Aggregate((MarketPriceReview?)null,(a,b)=>MarketPriceReviews.Merge(a,b,stock.Stock)),DisplayOrder=profile?.DisplayOrder??stock.DisplayOrder,LastVisit=g.Max(r=>r.LastVisit),JobId=profile?.JobId??stock.JobId,Level=profile?.Level??stock.Level,Job=profile?.Job??stock.Job,ProfileAt=profile?.ProfileAt??stock.ProfileAt};
             })
             .OrderBy(r=>r.Person).ThenBy(r=>r.PersonId).ThenBy(r=>r.Account).ThenBy(r=>r.AccountId)
             .ThenBy(r=>r.Character).ThenBy(r=>r.World).ThenBy(r=>r.CharacterId).ThenBy(r=>r.DisplayOrder).ThenBy(r=>r.Id).ToArray();

@@ -162,6 +162,7 @@ public sealed partial class Plugin
       ImGui.EndDisabled();
       if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))ImGui.SetTooltip(house is null?"Teleport your current character to the Gold Saucer for the Fashion Report. Requires an unlocked destination.":$"Go to {house.Name} · {house.World} · {house.District} W{house.Ward} P{house.Plot}.\nUses the current character. Enter the house to confirm the visit.");
      }
+     DrawAdventureMarketActions(task);
      if(pending is not null&&!task.ServerConfirmed)ImGui.TextColored(new Vector4(1,.8f,.4f,1),board.Protocol>=2?"Saved · Journal will catch up":"Pending Journal confirmation");
      ImGui.PopID();
     }

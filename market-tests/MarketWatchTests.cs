@@ -25,6 +25,8 @@ static class MarketWatchTests
         using var parsed=JsonDocument.Parse(Json(20,10));
         check("parser uses upload time not fetch time",MarketWatchPolicy.Parse(parsed.RootElement,20,10,now.AddHours(1)).Uploaded==now);
         try{MarketWatchPolicy.Parse(parsed.RootElement,21,10,now);check("parser wrong world rejected",false);}catch(JsonException){check("parser wrong world rejected",true);}
+        using var nullable=JsonDocument.Parse(Json(20,10).Replace("\"onMannequin\":false","\"onMannequin\":null"));
+        check("optional null mannequin flag remains usable",MarketWatchPolicy.Parse(nullable.RootElement,20,10,now).Offers.Length==1);
         var handler=new WatchHandler();using var client=new MarketWatchClient(handler);
         handler.Body=Json(20,10);
         var one=await client.Read(20,[10],CancellationToken.None);

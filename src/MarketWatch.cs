@@ -11,6 +11,15 @@ public sealed record MarketWatchBatch(MarketWatchSnapshot[] Items,TimeSpan Retry
 // Advisory cache only. SellerRun never accepts these records as a live comparison.
 public static class MarketWatchPolicy
 {
+    public static DateTimeOffset NextCheck(MarketWatchBatch batch,uint item,DateTimeOffset now,int minutes)
+    {
+        var row=batch.Items.FirstOrDefault(x=>x.Item==item);
+        return row is {Error:""}?now.AddMinutes(Math.Clamp(minutes,5,120)):now+TimeSpan.FromSeconds(Math.Max(60,batch.RetryAfter.TotalSeconds));
+    }
+    public static string Summary(MarketWatchBatch batch)=>batch.Error.Length>0?batch.Error:
+        $"Universalis: {batch.Items.Count(x=>x.Error.Length==0)}/{batch.Items.Length} items received"+
+        (batch.Items.Any(x=>x.Error.Length>0)?" · unavailable items will retry. Data age is shown on each listing.":" · data age is shown on each listing.");
+
     public static SellerDecision Assess(MarketStock item,uint world,MarketWatchSnapshot? data,ISet<string> ownNames,SellerSettings settings,DateTimeOffset now)
     {
         SellerDecision Unknown(string reason)=>new(SellerStatus.Unknown,null,reason,"Universalis");
@@ -57,7 +66,7 @@ public static class MarketWatchPolicy
                 materia=SellerMateria.FromParts(parts);
                 if(materia==null)throw new JsonException("Invalid materia types or grades.");
             }
-            offers.Add(new(row.TryGetProperty("retainerName",out var name)?name.GetString()??"":"",price,row.GetProperty("hq").GetBoolean(),quantity,row.TryGetProperty("onMannequin",out var mannequin)&&mannequin.GetBoolean(),materia));
+            offers.Add(new(row.TryGetProperty("retainerName",out var name)?name.GetString()??"":"",price,row.GetProperty("hq").GetBoolean(),quantity,row.TryGetProperty("onMannequin",out var mannequin)&&mannequin.ValueKind!=JsonValueKind.Null&&mannequin.GetBoolean(),materia));
             if(offers.Count>100)throw new JsonException("Unexpected number of listings.");
         }
         SellerSale[]? history=null;
@@ -67,7 +76,7 @@ public static class MarketWatchPolicy
                 var price=sale.GetProperty("pricePerUnit").GetInt64();var quantity=sale.GetProperty("quantity").GetUInt32();
                 if(price is <=0 or >SellerPricing.MaxPrice||quantity==0||entries.Count>=20)throw new JsonException("Invalid recent sale.");
                 if(sale.TryGetProperty("worldID",out var sw)&&sw.GetUInt32()!=world)throw new JsonException("Sale is from another world.");
-                entries.Add(new(price,sale.GetProperty("hq").GetBoolean(),quantity,DateTimeOffset.FromUnixTimeSeconds(sale.GetProperty("timestamp").GetInt64()),sale.TryGetProperty("onMannequin",out var mannequin)&&mannequin.GetBoolean()));
+                entries.Add(new(price,sale.GetProperty("hq").GetBoolean(),quantity,DateTimeOffset.FromUnixTimeSeconds(sale.GetProperty("timestamp").GetInt64()),sale.TryGetProperty("onMannequin",out var mannequin)&&mannequin.ValueKind!=JsonValueKind.Null&&mannequin.GetBoolean()));
             }
             history=entries.ToArray();
         }
@@ -81,7 +90,7 @@ public sealed class MarketWatchClient:IDisposable
     public MarketWatchClient(HttpMessageHandler? handler=null)
     {
         http=handler==null?new():new(handler);http.Timeout=TimeSpan.FromSeconds(20);
-        http.DefaultRequestHeaders.UserAgent.ParseAdd("EquinoxCompanion-Market/0.5.1.255");
+        http.DefaultRequestHeaders.UserAgent.ParseAdd("EquinoxCompanion-Market/0.5.1.258");
         http.MaxResponseContentBufferSize=8*1024*1024;
     }
     public async Task<MarketWatchBatch> Read(uint world,uint[] items,CancellationToken token)

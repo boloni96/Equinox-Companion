@@ -153,7 +153,7 @@ public sealed partial class Plugin
         }
         if(ImGui.CollapsingHeader("Background checks & visits")){
             Toggle("Sync Market with paired people",s.SyncToJournal,v=>{s.SyncToJournal=v;marketJournalSource=null;WakeObservationSync();},"Shares observed retainers, jobs, levels, selling lists, visits, sales, spending and price changes through your existing pairing. All clients receive the same records with the Journal closed. Gameplay observations upload first; history uses a separate paced queue. Automation controls remain on this computer.");
-            Toggle("Check Universalis in the background",s.BackgroundChecks,v=>{s.BackgroundChecks=v;if(!v)StopMarketWatch();},"Checks known listings on each retainer's home world while the plugin runs, even with windows closed. Suggestions are cached; repricing always uses live game comparisons.");
+            Toggle("Check Universalis in the background",s.BackgroundChecks,v=>{s.BackgroundChecks=v;if(!v)StopMarketWatch();},"Checks known listings on each retainer's home world while logged in, even with all plugin windows and the Journal closed. Suggestions are cached; repricing always uses live game comparisons.");
             if(s.BackgroundChecks){
                 Number("Check interval (minutes)",s.BackgroundIntervalMinutes,5,120,v=>s.BackgroundIntervalMinutes=v,"Minimum interval between background checks of each known item. Requests are paced and yield to gameplay syncing.");
                 Number("Maximum data age (minutes)",s.BackgroundMaxAgeMinutes,5,1440,v=>s.BackgroundMaxAgeMinutes=v,"Older Universalis information stays uncertain instead of being shown as a reliable update suggestion.");
