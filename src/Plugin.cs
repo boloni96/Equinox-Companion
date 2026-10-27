@@ -250,6 +250,7 @@ public sealed partial class Plugin : IDalamudPlugin
         InitializeMarketSearch();
         InitializeEquinoxMarket();
         InitializeGilTrader();
+        InitializeTradeItemShortcut();
         InitializeBidSearch();
         InitializeAdventures();
         InitializeTesting();
@@ -366,6 +367,7 @@ public sealed partial class Plugin : IDalamudPlugin
         UpdateSharedRoster(now);
         RunOptionalTool("Equinox Market",now);
         RunOptionalTool("Gil Trader",now);
+        RunOptionalTool("Trade item shortcut",now);
         UpdateAdventure();
         UpdateTesting(now);
         UpdateShoppingTravel(now);
@@ -1057,6 +1059,7 @@ public sealed partial class Plugin : IDalamudPlugin
                 gardenPickerDetails=gardenPickerCaptures.ToArray(),
                 marketSellerDiagnostics=ReadSellerDiagnosticExport(),
                 marketSharingDiagnostics=new {projectionVersion=config.SharedRoster?.MarketProjectionVersion??0,historyStatus=marketSharedStatus,historyCursor=marketSharedHistory.Cursor,sharedRecords=marketSharedHistory.Records.Length,acknowledgedRecords=marketSharedHistory.Sent.Count,historyInFlight=marketSharedTask!=null,backgroundStatus=marketWatchNotice,backgroundInFlight=marketWatchTask!=null,backgroundCachedItems=marketWatchCache.Count},
+                tradeItemShortcutDiagnostics=new {enabled=config.EnableTradeItemShortcut,actions=tradeItemShortcutActions,status=tradeItemShortcutStatus,pending=pendingTradeItemShortcut is not null},
                 gilTraderDiagnostics=new {enabled=config.EnableGilTrader,selectedDirection=gilReceive?"Receive":"Send",requestedTotal=gilTotal,requiresParty=gilPartnerRequiresParty,stage=gilTrade.Stage.ToString(),gilTrade.Status,gilTrade.Sending,gilTrade.Total,gilTrade.Done,gilTrade.Trades,partner=gilPartnerName,world=gilPartnerWorld,trace=gilTradeDiagnostics.ToArray()},
                 helperDiagnostics = new { character=Player.CharacterName, enabled=config.EnableFollowThem, armed=followSession.Armed, target=config.FollowThem.TargetName, questPermission=helperPermission.Quest, paused=HelperPaused, questPaused=helperPermission.QuestPaused, shareQuest=config.FollowThem.ShareQuestActions, stopOnMovement=config.FollowThem.StopOnMovement, followStatus, helperError, helperLastIssue, observedQuest=helperObservedQuest, followers=helperFollowers.Select(f=>new {f.Name,f.Status,f.Quest,f.QuestPaused,f.Control,f.Updated}).ToArray() },
                 eventExchangeDiagnostics=HelperExchangeDiagnostic(),
@@ -1308,6 +1311,7 @@ public sealed partial class Plugin : IDalamudPlugin
         Client.TerritoryChanged -= OnCofferTerritoryChanged;
         Pi.UiBuilder.Draw -= Draw;
         DisposeMarketSearch();
+        DisposeTradeItemShortcut();
         DisposeGilTrader();
         DisposeBidSearch();
         DisposeAdventures();

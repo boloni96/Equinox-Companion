@@ -1,0 +1,15 @@
+Ctrl + right-click items into an open trade
+
+Enable Settings → Optional tools → Ctrl + right-click items into trade. The setting is off by default and is available in both Goddess Blue and classic Dalamud.
+
+With the game's Trade window already open, hold Ctrl and right-click a tradable item in your normal inventory. Companion selects the item's native Trade action. Quantity prompts and final trade acceptance remain yours. Normal right-click and clicks outside a trade are unchanged. The shortcut is separate from automatic Gil Trader and pauses while a Gil Trader session is active.
+
+The shortcut checks the trade partner, inventory bag/slot, item quality and stack quantity again before selecting the action. Closed/replaced menus and stale clicks are cancelled. Menu entries inserted by other plugins are accounted for, and disabled or ambiguous Trade entries are left manual. Labels are resolved in the client's language in a one-time background task. Status is available in the setting's tooltip and diagnostic export.
+
+In-game checks still required:
+1. Enable the shortcut, open a trade and Ctrl + right-click one inexpensive tradable item.
+2. Repeat with a stack and check the normal quantity prompt; cancel it once.
+3. Check that normal right-click, a closed trade, untradable items and disabling the setting do not add anything.
+4. Review the offered items and accept or cancel manually.
+
+This release changes Companion only. No Journal, Worker or Android deployment is needed.
