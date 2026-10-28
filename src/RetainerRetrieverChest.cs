@@ -72,7 +72,7 @@ public sealed partial class Plugin
             if(!Player.IsLoaded||Player.CurrentWorld.RowId!=Player.HomeWorld.RowId||SellerAddon("FreeCompanyChest")==null||agent==null||!agent->IsAgentActive()||fc==null||fc->Id==0)throw new InvalidOperationException("Open your FC chest on your home world first.");
             EnsureChestMove();
             chestMode=mode;chestQuality=retrievalQuality;chestGoals=[];
-            if(mode==0||mode==3||mode==4){PreviewRetrieval(selected,false);if(retrievalPlan.Length==0&&(mode!=4||retrievalSendCategories.Count==0))throw new InvalidOperationException("Choose items in Retriever first.");chestGoals=retrievalPlan.ToDictionary(x=>x.ItemId,x=>checked(x.Quantity+(mode!=0||retrievalSubtract?0:RetrievalHeld(x.ItemId,chestQuality))));}
+            if(mode==0||mode==3||mode==4){PreviewRetrieval(selected,false);if(retrievalPlan.Length==0&&(mode!=4||retrievalSendCategories.Count==0))throw new InvalidOperationException("Choose items in Organizer first.");chestGoals=retrievalPlan.ToDictionary(x=>x.ItemId,x=>checked(x.Quantity+(mode!=0||retrievalSubtract?0:RetrievalHeld(x.ItemId,chestQuality))));}
             if(mode==4&&retrievalSendCategories.Count>0)foreach(var group in new uint[]{0,1,2,3,2001}.SelectMany(ReadChestContainer).Where(x=>retrievalSendCategories.Contains(OrganizeCategory(x.Item))&&RetainerRetrieval.AllowsQuality(x.Hq,chestQuality)).GroupBy(x=>x.Item))chestGoals.TryAdd(group.Key,group.Sum(x=>x.Quantity));
             var candidates=chestTab==0?new uint[]{20000,20001,20002,20003,20004,22001}:new[]{chestTab==6?22001u:19999u+(uint)chestTab};
             chestPages=candidates.Where(p=>(ChestAccess(p)==3||(mode==1||mode==4)&&ChestAccess(p)==2)&&(mode!=3||p!=22001&&p!=19999+chestDestination)).ToArray();
@@ -119,9 +119,9 @@ public sealed partial class Plugin
     {
         ImGui.BeginDisabled(chestRunning||organizeRunning||retrievalRun.Running);
         ImGui.SetNextItemWidth(160);ImGui.Combo("Tabs",ref chestTab,"All accessible tabs\0Tab 1\0Tab 2\0Tab 3\0Tab 4\0Tab 5\0Crystals\0");
-        if(ImGui.Button("Retrieve list"))StartChest(0);ImGui.SameLine();if(ImGui.Button("Selected"))StartChest(0,true);
-        if(ImGui.IsItemHovered())ImGui.SetTooltip("Uses checked list entries, the current material mode, quality and subtract-bags setting in Retriever.");
-        if(ImGui.Button("Send list to chest"))StartChest(4);
+        if(ImGui.Button("Withdraw list"))StartChest(0);ImGui.SameLine();if(ImGui.Button("Selected"))StartChest(0,true);
+        if(ImGui.IsItemHovered())ImGui.SetTooltip("Uses checked list entries, the current material mode, quality and subtract-bags setting in Organizer.");
+        if(ImGui.Button("Entrust list to chest"))StartChest(4);
         if(ImGui.Button("Deposit duplicates"))StartChest(1);ImGui.SameLine();if(ImGui.Button("Merge stacks"))StartChest(2);
         if(ImGui.IsItemHovered())ImGui.SetTooltip("Combines partial stacks within each selected chest tab. HQ and NQ stay separate.");
         ImGui.SetNextItemWidth(80);ImGui.InputInt("Keep in bags",ref chestKeep);chestKeep=Math.Clamp(chestKeep,0,RetainerRetrieval.MaxQuantity);
@@ -131,7 +131,7 @@ public sealed partial class Plugin
         if(ImGui.IsItemHovered())ImGui.SetTooltip("Moves all matching items from the selected source tabs to this destination. Uses item identities from the current material plan and the selected quality. Crystals remain in their dedicated inventory.");
         ImGui.EndDisabled();
         if(chestRunning&&ImGui.Button("Stop"))StopChest("Stopped by you. An already-sent transfer may still complete.");
-        if(ImGui.SmallButton("Open Retriever"))OpenRetriever();ImGui.SameLine();ImGui.Checkbox("Dock to chest",ref chestDock);
+        if(ImGui.SmallButton("Open Organizer"))OpenRetriever();ImGui.SameLine();ImGui.Checkbox("Dock to chest",ref chestDock);
         ImGui.TextWrapped(chestStatus);if(retrievalError.Length>0)ImGui.TextWrapped(retrievalError);
     }
 }

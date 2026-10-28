@@ -17,9 +17,9 @@ public sealed partial class Plugin
         RetrievalTry(()=>{
             if(organizeRunning||retrievalRun.Running||chestRunning||sellerRun.Running||gilTrade.Running||retainerGilRunning)throw new InvalidOperationException("Finish the current operation first.");
             var rm=RetainerManager.Instance();var active=rm==null?0:rm->LastSelectedRetainerId;
-            if(!Player.IsLoaded||rm==null||(SellerAddon("RetainerList")==null&&!SellerActive(active)))throw new InvalidOperationException("Open your retainer list or a retainer first.");
+            if(!Player.IsLoaded||rm==null||(SellerAddon("RetainerList")==null&&!RetrieverActive(active)))throw new InvalidOperationException("Open your retainer list or a retainer first.");
             if(SellerAddon("Bank")!=null)throw new InvalidOperationException("Close the existing gil window first.");
-            retainerGilTargets=SellerActive(active)?[active]:ReadSellerRetainers().Select(x=>x.Id).ToArray();
+            retainerGilTargets=RetrieverActive(active)?[active]:ReadSellerRetainers().Select(x=>x.Id).ToArray();
             if(retainerGilTargets.Length==0)throw new InvalidOperationException("No retainers available.");
             retainerWithdrawLabels??=Task.Run(()=>{var local=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Addon>();return DataManager.GetExcelSheet<Lumina.Excel.Sheets.Addon>(ClientLanguage.English).Where(x=>RetainerMenuPolicy.Matches(x.Text.ExtractText(),"Withdraw")).Select(x=>local.GetRow(x.RowId).Text.ExtractText()).ToHashSet();});
             retainerGilPort=new(this){Character=Player.ContentId,World=Player.CurrentWorld.RowId};retainerGilIndex=0;retainerGilTotal=0;retainerGilRunning=true;GilStage(0);
@@ -45,7 +45,7 @@ public sealed partial class Plugin
                     var label=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Addon>().GetRow(2379).Text.ExtractText();
                     for(var i=0;i<Math.Min(20,(int)menu->PopupMenu.PopupMenu.EntryCount);i++)if(RetainerMenuPolicy.Matches(TravelMenuText(menu->PopupMenu.PopupMenu.EntryNames[i].Value),label)){SelectTravelChoice((AtkUnitBase*)menu,i);retainerGilNext=now.AddSeconds(1);break;}break;
                 case 3:
-                    bank=SellerAddon("Bank");if(bank==null||!SellerActive(id)||retainerWithdrawLabels?.IsCompletedSuccessfully!=true)break;
+                    bank=SellerAddon("Bank");if(bank==null||!RetrieverActive(id)||retainerWithdrawLabels?.IsCompletedSuccessfully!=true)break;
                     var button=bank->GetComponentButtonById(35);if(button==null||button->ButtonTextNode==null)break;
                     var text=TravelMenuText(button->ButtonTextNode->NodeText.StringPtr);
                     if(!retainerWithdrawLabels.Result.Any(x=>RetainerMenuPolicy.Matches(text,x))){StopRetainerGil("Gil window is not in confirmed Withdraw mode. Nothing transferred.");return;}
@@ -54,7 +54,7 @@ public sealed partial class Plugin
                     if(retainerGilAmount==0){bank->Close(true);GilStage(5);break;}
                     var args=stackalloc AtkValue[2];args[0]=new(){Type=AtkValueType.Int,Int=3};args[1]=new(){Type=AtkValueType.UInt,UInt=retainerGilAmount};bank->FireCallback(2,args);GilStage(4);break;
                 case 4:
-                    bank=SellerAddon("Bank");if(bank==null||!SellerActive(id))break;
+                    bank=SellerAddon("Bank");if(bank==null||!RetrieverActive(id))break;
                     button=bank->GetComponentButtonById(35);var input=bank->GetComponentNodeById(32);if(button==null||input==null||!button->IsEnabled)break;
                     if(button->ButtonTextNode==null||!retainerWithdrawLabels!.Result.Any(x=>RetainerMenuPolicy.Matches(TravelMenuText(button->ButtonTextNode->NodeText.StringPtr),x)))throw new InvalidOperationException("Gil mode changed before confirmation.");
                     var numeric=input->GetAsAtkComponentNumericInput();if(numeric==null||numeric->Value!=retainerGilAmount)throw new InvalidOperationException("Gil amount changed before confirmation.");

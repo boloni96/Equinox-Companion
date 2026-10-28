@@ -79,7 +79,7 @@ public sealed partial class Plugin
         SettingsHelp("Held records are incomplete observations. They do not block valid records. Logs are kept locally; repeated issues are limited to once every five minutes.");
         if(optionalToolFailures.Count>0&&ImGui.CollapsingHeader("Optional tools need attention")){foreach(var issue in optionalToolFailures)ImGui.TextWrapped(issue.Key+": "+issue.Value);}
         if(config.Seller.Enabled&&ImGui.CollapsingHeader("Market & Seller"))DrawSellerDiagnostics();
-        if(config.EnableRetriever&&ImGui.CollapsingHeader("Retainer Retriever")){ImGui.TextWrapped(retrievalRun.Status);ImGui.TextWrapped(retrievalStockNotice);if(ImGui.Button("Open Retriever"))OpenRetriever();}
+        if(config.EnableRetriever&&ImGui.CollapsingHeader("Equinox Organizer")){ImGui.TextWrapped(retrievalRun.Status);ImGui.TextWrapped(retrievalStockNotice);if(ImGui.Button("Open Organizer"))OpenRetriever();}
         if(config.EnableGilTrader&&ImGui.CollapsingHeader("Gil Trader"))DrawGilTradeDiagnostics();
         if((config.EnableTradeItemShortcut||tradeItemShortcutTrace.Count>0)&&ImGui.CollapsingHeader("Item trade shortcut"))
         {
@@ -108,7 +108,7 @@ public sealed partial class Plugin
         if (ImGui.SmallButton(showSavedPairingKey ? "Hide key" : "Show key")) showSavedPairingKey = !showSavedPairingKey;
         ImGui.SameLine();
         if (ImGui.SmallButton("Copy key")) ImGui.SetClipboardText(config.PairingKey);
-        SettingsHelp("Share only with trusted people: this key reads the shared character/house list and allows sending game records to this Journal. It is not a view-only guest key.");
+        SettingsHelp("Share only with trusted people: this key reads the shared character/house list and allows entrusting game records to this Journal. It is not a view-only guest key.");
         ImGui.Separator();
     }
     private void DrawFeatureSettings()
@@ -116,7 +116,7 @@ public sealed partial class Plugin
         ImGui.TextUnformatted("Tools on this computer");
         MessageToggle("Ctrl + right-click items into trade", config.EnableTradeItemShortcut, SetTradeItemShortcutEnabled);
         SettingsHelp("With a trade already open, hold Ctrl and right-click an item in your inventory, Armoury Chest or any other container with an enabled Trade action. Stacks keep the game's quantity prompt. The item menu closes after adding the item or dismissing that prompt. You still review and accept the trade. Does nothing outside a trade or while automatic Gil Trader is running. This shortcut is independent of Enable Gil Trader.\n\n" + tradeItemShortcutStatus);
-        MessageToggle("Enable Retainer Retriever",config.EnableRetriever,value=>{config.EnableRetriever=value;if(!value){retrievalRun.Stop("Retriever disabled.");retrieverWindow.IsOpen=false;ForgetOptionalLauncher("Retainer Retriever");}SaveConfiguration();});
+        MessageToggle("Enable Equinox Organizer",config.EnableRetriever,value=>{config.EnableRetriever=value;if(!value){retrievalRun.Stop("Retriever disabled.");retrieverWindow.IsOpen=false;ForgetOptionalLauncher("Equinox Organizer");}SaveConfiguration();});
         if(ImGui.IsItemHovered())ImGui.SetTooltip("Optional finished-item and material retrieval. /eqretrieve opens saved lists and crafting/workshop selection.");
         MessageToggle("Enable Gil Trader", config.EnableGilTrader, SetGilTraderEnabled);
         SettingsHelp("Shows Gil Trader in the window menu and enables /eqtrade. Send a chosen gil total or receive from a selected nearby player. Disabling closes the window and stops the session; confirmed trades are kept.");

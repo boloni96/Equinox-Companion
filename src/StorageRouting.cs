@@ -10,6 +10,7 @@ public static class StorageRouting
     private static bool Crystal(uint item)=>item is >=2 and <=19;
     public static RoutingResult Build(StorageRoutingPlan plan,IReadOnlyDictionary<ulong,ChestStack[]> inventories,Func<uint,uint> category,bool bagsOnly=false,bool includeExistingBags=true)
     {
+        if(plan.Rules.Any(r=>r.To==StorageAutoRouting.AllRetainers)){if(bagsOnly)return StorageAutoRouting.Entrust(plan,inventories,category);plan=StorageAutoRouting.Resolve(plan,inventories,category);}
         var state=inventories.ToDictionary(x=>x.Key,x=>x.Value.ToList());
         if(!state.ContainsKey(Bags))throw new ArgumentException("Player inventory is required.");
         if(plan.Rules.Any(r=>r.To==0||r.To==AllSources||!state.ContainsKey(r.To)))throw new ArgumentException("A destination retainer is unavailable.");

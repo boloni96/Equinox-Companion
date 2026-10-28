@@ -34,7 +34,7 @@ public sealed partial class Plugin
         else if(name == "Where is it cheapest?") marketWindow.IsOpen=false;
         else if(name=="Equinox Market")equinoxMarketWindow.IsOpen=false;
         else if(name=="Equinox Seller")sellerWindow.IsOpen=false;
-        else if(name=="Retainer Retriever")retrieverWindow.IsOpen=false;
+        else if(name=="Equinox Organizer")retrieverWindow.IsOpen=false;
         else if(name=="Gil Trader")gilTraderWindow.IsOpen=false;
         else if(name == "Do I already have it?") itemSearchWindow.IsOpen=false;
         else if(name == "Fashion Report") fashionWindow.IsOpen=false;
@@ -63,8 +63,8 @@ public sealed partial class Plugin
         if(equinoxMarketWindow.IsOpen)minimizedLaunchers.Remove("Equinox Market");
         if(sellerWindow.IsOpen)minimizedLaunchers.Remove("Equinox Seller");
         if(gilTraderWindow.IsOpen)minimizedLaunchers.Remove("Gil Trader");
-        if(retrieverWindow.IsOpen)minimizedLaunchers.Remove("Retainer Retriever");
-        DrawLauncher("Retainer Retriever",13,"garden-art/assets/category-icons/retriever.png");
+        if(retrieverWindow.IsOpen)minimizedLaunchers.Remove("Equinox Organizer");
+        DrawLauncher("Equinox Organizer",13,"garden-art/assets/category-icons/retriever.png");
         DrawLauncher("Gil Trader",12,"garden-art/assets/category-icons/gil-trader.png");
         DrawLauncher("Equinox Market",10,"garden-art/assets/category-icons/market.png");
         DrawLauncher("Equinox Seller",11,"garden-art/assets/category-icons/seller.png");
@@ -96,7 +96,7 @@ public sealed partial class Plugin
                 if(pending=="Where is it cheapest?")marketWindow.IsOpen=true;
                 else if(pending=="Equinox Market")OpenEquinoxMarket();
                 else if(pending=="Equinox Seller")OpenEquinoxSeller();
-                else if(pending=="Retainer Retriever")OpenRetriever();
+                else if(pending=="Equinox Organizer")OpenRetriever();
                 else if(pending=="Gil Trader")OpenGilTrader();
                 else if(pending=="Do I already have it?")itemSearchWindow.IsOpen=true;
                 else if(pending=="Testing")OpenTesting();
