@@ -126,15 +126,7 @@ public sealed partial class Plugin
  // Presentation only: retain the original task, IDs and confirmation state for syncing.
  private static string AdventureTaskLabel(AdventureTask task)
  {
-  var suffixes=task.Rule?.Kind switch {
-   "event"=>new[]{" · Complete event activity"," · Activity completed"},
-   "reward"=>new[]{" · Collect reward"," · obtained"},
-   _=>Array.Empty<string>()
-  };
-  foreach(var suffix in suffixes)
-   if(task.Label.EndsWith(suffix,StringComparison.Ordinal)&&task.Label.Length>suffix.Length)
-    return task.Label[..^suffix.Length];
-  return task.Label;
+  return AdventureTaskPresentation.Split(task.Label,task.Rule?.Kind).Label;
  }
  private static string AdventureTaskHint(AdventureTask task)=>task.Rule?.Kind switch {
   "event"=>"Complete event activity.",
@@ -153,7 +145,7 @@ public sealed partial class Plugin
      ImGui.TextWrapped(label);
      var gardenLink=AdventureGardenNavigation.TaskTarget(task,stop);
      if(ImGui.IsItemClicked()){if(gardenLink is {} clicked)adventureOpenBed=clicked;else ImGui.SetClipboardText(label);}
-     if(hover||ImGui.IsItemHovered()){ImGui.BeginTooltip();ImGui.PushTextWrapPos(ImGui.GetFontSize()*32);ImGui.TextUnformatted((gardenLink is {} link?link.Bed>0?"Click to open this bed’s batch.\n":"Click to open this batch.\n":"Click to copy this label.\n")+(AdventureTaskHint(task) is {Length:>0} hint?hint+"\n":"")+(task.Status.Length>0?DisplayTime.InText(task.Status):task.Done?"Completion recorded in the Journal":"Waiting for completion")+(task.ServerConfirmed?"\nConfirmed automatically from game records. This check cannot be removed manually.":!task.CanCheck?"\nThis task updates automatically.":"\nManual completion can be changed here."));ImGui.PopTextWrapPos();ImGui.EndTooltip();}
+     if(hover||ImGui.IsItemHovered()){ImGui.BeginTooltip();ImGui.PushTextWrapPos(ImGui.GetFontSize()*32);ImGui.TextUnformatted((gardenLink is {} link?link.Bed>0?"Click to open this bed’s batch.\n":"Click to open this batch.\n":"Click to copy this label.\n")+(AdventureTaskHint(task) is {Length:>0} hint?hint+"\n":"")+(AdventureTaskPresentation.Split(task.Label,task.Rule?.Kind).Details is {Length:>0} details?details+"\n":"")+(task.Status.Length>0?DisplayTime.InText(task.Status):task.Done?"Completion recorded in the Journal":"Waiting for completion")+(task.ServerConfirmed?"\nConfirmed automatically from game records. This check cannot be removed manually.":!task.CanCheck?"\nThis task updates automatically.":"\nManual completion can be changed here."));ImGui.PopTextWrapPos();ImGui.EndTooltip();}
      if(!check&&(house is not null||AdventurePolicy.IsFashion(task))){
       var right=ImGui.GetItemRectMax().X+ImGui.GetStyle().ItemSpacing.X;
       if(right+ImGui.CalcTextSize("Go").X+ImGui.GetStyle().FramePadding.X*2<ImGui.GetCursorScreenPos().X+ImGui.GetContentRegionAvail().X)ImGui.SameLine();
