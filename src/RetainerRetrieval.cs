@@ -4,7 +4,7 @@ namespace EquinoxCompanion;
 public enum RetrievalQuality { Any, NqOnly, HqOnly }
 public enum RetrievalMode { FinalItems, AllMaterials, CompletedItems, DirectIngredients }
 public sealed record RetrievalEntry(uint ItemId, string Name, int Quantity, uint RecipeId = 0, bool ReadyMaterial = false);
-public sealed record RetrievalPreset(string Name, RetrievalEntry[] Items, int Multiplier = 1, bool IncludesSubcrafts = false, bool ArtisanPreset = false, RetrievalMode Mode = RetrievalMode.CompletedItems, Dictionary<uint,uint>? RecipeChoices = null, RetrievalQuality Quality = RetrievalQuality.Any);
+public sealed record RetrievalPreset(string Name, RetrievalEntry[] Items, int Multiplier = 1, bool IncludesSubcrafts = false, bool ArtisanPreset = false, RetrievalMode Mode = RetrievalMode.CompletedItems, Dictionary<uint,uint>? RecipeChoices = null, RetrievalQuality Quality = RetrievalQuality.Any, ulong DestinationRetainer = 0, uint[]? SendCategories = null);
 internal sealed record RetrievalRecipe(uint Id,uint ItemId,int Yield,RetrievalEntry[] Ingredients,string Job);
 internal sealed record RetrievalPreview(uint ItemId,string Name,int Required,int Held,int? Available)
 {

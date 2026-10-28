@@ -66,9 +66,10 @@ public sealed partial class Plugin
             if(!Player.IsLoaded||Player.CurrentWorld.RowId!=Player.HomeWorld.RowId||SellerAddon("FreeCompanyChest")==null||agent==null||!agent->IsAgentActive()||fc==null||fc->Id==0)throw new InvalidOperationException("Open your FC chest on your home world first.");
             EnsureChestMove();
             chestMode=mode;chestQuality=retrievalQuality;chestGoals=[];
-            if(mode==0||mode==3){PreviewRetrieval(selected,false);if(retrievalPlan.Length==0)throw new InvalidOperationException("Choose items in Retriever first.");chestGoals=retrievalPlan.ToDictionary(x=>x.ItemId,x=>checked(x.Quantity+(retrievalSubtract?0:RetrievalHeld(x.ItemId,chestQuality))));}
+            if(mode==0||mode==3||mode==4){PreviewRetrieval(selected,false);if(retrievalPlan.Length==0&&(mode!=4||retrievalSendCategories.Count==0))throw new InvalidOperationException("Choose items in Retriever first.");chestGoals=retrievalPlan.ToDictionary(x=>x.ItemId,x=>checked(x.Quantity+(mode!=0||retrievalSubtract?0:RetrievalHeld(x.ItemId,chestQuality))));}
+            if(mode==4&&retrievalSendCategories.Count>0)foreach(var group in new uint[]{0,1,2,3,2001}.SelectMany(ReadChestContainer).Where(x=>retrievalSendCategories.Contains(OrganizeCategory(x.Item))&&RetainerRetrieval.AllowsQuality(x.Hq,chestQuality)).GroupBy(x=>x.Item))chestGoals.TryAdd(group.Key,group.Sum(x=>x.Quantity));
             var candidates=chestTab==0?new uint[]{20000,20001,20002,20003,20004,22001}:new[]{chestTab==6?22001u:19999u+(uint)chestTab};
-            chestPages=candidates.Where(p=>(ChestAccess(p)==3||mode==1&&ChestAccess(p)==2)&&(mode!=3||p!=22001&&p!=19999+chestDestination)).ToArray();
+            chestPages=candidates.Where(p=>(ChestAccess(p)==3||(mode==1||mode==4)&&ChestAccess(p)==2)&&(mode!=3||p!=22001&&p!=19999+chestDestination)).ToArray();
             if(mode==3&&ChestAccess((uint)(19999+chestDestination))<2)throw new InvalidOperationException("Destination tab does not allow deposits.");
             if(chestPages.Length==0)throw new InvalidOperationException("No selected chest tabs permit this action.");
             chestOwner=Player.ContentId;chestWorld=Player.CurrentWorld.RowId;chestCompany=fc->Id;chestPageIndex=0;chestMoves=0;chestUnmoved=0;chestPending=null;
@@ -87,7 +88,7 @@ public sealed partial class Plugin
             if(now<chestNext)return;chestNext=now.AddMilliseconds(250);
             var page=chestPages[chestPageIndex];var access=ChestAccess(page);
             if(chestMode==3&&ChestAccess((uint)(19999+chestDestination))<2){StopChest("Stopped: destination access changed.");return;}
-            if(access!=3&&!(chestMode==1&&access==2)){StopChest("Stopped: chest permissions changed.");return;}
+            if(access!=3&&!((chestMode==1||chestMode==4)&&access==2)){StopChest("Stopped: chest permissions changed.");return;}
             var manager=InventoryManager.Instance();if(manager==null)throw new InvalidOperationException("Inventory unavailable.");
             foreach(var op in manager->PendingOperations)if(!op.IsEmpty){if(now>chestDeadline)StopChest("Stopped: inventory transaction timed out. Check the chest before retrying.");return;}
             var destination=chestMode==3?ReadChestContainer((uint)(19999+chestDestination)):Array.Empty<ChestStack>();
@@ -95,13 +96,13 @@ public sealed partial class Plugin
             if(chestPending is {} pending){
                 var all=chest.Concat(bags).Concat(destination).ToArray();var src=all.FirstOrDefault(s=>s.Container==pending.Source.Container&&s.Slot==pending.Source.Slot);var dst=all.FirstOrDefault(s=>s.Container==pending.Destination.Container&&s.Slot==pending.Destination.Slot);
                 if(src==null||dst==null||!ChestTransferPlanner.Confirmed(pending,src,dst)){if(now>chestDeadline)StopChest("Stopped: transfer was not confirmed. No automatic retry.");return;}
-                chestPending=null;chestMoves++;chestStatus=$"{chestMoves} transfers confirmed";
+                if(chestMode==4)chestGoals[pending.Source.Item]-=pending.Quantity;chestPending=null;chestMoves++;chestStatus=$"{chestMoves} transfers confirmed";
             }
-            var next=chestMode switch{0=>ChestTransferPlanner.Withdraw(chest,bags,chestGoals,chestQuality),1=>ChestTransferPlanner.Duplicates(chest,bags,chestKeep),3=>ChestTransferPlanner.Transfer(chest,destination,chestGoals.Keys.ToHashSet(),chestQuality),_=>ChestTransferPlanner.Merge(chest)};
+            var next=chestMode switch{0=>ChestTransferPlanner.Withdraw(chest,bags,chestGoals,chestQuality),1=>ChestTransferPlanner.Duplicates(chest,bags,chestKeep),3=>ChestTransferPlanner.Transfer(chest,destination,chestGoals.Keys.ToHashSet(),chestQuality),4=>ChestTransferPlanner.Send(bags,chest,chestGoals,chestQuality),_=>ChestTransferPlanner.Merge(chest)};
             if(next==null){
                 if(chestMode==3)chestUnmoved+=chest.Where(x=>chestGoals.ContainsKey(x.Item)&&RetainerRetrieval.AllowsQuality(x.Hq,chestQuality)).Sum(x=>x.Quantity);
                 if(++chestPageIndex<chestPages.Length){BeginChestPage(now);return;}
-                var missing=chestMode==0?chestGoals.Sum(x=>Math.Max(0,x.Value-RetrievalHeld(x.Key,chestQuality))):chestUnmoved;
+                var missing=chestMode==0?chestGoals.Sum(x=>Math.Max(0,x.Value-RetrievalHeld(x.Key,chestQuality))):chestMode==4?chestGoals.Values.Sum():chestUnmoved;
                 StopChest($"{chestMoves} transfers confirmed"+(missing>0?$" · {missing} items remain (stock or destination capacity unavailable).":" · Finished."));return;
             }
             chestPending=next;chestDeadline=now.AddSeconds(12);
@@ -114,6 +115,7 @@ public sealed partial class Plugin
         ImGui.SetNextItemWidth(160);ImGui.Combo("Tabs",ref chestTab,"All accessible tabs\0Tab 1\0Tab 2\0Tab 3\0Tab 4\0Tab 5\0Crystals\0");
         if(ImGui.Button("Retrieve list"))StartChest(0);ImGui.SameLine();if(ImGui.Button("Selected"))StartChest(0,true);
         if(ImGui.IsItemHovered())ImGui.SetTooltip("Uses checked list entries, the current material mode, quality and subtract-bags setting in Retriever.");
+        if(ImGui.Button("Send list to chest"))StartChest(4);
         if(ImGui.Button("Deposit duplicates"))StartChest(1);ImGui.SameLine();if(ImGui.Button("Merge stacks"))StartChest(2);
         if(ImGui.IsItemHovered())ImGui.SetTooltip("Combines partial stacks within each selected chest tab. HQ and NQ stay separate.");
         ImGui.SetNextItemWidth(80);ImGui.InputInt("Keep in bags",ref chestKeep);chestKeep=Math.Clamp(chestKeep,0,RetainerRetrieval.MaxQuantity);

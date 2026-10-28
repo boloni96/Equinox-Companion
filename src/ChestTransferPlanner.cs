@@ -34,6 +34,12 @@ public static class ChestTransferPlanner
             if(Move(s,Destination(s,destination),s.Quantity) is {} move)return move;
         return null;
     }
+    public static ChestMove? Send(IReadOnlyList<ChestStack> bags,IReadOnlyList<ChestStack> chest,IReadOnlyDictionary<uint,int> amounts,RetrievalQuality quality)
+    {
+        foreach(var s in bags.Where(x=>x.CanDeposit&&x.Item>0&&RetainerRetrieval.AllowsQuality(x.Hq,quality)))
+            if(Move(s,Destination(s,chest),amounts.GetValueOrDefault(s.Item)) is {} move)return move;
+        return null;
+    }
     public static ChestMove? Merge(IReadOnlyList<ChestStack> chest)
     {
         // Only move later stacks into earlier stacks: every move reduces fragmentation.
