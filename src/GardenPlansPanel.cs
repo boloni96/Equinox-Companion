@@ -101,11 +101,12 @@ public sealed partial class Plugin
     private SharedGardenPlan[] BuildGardenPlanSources()
     {
         var result=GardenPlanSourceBuilder.Build(config.SharedRoster);
+        var reads=DiscoveryReads();var edits=reads.Kind("garden.plan");
         var projected=result.Select(p=>{var revision=config.SharedRoster?.GardenPlanRevisions?.FirstOrDefault(r=>r.HouseId==p.HouseId&&r.Batch==p.Batch);
             if(p.At==DateTimeOffset.MinValue&&revision is not null)p=p with {At=revision.At};
             var assignedAt=config.SharedRoster?.GardenBatchOrders?.FirstOrDefault(o=>o.HouseId==p.HouseId)?.At;
-            return GardenPlanEditing.Apply(p,config.Discoveries.Where(e=>assignedAt is null||e.At>assignedAt));}).ToArray();
-        return GardenBatchOrdering.Apply(projected,config.SharedRoster?.GardenBatchOrders??[],config.Discoveries);
+            return GardenPlanEditing.Apply(p,edits.Where(e=>assignedAt is null||e.At>assignedAt));}).ToArray();
+        return GardenBatchOrdering.Apply(projected,config.SharedRoster?.GardenBatchOrders??[],reads.Kind("garden.batch-order"));
     }
     private SharedGardenPlan? gardenActionsPlan;
     private readonly GardenSelectionFollow gardenSelectionFollow=new();

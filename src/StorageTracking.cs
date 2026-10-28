@@ -12,13 +12,14 @@ public sealed partial class Plugin
     private DateTimeOffset storageRetainerReady, dresserReady;
     private Dictionary<uint,uint>? cabinetItems;
     private bool collectingStorage, storageChanged;
-    private void ObserveStorage(DateTimeOffset now)
+    private readonly StorageCaptureGate storageCaptureGate=new();
+    private void ObserveStorage(DateTimeOffset now,bool saddlebagsOnly=false)
     {
         collectingStorage=true;storageChanged=false;
-        try { ObserveStorageCore(now); }
+        try { ObserveStorageCore(now,saddlebagsOnly); }
         finally { collectingStorage=false;if(storageChanged)SaveConfiguration(); }
     }
-    private unsafe void ObserveStorageCore(DateTimeOffset now)
+    private unsafe void ObserveStorageCore(DateTimeOffset now,bool saddlebagsOnly)
     {
         if (!config.SyncCollections || !Player.IsLoaded || now < collectionReadyAt) return;
         var actor = ReadActor();
@@ -28,7 +29,7 @@ public sealed partial class Plugin
         void Save(string key, string name, IEnumerable<uint> items, StorageStack[]? stacks = null)
         {
             var ids = items.Where(i=>i>0 && i<1000000).Distinct().Order().ToArray();
-            var last=config.Discoveries.LastOrDefault(e=>e.Kind=="storage.observed"&&e.Actor.ContentId==actor.ContentId&&e.Storage?.Key==key);
+            var last=DiscoveryReads().Last("storage.observed",actor.ContentId,storage:key);
             var details = new StorageDetails(key, name, ids, stacks);
             // Compare unchanged containers without allocating two JSON documents.
             if(last?.Storage is {} previous && last.Actor == actor && now-last.At < TimeSpan.FromMinutes(30) && StorageObservationEquality.Same(previous, details)) return;
@@ -46,16 +47,23 @@ public sealed partial class Plugin
             }
             return stacks.GroupBy(x=>(x.ItemId,x.Hq)).Select(g=>new StorageStack(g.Key.ItemId,g.Sum(x=>x.Quantity),g.Key.Hq,g.First().Name,g.SelectMany(x=>x.Positions??[]).OrderBy(x=>x.Slot).ToArray())).OrderBy(x=>x.ItemId).ThenBy(x=>x.Hq).ToArray();
         }
+        Span<StorageSlotValue> slotValues=stackalloc StorageSlotValue[200];
         foreach (var type in Enum.GetValues<InventoryType>())
         {
             var id=(uint)type;
+            if(saddlebagsOnly&&id is not (4000 or 4001 or 4100 or 4101))continue;
             if (!(id<=3 || id==1000 || id==2001 || id is >=3200 and <=3500 || id is >=4000 and <=4101)) continue;
             var container=manager->GetInventoryContainer(type);
             if (container==null || !container->IsLoaded || container->Items==null || container->Size is <=0 or >200) continue;
+            for(var i=0;i<container->Size;i++){var item=container->Items[i];slotValues[i]=new(item.ItemId,item.Quantity,(item.Flags&InventoryItem.ItemFlags.HighQuality)!=0);}
+            var slots=slotValues[..container->Size];var bagKey="bag:"+id;
+            if(!storageCaptureGate.Needs(actor,bagKey,slots,now))continue;
             var items=new List<uint>();
             for(var i=0;i<container->Size;i++)if(container->Items[i].Quantity>0)items.Add(container->Items[i].ItemId % 1000000);
             Save("bag:"+id, id<=3?$"Inventory {id+1}":id==1000?"Equipped":id==2001?"Crystals":id>=4000?$"{(id>=4100?"Premium chocobo saddlebag":"Chocobo saddlebag")} {id%100+1}":"Armoury Chest · "+type.ToString().Replace("Armory", "").Replace("Feets","Feet").Replace("OffHand","Off hand").Replace("MainHand","Main hand").Replace("SoulCrystal","Soul crystal"),items,ReadStacks(container));
+            storageCaptureGate.Remember(actor,bagKey,slots,now);
         }
+        if(saddlebagsOnly)return;
         var housing=HousingManager.Instance();
         var agents=AgentModule.Instance();
         var editor=agents==null?null:agents->GetAgentByInternalId(AgentId.HousingEditContainer);

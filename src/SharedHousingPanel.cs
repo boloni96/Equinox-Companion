@@ -42,7 +42,7 @@ public sealed partial class Plugin
             }
             rosterTask = null;
         }
-        if ((!visible && !(bidWindow?.IsOpen??false) && !(adventureWindow?.IsOpen??false) && !FastGardenSync && !config.RefreshSharedInBackground && !RegistrationNeedsRoster) || !config.SyncEnabled || config.PairingKey.Length != 64 || rosterTask is not null || now < nextRosterRead) return;
+        if ((!visible && !(itemSearchWindow?.IsOpen??false) && !(bidWindow?.IsOpen??false) && !(adventureWindow?.IsOpen??false) && !FastGardenSync && !config.RefreshSharedInBackground && !RegistrationNeedsRoster) || !config.SyncEnabled || config.PairingKey.Length != 64 || rosterTask is not null || now < nextRosterRead) return;
         nextRosterRead = now.AddSeconds(FastGardenSync ? 2 : 15);
         rosterTaskKey = config.PairingKey;
         rosterTask = sync.ReadRoster(rosterTaskKey, config.SharedRoster?.Revision);
@@ -51,7 +51,7 @@ public sealed partial class Plugin
     {
         var incompatible=unsupportedSyncRecords>0;
         var attention=rosterReadFailed||faulted||syncFailures>0||configurationError.Length>0||incompatible||SyncValidation.ActionableHeld(heldSyncRecords,historicalHeldSyncRecords)>0;
-        var label=!config.SyncEnabled?"Sync off":config.PairingKey.Length!=64?"Not paired":attention?"Needs attention":syncTask is not null||readySyncRecords>0?"Saving…":rosterReceivedAt is null?"Checking shared data…":"Sync active";
+        var label=!config.SyncEnabled?"Sync off":config.PairingKey.Length!=64?"Not paired":attention?"Needs attention":syncTask is not null||uploadPreparation is not null||readySyncRecords>0?"Saving…":rosterReceivedAt is null?"Checking shared data…":"Sync active";
         ImGui.TextColored(attention?Orange:Grey,label);
         if(ImGui.IsItemHovered()){
             ImGui.BeginTooltip();ImGui.PushTextWrapPos(ImGui.GetFontSize()*32);

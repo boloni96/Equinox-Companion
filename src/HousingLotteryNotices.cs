@@ -4,7 +4,7 @@ public static class HousingLotteryNotices
 {
     public static IEnumerable<SyncEvent> WithShared(IEnumerable<SyncEvent> local,SharedRoster? roster)
     {
-        var all=local.ToList();
+        var all=local.Where(e=>e.Kind is "housing.lottery" or "housing.lottery-result" or "house.discovered").ToList();
         foreach(var c in roster?.People.SelectMany(p=>p.Characters)??[])
         foreach(var b in c.HousingBids??[])
         {
