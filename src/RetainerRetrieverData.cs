@@ -29,7 +29,7 @@ public sealed partial class Plugin
             {
                 if(!File.Exists(file)){if(file==path)warnings.Add("Artisan.json not found beside Companion configuration.");continue;}
                 try{if(new FileInfo(file).Length>32*1024*1024)throw new IOException("File exceeds 32 MB.");
-                    var read=RetainerRetrieval.ReadArtisan(File.ReadAllText(file),recipes,names);presets.AddRange(read.Lists);warnings.AddRange(read.Warnings);}
+                    var read=RetainerRetrieval.ReadArtisan(File.ReadAllText(file),recipes,names);presets.AddRange(read.Lists.Select(p=>p with{ArtisanPreset=file==premadePath}));warnings.AddRange(read.Warnings);}
                 catch(Exception e){warnings.Add(Path.GetFileName(file)+": "+e.Message);}
             }
             return new RetainerRetrieval.ArtisanLists(presets.ToArray(),warnings.ToArray());

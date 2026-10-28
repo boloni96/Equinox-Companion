@@ -1,0 +1,35 @@
+Equinox Companion 0.5.1.266 — clear list intent and Artisan handoff
+
+Lists & import splits My lists (expanded) and Artisan presets (collapsed), based
+on the source file, not the list title. Both keep Load, Add and contents on hover.
+
+Retrieve modes now say Listed items / turn-ins and Ingredients to craft them.
+The first retrieves exactly the requested outputs, including workshop turn-ins
+across every phase. The second expands recipes to ingredients; subcrafts and
+outputs appear separately in crafting order and are not additional withdrawals.
+
+List options > List already includes subcrafts is explicit opt-in for an expanded
+list containing outputs and intermediate recipes together. Quantities consumed
+by other listed recipes are removed from the final-output request; surplus stays.
+Leave it off for workshop turn-ins or independent requested items. Intent cannot
+be inferred reliably from a title or from overlapping recipe ingredients alone.
+The setting persists in presets and exported presets. The list name never applies
+a multiplier: inspect actual quantities and the explicit multiplier.
+
+Prepare Artisan list opens a review of recipe IDs, craft counts/yields, subcraft
+order and raw requirements. Choose all outputs or only outputs missing from bags
+and recorded retainers; missing-only is blocked when retainer stock is unknown.
+Intermediate stock is not used to optimise the raw-material plan. NQ/HQ combine.
+Copy Artisan list, or Copy + open Artisan, then use Artisan's Lists > Import List
+From Clipboard (Artisan Export). There is no public create-list IPC in the checked
+Artisan interface; this uses its supported UI import, does not write Artisan's
+configuration and never starts crafting. Review Artisan settings after importing.
+
+More vertical space is assigned to the item breakdown. Less-used list options
+collapse, and Artisan preparation shares the preview action row.
+
+Validation: zero-warning/error build; gate regression tests including nine new
+cases for exact turn-ins, mixed-list subcraft consumption, no double counting,
+surplus, multipliers, recipe ordering, export recipe quantities and preset flags.
+In-game acceptance is still needed for the UI and Artisan import.
+No Journal deployment required; existing presets remain intact.
