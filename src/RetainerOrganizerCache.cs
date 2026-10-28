@@ -8,9 +8,9 @@ public sealed partial class Plugin
     private readonly HashSet<(uint,int)> organizerProtectedBagSlots=[];
     private int OrganizerStackLimit(uint item)=>(int)(DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>().GetRowOrDefault(item)?.StackSize??1);
     private static ChestStack[] EmptyOrganizerRetainer()=>Enumerable.Range(0,175).Select(i=>new ChestStack((uint)(10000+i/25),i%25,0,0,false,0)).Concat(Enumerable.Range(0,18).Select(i=>new ChestStack(12001,i,(uint)(i+2),0,false,9999))).ToArray();
-    private unsafe Dictionary<ulong,ChestStack[]> RecordedOrganizerInventories(ulong[] owners)
+    private unsafe Dictionary<ulong,ChestStack[]> RecordedOrganizerInventories(ulong[] owners,bool refreshStock=true)
     {
-        RefreshRetrievalStock();var result=new Dictionary<ulong,ChestStack[]>();
+        if(refreshStock)RefreshRetrievalStock();var result=new Dictionary<ulong,ChestStack[]>();
         var manager=RetainerManager.Instance();if(manager==null||!manager->IsReady)return result;
         var counts=new Dictionary<ulong,int>();for(uint i=0;i<manager->GetRetainerCount();i++){var retainer=manager->GetRetainerBySortedIndex(i);if(retainer!=null)counts[retainer->RetainerId]=retainer->ItemCount;}
         var observations=config.Discoveries.Where(e=>e.Actor.ContentId==Player.ContentId.ToString()&&e.Storage?.Key.StartsWith("retainer:")==true).GroupBy(e=>e.Storage!.Key).ToDictionary(g=>g.Key,g=>g.MaxBy(x=>x.At)!);

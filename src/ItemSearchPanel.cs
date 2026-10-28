@@ -16,7 +16,7 @@ public sealed partial class Plugin
     private SharedRoster? itemSearchRoster;
     private int itemSearchDiscoveryCount=-1,itemSearchLocationCount,itemLocationFilter,itemQualityFilter,itemFreshnessFilter;
     private bool itemSearchCommandRegistered,itemSelectCurrentPerson,itemCurrentOnly;
-    private readonly List<(SharedItemLocation Location,StorageStack Stack)> itemSearchMatches=[];
+    private (SharedItemLocation Location,StorageStack Stack)[] itemSearchMatches=[];
     private static readonly string[] ItemLocationNames=["All locations","Inventory","Equipped","Armoury","Saddlebags","Retainers","FC chest","Armoire","Dresser","Housing placed","Housing storeroom"];
     private sealed class ItemSearchWindow:Window
     {
@@ -83,31 +83,6 @@ public sealed partial class Plugin
         if(!int.TryParse(key.Split(':').Last(),out var id))return 0;
         return id<=3||id==2001?1:id==1000?2:id>=4000?4:3;
     }
-    private void BuildItemSearch()
-    {
-        var query=itemSearchQuery.Trim();
-        if(itemSearchBuiltQuery==query&&itemSearchRoster==config.SharedRoster&&itemSearchDiscoveryCount==config.Discoveries.Count)return;
-        itemSearchBuiltQuery=query;itemSearchRoster=config.SharedRoster;itemSearchDiscoveryCount=config.Discoveries.Count;itemSearchMatches.Clear();
-        var chars=config.SharedRoster?.People.SelectMany(p=>p.Characters).ToArray()??[];
-        var locations=(config.SharedRoster?.ItemLocations??[]).ToDictionary(x=>(x.OwnerId,x.Key));
-        foreach(var e in config.Discoveries.Where(e=>e.Kind=="storage.observed"&&e.Storage is not null))
-        {
-            var c=chars.FirstOrDefault(c=>c.ContentId==e.Actor.ContentId);if(c is null)continue;
-            var s=e.Storage!;var fc=s.Key.StartsWith("fc:")?s.Key.Split(':')[1]:null;
-            if(fc is not null&&(c.FcMember==false||c.FcId!=fc))continue;
-            var housing=s.Key.StartsWith("house:");var owner=housing?"house:"+s.Key.Split(':')[1]:fc is null?c.Id:"fc:"+fc;var key=(owner,s.Key);
-            if(locations.TryGetValue(key,out var old)&&old.At>=e.At)continue;
-            locations[key]=new(owner,housing?"Housing · shared observation":fc is null?c.Name+" @ "+c.World:"Free Company",s.Key,s.Name,e.At,s.Items,s.Stacks,housing?(old?.CharacterIds??[]).Append(c.Id).Concat(chars.Where(x=>x.Houses.Any(h=>h.GameHouseId==s.Key.Split(':')[1])).Select(x=>x.Id)).Distinct().ToArray():null);
-        }
-        itemSearchLocationCount=locations.Count;if(query.Length==0)return;
-        foreach(var location in locations.Values)
-        foreach(var stack in location.Stacks??location.Items.Select(id=>new StorageStack(id,0,false,SearchItemName(id))))
-        {
-            var name=SearchItemName(stack.ItemId);
-            if(itemExactId is {} exact?stack.ItemId!=exact:stack.ItemId.ToString()!=query&&!name.Contains(query,StringComparison.OrdinalIgnoreCase)&&!stack.Name.Contains(query,StringComparison.OrdinalIgnoreCase))continue;
-            itemSearchMatches.Add((location,stack with{Name=name}));
-        }
-    }
     private void DrawItemSearch()
     {
         var activeFilters=(itemLocationFilter>0?1:0)+(itemQualityFilter>0?1:0)+(itemFreshnessFilter>0?1:0)+(itemWorld.Length>0?1:0);
@@ -125,10 +100,13 @@ public sealed partial class Plugin
             if(ImGui.Button("Clear filters")){if(itemCurrentOnly)itemRestorePerson=itemPreviousPerson;itemCurrentOnly=false;itemWorld=itemAccount=itemCharacter="";itemLocationFilter=itemQualityFilter=itemFreshnessFilter=0;}
         }
         ImGui.SetNextItemWidth(Math.Max(200,ImGui.GetContentRegionAvail().X-35));
-        if(ImGui.InputTextWithHint("###item-search","Item name",ref itemSearchQuery,120)){itemExactId=null;itemSearchDiscoveryCount=-1;}
-        ImGui.SameLine();if(ImGui.Button("X##ClearOwnedSearch")){itemSearchQuery="";itemExactId=null;itemSearchDiscoveryCount=-1;}
+        if(ImGui.InputTextWithHint("###item-search","Item name",ref itemSearchQuery,120)){itemExactId=null;}
+        ImGui.SameLine();if(ImGui.Button("X##ClearOwnedSearch")){itemSearchQuery="";itemExactId=null;}
         if(ImGui.IsItemHovered())ImGui.SetTooltip("Clear search text and results");
         BuildItemSearch();
+        if(ownedItemSearchStatus.Length>0)ImGui.TextDisabled(ownedItemSearchStatus);
+        else if(ownedItemIndexTask!=null||ownedItemNamesTask!=null)ImGui.TextDisabled("Updating inventory index…");
+        else if(ownedItemQueryTask!=null||itemSearchQuery.Trim()!=itemSearchBuiltQuery)ImGui.TextDisabled("Searching…");
         var loggedCharacter=config.SharedRoster?.People.SelectMany(p=>p.Characters).FirstOrDefault(c=>Player.IsLoaded&&c.ContentId==Player.ContentId.ToString());
         ImGui.BeginDisabled(loggedCharacter is null);if(ImGui.Checkbox("Current character only###current-character-search",ref itemCurrentOnly)){if(itemCurrentOnly)itemPreviousPerson=itemActivePerson;else itemRestorePerson=itemPreviousPerson;}ImGui.EndDisabled();
         if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))ImGui.SetTooltip(loggedCharacter is null?"Log into a paired character to use this filter.":"Logged in: "+loggedCharacter.Name+" @ "+loggedCharacter.World);
@@ -164,12 +142,17 @@ public sealed partial class Plugin
             itemActivePerson=person.Id;if(itemRestorePerson==person.Id)itemRestorePerson="";
             ImGui.PushID(person.Id);
             var chars=person.Characters.Where(c=>itemCurrentOnly?c.Id==loggedCharacter?.Id:(itemAccount==""||string.Equals(c.Account,itemAccount,StringComparison.OrdinalIgnoreCase))&&(itemCharacter==""||c.Id==itemCharacter)).Where(c=>itemWorld==""||c.World==itemWorld).ToArray();
-            var rows=itemSearchMatches.Where(x=>(itemLocationFilter==0||ItemLocationKind(x.Location.Key)==itemLocationFilter)&&(itemQualityFilter==0||(x.Location.Stacks is null?3:x.Stack.Hq?2:1)==itemQualityFilter)&&(itemFreshnessFilter==0||DateTimeOffset.UtcNow-x.Location.At<=TimeSpan.FromDays(new[]{0,1,7,30}[itemFreshnessFilter]))).ToArray();
             var scopeOwners=chars.Select(c=>c.Id).Concat(chars.Where(c=>c.FcMember!=false).Select(c=>"fc:"+c.FcId)).ToHashSet();
-            var housingRows=rows.Where(x=>x.Location.Key.StartsWith("house:")&&(x.Location.CharacterIds??[]).Intersect(chars.Select(c=>c.Id)).Any()).ToArray();
-            var count=rows.Count(x=>scopeOwners.Contains(x.Location.OwnerId))+housingRows.Length;
-            ImGui.TextDisabled($"{count} matching records · {chars.Count(c=>rows.Any(x=>x.Location.OwnerId==c.Id))} characters");
+            var charIds=chars.Select(c=>c.Id).ToHashSet();
+            var stamp=$"{person.Id}/{itemAccount}/{itemCharacter}/{itemWorld}/{itemCurrentOnly}/{loggedCharacter?.Id}/{itemLocationFilter}/{itemQualityFilter}/{itemFreshnessFilter}/{config.SharedRoster?.Revision}";
+            var allRows=itemSearchFiltered.Get(itemSearchMatches,stamp,Environment.TickCount64,()=>itemSearchMatches.Where(x=>(scopeOwners.Contains(x.Location.OwnerId)||(x.Location.CharacterIds??[]).Any(charIds.Contains))&&(itemLocationFilter==0||ItemLocationKind(x.Location.Key)==itemLocationFilter)&&(itemQualityFilter==0||(x.Location.Stacks is null?3:x.Stack.Hq?2:1)==itemQualityFilter)&&(itemFreshnessFilter==0||DateTimeOffset.UtcNow-x.Location.At<=TimeSpan.FromDays(new[]{0,1,7,30}[itemFreshnessFilter]))).ToArray());
+            var matchingOwners=itemSearchOwners.Get(allRows,"",0,()=>allRows.Select(x=>x.Location.OwnerId).ToHashSet());
+            var count=allRows.Length;var pageCount=Math.Max(1,(count+59)/60);itemSearchPage=Math.Clamp(itemSearchPage,0,pageCount-1);
+            var rows=allRows.Skip(itemSearchPage*60).Take(60).ToArray();
+            var housingRows=rows.Where(x=>x.Location.Key.StartsWith("house:")&&(x.Location.CharacterIds??[]).Any(charIds.Contains)).ToArray();
+            ImGui.TextDisabled($"{count} matching records · {chars.Count(c=>matchingOwners.Contains(c.Id))} characters");
             ImGui.SameLine();bool? expand=null;if(ImGui.SmallButton("Expand results"))expand=true;ImGui.SameLine();if(ImGui.SmallButton("Collapse results"))expand=false;
+            if(pageCount>1){ImGui.BeginDisabled(itemSearchPage==0);if(ImGui.SmallButton("Previous##items"))itemSearchPage--;ImGui.EndDisabled();ImGui.SameLine();ImGui.TextDisabled($"Page {itemSearchPage+1}/{pageCount}");ImGui.SameLine();ImGui.BeginDisabled(itemSearchPage+1>=pageCount);if(ImGui.SmallButton("Next##items"))itemSearchPage++;ImGui.EndDisabled();}
             ImGui.BeginChild("item-results",Vector2.Zero);
             // Update stored child states before closing their parents: hidden children
             // are not drawn, so SetNextItemOpen inside an account cannot reach them.
