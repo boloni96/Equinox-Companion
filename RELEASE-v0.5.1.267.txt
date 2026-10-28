@@ -1,0 +1,18 @@
+Equinox Companion 0.5.1.267 — workshop projects selected as items
+
+Workshop requirements now resolve by result item ID in the shared planner, not
+only when adding from the FC workshop source. Parts added from All items, imports
+or saved lists expand to their all-phase turn-ins in Listed items / workshop
+turn-ins mode. Ingredients to craft them expands those supplies to ingredients.
+Already-expanded workshop lists remain unchanged. Project quantities and the
+explicit multiplier apply once; duplicate supplies combine across parts.
+
+Completed items themselves is a separate explicit choice when you actually want
+to withdraw finished submarine parts. Preparing an Artisan list resolves workshop
+projects to craftable turn-ins before calculating missing outputs and subcrafts.
+
+Regression checks cover four selected parts, quantities for four submarines,
+combined supplies, already expanded lists, mixed ordinary items and raw materials.
+In-game acceptance: load the existing Bow/Bridge/Hull/Stern list; the first mode
+must show turn-in materials, the second ingredients, and the third finished parts.
+No Journal update needed. Native withdrawal code is unchanged.

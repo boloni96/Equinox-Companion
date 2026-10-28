@@ -26,6 +26,7 @@ public sealed partial class Plugin
     {
         if(retrievalCatalog==null)return;
         var outputs=RetainerRetrieval.Requested(retrievalItems.Where(x=>!selected||retrievalSelected.Contains(x.ItemId)),retrievalMultiplier,retrievalIncludesSubcrafts,retrievalCatalog.Recipes);
+        if(retrievalMode!=RetrievalMode.CompletedItems)outputs=RetainerRetrieval.WorkshopTurnIns(outputs,retrievalCatalog.WorkshopByItem);
         retrievalCraftSteps=[];
         if(retrievalMode==RetrievalMode.AllMaterials){var plan=RetainerRetrieval.PlanCrafts(outputs,retrievalCatalog.Recipes);retrievalPlan=plan.Materials;retrievalCraftSteps=plan.Steps;}else retrievalPlan=outputs;
         try{RefreshRetrievalStock();}catch(Exception e){retrievalStockComplete=false;retrievalStockNotice="Inventory unavailable: "+e.Message;}
@@ -63,8 +64,8 @@ public sealed partial class Plugin
     }
     private void DrawRetrievalList()
     {
-        var mode=(int)retrievalMode;ImGui.SetNextItemWidth(210);if(ImGui.Combo("##RetrievalMode",ref mode,"Listed items / turn-ins\0Ingredients to craft them\0")){retrievalMode=(RetrievalMode)mode;retrievalPreview=[];retrievalPreviewDirty=true;}
-        if(ImGui.IsItemHovered())ImGui.SetTooltip("Final items: withdraw the exact listed items. All crafting materials: recursively expand recipes to raw/non-craftable ingredients; includes crystals. Subtract bags applies after expansion. No crafting is started.");
+        var mode=(int)retrievalMode;ImGui.SetNextItemWidth(210);if(ImGui.Combo("##RetrievalMode",ref mode,"Listed items / workshop turn-ins\0Ingredients to craft them\0Completed items themselves\0")){retrievalMode=(RetrievalMode)mode;retrievalPreview=[];retrievalPreviewDirty=true;}
+        if(ImGui.IsItemHovered())ImGui.SetTooltip("Workshop parts expand to all phase turn-ins in the first mode, and their crafting ingredients in the second. Completed items themselves retrieves finished parts instead. Ordinary listed items remain exact in the first mode. No crafting starts.");
         ImGui.SameLine();ImGui.SetNextItemWidth(90);if(ImGui.InputInt("×",ref retrievalMultiplier)){retrievalMultiplier=Math.Clamp(retrievalMultiplier,1,999);retrievalPreview=[];retrievalPreviewDirty=true;}
         if(ImGui.CollapsingHeader("List options")){
         if(ImGui.Checkbox("List already includes subcrafts",ref retrievalIncludesSubcrafts)){retrievalPreviewDirty=true;retrievalPreview=[];}
