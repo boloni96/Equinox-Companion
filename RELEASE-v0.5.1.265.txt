@@ -1,0 +1,29 @@
+Equinox Companion 0.5.1.265 — Retriever lists and item breakdown
+
+Artisan saved lists load automatically on opening the Retriever. Refresh remains
+available after editing a list in Artisan. Unsupported recipes identify the list
+that needs attention without hiding other valid lists. Same-output recipes from
+different crafting jobs combine their finished-item quantities. Wrapped JSON arrays
+and nullable item options are supported. Artisan configuration is read-only. Live Artisan list names are queried through
+Artisan.GetLists; unreadable lists remain visible with a reason. PremadeCraftsV2.dat
+is also read for Artisan premade lists. Diagnostics include list-reader status.
+
+Load on a saved preset or Artisan list opens Retrieve and calculates its breakdown:
+Item / Required / Bags used / To fetch / Retainers / Missing. Unknown recorded
+stock remains Unknown. Hover an item for recorded retainer holders. Preview
+refreshes stock explicitly; changes to list, mode or multiplier rebuild the preview,
+not every draw frame. Native withdrawal rules are unchanged.
+
+Game item icons appear in inventory, search results, requested items and the
+retrieval breakdown. Hover saved, Artisan or workshop presets to inspect their
+contents. View current list opens the full list after adding items or turn-ins.
+Lists/import and source results scroll separately from the tabs.
+
+Build: zero warnings/errors. Regression suite includes eight new checks for Artisan
+list isolation, duplicate outputs, yields, skipped rows, wrappers and preview counts.
+Live acceptance: open /eqretrieve, verify Artisan lists, Load one, inspect icons and
+quantities, toggle finished/material mode and multiplier. Request 3 ordinary items
+with 1 in bags and Subtract bags enabled: expect exactly 2 withdrawn.
+
+No Journal update required. Existing local presets are retained. NQ/HQ remain
+combined; crafting is never started. This does not claim live game verification.
