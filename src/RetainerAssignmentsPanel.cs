@@ -23,13 +23,8 @@ public sealed partial class Plugin
             ImGui.BeginDisabled(index==rows.Count-1);if(ImGui.SmallButton("↓")){(rows[index+1],rows[index])=(rows[index],rows[index+1]);dirty=true;}ImGui.EndDisabled();ImGui.SameLine();
             if(ImGui.TreeNode(names[entry.Retainer]+$" · {entry.Categories.Length} categories / {entry.Items.Length} items")){
                 var categories=entry.Categories.ToHashSet();var items=entry.Items.ToHashSet();var changed=false;
-                if(ImGui.SmallButton("Materia")){categories.Add(58);changed=true;}ImGui.SameLine();
-                if(ImGui.SmallButton("Ingredients")){foreach(var c in DataManager.GetExcelSheet<Lumina.Excel.Sheets.ItemUICategory>())if(new[]{"Ingredient","Reagent","Metal","Stone","Bone","Cloth","Leather","Lumber","Part"}.Any(n=>c.Name.ToString().Contains(n,StringComparison.OrdinalIgnoreCase)))categories.Add(c.RowId);changed=true;}
-                MarketHelp("Adds crafting-material categories. Review the category list to include exactly what you want.");ImGui.SameLine();
-                if(ImGui.SmallButton("Clear")){categories.Clear();items.Clear();changed=true;}
-                if(ImGui.BeginCombo("Categories",categories.Count+" selected")){
-                    foreach(var c in DataManager.GetExcelSheet<Lumina.Excel.Sheets.ItemUICategory>().Where(c=>c.RowId>0&&!string.IsNullOrWhiteSpace(c.Name.ToString()))){var selected=categories.Contains(c.RowId);if(ImGui.Checkbox(c.Name.ToString()+"##"+c.RowId,ref selected)){if(selected)categories.Add(c.RowId);else categories.Remove(c.RowId);changed=true;}}ImGui.EndCombo();
-                }
+                if(ImGui.SmallButton("Clear selections")){categories.Clear();items.Clear();changed=true;}
+                changed|=DrawStorageCategoryPicker("Categories",categories);
                 if(ImGui.TreeNode("Specific items")){
                     foreach(var id in items.ToArray()){if(ImGui.SmallButton("×##"+id)){items.Remove(id);changed=true;}ImGui.SameLine();DrawRetrievalIcon(id);ImGui.TextUnformatted(retrievalCatalog?.Names.GetValueOrDefault(id)??id.ToString());}
                     ImGui.InputText("Find item",ref assignmentItemSearch,80);
