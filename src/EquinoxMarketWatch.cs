@@ -36,7 +36,7 @@ public sealed partial class Plugin
                 var ownNames=group.Select(x=>x.Name).Where(x=>x.Length>0).ToHashSet(StringComparer.Ordinal);
                 foreach(var retainer in group)foreach(var item in retainer.Stock){
                     active.Add((group.Key,item.ItemId));
-                    marketWatchReviews[(retainer.Id,item.Slot)]=(item,MarketWatchPolicy.Assess(item,group.Key,marketWatchCache.GetValueOrDefault((group.Key,item.ItemId)),ownNames,config.Seller,now));
+                    marketWatchReviews[(retainer.Id,item.Slot)]=(item,MarketWatchPolicy.Assess(item,group.Key,marketWatchCache.GetValueOrDefault((group.Key,item.ItemId)),ownNames,config.Seller,now,IsSellerLevelOneOutfit(item.ItemId)));
                 }
             }
             foreach(var key in marketWatchNext.Keys.Where(x=>!active.Contains(x)).ToArray())marketWatchNext.Remove(key);
