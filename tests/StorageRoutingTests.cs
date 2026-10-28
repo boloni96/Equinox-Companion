@@ -34,6 +34,9 @@ internal static class StorageRoutingTests
         var chained=new Dictionary<ulong,ChestStack[]>{{0,bags},{1,[new(10000,0,500,10,false,99)]},{2,[new(10000,0,500,10,false,99)]},{3,[Empty(10000,0)]}};
         result=StorageRouting.Build(new("Explicit sources",1,[new(1,2,[],[500]),new(2,3,[],[500])]),chained,_=>1,includeExistingBags:false);
         Check("delivered cargo is not picked up again",result.Moves.Where(x=>x.Withdraw).Sum(x=>x.Move.Quantity)==20&&result.Remaining==0);
+        var fragmented=new Dictionary<ulong,ChestStack[]>{{0,[Empty(0,0),Empty(0,1)]},{1,[new(10000,0,500,10,false,99)]},{2,[new(10000,0,600,10,false,99),new(10000,1,600,10,false,99)]}};
+        result=StorageRouting.Build(new("Free a slot",1,[new(StorageRouting.AllSources,2,[],[],AllItems:true)]),fragmented,_=>0,includeExistingBags:false);
+        Check("merge frees destination space before collecting",result.Remaining==0&&result.Moves[0].Internal&&result.Moves.Any(x=>x.Withdraw));
         var preset=new RetrievalPreset("Send",[],DestinationRetainer:22,SendCategories:[58]);
         var imported=RetainerRetrieval.Import(RetainerRetrieval.Export(preset),_=>null);
         Check("send destination and categories survive export",imported.DestinationRetainer==22&&imported.SendCategories!.Single()==58);

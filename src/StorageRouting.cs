@@ -67,6 +67,19 @@ public static class StorageRouting
             if(withdraw)outgoing[(owner,move.Source.Item,move.Source.Hq)]-=move.Quantity;
             moves.Add(new(owner,move,withdraw));
         }
+        void MergeAssigned()
+        {
+        if(!bagsOnly)foreach(var owner in state.Keys.Where(k=>k!=Bags)){
+            for(var pass=0;pass<2000;pass++){
+                var eligible=state[owner].Where(s=>s.Item>0&&plan.Rules.Any(r=>r.To==owner&&RetainerRetrieval.AllowsQuality(s.Hq,r.Quality)&&(r.AllItems||r.Duplicates||r.Items.Contains(s.Item)||r.Categories.Contains(category(s.Item))))).ToArray();
+                var merge=ChestTransferPlanner.Merge(eligible);if(merge==null)break;
+                var si=state[owner].FindIndex(s=>s.Container==merge.Source.Container&&s.Slot==merge.Source.Slot);var di=state[owner].FindIndex(s=>s.Container==merge.Destination.Container&&s.Slot==merge.Destination.Slot);
+                var left=merge.Source.Quantity-merge.Quantity;state[owner][si]=left==0?merge.Source with{Item=0,Quantity=0,Hq=false,Limit=0}:merge.Source with{Quantity=left};state[owner][di]=merge.Destination with{Quantity=merge.Destination.Quantity+merge.Quantity};
+                moves.Add(new(owner,merge,false,true));
+            }
+        }
+        }
+        MergeAssigned();
         for(var step=0;step<20000;step++){
             var action=current==0?(move:(ChestMove?)null,withdraw:false,destination:0UL):Next(current,false);
             if(action.move==null){
@@ -83,15 +96,7 @@ public static class StorageRouting
             }
             Apply(current,action.move!,action.withdraw,action.destination);
         }
-        if(!bagsOnly)foreach(var owner in state.Keys.Where(k=>k!=Bags)){
-            for(var pass=0;pass<2000;pass++){
-                var eligible=state[owner].Where(s=>s.Item>0&&plan.Rules.Any(r=>r.To==owner&&RetainerRetrieval.AllowsQuality(s.Hq,r.Quality)&&(r.AllItems||r.Duplicates||r.Items.Contains(s.Item)||r.Categories.Contains(category(s.Item))))).ToArray();
-                var merge=ChestTransferPlanner.Merge(eligible);if(merge==null)break;
-                var si=state[owner].FindIndex(s=>s.Container==merge.Source.Container&&s.Slot==merge.Source.Slot);var di=state[owner].FindIndex(s=>s.Container==merge.Destination.Container&&s.Slot==merge.Destination.Slot);
-                var left=merge.Source.Quantity-merge.Quantity;state[owner][si]=left==0?merge.Source with{Item=0,Quantity=0,Hq=false,Limit=0}:merge.Source with{Quantity=left};state[owner][di]=merge.Destination with{Quantity=merge.Destination.Quantity+merge.Quantity};
-                moves.Add(new(owner,merge,false,true));
-            }
-        }
+        MergeAssigned();
         var remaining=cargo.Values.Sum();
         remaining+=outgoing.Values.Sum();
         return new(moves.ToArray(),remaining);
