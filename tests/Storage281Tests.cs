@@ -30,6 +30,8 @@ internal static class Storage281Tests
   Check("known losing ticket accepts separate refund offer",HousingLottery.RefundEligible(bid,null));
   Check("unresolved ticket requires winning number",!HousingLottery.RefundEligible(bid with{Status="entered"},null)&&HousingLottery.RefundEligible(bid with{Status="entered"},6));
   Check("winner and collected tickets cannot be refunded again",!HousingLottery.RefundEligible(bid,11)&&!HousingLottery.RefundEligible(bid with{Evidence="refund-receipt"},6)&&!HousingLottery.RefundEligible(bid with{Status="won"},6));
+  Check("Vyrion exact refund chat receipt",HousingLottery.ReceivedGil("You obtain 3,750,000 gil.")==3750000);
+  Check("Vyrion refund offer and receipt match",HousingLottery.RefundAmount("Accept a full refund of your deposit of 3,750,000 gil?")==3750000&&HousingLottery.RefundReceiptMatches(1,403,42,3750000,now,1,403,null,3750000,now.AddSeconds(2)));
   Check("dialog wrapping is harmless",HousingLottery.RefundAmount("Accept a full refund of your\ndeposit of 20,000,000 gil?")==20000000);
   Check("closing placard target does not lose receipt",HousingLottery.RefundReceiptMatches(1,403,42,20000000,now,1,403,null,20000000,now.AddSeconds(2)));
   Check("different selected placard still rejected",!HousingLottery.RefundReceiptMatches(1,403,42,20000000,now,1,403,99,20000000,now.AddSeconds(2)));
