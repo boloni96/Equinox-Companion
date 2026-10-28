@@ -12,7 +12,7 @@ public sealed partial class Plugin
     private unsafe int RetrievalHeld(uint item,RetrievalQuality quality=RetrievalQuality.Any){var m=InventoryManager.Instance();if(m==null)return 0;var count=0;foreach(var t in new[]{InventoryType.Inventory1,InventoryType.Inventory2,InventoryType.Inventory3,InventoryType.Inventory4,InventoryType.Crystals}){var c=m->GetInventoryContainer(t);if(c==null||!c->IsLoaded)continue;for(var i=0;i<c->Size;i++)if(c->Items[i].ItemId==item&&RetainerRetrieval.AllowsQuality((c->Items[i].Flags&InventoryItem.ItemFlags.HighQuality)!=0,quality))count=checked(count+c->Items[i].Quantity);}return count;}
     private void UpdateRetriever(DateTimeOffset now)
     {
-        TickChest(now);TickOrganize(now);
+        TickRetainerTools(now);TickRetainerGil(now);TickChest(now);TickOrganize(now);
         if(retrievalPort.Pause.RestorePending)retrievalPort.Pause.Release(now);
         if(!config.EnableRetriever){if(retrievalRun.Running)retrievalRun.Stop("Retriever disabled.");retrieverWindow.IsOpen=false;ForgetOptionalLauncher("Retainer Retriever");return;}
         if(retrievalRun.Running&&retrievalRun.State!=RetrievalRun.Phase.Prepare&&retrievalPort.Pause.Held){var pause=retrievalPort.Pause.Check(now);if(!pause.Ready){retrievalRun.Stop(pause.Error.Length>0?pause.Error:"Another AutoRetainer task started; retrieval stopped.");return;}}
@@ -29,9 +29,36 @@ public sealed partial class Plugin
         internal RetrieverPort(Plugin plugin){p=plugin;navigation=new(plugin);}
         public bool ContextMatches=>p.config.EnableRetriever&&Player.IsLoaded&&Player.ContentId==Character&&Player.CurrentWorld.RowId==World&&Player.HomeWorld.RowId==World&&Conditions[ConditionFlag.OccupiedSummoningBell]&&!Conditions[ConditionFlag.InCombat]&&!Conditions[ConditionFlag.BetweenAreas]&&!Conditions[ConditionFlag.BetweenAreas51]&&!p.HelperInCutscene()&&!p.sellerRun.Running&&!p.gilTrade.Running;
         public bool Prepare(){var result=prepared?Pause.Check(DateTimeOffset.UtcNow):Pause.Acquire(DateTimeOffset.UtcNow);prepared=true;if(result.Error.Length>0)throw new InvalidOperationException(result.Error);if(Pi.InstalledPlugins.Any(x=>x.IsLoaded&&x.InternalName=="Artisan")&&Pi.GetIpcSubscriber<bool>("Artisan.IsBusy").InvokeFunc())throw new InvalidOperationException("Artisan is busy. Stop its current task first.");return result.Ready;}
-        public bool Select(ulong id)=>navigation.SelectRetainer(new SellerRetainerRef(id,""));
+        public bool Select(ulong id){
+            var rm=RetainerManager.Instance();var current=rm==null?0:rm->LastSelectedRetainerId;
+            if(current!=id&&SellerActive(current)&&InventoryOpen){Close(current);return false;}
+            return navigation.SelectRetainer(new SellerRetainerRef(id,""));
+        }
         private static bool InventoryOpen=>SellerAddon("InventoryRetainer")!=null||SellerAddon("InventoryRetainerLarge")!=null;
-        public bool OpenInventory(ulong id){if(!SellerActive(id))return false;if(AgentRetainer.Instance()!=null&&AgentRetainer.Instance()->IsAgentActive()&&InventoryOpen){if(inventoryRetainer!=id){inventoryRetainer=id;inventoryReadyAt=DateTimeOffset.UtcNow.AddSeconds(1);}return DateTimeOffset.UtcNow>=inventoryReadyAt;}var menu=(AddonSelectString*)SellerAddon("SelectString");if(menu==null){p.SellerRetainerTalk(id);return false;}var label=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Addon>().GetRow(2378).Text.ToString();for(var i=0;i<Math.Min(20,(int)menu->PopupMenu.PopupMenu.EntryCount);i++)if(TravelMenuText(menu->PopupMenu.PopupMenu.EntryNames[i].Value)==label){menu->FireCallbackInt(i);return false;}return false;}
+        internal string InventoryStatus="Not opened";
+        private DateTimeOffset inventoryMenuNext;
+        public bool OpenInventory(ulong id)
+        {
+            if(!SellerActive(id)){InventoryStatus="Waiting for selected retainer identity";return false;}
+            if(AgentRetainer.Instance()!=null&&AgentRetainer.Instance()->IsAgentActive()&&InventoryOpen){
+                if(inventoryRetainer!=id){inventoryRetainer=id;inventoryReadyAt=DateTimeOffset.UtcNow.AddSeconds(1);}
+                InventoryStatus="Inventory open; waiting for stock";
+                return DateTimeOffset.UtcNow>=inventoryReadyAt;
+            }
+            var menu=(AddonSelectString*)SellerAddon("SelectString");
+            if(menu==null){InventoryStatus="Waiting for retainer menu / greeting";p.SellerRetainerTalk(id);return false;}
+            var label=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Addon>().GetRow(2378).Text.ExtractText();
+            var entries=new List<string>();
+            for(var i=0;i<Math.Min(20,(int)menu->PopupMenu.PopupMenu.EntryCount);i++){
+                var text=TravelMenuText(menu->PopupMenu.PopupMenu.EntryNames[i].Value)??"";entries.Add(text);
+                if(!RetainerMenuPolicy.Matches(text,label))continue;
+                InventoryStatus="Opening entrust / withdraw items";
+                if(DateTimeOffset.UtcNow>=inventoryMenuNext){SelectTravelChoice((AtkUnitBase*)menu,i);inventoryMenuNext=DateTimeOffset.UtcNow.AddSeconds(1);}
+                return false;
+            }
+            InventoryStatus="Inventory menu entry not found: "+string.Join(" | ",entries);
+            return false;
+        }
         public RetrievalSlot[]? Read(ulong id){if(!SellerActive(id)||!InventoryOpen)return null;var m=InventoryManager.Instance();if(m==null)return null;var list=new List<RetrievalSlot>();foreach(var type in Enumerable.Range(10000,7).Append(12001)){var c=m->GetInventoryContainer((InventoryType)type);if(c==null||!c->IsLoaded||c->Items==null)return null;for(var i=0;i<c->Size;i++){var s=c->Items[i];if(s.ItemId>0&&s.Quantity>0&&RetainerRetrieval.AllowsQuality((s.Flags&InventoryItem.ItemFlags.HighQuality)!=0,Quality))list.Add(new(s.ItemId,s.Quantity,type,i,(s.Flags&InventoryItem.ItemFlags.HighQuality)!=0));}}return list.ToArray();}
         public int Held(uint item)=>p.RetrievalHeld(item,Quality);
         public bool Withdraw(ulong id,RetrievalSlot slot,int amount)

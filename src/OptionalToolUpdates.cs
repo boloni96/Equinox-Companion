@@ -7,7 +7,7 @@ public sealed partial class Plugin
     private bool OptionalToolHasWork(string name)=>name switch
     {
         "Equinox Market"=>true,
-        "Retainer Retriever"=>config.EnableRetriever||retrievalRun.Running||chestRunning||organizeRunning||organizePort?.Pause.RestorePending==true||retrievalPort.Pause.RestorePending,
+        "Retainer Retriever"=>config.EnableRetriever||retainerGilRunning||retainerGilPort?.Pause.RestorePending==true||retrievalRun.Running||chestRunning||organizeRunning||organizePort?.Pause.RestorePending==true||retrievalPort.Pause.RestorePending,
         "Gil Trader"=>gilTrade.Running,
         "Trade item shortcut"=>pendingTradeItemShortcut is not null||tradeItemMenuCleanup is not null||tradeItemOfferWatch is not null,
         "Camera"=>OptionalToolAvailable("Camera")&&config.RememberCameraHeight||cameraHeightDefaultPending,
