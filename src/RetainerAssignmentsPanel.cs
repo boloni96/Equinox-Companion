@@ -21,7 +21,7 @@ public sealed partial class Plugin
             var index=rows.IndexOf(entry);ImGui.PushID(entry.Retainer.ToString());
             ImGui.BeginDisabled(index==0);if(ImGui.SmallButton("↑")){(rows[index-1],rows[index])=(rows[index],rows[index-1]);dirty=true;}ImGui.EndDisabled();ImGui.SameLine();
             ImGui.BeginDisabled(index==rows.Count-1);if(ImGui.SmallButton("↓")){(rows[index+1],rows[index])=(rows[index],rows[index+1]);dirty=true;}ImGui.EndDisabled();ImGui.SameLine();
-            if(ImGui.TreeNode(names[entry.Retainer]+$" · {entry.Categories.Length} categories / {entry.Items.Length} items")){
+            if(ImGui.TreeNode(names[entry.Retainer]+$" · {entry.Categories.Length} categories / {entry.Items.Length} items###RetainerAssignment")){
                 var categories=entry.Categories.ToHashSet();var items=entry.Items.ToHashSet();var changed=false;
                 if(ImGui.SmallButton("Clear selections")){categories.Clear();items.Clear();changed=true;}
                 changed|=DrawStorageCategoryPicker("Categories",categories);

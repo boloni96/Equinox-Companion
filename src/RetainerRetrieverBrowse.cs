@@ -56,12 +56,4 @@ public sealed partial class Plugin
         retrievalStockNotice=(allagan?"Allagan Tools + saved inventory":"Companion saved inventory")+" · "+names.Count+" known retainers · "+(complete?"recorded stock":"partial recorded stock")+notice;
         retrievalRefreshPending=false;retrievalPreviewDirty=true;
     }
-    private void DrawRetrievalBrowse()
-    {
-        if(ImGui.Button("Refresh inventory"))RetrievalTry(RefreshRetrievalStock);ImGui.SameLine();ImGui.Checkbox("Group by retainer",ref retrievalBrowseGroups);ImGui.InputText("Filter inventory",ref retrievalBrowseSearch,100);
-        ImGui.TextWrapped(retrievalStockNotice);ImGui.SetNextItemWidth(120);ImGui.InputInt("Add quantity",ref retrievalQuantity);retrievalQuantity=Math.Clamp(retrievalQuantity,1,RetainerRetrieval.MaxQuantity);
-        var rows=retrievalStock.Where(x=>x.Name.Contains(retrievalBrowseSearch,StringComparison.OrdinalIgnoreCase));
-        void Draw(IEnumerable<RetrieverStock> items,string key){if(!ImGui.BeginTable("Inventory##"+key,4,ImGuiTableFlags.RowBg|ImGuiTableFlags.Resizable))return;foreach(var t in new[]{"Item · click to add","Retainer stock","Bags at refresh","Holder"})ImGui.TableSetupColumn(t);ImGui.TableHeadersRow();foreach(var g in items.GroupBy(x=>x.Item).OrderBy(g=>g.First().Name).Take(200)){var item=g.First();ImGui.TableNextRow();ImGui.TableNextColumn();DrawRetrievalIcon(item.Item);if(ImGui.Selectable(item.Name+"##"+item.Item))RetrievalTry(()=>AddRetrieval([new(item.Item,item.Name,retrievalQuantity)]));if(ImGui.IsItemHovered())ImGui.SetTooltip("NQ and HQ combined · "+(item.At.HasValue?"recorded "+item.At.Value.ToLocalTime().ToString("g"):"Allagan Tools cache; observation time unavailable"));ImGui.TableNextColumn();ImGui.TextUnformatted(g.Sum(x=>x.Quantity).ToString());ImGui.TableNextColumn();ImGui.TextUnformatted(retrievalBrowseBags.GetValueOrDefault(item.Item).ToString());ImGui.TableNextColumn();ImGui.TextUnformatted(string.Join(", ",g.Select(x=>x.Holder).Distinct()));}ImGui.EndTable();}
-        if(retrievalBrowseGroups){foreach(var g in rows.GroupBy(x=>x.Retainer))if(ImGui.CollapsingHeader(g.First().Holder+"##"+g.Key))Draw(g,g.Key.ToString());}else Draw(rows,"all");
-    }
 }
