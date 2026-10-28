@@ -44,10 +44,10 @@ public sealed record EntrustSelection(Dictionary<uint,int> Keep, Dictionary<uint
         string Unique(string name){var candidate=name;for(var n=2;result.Any(x=>x.Name==candidate);n++)candidate=name[..Math.Min(name.Length,85)]+" ("+n+")";return candidate;}
         if(current.Items.Length>0||current.SendCategories?.Length>0){
             var at=editing==null?-1:result.FindIndex(x=>x.Name==editing);
-            if(at>=0)result[at]=current with{Name=editing!};
+            if(at>=0)result[at]=current with{Name=editing!,PlanId=result[at].PlanId};
             else result.Add(current with{Name=Unique(string.IsNullOrWhiteSpace(current.Name)?"Saved working list":current.Name)});
         }
-        result.Add(imported with{Name=Unique(imported.Name)});
+        result.Add(imported with{Name=Unique(imported.Name),PlanId=Guid.NewGuid().ToString("N")});
         if(result.Count>25)throw new ArgumentException("Maximum 25 presets. Remove an unused saved preset before importing; your current list has not changed.");
         return result.ToArray();
     }

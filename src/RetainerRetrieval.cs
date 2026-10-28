@@ -4,7 +4,7 @@ namespace EquinoxCompanion;
 public enum RetrievalQuality { Any, NqOnly, HqOnly }
 public enum RetrievalMode { FinalItems, AllMaterials, CompletedItems, DirectIngredients }
 public sealed record RetrievalEntry(uint ItemId, string Name, int Quantity, uint RecipeId = 0, bool ReadyMaterial = false);
-public sealed record RetrievalPreset(string Name, RetrievalEntry[] Items, int Multiplier = 1, bool IncludesSubcrafts = false, bool ArtisanPreset = false, RetrievalMode Mode = RetrievalMode.CompletedItems, Dictionary<uint,uint>? RecipeChoices = null, RetrievalQuality Quality = RetrievalQuality.Any, ulong DestinationRetainer = 0, uint[]? SendCategories = null, EntrustSelection? Entrust = null);
+public sealed record RetrievalPreset(string Name, RetrievalEntry[] Items, int Multiplier = 1, bool IncludesSubcrafts = false, bool ArtisanPreset = false, RetrievalMode Mode = RetrievalMode.CompletedItems, Dictionary<uint,uint>? RecipeChoices = null, RetrievalQuality Quality = RetrievalQuality.Any, ulong DestinationRetainer = 0, uint[]? SendCategories = null, EntrustSelection? Entrust = null, string PlanId = "");
 internal sealed record RetrievalRecipe(uint Id,uint ItemId,int Yield,RetrievalEntry[] Ingredients,string Job);
 internal sealed record RetrievalPreview(uint ItemId,string Name,int Required,int Held,int? Available)
 {
@@ -164,6 +164,7 @@ internal interface IRetrievalPort
     int Held(uint item);
     bool Withdraw(ulong retainer,RetrievalSlot slot,int quantity);
     bool Close(ulong retainer);
+    void Confirmed(ulong retainer,RetrievalSlot slot,int quantity) {}
     void Release();
 }
 internal sealed class RetrievalRun(IRetrievalPort port)
@@ -186,7 +187,7 @@ internal sealed class RetrievalRun(IRetrievalPort port)
             var stock=port.Read(id);if(stock is null)return;slot=stock.FirstOrDefault(s=>targets.TryGetValue(s.ItemId,out var target)&&port.Held(s.ItemId)<target);
             if(slot is null){Transition(Phase.Close,now);break;}before=port.Held(slot.ItemId);quantity=Math.Min(slot.Quantity,targets[slot.ItemId]-before);Transition(Phase.Withdraw,now);break;
         case Phase.Withdraw:if(port.Withdraw(id,slot!,quantity))Transition(Phase.Confirm,now);break;
-        case Phase.Confirm:if(port.Held(slot!.ItemId)>=before+quantity)Transition(Phase.Read,now);break;
+        case Phase.Confirm:if(port.Held(slot!.ItemId)>=before+quantity){Transition(Phase.Read,now);port.Confirmed(id,slot,quantity);}break;
         case Phase.Close:if(port.Close(id)){if(targets.All(x=>port.Held(x.Key)>=x.Value)){Stop("Complete · requested quantities are in your bags.");return;}if(++index>=retainers.Length){Stop("Finished checking retainers · some requested items are still missing.");return;}Transition(Phase.Select,now);}break;
         }
     }catch(Exception e){Stop("Stopped: "+e.Message);}}

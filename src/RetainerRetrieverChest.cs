@@ -102,6 +102,7 @@ public sealed partial class Plugin
             if(chestPending is {} pending){
                 var all=chest.Concat(bags).Concat(destination).ToArray();var src=all.FirstOrDefault(s=>s.Container==pending.Source.Container&&s.Slot==pending.Source.Slot);var dst=all.FirstOrDefault(s=>s.Container==pending.Destination.Container&&s.Slot==pending.Destination.Slot);
                 if(src==null||dst==null||!ChestTransferPlanner.Confirmed(pending,src,dst)){if(now>chestDeadline)StopChest("Stopped: transfer was not confirmed. No automatic retry.");return;}
+                ReportStorageTransfer(pending.Source.Container<10000?"Entrusted":pending.Destination.Container<10000?"Withdrew":"Moved within chest",pending.Source.Item,pending.Source.Hq,pending.Quantity,"FC chest");
                 if(chestMode==4)chestGoals[pending.Source.Item]-=pending.Quantity;chestPending=null;chestMoves++;chestStatus=$"{chestMoves} transfers confirmed";
             }
             var next=chestMode switch{0=>ChestTransferPlanner.Withdraw(chest,bags,chestGoals,chestQuality),1=>ChestTransferPlanner.Duplicates(chest,bags,chestKeep),3=>ChestTransferPlanner.Transfer(chest,destination,chestGoals.Keys.ToHashSet(),chestQuality),4=>ChestTransferPlanner.Send(bags,chest,chestGoals,chestQuality),_=>ChestTransferPlanner.Merge(chest)};

@@ -3,6 +3,7 @@ import base64
 import hashlib
 import json
 import os
+import time
 from pathlib import Path
 import urllib.request
 
@@ -40,7 +41,11 @@ commit = api('git/commits', {'tree': tree['sha'], 'parents': [head],
                            'message': f'Publish verified Companion {version} and feed'})
 # Non-forced update rejects any concurrent divergent main commit.
 api('git/refs/heads/main', {'sha': commit['sha'], 'force': False}, 'PATCH')
-if api('git/ref/heads/main')['object']['sha'] != commit['sha']:
-    raise RuntimeError('Published head verification failed')
+for attempt in range(6):
+    if api('git/ref/heads/main?verify=' + str(time.time_ns()))['object']['sha'] == commit['sha']:
+        break
+    time.sleep(2)
+else:
+    raise RuntimeError('Published head verification failed; inspect main before retrying')
 print('Published', version, commit['sha'])
 print('Package SHA256', hashlib.sha256((root / directory / 'EquinoxCompanion.zip').read_bytes()).hexdigest())

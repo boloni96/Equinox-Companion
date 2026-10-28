@@ -62,6 +62,7 @@ public sealed partial class Plugin
             return false;
         }
         public RetrievalSlot[]? Read(ulong id){if(!RetrieverActive(id)||!InventoryOpen)return null;var m=InventoryManager.Instance();if(m==null)return null;var list=new List<RetrievalSlot>();foreach(var type in Enumerable.Range(10000,7).Append(12001)){var c=m->GetInventoryContainer((InventoryType)type);if(c==null||!c->IsLoaded||c->Items==null){InventoryStatus="Inventory open; waiting for container "+type;return null;}for(var i=0;i<c->Size;i++){var s=c->Items[i];if(s.ItemId>0&&s.Quantity>0&&RetainerRetrieval.AllowsQuality((s.Flags&InventoryItem.ItemFlags.HighQuality)!=0,Quality))list.Add(new(s.ItemId,s.Quantity,type,i,(s.Flags&InventoryItem.ItemFlags.HighQuality)!=0));}}return list.ToArray();}
+        public void Confirmed(ulong id,RetrievalSlot slot,int amount)=>p.ReportStorageTransfer("Withdrew",slot.ItemId,slot.Hq,amount,p.StorageRetainerName(id));
         public int Held(uint item)=>p.RetrievalHeld(item,Quality);
         public bool Withdraw(ulong id,RetrievalSlot slot,int amount)
         {

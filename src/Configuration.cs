@@ -3,6 +3,7 @@ namespace EquinoxCompanion;
 [Serializable]
 public sealed class Configuration : IPluginConfiguration
 {
+    public bool ShowStorageTransfersInChat { get; set; }
     public bool EnableRetriever { get; set; }
     public Dictionary<ulong,List<RetainerAssignment>> RetainerAssignments { get; set; } = [];
     public HashSet<ulong> UseRetainerAssignments { get; set; } = [];

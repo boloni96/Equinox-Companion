@@ -1,5 +1,5 @@
 namespace EquinoxCompanion;
-public sealed record StorageRoute(ulong From,ulong To,uint[] Categories,uint[] Items,bool AllItems=false,bool Duplicates=false,RetrievalQuality Quality=RetrievalQuality.Any,Dictionary<uint,int>? Amounts=null,ulong[]? Destinations=null);
+public sealed record StorageRoute(ulong From,ulong To,uint[] Categories,uint[] Items,bool AllItems=false,bool Duplicates=false,RetrievalQuality Quality=RetrievalQuality.Any,Dictionary<uint,int>? Amounts=null,ulong[]? Destinations=null,bool Flexible=false);
 public sealed record StorageRoutingPlan(string Name,ulong Character,StorageRoute[] Rules,int ReserveSlots=1,int KeepInBags=0);
 public sealed record RoutedMove(ulong Retainer,ChestMove Move,bool Withdraw,bool Internal=false);
 public sealed record RoutingResult(RoutedMove[] Moves,int Remaining);
@@ -20,7 +20,18 @@ public static class StorageRouting
             if(bagsOnly&&owner!=Bags)continue;
             var rule=plan.Rules.FirstOrDefault(r=>(r.From==AllSources||r.From==owner)&&RetainerRetrieval.AllowsQuality(s.Hq,r.Quality)&&
                 (r.AllItems||r.Items.Contains(s.Item)||r.Categories.Contains(category(s.Item))||r.Duplicates&&inventories[r.To].Any(d=>Same(d,s)&&d.Quantity>0)));
-            if(rule!=null)goals[(owner,s.Item,s.Hq)]=rule.To;
+            if(rule!=null){
+                var destination=rule.To;
+                if(rule.Flexible&&owner!=Bags&&rule.Destinations?.Contains(owner)==true){
+                    // A category assignment defines allowed homes, not a priority.
+                    // Only move an already-correct group when it fits existing partial
+                    // stacks on an earlier holder and actually consolidates storage.
+                    destination=owner;var total=rows.Where(x=>Same(x,s)).Sum(x=>x.Quantity);
+                    foreach(var candidate in inventories.Keys.TakeWhile(id=>id!=owner).Where(id=>id!=Bags&&rule.Destinations.Contains(id)))
+                        if(inventories[candidate].Where(x=>Same(x,s)&&x.CanDeposit).Sum(x=>Math.Max(0,x.Limit-x.Quantity))>=total){destination=candidate;break;}
+                }
+                goals[(owner,s.Item,s.Hq)]=destination;
+            }
         }
         var outgoing=new Dictionary<(ulong,uint,bool),int>();
         if(!bagsOnly)foreach(var (owner,rows) in inventories.Where(x=>x.Key!=Bags))foreach(var g in rows.Where(s=>s.Item>0).GroupBy(s=>(s.Item,s.Hq)))
@@ -55,6 +66,18 @@ public static class StorageRouting
             if(bagsOnly)return(null,false,0);
             foreach(var s in state[owner].Where(s=>s.Item>0&&s.Quantity>0)){
                 if(!goals.TryGetValue((owner,s.Item,s.Hq),out var dest)||dest==owner||outgoing.GetValueOrDefault((owner,s.Item,s.Hq))<=0)continue;
+                var flexible=plan.Rules.FirstOrDefault(r=>r.Flexible&&(r.From==AllSources||r.From==owner)&&RetainerRetrieval.AllowsQuality(s.Hq,r.Quality)&&(r.AllItems||r.Items.Contains(s.Item)||r.Categories.Contains(category(s.Item))));
+                if(flexible?.Destinations is {} eligible){
+                    if(eligible.Contains(owner)){
+                        // Correctly placed stock must not churn between eligible homes.
+                        if(Target(s,dest,true)==null){outgoing[(owner,s.Item,s.Hq)]=0;continue;}
+                    }else{
+                        var available=eligible.Where(id=>id!=owner&&state.ContainsKey(id)&&Target(s,id,true)!=null)
+                            .OrderByDescending(id=>state[id].Any(x=>Same(x,s)&&x.Quantity<x.Limit)).FirstOrDefault();
+                        if(available>0)dest=available;
+                        else {var freeing=eligible.FirstOrDefault(id=>id!=owner&&state.ContainsKey(id)&&HasOutgoing(id));if(freeing==0)continue;dest=freeing;}
+                    }
+                }
                 // Do not strand items for a full destination that has nothing to move elsewhere.
                 if(Target(s,dest,true)==null&&!HasOutgoing(dest)){
                     var rule=plan.Rules.FirstOrDefault(r=>(r.From==AllSources||r.From==owner)&&RetainerRetrieval.AllowsQuality(s.Hq,r.Quality)&&(r.AllItems||r.Items.Contains(s.Item)||r.Categories.Contains(category(s.Item))));
@@ -96,6 +119,7 @@ public static class StorageRouting
         }
         }
         MergeAssigned();
+        var safeMoveCount=moves.Count;var safeRemaining=outgoing.Values.Sum();
         for(var step=0;step<20000;step++){
             rerouted=false;
             var action=current==0?(move:(ChestMove?)null,withdraw:false,destination:0UL):Next(current,false);
@@ -112,7 +136,11 @@ public static class StorageRouting
                 if(current==0){if(rerouted)continue;break;}
             }
             Apply(current,action.move!,action.withdraw,action.destination);
+            if(cargo.Values.All(q=>q==0)){safeMoveCount=moves.Count;safeRemaining=outgoing.Values.Sum();}
         }
+        // Do not execute a speculative swap/withdrawal suffix that cannot be
+        // unloaded. All discarded work exists only in the planning simulation.
+        if(!bagsOnly&&!includeExistingBags&&cargo.Values.Any(q=>q>0))return new(moves.Take(safeMoveCount).ToArray(),safeRemaining);
         MergeAssigned();
         var remaining=cargo.Values.Sum();
         remaining+=outgoing.Values.Sum();
