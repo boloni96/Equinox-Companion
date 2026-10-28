@@ -22,7 +22,7 @@ public sealed partial class Plugin
         var owners=ReadSellerRetainers().Select(x=>x.Id).ToArray();
         if(owners.Length==0)throw new InvalidOperationException("Open the retainer list to preview this character's organisation.");
         var cached=RecordedOrganizerInventories(owners);var rules=OrganizeRules();
-        if(config.UseRetainerAssignments.Contains(Player.ContentId))rules=StorageAssignments.Apply(rules,(config.RetainerAssignments.GetValueOrDefault(Player.ContentId)??[]).ToArray(),cached,OrganizeCategory);
+        if(config.UseRetainerAssignments.Contains(Player.ContentId))rules=StorageAssignments.Apply(rules,(config.RetainerAssignments.GetValueOrDefault(Player.ContentId)??[]).ToArray(),cached,OrganizeCategory,config.RetrievalPresets);
         if(cached.Count==0){organizePreview=[];organizeStatus="No complete recorded inventories yet; the first run must inspect missing inventories.";return;}
         organizeResolvedRules=rules.Any(r=>r.To==StorageAutoRouting.AllRetainers)?StorageAutoRouting.Resolve(new("Preview",Player.ContentId,rules),cached,OrganizeCategory).Rules:rules;
         organizePreview=retrievalStock.Where(x=>cached.ContainsKey(x.Retainer)&&organizeResolvedRules.Any(r=>r.To!=x.Retainer&&(r.From==StorageRouting.AllSources||r.From==x.Retainer)&&(r.AllItems||r.Items.Contains(x.Item)||r.Categories.Contains(OrganizeCategory(x.Item)))&&RetainerRetrieval.AllowsQuality(x.Hq,r.Quality))).OrderBy(x=>x.Name).ThenBy(x=>x.Holder).ToArray();organizePreviewPage=0;
@@ -134,6 +134,7 @@ public sealed partial class Plugin
                     var done=organizeMoves[organizeMoveIndex];if(done.Internal){}else if(done.Withdraw)organizeCarry+=done.Move.Quantity;else{if(!organizeBagsOnly)organizeCarry-=done.Move.Quantity;organizeTransferred+=done.Move.Quantity;}
                     RememberOrganizerInventory(organizeActiveRetainer,OrganizerInventory(true,false).Concat(OrganizerInventory(true,true)).ToArray());
                     if(organizeBagsOnly&&!done.Withdraw&&!done.Internal)organizerEntrusted[done.Move.Source.Item]=organizerEntrusted.GetValueOrDefault(done.Move.Source.Item)+done.Move.Quantity;
+                    ReportStorageTransfer(done.Internal?"Merged":done.Withdraw?"Withdrew":"Entrusted",done.Move.Source.Item,done.Move.Source.Hq,done.Move.Quantity,StorageRetainerName(organizeActiveRetainer));
                     organizePending=null;organizeMoveIndex++;
                     if(organizeMoveIndex<organizeMoves.Length&&organizeMoves[organizeMoveIndex].Retainer==organizeActiveRetainer)OrganizeStage(6);else OrganizeStage(8);break;
                 case 8:
@@ -148,7 +149,7 @@ public sealed partial class Plugin
                     organizeInventories[StorageRouting.Bags]=OrganizerInventory(false,false).Concat(OrganizerInventory(false,true)).ToArray();
                     var snapshot=organizeOwnerOrder.Where(organizeInventories.ContainsKey).Append(StorageRouting.Bags).ToDictionary(id=>id,id=>organizeInventories[id].ToArray());var categories=snapshot.Values.SelectMany(x=>x).Where(x=>x.Item>0).Select(x=>x.Item).Distinct().ToDictionary(x=>x,OrganizeCategory);
                     var rules=organizeActiveRules.Select(r=>r.Amounts==null?r:r with{Amounts=r.Amounts.ToDictionary(x=>x.Key,x=>Math.Max(0,x.Value-organizerEntrusted.GetValueOrDefault(x.Key)))}).ToArray();
-                    if(config.UseRetainerAssignments.Contains(Player.ContentId))rules=StorageAssignments.Apply(rules,(config.RetainerAssignments.GetValueOrDefault(Player.ContentId)??[]).ToArray(),snapshot,id=>categories.GetValueOrDefault(id));
+                    if(config.UseRetainerAssignments.Contains(Player.ContentId))rules=StorageAssignments.Apply(rules,(config.RetainerAssignments.GetValueOrDefault(Player.ContentId)??[]).ToArray(),snapshot,id=>categories.GetValueOrDefault(id),config.RetrievalPresets);
                     var routingPlan=new StorageRoutingPlan("Current movements",Player.ContentId,rules,organizeReserve);var bagsOnly=organizeBagsOnly;
                     organizeRoutingTask=Task.Run(()=>StorageRouting.Build(routingPlan,snapshot,id=>categories.GetValueOrDefault(id),bagsOnly,bagsOnly));OrganizeStage(9);
     }
