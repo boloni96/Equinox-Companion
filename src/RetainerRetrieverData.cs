@@ -13,7 +13,7 @@ public sealed partial class Plugin
             if(project.ResultItem.RowId==0)continue;var rows=new List<RetrievalEntry>();foreach(var part in project.CompanyCraftPart.Where(x=>x.RowId>0))foreach(var process in part.Value.CompanyCraftProcess.Where(x=>x.RowId>0)){
                 var step=process.Value;for(var i=0;i<step.SupplyItem.Count;i++){var supply=step.SupplyItem[i];if(supply.RowId==0)continue;var id=supply.Value.Item.RowId;var count=checked(step.SetQuantity[i]*step.SetsRequired[i]);if(id>0&&count>0)rows.Add(new(id,names.GetValueOrDefault(id,"Item"),count));}}
             if(rows.Count>0){var supplies=RetainerRetrieval.Combine(rows).Select(e=>e with{ReadyMaterial=true}).ToArray();workshopByItem[project.ResultItem.RowId]=supplies;workshop.Add(new(names.GetValueOrDefault(project.ResultItem.RowId,"Workshop "+project.RowId)+" · turn-ins",supplies));}}
-        var shark=workshop.Where(p=>p.Name.StartsWith("Shark-class ",StringComparison.OrdinalIgnoreCase)).ToArray();if(shark.Length==4)workshop.Add(new("Shark submarine (all 4 parts) · turn-ins",RetainerRetrieval.Combine(shark.SelectMany(p=>p.Items))));
+        var shark=workshop.Where(p=>p.Name.StartsWith("Shark-class ",StringComparison.OrdinalIgnoreCase)).ToArray();if(shark.Length==4)workshop.Add(new("Shark-class submarine (all 4 parts) · turn-ins",RetainerRetrieval.Combine(shark.SelectMany(p=>p.Items))));
         var outfits=new Dictionary<uint,RetrievalEntry[]>();
         foreach(var set in DataManager.GetExcelSheet<MirageStoreSetItem>()){
             if(!names.ContainsKey(set.RowId))continue;

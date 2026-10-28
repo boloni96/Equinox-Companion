@@ -45,3 +45,9 @@ Local gate tests include 13 new cases for cached-container scope, noncraftable
 items, outfit mapping, job alternatives and quality filtering/persistence.
 In-game tests still needed: cached retainer view away from bell, Attire expansion,
 NQ-only and HQ-only requests against mixed-quality stacks, and recipe override.
+
+Full Add items catalogue with pages and counts; workshop search guidance.
+
+Native FC chest tools: list retrieval, duplicate deposits with bag reserves, within-tab merging, and moving list items between tabs. Dedicated crystal inventories and quality filters are supported. Chest controls open beside the game chest when Retriever is enabled. No FCCH dependency.
+Retainer organizer: source/destination selectors, category filters, recorded-stock preview, and repeated space-limited trips through player bags. Deposits require confirmation before the next trip. Partial or interrupted operations report remaining items.
+New chest and organizer movement paths require in-game verification; compiled and planner tests are not live-game validation.
