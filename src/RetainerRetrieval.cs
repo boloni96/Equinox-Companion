@@ -46,6 +46,7 @@ internal static class RetainerRetrieval
         }
         return new(result.ToArray(),warnings.ToArray());
     }
+    internal static bool IsRetainerStorage(ulong container)=>container is >=10000 and <=10006 or 12001;
     internal const int MaxQuantity=1_000_000, MaxEntries=200;
     internal static RetrievalEntry[] Combine(IEnumerable<RetrievalEntry> entries)
     {

@@ -1,0 +1,26 @@
+Equinox Companion 0.5.1.269 — cached retainers outside the bell
+
+Inventory browsing no longer requires the game's live retainer list. It merges
+this character's known market/observed retainers with Allagan Tools' public
+GetCharactersOwnedByActive and GetCharacterItems IPC. Owned FC/house inventories
+are excluded by container type; only retainer bags and crystals are included.
+The owning character is checked before Allagan data is read. Names use native or
+Companion records; unknown names temporarily show a retainer ID. Transient IPC
+failures fall back to saved observations without discarding other retainers.
+
+Recorded inventory refreshes once on opening or character change, and on explicit
+Refresh/Preview. No per-frame history scans. Without a live roster, completeness
+is conservatively unknown: known counts show a '+' in the retrieval preview,
+while missing amounts stay Unknown. Retrieval still requires the actual bell
+and validates its live retainer list before any withdrawal.
+
+All items search marks craftable, workshop, or no crafting recipe. Ingredient
+previews explain when a selected item has no recipe and is left unchanged. In the
+reported screenshot the chosen augmented shoes were shown by the game catalogue
+as No recipe; the planner must not invent crafting ingredients or silently replace
+them with a different equipment version. Use Crafting logs to test a craftable item.
+
+Validation: zero-warning/error build, gate tests including retainer-container
+isolation and noncraftable behavior in all modes. Live acceptance: reopen away
+from the bell and check cached inventory, then compare a Crafting logs item in
+all three modes. No Journal deployment required; native withdrawals unchanged.
