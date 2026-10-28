@@ -12,6 +12,39 @@ internal sealed record RetrievalPreview(uint ItemId,string Name,int Required,int
 }
 internal static class RetainerRetrieval
 {
+    internal sealed record ArtisanLists(RetrievalPreset[] Lists, string[] Warnings);
+    internal static ArtisanLists ReadArtisan(string json, IReadOnlyDictionary<uint,RetrievalRecipe> recipes, IReadOnlyDictionary<uint,string> names)
+    {
+        using var doc=JsonDocument.Parse(json,new JsonDocumentOptions{AllowTrailingCommas=true,CommentHandling=JsonCommentHandling.Skip});
+        var root=doc.RootElement;
+        if(root.ValueKind==JsonValueKind.Object&&root.TryGetProperty("Payload",out var payload)&&payload.ValueKind==JsonValueKind.Object)root=payload;
+        var lists=root;
+        if(root.ValueKind!=JsonValueKind.Array&&!root.TryGetProperty("NewCraftingLists",out lists))throw new IOException("This Artisan file has no saved crafting lists (NewCraftingLists).");
+        static JsonElement Array(JsonElement value)=>value.ValueKind==JsonValueKind.Object&&value.TryGetProperty("$values",out var values)?values:value;
+        var result=new List<RetrievalPreset>();var warnings=new List<string>();
+        foreach(var list in Array(lists).EnumerateArray())
+        {
+            var name=list.TryGetProperty("Name",out var n)?n.GetString()??"Artisan list":"Artisan list";
+            try
+            {
+                var entries=new List<RetrievalEntry>();
+                foreach(var item in Array(list.GetProperty("Recipes")).EnumerateArray())
+                {
+                    if(item.TryGetProperty("ListItemOptions",out var options)&&options.ValueKind==JsonValueKind.Object&&options.TryGetProperty("Skipping",out var skip)&&skip.ValueKind==JsonValueKind.True)continue;
+                    var id=item.GetProperty("ID").GetUInt32();var count=item.GetProperty("Quantity").GetInt32();if(count<=0)continue;
+                    if(!recipes.TryGetValue(id,out var recipe))throw new IOException("unknown recipe "+id);
+                    entries.Add(new(recipe.ItemId,names.GetValueOrDefault(recipe.ItemId,"Item "+recipe.ItemId),checked(count*recipe.Yield),id));
+                }
+                // Equivalent job recipes can produce the same item. Finished retrieval needs the total,
+                // while material expansion still checks ambiguity if no unique recipe was chosen.
+                var merged=entries.GroupBy(e=>e.ItemId).Select(g=>new RetrievalEntry(g.Key,g.First().Name,checked(g.Sum(e=>e.Quantity)),g.Select(e=>e.RecipeId).Distinct().Count()==1?g.First().RecipeId:0));
+                result.Add(new(name,Combine(merged)));
+            }
+            catch(Exception e) when(e is IOException or InvalidOperationException or KeyNotFoundException or FormatException or OverflowException or ArgumentException)
+            {warnings.Add(name+": "+e.Message);}
+        }
+        return new(result.ToArray(),warnings.ToArray());
+    }
     internal const int MaxQuantity=1_000_000, MaxEntries=200;
     internal static RetrievalEntry[] Combine(IEnumerable<RetrievalEntry> entries)
     {
