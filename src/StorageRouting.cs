@@ -36,7 +36,7 @@ public static class StorageRouting
                 cargo[(group.Key.Item,group.Key.Hq,dest)]=available;
             }
         }
-        var moves=new List<RoutedMove>();ulong current=0;
+        var moves=new List<RoutedMove>();ulong current=0;bool rerouted=false;
         int FreeBags()=>state[Bags].Count(s=>s.Container<=3&&s.Item==0);
         ChestStack? Target(ChestStack source,ulong owner,bool allowReserve){
             var rows=state[owner].Where(d=>d.CanDeposit).Where(d=>Crystal(source.Item)?d.Container is 2001 or 12001:owner==Bags?d.Container<=3:d.Container is >=10000 and <=10006).ToArray();
@@ -48,9 +48,9 @@ public static class StorageRouting
         (ChestMove? move,bool withdraw,ulong destination) Next(ulong owner,bool reserve){
             foreach(var c in cargo.Where(x=>x.Key.Item3==owner&&x.Value>0).ToArray())foreach(var b in state[Bags].Where(s=>s.Item==c.Key.Item1&&s.Hq==c.Key.Item2&&s.Quantity>0&&!protectedBagSlots.Contains((s.Container,s.Slot)))){
                 if(Make(b,owner,c.Value,true) is {} deposit)return(deposit,false,owner);
-                var allowed=plan.Rules.FirstOrDefault(r=>r.To==owner&&r.Destinations!=null&&RetainerRetrieval.AllowsQuality(b.Hq,r.Quality)&&(r.AllItems||r.Items.Contains(b.Item)||r.Categories.Contains(category(b.Item))))?.Destinations;
+                var allowed=plan.Rules.FirstOrDefault(r=>(r.To==owner||r.Destinations?.Contains(owner)==true)&&r.Destinations!=null&&RetainerRetrieval.AllowsQuality(b.Hq,r.Quality)&&(r.AllItems||r.Items.Contains(b.Item)||r.Categories.Contains(category(b.Item))))?.Destinations;
                 var next=allowed?.Where(id=>id!=owner&&state.ContainsKey(id)&&Target(b,id,true)!=null).OrderByDescending(id=>state[id].Any(x=>Same(x,b)&&x.Quantity<x.Limit)).FirstOrDefault()??0;
-                if(next>0){cargo[c.Key]=0;var key=(c.Key.Item1,c.Key.Item2,next);cargo[key]=cargo.GetValueOrDefault(key)+c.Value;break;}
+                if(next>0){cargo[c.Key]=0;var key=(c.Key.Item1,c.Key.Item2,next);cargo[key]=cargo.GetValueOrDefault(key)+c.Value;rerouted=true;break;}
             }
             if(bagsOnly)return(null,false,0);
             foreach(var s in state[owner].Where(s=>s.Item>0&&s.Quantity>0)){
@@ -62,9 +62,9 @@ public static class StorageRouting
                     if(alternatives==null)continue;
                     // An assigned holder may keep overflow once earlier destinations
                     // are full. An unassigned source can use the next eligible holder.
-                    if(alternatives.Contains(owner)){outgoing[(owner,s.Item,s.Hq)]=0;continue;}
-                    var fallback=alternatives.Where(id=>id!=owner&&state.ContainsKey(id)&&Target(s,id,true)!=null).OrderByDescending(id=>state[id].Any(x=>Same(x,s)&&x.Quantity<x.Limit)).FirstOrDefault();
-                    if(fallback==0)continue;dest=fallback;
+                    var earlier=alternatives.Contains(owner)?alternatives.TakeWhile(id=>id!=owner):alternatives;
+                    var fallback=earlier.Where(id=>id!=owner&&state.ContainsKey(id)&&Target(s,id,true)!=null).OrderByDescending(id=>state[id].Any(x=>Same(x,s)&&x.Quantity<x.Limit)).FirstOrDefault();
+                    if(fallback==0){if(alternatives.Contains(owner))outgoing[(owner,s.Item,s.Hq)]=0;continue;}dest=fallback;
                 }
                 if(Make(s,Bags,outgoing[(owner,s.Item,s.Hq)],reserve) is {} pickup)return(pickup,true,dest);
             }
@@ -87,7 +87,7 @@ public static class StorageRouting
         {
         if(!bagsOnly)foreach(var owner in state.Keys.Where(k=>k!=Bags)){
             for(var pass=0;pass<2000;pass++){
-                var eligible=state[owner].Where(s=>s.Item>0&&plan.Rules.Any(r=>r.To==owner&&RetainerRetrieval.AllowsQuality(s.Hq,r.Quality)&&(r.AllItems||r.Duplicates||r.Items.Contains(s.Item)||r.Categories.Contains(category(s.Item))))).ToArray();
+                var eligible=state[owner].Where(s=>s.Item>0&&plan.Rules.Any(r=>(r.To==owner||r.Destinations?.Contains(owner)==true)&&RetainerRetrieval.AllowsQuality(s.Hq,r.Quality)&&(r.AllItems||r.Duplicates||r.Items.Contains(s.Item)||r.Categories.Contains(category(s.Item))))).ToArray();
                 var merge=ChestTransferPlanner.Merge(eligible);if(merge==null)break;
                 var si=state[owner].FindIndex(s=>s.Container==merge.Source.Container&&s.Slot==merge.Source.Slot);var di=state[owner].FindIndex(s=>s.Container==merge.Destination.Container&&s.Slot==merge.Destination.Slot);
                 var left=merge.Source.Quantity-merge.Quantity;state[owner][si]=left==0?merge.Source with{Item=0,Quantity=0,Hq=false,Limit=0}:merge.Source with{Quantity=left};state[owner][di]=merge.Destination with{Quantity=merge.Destination.Quantity+merge.Quantity};
@@ -97,6 +97,7 @@ public static class StorageRouting
         }
         MergeAssigned();
         for(var step=0;step<20000;step++){
+            rerouted=false;
             var action=current==0?(move:(ChestMove?)null,withdraw:false,destination:0UL):Next(current,false);
             if(action.move==null){
                 current=0;
@@ -108,7 +109,7 @@ public static class StorageRouting
                     foreach(var owner in cargo.Where(c=>c.Value>0).Select(c=>c.Key.Item3).Distinct()){
                         action=Next(owner,true);if(action.move!=null){current=owner;break;}}
                 }
-                if(current==0)break;
+                if(current==0){if(rerouted)continue;break;}
             }
             Apply(current,action.move!,action.withdraw,action.destination);
         }

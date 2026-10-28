@@ -25,7 +25,7 @@ public static class StorageAutoRouting
                 if(to==0)to=owners[0];
                 // Existing partial stacks win, then assignment priority. The
                 // transfer planner reports capacity that cannot be reached.
-                resolved.Add(rule with{To=to,Categories=[],Items=[group.Key],AllItems=false});
+                resolved.Add(rule with{To=to,Categories=[],Items=[group.Key],AllItems=false,Destinations=rule.Destinations??existing});
             }
         }
         return plan with{Rules=resolved.ToArray()};

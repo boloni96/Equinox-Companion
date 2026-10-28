@@ -37,6 +37,9 @@ internal static class StorageVisitTests
   Check("last retainer is first duplicate source",moves.Moves.First(x=>x.Withdraw).Retainer==5);
   Check("game order rather than numeric ID defines first retainer",moves.Moves.Where(x=>!x.Withdraw).All(x=>x.Retainer==90));
   Check("unique items left alone",moves.Moves.All(x=>x.Move.Source.Item!=200));
+  var fullFirst=new Dictionary<ulong,ChestStack[]>{{90,[I(10000,0,100,99)]},{20,[I(10000,0,100,80)]},{5,[I(10000,0,100,10)]},{0,bags}};
+  var fullFlow=StorageRouting.Build(plan,fullFirst,_=>58,includeExistingBags:false);
+  Check("full first retainer falls back to next existing holder",fullFlow.Remaining==0&&fullFlow.Moves.Any(x=>!x.Withdraw&&x.Retainer==20));
   var assignments=new[]{new RetainerAssignment(20,[58],[]),new RetainerAssignment(90,[58],[]),new RetainerAssignment(5,[],[200])};
   var rules=StorageAssignments.Apply([rule],assignments,inv,id=>id==100?58u:80u);
   Check("overlapping categories preserve chosen priority",rules.Single(x=>x.Items.Contains(100u)).Destinations!.SequenceEqual(new ulong[]{20,90}));

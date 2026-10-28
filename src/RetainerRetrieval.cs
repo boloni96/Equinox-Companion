@@ -4,7 +4,7 @@ namespace EquinoxCompanion;
 public enum RetrievalQuality { Any, NqOnly, HqOnly }
 public enum RetrievalMode { FinalItems, AllMaterials, CompletedItems, DirectIngredients }
 public sealed record RetrievalEntry(uint ItemId, string Name, int Quantity, uint RecipeId = 0, bool ReadyMaterial = false);
-public sealed record RetrievalPreset(string Name, RetrievalEntry[] Items, int Multiplier = 1, bool IncludesSubcrafts = false, bool ArtisanPreset = false, RetrievalMode Mode = RetrievalMode.CompletedItems, Dictionary<uint,uint>? RecipeChoices = null, RetrievalQuality Quality = RetrievalQuality.Any, ulong DestinationRetainer = 0, uint[]? SendCategories = null);
+public sealed record RetrievalPreset(string Name, RetrievalEntry[] Items, int Multiplier = 1, bool IncludesSubcrafts = false, bool ArtisanPreset = false, RetrievalMode Mode = RetrievalMode.CompletedItems, Dictionary<uint,uint>? RecipeChoices = null, RetrievalQuality Quality = RetrievalQuality.Any, ulong DestinationRetainer = 0, uint[]? SendCategories = null, EntrustSelection? Entrust = null);
 internal sealed record RetrievalRecipe(uint Id,uint ItemId,int Yield,RetrievalEntry[] Ingredients,string Job);
 internal sealed record RetrievalPreview(uint ItemId,string Name,int Required,int Held,int? Available)
 {
@@ -49,14 +49,14 @@ internal static class RetainerRetrieval
     }
     internal static bool AllowsQuality(bool hq,RetrievalQuality quality)=>quality==RetrievalQuality.Any||(quality==RetrievalQuality.HqOnly)==hq;
     internal static bool IsRetainerStorage(ulong container)=>container is >=10000 and <=10006 or 12001;
-    internal const int MaxQuantity=1_000_000, MaxEntries=200;
+    internal const int MaxQuantity=1_000_000, MaxEntries=5000;
     internal static RetrievalEntry[] Combine(IEnumerable<RetrievalEntry> entries)
     {
         var result=new Dictionary<uint,RetrievalEntry>();
         foreach(var e in entries){if(e.ItemId==0||e.Quantity is <1 or >MaxQuantity)throw new ArgumentException("Invalid item or quantity.");
             if(result.TryGetValue(e.ItemId,out var old)){if(old.RecipeId!=0&&e.RecipeId!=0&&old.RecipeId!=e.RecipeId)throw new ArgumentException("Choose one recipe for "+e.Name);result[e.ItemId]=old with {Quantity=checked(old.Quantity+e.Quantity),RecipeId=old.RecipeId==0?e.RecipeId:old.RecipeId,ReadyMaterial=old.ReadyMaterial&&e.ReadyMaterial};}
             else result[e.ItemId]=e;
-            if(result[e.ItemId].Quantity>MaxQuantity||result.Count>MaxEntries)throw new ArgumentException("List exceeds 200 items or 1,000,000 per item.");}
+            if(result[e.ItemId].Quantity>MaxQuantity||result.Count>MaxEntries)throw new ArgumentException("List exceeds 5,000 items or 1,000,000 per item.");}
         return result.Values.ToArray();
     }
     internal sealed record CraftStep(uint RecipeId,uint ItemId,string Name,int Crafts,int Yield);
@@ -145,10 +145,10 @@ internal static class RetainerRetrieval
         return JsonSerializer.Serialize(new{Name=name,ID=0,Recipes=steps.Select(s=>new{ID=s.RecipeId,Quantity=s.Crafts,ListItemOptions=new{Skipping=false}}).ToArray(),SkipIfEnough=false,IsPremade=false},new JsonSerializerOptions{WriteIndented=true});
     }
     internal static string Export(RetrievalPreset list)=>JsonSerializer.Serialize(new {Format="EquinoxRetrieval",Version=1,List=list},new JsonSerializerOptions{WriteIndented=true});
-    internal static RetrievalPreset Import(string text,Func<string,RetrievalEntry?> resolve)
+    internal static RetrievalPreset Import(string text,Func<string,RetrievalEntry?> resolve, Func<uint[]>? protectedItems = null)
     {
-        if(text.Length>100_000)throw new ArgumentException("Import is limited to 100,000 characters.");
-        if(text.TrimStart().StartsWith('{')){using var doc=JsonDocument.Parse(text);var root=doc.RootElement;if(root.GetProperty("Format").GetString()!="EquinoxRetrieval"||root.GetProperty("Version").GetInt32()!=1)throw new ArgumentException("Unsupported preset format.");var p=root.GetProperty("List").Deserialize<RetrievalPreset>()??throw new ArgumentException("Missing list.");if(string.IsNullOrWhiteSpace(p.Name)||p.Name.Length>100)throw new ArgumentException("List name must be 1–100 characters.");if(p.Multiplier is <1 or >999)throw new ArgumentException("Invalid preset multiplier.");return p with{Items=Combine(p.Items.Select(e=>{var found=resolve(e.ItemId.ToString())??throw new ArgumentException("Unknown item ID: "+e.ItemId);return e with{Name=found.Name};}))};}
+        if(text.Length>2_000_000)throw new ArgumentException("Import is limited to 2,000,000 characters.");
+        if(text.TrimStart().StartsWith('{')){using var doc=JsonDocument.Parse(text);var root=doc.RootElement;if(root.TryGetProperty("EntrustItems",out _))return EntrustSelection.Import(root,resolve,protectedItems);if(root.GetProperty("Format").GetString()!="EquinoxRetrieval"||root.GetProperty("Version").GetInt32()!=1)throw new ArgumentException("Unsupported preset format.");var p=root.GetProperty("List").Deserialize<RetrievalPreset>()??throw new ArgumentException("Missing list.");if(string.IsNullOrWhiteSpace(p.Name)||p.Name.Length>100)throw new ArgumentException("List name must be 1–100 characters.");if(p.Multiplier is <1 or >999)throw new ArgumentException("Invalid preset multiplier.");return p with{Items=Combine(p.Items.Select(e=>{var found=resolve(e.ItemId.ToString())??throw new ArgumentException("Unknown item ID: "+e.ItemId);return e with{Name=found.Name};}))};}
         var parsed=MarketShopping.Parse(text);if(parsed.Errors.Length>0)throw new ArgumentException(string.Join("\n",parsed.Errors));
         return new("Imported list",Combine(parsed.Items.Select(e=>(resolve(e.Name)??throw new ArgumentException("Unknown or ambiguous item: "+e.Name)) with{Quantity=e.Quantity})));
     }

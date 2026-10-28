@@ -11,6 +11,7 @@ public sealed partial class Plugin
     private ulong[] organizeSources=[],organizeOwnerOrder=[];private RetrieverPort? organizePort;
     private DateTimeOffset organizeNext,organizeDeadline;
     private ChestMove? organizePending;
+    private object? organizerLastTransfer;
     private int organizeCarry;
     private string organizeStatus="Preview all or Organise all. Use assignments for category homes; custom movements remain below.";
     private void OrganizeStage(int stage){organizeStage=stage;organizeStatus=$"{organizeTransferred} delivered · {organizeMoveIndex}/{organizeMoves.Length} transfers · "+(stage switch{0=>"Preparing",1 or 2 or 3=>$"Refreshing missing inventory {organizeSourceIndex+1}/{organizeSources.Length}",4 or 5=>"Opening retainer",6 or 7=>"Moving batch",9=>"Calculating batch space",_=>"Next retainer"});organizeDeadline=DateTimeOffset.UtcNow.AddSeconds(60);}
@@ -69,7 +70,9 @@ public sealed partial class Plugin
     {
         RetrievalTry(()=>{
             if(retrievalSendTo==0)throw new InvalidOperationException("Choose a destination retainer for this plan first.");
+            if(duplicates&&retrievalEntrust!=null)throw new InvalidOperationException("Use Entrust plan to preserve this imported plan’s protection and keep amounts.");
             if(duplicates){StartStorageRouting([new(StorageRouting.Bags,retrievalSendTo,[],[],Duplicates:true,Quality:retrievalQuality)],true);return;}
+            if(retrievalEntrust!=null){var amounts=retrievalEntrust.Amounts(retrievalItems.Select(x=>x.ItemId),OrganizerInventory(false,false).Concat(OrganizerInventory(false,true)),retrievalQuality,OrganizeCategory,retrievalSendCategories);if(amounts.Count==0)throw new InvalidOperationException("No matching bag items to entrust after keep amounts and protection.");StartStorageRouting([new(StorageRouting.Bags,retrievalSendTo,[],amounts.Keys.ToArray(),Quality:retrievalQuality,Amounts:amounts)],true);return;}
             PreviewRetrieval(false,false);if(retrievalPlan.Length==0&&retrievalSendCategories.Count==0)throw new InvalidOperationException("Choose items or send categories first.");
             var rules=new List<StorageRoute>();
             if(retrievalPlan.Length>0)rules.Add(new(StorageRouting.Bags,retrievalSendTo,[],retrievalPlan.Select(x=>x.ItemId).ToArray(),Quality:retrievalQuality,Amounts:retrievalPlan.ToDictionary(x=>x.ItemId,x=>x.Quantity)));
@@ -127,7 +130,7 @@ public sealed partial class Plugin
                     var action=organizeMoves[organizeMoveIndex];var move=action.Move;
                     var src=ReadChestContainer(move.Source.Container).First(s=>s.Slot==move.Source.Slot);var dst=ReadChestContainer(move.Destination.Container).First(s=>s.Slot==move.Destination.Slot);
                     if(!OrganizerSlotMatches(move.Source,src)||!OrganizerSlotMatches(move.Destination,dst)){StopOrganize("Inventory changed after the space check. Stopped before moving another item; Check again.");return;}
-                    organizePending=move;chestMove!(manager,(InventoryType)src.Container,(ushort)src.Slot,(InventoryType)dst.Container,(ushort)dst.Slot,move.Quantity);OrganizeStage(7);break;
+                    organizePending=move;var submitted=chestMove!(manager,(InventoryType)src.Container,(ushort)src.Slot,(InventoryType)dst.Container,(ushort)dst.Slot,move.Quantity);organizerLastTransfer=new {retainer=organizeActiveRetainer,action.Withdraw,action.Internal,move,nativeResult=submitted,at=now};OrganizeStage(7);break;
                 case 7:
                     if(!OrganizerConfirmed())break;
                     var done=organizeMoves[organizeMoveIndex];if(done.Internal){}else if(done.Withdraw)organizeCarry+=done.Move.Quantity;else{if(!organizeBagsOnly)organizeCarry-=done.Move.Quantity;organizeTransferred+=done.Move.Quantity;}
@@ -156,6 +159,8 @@ public sealed partial class Plugin
         var move=organizePending!;
         var src=ReadChestContainer(move.Source.Container).First(s=>s.Slot==move.Source.Slot);
         var dst=ReadChestContainer(move.Destination.Container).First(s=>s.Slot==move.Destination.Slot);
-        return ChestTransferPlanner.Confirmed(move,src,dst);
+        var confirmed=ChestTransferPlanner.Confirmed(move,src,dst);
+        organizerLastTransfer=new {retainer=organizeActiveRetainer,move,sourceNow=src,destinationNow=dst,confirmed,at=DateTimeOffset.UtcNow};
+        return confirmed;
     }
 }
