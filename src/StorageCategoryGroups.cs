@@ -5,7 +5,11 @@ internal static class StorageCategoryGroups
 {
     internal static string Group(StorageCategory category)=>category.Id switch
     {
-        57 or >=64 and <=80 or 82 or 94 or 95=>"Housing",
+        57 or >=64 and <=80 or 82 or 95=>"Housing",
+        55=>"Dyes",
+        81 or 86 or 94=>"Collectibles",
+        33=>"Fishing tackle",
+        112=>"Outfits",
         58 or 83=>"Materia",
         59 or 60=>"Crystals & catalysts",
         >=90 and <=93 or >=101 and <=104=>"Workshop parts",
@@ -14,7 +18,7 @@ internal static class StorageCategoryGroups
     internal static StorageCategoryGroup[] Build(IEnumerable<StorageCategory> categories)
     {
         var rows=categories.Where(c=>c.Id>0&&!string.IsNullOrWhiteSpace(c.Name)).DistinctBy(c=>c.Id).ToArray();
-        return new[]{"Housing","Crafting materials","Materia","Crystals & catalysts","Workshop parts","Weapons","Tools","Armour & accessories","Food & medicine","Other items"}
+        return new[]{"Housing","Dyes","Crafting materials","Materia","Crystals & catalysts","Workshop parts","Weapons","Tools","Armour & accessories","Food & medicine","Fishing tackle","Outfits","Collectibles","Other items"}
             .Select(name=>new StorageCategoryGroup(name,rows.Where(c=>Group(c)==name).OrderBy(c=>c.Minor).ThenBy(c=>c.Id).ToArray())).Where(g=>g.Categories.Length>0).ToArray();
     }
     internal static void Select(HashSet<uint> selection,StorageCategoryGroup group,bool enabled)
