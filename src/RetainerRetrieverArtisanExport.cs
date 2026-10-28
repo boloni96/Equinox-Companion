@@ -19,6 +19,7 @@ public sealed partial class Plugin
         {
             if(retrievalCatalog==null)return;
             var outputs=RetainerRetrieval.Requested(retrievalItems,retrievalMultiplier,retrievalIncludesSubcrafts,RetrievalRecipes());
+            outputs=RetainerRetrieval.WorkshopTurnIns(outputs,retrievalCatalog.Outfits);
             outputs=RetainerRetrieval.WorkshopTurnIns(outputs,retrievalCatalog.WorkshopByItem);
             if(retrievalExportMissing)
             {
@@ -34,7 +35,7 @@ public sealed partial class Plugin
     {
         ImGui.SetNextWindowSize(new Vector2(600,450),ImGuiCond.FirstUseEver);
         if(!ImGui.BeginPopupModal("Prepare Artisan crafting list"))return;
-        if(ImGui.Checkbox("Only missing outputs (bags + recorded retainers)",ref retrievalExportMissing))BuildRetrievalArtisanExport();
+        if(ImGui.Checkbox("Only missing outputs (NQ + HQ bags and recorded retainers)",ref retrievalExportMissing))BuildRetrievalArtisanExport();
         ImGui.TextWrapped("Review the crafting order below. Copy, then use Artisan → Lists → Import List From Clipboard (Artisan Export). No crafting starts automatically.");
         ImGui.BeginChild("CraftExportReview",new Vector2(0,Math.Max(100,ImGui.GetContentRegionAvail().Y-100)),false);
         foreach(var s in retrievalExportSteps){DrawRetrievalIcon(s.ItemId);ImGui.TextUnformatted($"{s.Name} · {s.Crafts} crafts → {s.Crafts*s.Yield} items");}

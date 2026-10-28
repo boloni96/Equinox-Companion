@@ -9,9 +9,10 @@ public sealed partial class Plugin
     private RetrievalRun retrievalRun=null!;
     private RetrieverPort retrievalPort=null!;
     private DateTimeOffset retrievalTick;private string retrievalLastStatus="";
-    private unsafe int RetrievalHeld(uint item){var m=InventoryManager.Instance();if(m==null)return 0;var count=0;foreach(var t in new[]{InventoryType.Inventory1,InventoryType.Inventory2,InventoryType.Inventory3,InventoryType.Inventory4,InventoryType.Crystals}){var c=m->GetInventoryContainer(t);if(c==null||!c->IsLoaded)continue;for(var i=0;i<c->Size;i++)if(c->Items[i].ItemId==item)count=checked(count+c->Items[i].Quantity);}return count;}
+    private unsafe int RetrievalHeld(uint item,RetrievalQuality quality=RetrievalQuality.Any){var m=InventoryManager.Instance();if(m==null)return 0;var count=0;foreach(var t in new[]{InventoryType.Inventory1,InventoryType.Inventory2,InventoryType.Inventory3,InventoryType.Inventory4,InventoryType.Crystals}){var c=m->GetInventoryContainer(t);if(c==null||!c->IsLoaded)continue;for(var i=0;i<c->Size;i++)if(c->Items[i].ItemId==item&&RetainerRetrieval.AllowsQuality((c->Items[i].Flags&InventoryItem.ItemFlags.HighQuality)!=0,quality))count=checked(count+c->Items[i].Quantity);}return count;}
     private void UpdateRetriever(DateTimeOffset now)
     {
+        TickChest(now);TickOrganize(now);
         if(retrievalPort.Pause.RestorePending)retrievalPort.Pause.Release(now);
         if(!config.EnableRetriever){if(retrievalRun.Running)retrievalRun.Stop("Retriever disabled.");retrieverWindow.IsOpen=false;ForgetOptionalLauncher("Retainer Retriever");return;}
         if(retrievalRun.Running&&retrievalRun.State!=RetrievalRun.Phase.Prepare&&retrievalPort.Pause.Held){var pause=retrievalPort.Pause.Check(now);if(!pause.Ready){retrievalRun.Stop(pause.Error.Length>0?pause.Error:"Another AutoRetainer task started; retrieval stopped.");return;}}
@@ -22,7 +23,7 @@ public sealed partial class Plugin
     {
         private readonly Plugin p;private readonly SellerPort navigation;
         internal readonly SellerAutoRetainerPause Pause=new(new SellerAutoRetainerPort());
-        internal ulong Character;internal uint World;
+        internal RetrievalQuality Quality;internal ulong Character;internal uint World;
         private ulong inventoryRetainer;private DateTimeOffset inventoryReadyAt;
         private RetrievalSlot? pending;private int quantity;private bool contextSent,numericSent,prepared;private DateTimeOffset openedAt;
         internal RetrieverPort(Plugin plugin){p=plugin;navigation=new(plugin);}
@@ -31,8 +32,8 @@ public sealed partial class Plugin
         public bool Select(ulong id)=>navigation.SelectRetainer(new SellerRetainerRef(id,""));
         private static bool InventoryOpen=>SellerAddon("InventoryRetainer")!=null||SellerAddon("InventoryRetainerLarge")!=null;
         public bool OpenInventory(ulong id){if(!SellerActive(id))return false;if(AgentRetainer.Instance()!=null&&AgentRetainer.Instance()->IsAgentActive()&&InventoryOpen){if(inventoryRetainer!=id){inventoryRetainer=id;inventoryReadyAt=DateTimeOffset.UtcNow.AddSeconds(1);}return DateTimeOffset.UtcNow>=inventoryReadyAt;}var menu=(AddonSelectString*)SellerAddon("SelectString");if(menu==null){p.SellerRetainerTalk(id);return false;}var label=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Addon>().GetRow(2378).Text.ToString();for(var i=0;i<Math.Min(20,(int)menu->PopupMenu.PopupMenu.EntryCount);i++)if(TravelMenuText(menu->PopupMenu.PopupMenu.EntryNames[i].Value)==label){menu->FireCallbackInt(i);return false;}return false;}
-        public RetrievalSlot[]? Read(ulong id){if(!SellerActive(id)||!InventoryOpen)return null;var m=InventoryManager.Instance();if(m==null)return null;var list=new List<RetrievalSlot>();foreach(var type in Enumerable.Range(10000,7).Append(12001)){var c=m->GetInventoryContainer((InventoryType)type);if(c==null||!c->IsLoaded||c->Items==null)return null;for(var i=0;i<c->Size;i++){var s=c->Items[i];if(s.ItemId>0&&s.Quantity>0)list.Add(new(s.ItemId,s.Quantity,type,i));}}return list.ToArray();}
-        public int Held(uint item)=>p.RetrievalHeld(item);
+        public RetrievalSlot[]? Read(ulong id){if(!SellerActive(id)||!InventoryOpen)return null;var m=InventoryManager.Instance();if(m==null)return null;var list=new List<RetrievalSlot>();foreach(var type in Enumerable.Range(10000,7).Append(12001)){var c=m->GetInventoryContainer((InventoryType)type);if(c==null||!c->IsLoaded||c->Items==null)return null;for(var i=0;i<c->Size;i++){var s=c->Items[i];if(s.ItemId>0&&s.Quantity>0&&RetainerRetrieval.AllowsQuality((s.Flags&InventoryItem.ItemFlags.HighQuality)!=0,Quality))list.Add(new(s.ItemId,s.Quantity,type,i,(s.Flags&InventoryItem.ItemFlags.HighQuality)!=0));}}return list.ToArray();}
+        public int Held(uint item)=>p.RetrievalHeld(item,Quality);
         public bool Withdraw(ulong id,RetrievalSlot slot,int amount)
         {
             if(!SellerActive(id))throw new InvalidOperationException("Selected retainer changed.");
