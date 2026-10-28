@@ -1,0 +1,41 @@
+Equinox Companion 0.5.1.268 — retriever planning consistency review
+
+The previous first mode expanded workshops but left gear untouched. The window
+now uses one tested planner with three explicit meanings:
+1. Recipe ingredients / workshop turn-ins: immediate recipe ingredients for gear
+   and other craftable outputs; all phases for workshop projects. Materials added
+   from the workshop source carry provenance so they are not expanded twice.
+2. All raw ingredients: recursively expand subcrafts, including crystals.
+3. Listed items themselves: retrieve exactly the entries (e.g. 600 finished ingots).
+Non-craftable items remain exact; missing recipes are not invented. Unavailable
+saved recipe IDs fail visibly. Game recipes with Number=0 are excluded, matching
+Artisan's valid-recipe filtering. Different valid recipes require an explicit choice.
+
+Recipe choice is available for requested items and ambiguous intermediate recipes.
+Save/export now remembers retrieval mode and recipe choices. Existing presets
+without a saved mode load as exact items; choose the intended mode and save once.
+Artisan lists load as recipe ingredients. Expanded Artisan lists still need the
+explicit includes-subcrafts setting when that describes their contents.
+
+Clear list resets the working list/preview/selection and offers Undo clear. Saved
+presets are not deleted. Undo restores the list's mode and recipe choices too.
+Failed calculations clear obsolete previews. Selected-only previews retain their
+scope after edits. Character changes discard old stock/preview counts. Finished
+retrieval updates bag counts. Automatic quantity edits recalculate the plan without
+rescanning retained observation history; explicit Preview refreshes inventory.
+
+Reviewed: catalogue filtering; list and preset loading; workshop provenance;
+direct/raw/exact planning; yields, multipliers and duplicate supplies; selection;
+recipe choice; import/export and Artisan preparation; stock invalidation; native
+retrieval/cancellation boundaries. Native withdrawal actions are unchanged.
+
+Validation: build zero warnings/errors; gate suite 1,837 PASS lines, including 17
+new tests against the window's shared planner and persistence. Windows CI also runs
+native and market regression suites before publication. This is source/build
+validation, not live testing of every gear item or game window.
+
+Live checks: Clear/Undo; add one crafted gear item and compare all three modes;
+repeat with four workshop parts; save/load the chosen mode; inspect one Artisan
+import without starting crafts. First withdrawal remains a small stack test.
+Known limits: NQ/HQ combined, recorded stock can be stale/unknown, raw-material
+planning does not substitute intermediate stock. No Journal deployment needed.

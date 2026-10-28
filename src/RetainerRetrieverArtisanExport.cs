@@ -18,15 +18,16 @@ public sealed partial class Plugin
         try
         {
             if(retrievalCatalog==null)return;
-            var outputs=RetainerRetrieval.Requested(retrievalItems,retrievalMultiplier,retrievalIncludesSubcrafts,retrievalCatalog.Recipes);
+            var outputs=RetainerRetrieval.Requested(retrievalItems,retrievalMultiplier,retrievalIncludesSubcrafts,RetrievalRecipes());
             outputs=RetainerRetrieval.WorkshopTurnIns(outputs,retrievalCatalog.WorkshopByItem);
             if(retrievalExportMissing)
             {
                 RefreshRetrievalStock();if(!retrievalStockComplete)throw new InvalidOperationException("Some retainer stock is unknown. Refresh inventory after visiting your retainers, or choose all requested outputs.");
                 outputs=outputs.Select(e=>e with{Quantity=Math.Max(0,e.Quantity-RetrievalHeld(e.ItemId)-retrievalStock.Where(s=>s.Item==e.ItemId).Sum(s=>s.Quantity))}).Where(e=>e.Quantity>0).ToArray();
             }
-            var plan=RetainerRetrieval.PlanCrafts(outputs,retrievalCatalog.Recipes);retrievalExportSteps=plan.Steps;retrievalExportMaterials=plan.Materials;
+            var plan=RetainerRetrieval.PlanCrafts(outputs,RetrievalRecipes());retrievalExportSteps=plan.Steps;retrievalExportMaterials=plan.Materials;
         }
+        catch(RetrievalRecipeChoiceException e){retrievalRecipeChoice=e.ItemId;retrievalExportError=e.Message+" Close this review, choose the recipe in Retrieve, then prepare again.";}
         catch(Exception e){retrievalExportError=e.Message;}
     }
     private void DrawRetrievalArtisanExport()
