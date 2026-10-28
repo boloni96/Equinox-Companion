@@ -19,6 +19,7 @@ public sealed partial class Plugin
         {
             if(retrievalCatalog==null)return;
             var outputs=RetainerRetrieval.Requested(retrievalItems,retrievalMultiplier,retrievalIncludesSubcrafts,retrievalCatalog.Recipes);
+            outputs=RetainerRetrieval.WorkshopTurnIns(outputs,retrievalCatalog.WorkshopByItem);
             if(retrievalExportMissing)
             {
                 RefreshRetrievalStock();if(!retrievalStockComplete)throw new InvalidOperationException("Some retainer stock is unknown. Refresh inventory after visiting your retainers, or choose all requested outputs.");

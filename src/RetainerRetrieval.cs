@@ -1,7 +1,7 @@
 using System.Text.Json;
 namespace EquinoxCompanion;
 
-public enum RetrievalMode { FinalItems, AllMaterials }
+public enum RetrievalMode { FinalItems, AllMaterials, CompletedItems }
 public sealed record RetrievalEntry(uint ItemId, string Name, int Quantity, uint RecipeId = 0);
 public sealed record RetrievalPreset(string Name, RetrievalEntry[] Items, int Multiplier = 1, bool IncludesSubcrafts = false, bool ArtisanPreset = false);
 internal sealed record RetrievalRecipe(uint Id,uint ItemId,int Yield,RetrievalEntry[] Ingredients,string Job);
@@ -78,6 +78,20 @@ internal static class RetainerRetrieval
         if(listed.Length>0&&outputs.Length==0)throw new ArgumentException("No final outputs remain. Check the list and its subcraft option.");
         return outputs;
     }
+    internal static RetrievalEntry[] WorkshopTurnIns(IEnumerable<RetrievalEntry> entries,IReadOnlyDictionary<uint,RetrievalEntry[]> projects)
+    {
+        var expanded=new List<RetrievalEntry>();
+        foreach(var e in entries)
+        {
+            if(projects.TryGetValue(e.ItemId,out var supplies))
+            {
+                if(supplies.Length==0)throw new ArgumentException("Workshop requirements unavailable for "+e.Name);
+                expanded.AddRange(supplies.Select(i=>i with{Quantity=checked(i.Quantity*e.Quantity)}));
+            }
+            else expanded.Add(e);
+        }
+        return Combine(expanded);
+    }
     internal static CraftPlan PlanCrafts(IEnumerable<RetrievalEntry> entries,IReadOnlyDictionary<uint,RetrievalRecipe[]> recipes)
     {
         var leaves=new List<RetrievalEntry>();var spare=new Dictionary<uint,int>();var steps=new List<CraftStep>();
@@ -94,7 +108,7 @@ internal static class RetainerRetrieval
     internal static RetrievalEntry[] Expand(IEnumerable<RetrievalEntry> entries,int multiplier,RetrievalMode mode,IReadOnlyDictionary<uint,RetrievalRecipe[]> recipes)
     {
         var requested=Requested(entries,multiplier,false,recipes);
-        return mode==RetrievalMode.FinalItems?requested:PlanCrafts(requested,recipes).Materials;
+        return mode!=RetrievalMode.AllMaterials?requested:PlanCrafts(requested,recipes).Materials;
     }
     internal static string ExportArtisan(string name,CraftStep[] steps)
     {
