@@ -3,7 +3,7 @@ using Lumina.Excel.Sheets;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
-    private sealed record RetrievalCatalog(Dictionary<uint,string> Names,Dictionary<uint,uint> Icons,Dictionary<uint,RetrievalRecipe[]> Recipes,RetrievalPreset[] Workshop,Dictionary<uint,RetrievalEntry[]> WorkshopByItem);
+    private sealed record RetrievalCatalog(Dictionary<uint,string> Names,Dictionary<uint,uint> Icons,Dictionary<uint,RetrievalRecipe[]> Recipes,RetrievalPreset[] Workshop,Dictionary<uint,RetrievalEntry[]> WorkshopByItem,Dictionary<uint,RetrievalEntry[]> Outfits);
     private Task<RetrievalCatalog>? retrievalCatalogTask;private RetrievalCatalog? retrievalCatalog;
     private Task<RetainerRetrieval.ArtisanLists>? retrievalArtisanTask;private RetrievalPreset[] retrievalArtisan=[];private string retrievalArtisanNotice="";private bool retrievalArtisanRequested;private string[] retrievalArtisanLive=[];private string retrievalArtisanConnection="";
     private void LoadRetrievalCatalog(){if(retrievalCatalog!=null||retrievalCatalogTask!=null)return;retrievalCatalogTask=Task.Run(()=>{
@@ -14,7 +14,12 @@ public sealed partial class Plugin
                 var step=process.Value;for(var i=0;i<step.SupplyItem.Count;i++){var supply=step.SupplyItem[i];if(supply.RowId==0)continue;var id=supply.Value.Item.RowId;var count=checked(step.SetQuantity[i]*step.SetsRequired[i]);if(id>0&&count>0)rows.Add(new(id,names.GetValueOrDefault(id,"Item"),count));}}
             if(rows.Count>0){var supplies=RetainerRetrieval.Combine(rows).Select(e=>e with{ReadyMaterial=true}).ToArray();workshopByItem[project.ResultItem.RowId]=supplies;workshop.Add(new(names.GetValueOrDefault(project.ResultItem.RowId,"Workshop "+project.RowId)+" · turn-ins",supplies));}}
         var shark=workshop.Where(p=>p.Name.StartsWith("Shark-class ",StringComparison.OrdinalIgnoreCase)).ToArray();if(shark.Length==4)workshop.Add(new("Shark submarine (all 4 parts) · turn-ins",RetainerRetrieval.Combine(shark.SelectMany(p=>p.Items))));
-        return new RetrievalCatalog(names,DataManager.GetExcelSheet<Item>().Where(x=>x.RowId>0).ToDictionary(x=>x.RowId,x=>(uint)x.Icon),recipes,workshop.OrderBy(x=>x.Name).ToArray(),workshopByItem);});}
+        var outfits=new Dictionary<uint,RetrievalEntry[]>();
+        foreach(var set in DataManager.GetExcelSheet<MirageStoreSetItem>()){
+            if(!names.ContainsKey(set.RowId))continue;
+            var ids=new[]{set.MainHand.RowId,set.OffHand.RowId,set.Head.RowId,set.Body.RowId,set.Hands.RowId,set.Legs.RowId,set.Feet.RowId,set.Earrings.RowId,set.Necklace.RowId,set.Bracelets.RowId,set.Ring.RowId}.Where(id=>id>0&&id!=set.RowId&&names.ContainsKey(id)).Distinct().ToArray();
+            if(ids.Length>0)outfits[set.RowId]=ids.Select(id=>new RetrievalEntry(id,names[id],1)).ToArray();}
+        return new RetrievalCatalog(names,DataManager.GetExcelSheet<Item>().Where(x=>x.RowId>0).ToDictionary(x=>x.RowId,x=>(uint)x.Icon),recipes,workshop.OrderBy(x=>x.Name).ToArray(),workshopByItem,outfits);});}
     private RetrievalEntry? ResolveRetrievalItem(string name){if(retrievalCatalog==null)return null;if(uint.TryParse(name,out var id)&&retrievalCatalog.Names.TryGetValue(id,out var text))return new(id,text,1);var matches=retrievalCatalog.Names.Where(x=>x.Value.Equals(name,StringComparison.OrdinalIgnoreCase)).Take(2).ToArray();return matches.Length==1?new(matches[0].Key,matches[0].Value,1):null;}
     private void LoadRetrievalArtisan(){if(retrievalCatalog==null||retrievalArtisanTask!=null)return;
         var path=Path.Combine(Pi.ConfigFile.DirectoryName!,"Artisan.json");var recipes=retrievalCatalog.Recipes.Values.SelectMany(x=>x).ToDictionary(x=>x.Id);var names=retrievalCatalog.Names;

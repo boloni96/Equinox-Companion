@@ -24,3 +24,24 @@ Validation: zero-warning/error build, gate tests including retainer-container
 isolation and noncraftable behavior in all modes. Live acceptance: reopen away
 from the bell and check cached inventory, then compare a Crafting logs item in
 all three modes. No Journal deployment required; native withdrawals unchanged.
+
+Additional fixes validated against the later screenshots:
+- Full Attire entries resolve through MirageStoreSetItem into their actual pieces
+  before ingredient planning and Artisan export. Exact mode keeps the outfit item.
+- Recipes with identical ordinary materials/yield but different crystals/jobs use
+  a stable recipe automatically. Its real crystals remain in the plan. Explicit
+  recipe choices win; genuinely different material recipes still require a choice.
+  Subcraft rows offer Recipe to change the job, and obsolete prompts are cleared.
+- Any quality / NQ only / HQ only filters preview bag/retainer quantities AND native
+  stack selection and completion counts. Presets remember quality; Clear resets it.
+  HQ-only never substitutes NQ, even for crystals/non-HQ items. Inventory browsing
+  remains a combined catalogue; the quality filter controls retrieval.
+- The subcraft option is labelled List contains outputs AND their subcrafts to
+  distinguish it from ordinary requested materials. Leave it off for turn-in lists.
+- Artisan missing-output preparation explicitly uses combined NQ+HQ; the HQ filter
+  is for retrieval and does not promise that Artisan will craft HQ outputs.
+
+Local gate tests include 13 new cases for cached-container scope, noncraftable
+items, outfit mapping, job alternatives and quality filtering/persistence.
+In-game tests still needed: cached retainer view away from bell, Attire expansion,
+NQ-only and HQ-only requests against mixed-quality stacks, and recipe override.

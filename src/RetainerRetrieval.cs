@@ -1,9 +1,10 @@
 using System.Text.Json;
 namespace EquinoxCompanion;
 
+public enum RetrievalQuality { Any, NqOnly, HqOnly }
 public enum RetrievalMode { FinalItems, AllMaterials, CompletedItems, DirectIngredients }
 public sealed record RetrievalEntry(uint ItemId, string Name, int Quantity, uint RecipeId = 0, bool ReadyMaterial = false);
-public sealed record RetrievalPreset(string Name, RetrievalEntry[] Items, int Multiplier = 1, bool IncludesSubcrafts = false, bool ArtisanPreset = false, RetrievalMode Mode = RetrievalMode.CompletedItems, Dictionary<uint,uint>? RecipeChoices = null);
+public sealed record RetrievalPreset(string Name, RetrievalEntry[] Items, int Multiplier = 1, bool IncludesSubcrafts = false, bool ArtisanPreset = false, RetrievalMode Mode = RetrievalMode.CompletedItems, Dictionary<uint,uint>? RecipeChoices = null, RetrievalQuality Quality = RetrievalQuality.Any);
 internal sealed record RetrievalRecipe(uint Id,uint ItemId,int Yield,RetrievalEntry[] Ingredients,string Job);
 internal sealed record RetrievalPreview(uint ItemId,string Name,int Required,int Held,int? Available)
 {
@@ -46,6 +47,7 @@ internal static class RetainerRetrieval
         }
         return new(result.ToArray(),warnings.ToArray());
     }
+    internal static bool AllowsQuality(bool hq,RetrievalQuality quality)=>quality==RetrievalQuality.Any||(quality==RetrievalQuality.HqOnly)==hq;
     internal static bool IsRetainerStorage(ulong container)=>container is >=10000 and <=10006 or 12001;
     internal const int MaxQuantity=1_000_000, MaxEntries=200;
     internal static RetrievalEntry[] Combine(IEnumerable<RetrievalEntry> entries)
@@ -62,7 +64,11 @@ internal static class RetainerRetrieval
     private static RetrievalRecipe? Recipe(RetrievalEntry e,IReadOnlyDictionary<uint,RetrievalRecipe[]> recipes)
     {
         if(!recipes.TryGetValue(e.ItemId,out var choices)||choices.Length==0){if(e.RecipeId!=0)throw new ArgumentException("Saved recipe is unavailable for "+e.Name+". Choose a current recipe.");return null;}
-        var r=e.RecipeId!=0?choices.FirstOrDefault(r=>r.Id==e.RecipeId):choices.Select(x=>x.Yield+"|"+string.Join(";",x.Ingredients.OrderBy(i=>i.ItemId).Select(i=>i.ItemId+":"+i.Quantity))).Distinct().Count()==1?choices[0]:null;
+        var same=choices.Select(x=>x.Yield+"|"+string.Join(";",x.Ingredients.OrderBy(i=>i.ItemId).Select(i=>i.ItemId+":"+i.Quantity))).Distinct().Count()==1;
+        // Job alternatives using identical ordinary materials may differ only in crystal type.
+        // Keep the chosen recipe's actual crystals; genuinely different material recipes need a choice.
+        var jobAlternates=choices.All(x=>x.Ingredients.Any(i=>i.ItemId>19))&&choices.Select(x=>x.Yield+"|"+string.Join(";",x.Ingredients.Where(i=>i.ItemId>19).OrderBy(i=>i.ItemId).Select(i=>i.ItemId+":"+i.Quantity))).Distinct().Count()==1;
+        var r=e.RecipeId!=0?choices.FirstOrDefault(r=>r.Id==e.RecipeId):(same||jobAlternates)?choices.OrderBy(x=>x.Id).First():null;
         return r??throw new RetrievalRecipeChoiceException(e.ItemId,e.Name);
     }
     internal static RetrievalEntry[] Requested(IEnumerable<RetrievalEntry> entries,int multiplier,bool includesSubcrafts,IReadOnlyDictionary<uint,RetrievalRecipe[]> recipes)
@@ -94,10 +100,11 @@ internal static class RetainerRetrieval
         }
         return Combine(expanded);
     }
-    internal static CraftPlan BuildPlan(IEnumerable<RetrievalEntry> entries,int multiplier,bool includesSubcrafts,RetrievalMode mode,IReadOnlyDictionary<uint,RetrievalRecipe[]> recipes,IReadOnlyDictionary<uint,RetrievalEntry[]> workshop)
+    internal static CraftPlan BuildPlan(IEnumerable<RetrievalEntry> entries,int multiplier,bool includesSubcrafts,RetrievalMode mode,IReadOnlyDictionary<uint,RetrievalRecipe[]> recipes,IReadOnlyDictionary<uint,RetrievalEntry[]> workshop,IReadOnlyDictionary<uint,RetrievalEntry[]>? outfits=null)
     {
         var requested=Requested(entries,multiplier,includesSubcrafts,recipes);
         if(mode==RetrievalMode.CompletedItems)return new(requested,[]);
+        if(outfits!=null)requested=WorkshopTurnIns(requested,outfits);
         if(mode==RetrievalMode.AllMaterials)return PlanCrafts(WorkshopTurnIns(requested,workshop),recipes);
         if(mode==RetrievalMode.FinalItems)return new(WorkshopTurnIns(requested,workshop),[]); // Legacy exact-list mode.
         var materials=new List<RetrievalEntry>();var steps=new List<CraftStep>();
@@ -146,7 +153,7 @@ internal static class RetainerRetrieval
         return new("Imported list",Combine(parsed.Items.Select(e=>(resolve(e.Name)??throw new ArgumentException("Unknown or ambiguous item: "+e.Name)) with{Quantity=e.Quantity})));
     }
 }
-internal sealed record RetrievalSlot(uint ItemId,int Quantity,int Container,int Slot);
+internal sealed record RetrievalSlot(uint ItemId,int Quantity,int Container,int Slot,bool Hq=false);
 internal interface IRetrievalPort
 {
     bool ContextMatches {get;}

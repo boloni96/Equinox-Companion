@@ -2,7 +2,7 @@ using Dalamud.Bindings.ImGui;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
-    private sealed record RetrieverStock(ulong Retainer,string Holder,uint Item,string Name,int Quantity,DateTimeOffset? At);
+    private sealed record RetrieverStock(ulong Retainer,string Holder,uint Item,string Name,int Quantity,DateTimeOffset? At,bool Hq=false);
     private Dictionary<uint,int> retrievalBrowseBags=[];
     private RetrieverStock[] retrievalStock=[];private bool retrievalStockComplete;private string retrievalStockNotice="Refresh at a summoning bell to identify this character's retainers.";
     private string retrievalBrowseSearch="";private bool retrievalBrowseGroups=true;
@@ -40,17 +40,17 @@ public sealed partial class Plugin
             if(rawById.TryGetValue(id,out var raw))
             {
                 var good=raw.Where(x=>x.Length>3&&RetainerRetrieval.IsRetainerStorage(x[0])&&x[2] is >0 and <=uint.MaxValue&&x[3] is >0 and <=RetainerRetrieval.MaxQuantity);
-                foreach(var g in good.GroupBy(x=>(uint)x[2]))stocks.Add(new(id,name,g.Key,retrievalCatalog?.Names.GetValueOrDefault(g.Key)??g.Key.ToString(),checked((int)g.Sum(x=>(long)x[3])),null));
+                foreach(var g in good.GroupBy(x=>(Item:(uint)x[2],Hq:x.Length>6&&(x[6]&1)!=0)))stocks.Add(new(id,name,g.Key.Item,retrievalCatalog?.Names.GetValueOrDefault(g.Key.Item)??g.Key.Item.ToString(),checked((int)g.Sum(x=>(long)x[3])),null,g.Key.Hq));
             }
             else
             {
                 if(!Enumerable.Range(10000,7).Append(12001).All(t=>rows.Any(e=>e.Storage!.Key=="retainer:"+id+":"+t)))complete=false;
                 var saved=rows.SelectMany(e=>(e.Storage!.Stacks??[]).Select(s=>(s,e.At))).ToArray();
-                foreach(var g in saved.GroupBy(x=>x.s.ItemId))stocks.Add(new(id,name,g.Key,g.First().s.Name,g.Sum(x=>x.s.Quantity),g.Min(x=>x.At)));
+                foreach(var g in saved.GroupBy(x=>(x.s.ItemId,x.s.Hq)))stocks.Add(new(id,name,g.Key.ItemId,g.First().s.Name,g.Sum(x=>x.s.Quantity),g.Min(x=>x.At),g.Key.Hq));
                 if(rows.Length==0)stocks.AddRange(retrievalStock.Where(s=>s.Retainer==id&&retrievalPreviewOwner==owner));
             }
         }
-        retrievalStock=stocks.ToArray();retrievalBrowseBags=retrievalStock.Select(x=>x.Item).Distinct().ToDictionary(x=>x,RetrievalHeld);retrievalStockComplete=complete;
+        retrievalStock=stocks.ToArray();retrievalBrowseBags=retrievalStock.Select(x=>x.Item).Distinct().ToDictionary(x=>x,x=>RetrievalHeld(x));retrievalStockComplete=complete;
         retrievalStockNotice=(allagan?"Allagan Tools + saved inventory":"Companion saved inventory")+" · "+names.Count+" known retainers · "+(complete?"recorded stock":"partial recorded stock")+notice;
         retrievalRefreshPending=false;retrievalPreviewDirty=true;
     }
