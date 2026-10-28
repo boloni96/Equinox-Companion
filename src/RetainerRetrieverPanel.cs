@@ -5,6 +5,7 @@ using Dalamud.Interface.Windowing;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
+    private bool organizerTabWasVisible;
     private RetrieverWindow retrieverWindow=null!;private bool retrieverCommand,organizerCommand;
     private string retrievalName="New list",retrievalPaste="",retrievalSearch="",retrievalJob="All crafting logs",retrievalError="";
     private RetrievalEntry[] retrievalItems=[],retrievalPlan=[];private RetrievalPreview[] retrievalPreview=[];
@@ -72,7 +73,7 @@ public sealed partial class Plugin
         if(ImGui.BeginTabBar("RetrieverTabs")){
             if(ImGui.BeginTabItem("Browse inventory")){ImGui.BeginDisabled(retrievalRun.Running||organizeRunning||chestRunning);DrawRetrievalBrowse();ImGui.EndDisabled();ImGui.EndTabItem();}
             if(ImGui.BeginTabItem("Withdraw",retrievalShowList?ImGuiTabItemFlags.SetSelected:ImGuiTabItemFlags.None)){retrievalShowList=false;ImGui.BeginDisabled(retrievalRun.Running||organizeRunning||chestRunning);DrawRetrievalList();ImGui.EndDisabled();ImGui.EndTabItem();}
-            if(ImGui.BeginTabItem("Organize retainers")){DrawRetainerOrganizer();ImGui.EndTabItem();}
+            if(ImGui.BeginTabItem("Organize retainers")){if(!organizerTabWasVisible)InvalidateOrganizePreview();organizerTabWasVisible=true;DrawRetainerOrganizer();ImGui.EndTabItem();}else organizerTabWasVisible=false;
             if(ImGui.BeginTabItem("FC chest")){DrawRetrievalChest();ImGui.EndTabItem();}
             if(ImGui.BeginTabItem("Add items")){ImGui.BeginChild("RetrieverSourcesScroll",new Vector2(0,Math.Max(80,ImGui.GetContentRegionAvail().Y-8)),false);ImGui.BeginDisabled(retrievalRun.Running||organizeRunning||chestRunning);DrawRetrievalSources();ImGui.EndDisabled();ImGui.EndChild();ImGui.EndTabItem();}
             if(ImGui.BeginTabItem("Lists & import")){ImGui.BeginChild("RetrieverPresetsScroll",new Vector2(0,Math.Max(80,ImGui.GetContentRegionAvail().Y-8)),false);ImGui.BeginDisabled(retrievalRun.Running||organizeRunning||chestRunning);DrawRetrievalPresets();ImGui.EndDisabled();ImGui.EndChild();ImGui.EndTabItem();}

@@ -6,11 +6,11 @@ public sealed partial class Plugin
     private void DrawRetainerAssignments()
     {
         if(!Player.IsLoaded){ImGui.TextDisabled("Log in to edit this character’s assignments.");return;}
-        if(ImGui.Button("Preview all")){organizeFrom=0;organizeTo=StorageAutoRouting.AllRetainers;organizeRules.Clear();RetrievalTry(CheckOrganize);}ImGui.SameLine();
+        if(ImGui.Button("Preview all"))CheckAllOrganize();ImGui.SameLine();
         if(ImGui.Button("Organise all"))StartStorageRouting([new(StorageRouting.AllSources,StorageAutoRouting.AllRetainers,[],[],AllItems:true)],false);
         MarketHelp("Regular: consolidate duplicates from the last retainer toward the first in game order; unique items stay put. With assignments enabled: use the selected category/item homes, choosing available space across them. Your existing bag items stay untouched; only empty space is used for staging. No routine inventory tour when recorded stock is complete.");
         var character=Player.ContentId;var use=config.UseRetainerAssignments.Contains(character);ImGui.SameLine();
-        if(ImGui.Checkbox("Use assignments",ref use)){if(use)config.UseRetainerAssignments.Add(character);else config.UseRetainerAssignments.Remove(character);SaveConfiguration();organizePreview=[];}
+        if(ImGui.Checkbox("Use assignments",ref use)){if(use)config.UseRetainerAssignments.Add(character);else config.UseRetainerAssignments.Remove(character);SaveConfiguration();InvalidateOrganizePreview();}
         MarketHelp("Assignments apply to All retainers in Organise and Entrust. Explicit destinations still override them. Unassigned items are left alone. Settings belong to this character.");
 
         if(!ImGui.CollapsingHeader("Retainer assignments"))return;
@@ -43,7 +43,7 @@ public sealed partial class Plugin
             }
             ImGui.PopID();
         }
-        if(dirty){SaveConfiguration();organizePreview=[];}
+        if(dirty){SaveConfiguration();InvalidateOrganizePreview();}
         ImGui.TextDisabled("Allowed homes · available space first · saved per character");
     }
 }

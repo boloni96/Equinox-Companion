@@ -23,7 +23,7 @@ public sealed partial class Plugin
         var p=new RetrievalPreset(retrievalName,RetainerRetrieval.Combine(retrievalItems),retrievalMultiplier,retrievalIncludesSubcrafts,Mode:retrievalMode,RecipeChoices:new(retrievalRecipeOverrides),Quality:retrievalQuality,DestinationRetainer:retrievalSendTo,SendCategories:retrievalSendCategories.ToArray(),Entrust:retrievalEntrust,PlanId:at>=0?config.RetrievalPresets[at].PlanId:Guid.NewGuid().ToString("N"));
         if(config.RetrievalPresets.Any(x=>x.Name==p.Name)&&at!=config.RetrievalPresets.FindIndex(x=>x.Name==p.Name))throw new ArgumentException("Another plan already has this name.");
         if(at>=0)config.RetrievalPresets[at]=p;else if(config.RetrievalPresets.Count<25)config.RetrievalPresets.Add(p);else throw new ArgumentException("Maximum 25 presets.");
-        retrievalEditingPreset=p.Name;SaveConfiguration();
+        retrievalEditingPreset=p.Name;SaveConfiguration();InvalidateOrganizePreview();
     }
     private void DrawRetrievalPlanSelector(bool compact=false)
     {
