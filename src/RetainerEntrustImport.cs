@@ -4,12 +4,16 @@ public sealed partial class Plugin
 {
     private uint[] ReadAutoRetainerProtection()
     {
-        var path=Path.Combine(Pi.ConfigFile.DirectoryName!,"AutoRetainer.json");
-        if(!File.Exists(path)||new FileInfo(path).Length>32*1024*1024)throw new IOException("AutoRetainer.json is unavailable or too large to read its protection list. Save AutoRetainer settings first.");
-        // Copy the union of protection lists: a conservative snapshot, independent
-        // of future AutoRetainer changes or the currently selected cleanup plan.
-        return EntrustSelection.ReadProtection(File.ReadAllText(path));
+        return EntrustSelection.ReadProtectionDirectory(Pi.ConfigFile.DirectoryName!);
     }
+    private void ImportRetrievalAsNewPlan()
+    {
+        var imported=RetainerRetrieval.Import(retrievalPaste,ResolveRetrievalItem,ReadAutoRetainerProtection);
+        var current=new RetrievalPreset(retrievalName,retrievalItems.ToArray(),retrievalMultiplier,retrievalIncludesSubcrafts,Mode:retrievalMode,RecipeChoices:new(retrievalRecipeOverrides),Quality:retrievalQuality,DestinationRetainer:retrievalSendTo,SendCategories:retrievalSendCategories.ToArray(),Entrust:retrievalEntrust);
+        var updated=EntrustSelection.AddImportedPlan(config.RetrievalPresets,current,retrievalEditingPreset,imported);
+        config.RetrievalPresets=updated.ToList();SaveConfiguration();SelectRetrievalPreset(updated[^1]);
+    }
+
     private void DrawImportedEntrust()
     {
         var plan=retrievalEntrust!;

@@ -29,6 +29,28 @@ public sealed record EntrustSelection(Dictionary<uint,int> Keep, Dictionary<uint
         var protection=Flag("ExcludeProtected")?(protectedItems??throw new ArgumentException("AutoRetainer protection list is required for this import."))():[];
         return new(name,RetainerRetrieval.Combine(entries),Mode:RetrievalMode.CompletedItems,DestinationRetainer:StorageAutoRouting.AllRetainers,SendCategories:cats.Keys.ToArray(),Entrust:new(keep,cats,protection.Distinct().ToArray()));
     }
+    internal static uint[] ReadProtectionDirectory(string directory)
+    {
+        // EzConfig migrates the legacy sibling file to AutoRetainer/DefaultConfig.json.
+        // An existing modern file is authoritative; never fall back to stale protection.
+        var paths=new[]{Path.Combine(directory,"AutoRetainer","DefaultConfig.json"),Path.Combine(directory,"AutoRetainer.json")};
+        var path=paths.FirstOrDefault(File.Exists)??throw new IOException("AutoRetainer protection settings were not found in AutoRetainer/DefaultConfig.json or AutoRetainer.json. Open AutoRetainer settings and save them, then import again.");
+        if(new FileInfo(path).Length>32*1024*1024)throw new IOException("AutoRetainer protection settings exceed the 32 MB import limit.");
+        return ReadProtection(File.ReadAllText(path));
+    }
+    internal static RetrievalPreset[] AddImportedPlan(IEnumerable<RetrievalPreset> saved,RetrievalPreset current,string? editing,RetrievalPreset imported)
+    {
+        var result=saved.ToList();
+        string Unique(string name){var candidate=name;for(var n=2;result.Any(x=>x.Name==candidate);n++)candidate=name[..Math.Min(name.Length,85)]+" ("+n+")";return candidate;}
+        if(current.Items.Length>0||current.SendCategories?.Length>0){
+            var at=editing==null?-1:result.FindIndex(x=>x.Name==editing);
+            if(at>=0)result[at]=current with{Name=editing!};
+            else result.Add(current with{Name=Unique(string.IsNullOrWhiteSpace(current.Name)?"Saved working list":current.Name)});
+        }
+        result.Add(imported with{Name=Unique(imported.Name)});
+        if(result.Count>25)throw new ArgumentException("Maximum 25 presets. Remove an unused saved preset before importing; your current list has not changed.");
+        return result.ToArray();
+    }
     internal static uint[] ReadProtection(string json)
     {
         using var doc=JsonDocument.Parse(json);var ids=new HashSet<uint>();var found=false;
