@@ -8,14 +8,11 @@ public sealed partial class Plugin
         if(!Player.IsLoaded){ImGui.TextDisabled("Log in to edit this character’s assignments.");return;}
         if(ImGui.Button("Preview all")){organizeFrom=0;organizeTo=StorageAutoRouting.AllRetainers;organizeRules.Clear();RetrievalTry(CheckOrganize);}ImGui.SameLine();
         if(ImGui.Button("Organise all"))StartStorageRouting([new(StorageRouting.AllSources,StorageAutoRouting.AllRetainers,[],[],AllItems:true)],false);
-        MarketHelp("Regular: consolidate duplicates from the last retainer toward the first in game order; unique items stay put. With assignments enabled: use the selected category/item homes, choosing available space across them. No routine inventory tour when recorded stock is complete.");
+        MarketHelp("Regular: consolidate duplicates from the last retainer toward the first in game order; unique items stay put. With assignments enabled: use the selected category/item homes, choosing available space across them. Your existing bag items stay untouched; only empty space is used for staging. No routine inventory tour when recorded stock is complete.");
         var character=Player.ContentId;var use=config.UseRetainerAssignments.Contains(character);ImGui.SameLine();
         if(ImGui.Checkbox("Use assignments",ref use)){if(use)config.UseRetainerAssignments.Add(character);else config.UseRetainerAssignments.Remove(character);SaveConfiguration();organizePreview=[];}
         MarketHelp("Assignments apply to All retainers in Organise and Entrust. Explicit destinations still override them. Unassigned items are left alone. Settings belong to this character.");
-        if(use){
-            if(ImGui.SmallButton("Entrust matching bag items"))StartStorageRouting([new(StorageRouting.Bags,StorageAutoRouting.AllRetainers,[],[],AllItems:true)],true);
-            MarketHelp("Entrust ALL bag items matching your assignments, including leftovers from an older organiser run. Unassigned items stay in your bags. This is an explicit action, not an automatic part of Organise all.");
-        }
+
         if(!ImGui.CollapsingHeader("Retainer assignments"))return;
         if(!config.RetainerAssignments.TryGetValue(character,out var rows))config.RetainerAssignments[character]=rows=[];
         var owned=ReadSellerRetainers();if(owned.Length==0)owned=(retrievalKnownRetainers.GetValueOrDefault(character)??new Dictionary<ulong,string>()).Select(x=>new SellerRetainerRef(x.Key,x.Value)).ToArray();var names=owned.ToDictionary(x=>x.Id,x=>x.Name);
@@ -24,10 +21,11 @@ public sealed partial class Plugin
         for(var i=0;i<config.RetrievalPresets.Count;i++)if(string.IsNullOrEmpty(config.RetrievalPresets[i].PlanId)){config.RetrievalPresets[i]=config.RetrievalPresets[i] with{PlanId=Guid.NewGuid().ToString("N")};dirty=true;}
         foreach(var entry in rows.ToArray().Where(x=>names.ContainsKey(x.Retainer))){
             ImGui.PushID(entry.Retainer.ToString());
-            if(ImGui.TreeNode(names[entry.Retainer]+$" · {entry.Categories.Length} categories / {entry.Items.Length} items###RetainerAssignment")){
+            if(ImGui.TreeNode(names[entry.Retainer]+$" · {entry.Categories.Length} categories / {entry.Items.Length} items / {entry.Plans?.Length??0} plans###RetainerAssignment")){
                 var categories=entry.Categories.ToHashSet();var items=entry.Items.ToHashSet();var plans=(entry.Plans??[]).ToHashSet();var changed=false;
                 if(ImGui.SmallButton("Clear selections")){categories.Clear();items.Clear();plans.Clear();changed=true;}
-                changed|=DrawStorageCategoryPicker("Categories",categories);
+                changed|=DrawStorageCategoryPicker("Categories",categories,"Optional · plan/items only");
+                MarketHelp("Saved plans and specific items work without categories. Categories add other eligible item groups; leaving them empty does not disable your plan.");
                 if(ImGui.BeginCombo("Saved plans",$"{plans.Count} selected")){
                     foreach(var plan in config.RetrievalPresets){var selected=plans.Contains(plan.PlanId);if(ImGui.Checkbox(plan.Name+"##"+plan.PlanId,ref selected)){if(selected)plans.Add(plan.PlanId);else plans.Remove(plan.PlanId);changed=true;}}
                     foreach(var missing in plans.Where(id=>!config.RetrievalPresets.Any(p=>p.PlanId==id)).ToArray())if(ImGui.SmallButton("Remove deleted plan##"+missing)){plans.Remove(missing);changed=true;}

@@ -17,7 +17,7 @@ public static class StorageRouting
         if(plan.Rules.Any(r=>r.To==0||r.To==AllSources||!state.ContainsKey(r.To)))throw new ArgumentException("A destination retainer is unavailable.");
         var goals=new Dictionary<(ulong,uint,bool),ulong>();
         foreach(var (owner,rows) in inventories)foreach(var s in rows.Where(s=>s.Item>0)){
-            if(bagsOnly&&owner!=Bags)continue;
+            if(bagsOnly&&owner!=Bags||!includeExistingBags&&owner==Bags)continue;
             var rule=plan.Rules.FirstOrDefault(r=>(r.From==AllSources||r.From==owner)&&RetainerRetrieval.AllowsQuality(s.Hq,r.Quality)&&
                 (r.AllItems||r.Items.Contains(s.Item)||r.Categories.Contains(category(s.Item))||r.Duplicates&&inventories[r.To].Any(d=>Same(d,s)&&d.Quantity>0)));
             if(rule!=null){
@@ -36,7 +36,7 @@ public static class StorageRouting
         var outgoing=new Dictionary<(ulong,uint,bool),int>();
         if(!bagsOnly)foreach(var (owner,rows) in inventories.Where(x=>x.Key!=Bags))foreach(var g in rows.Where(s=>s.Item>0).GroupBy(s=>(s.Item,s.Hq)))
             if(goals.TryGetValue((owner,g.Key.Item,g.Key.Hq),out var dest)&&dest!=owner)outgoing[(owner,g.Key.Item,g.Key.Hq)]=g.Sum(s=>s.Quantity);
-        var protectedBagSlots=!includeExistingBags?inventories[Bags].Where(s=>s.Item>0&&s.Limit==1).Select(s=>(s.Container,s.Slot)).ToHashSet():[];
+        var protectedBagSlots=!includeExistingBags?inventories[Bags].Where(s=>s.Item>0&&s.Quantity>0).Select(s=>(s.Container,s.Slot)).ToHashSet():[];
         // Cargo retains its source rule even after it reaches bags. Existing bag reserves are never cargo.
         var cargo=new Dictionary<(uint,bool,ulong),int>();
         if(includeExistingBags)foreach(var group in inventories[Bags].Where(s=>s.Item>0).GroupBy(s=>(s.Item,s.Hq))){
@@ -50,7 +50,7 @@ public static class StorageRouting
         var moves=new List<RoutedMove>();ulong current=0;bool rerouted=false;
         int FreeBags()=>state[Bags].Count(s=>s.Container<=3&&s.Item==0);
         ChestStack? Target(ChestStack source,ulong owner,bool allowReserve){
-            var rows=state[owner].Where(d=>d.CanDeposit).Where(d=>Crystal(source.Item)?d.Container is 2001 or 12001:owner==Bags?d.Container<=3:d.Container is >=10000 and <=10006).ToArray();
+            var rows=state[owner].Where(d=>d.CanDeposit&&(owner!=Bags||!protectedBagSlots.Contains((d.Container,d.Slot)))).Where(d=>Crystal(source.Item)?d.Container is 2001 or 12001:owner==Bags?d.Container<=3:d.Container is >=10000 and <=10006).ToArray();
             return rows.FirstOrDefault(d=>Same(d,source)&&d.Quantity<d.Limit)??
                 (owner==Bags&&!allowReserve&&FreeBags()<=Math.Max(0,plan.ReserveSlots)?null:rows.FirstOrDefault(d=>d.Item==0));
         }

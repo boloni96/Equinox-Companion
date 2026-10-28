@@ -5,6 +5,7 @@ using Dalamud.Game.Text;
 using Dalamud.Game.ClientState.Conditions;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using System.Text.RegularExpressions;
+using FFXIVClientStructs.FFXIV.Client.Game;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
@@ -12,6 +13,8 @@ public sealed partial class Plugin
     private readonly LotteryBidNoticeGate lotteryBidNotices=new();
     private DateTimeOffset nextLotteryReminderCheck,nextLotteryVisibleCheck;
     private object? lotteryDiagnostic;
+    private object? lotteryRefundDiagnostic;
+    private uint? lotteryRefundGilBefore;
     private LotteryResult? lotteryLastResult;
     private (LotteryBid Bid,ulong Character,uint World,ulong Target,long Amount,DateTimeOffset At)? lotteryRefund;
     private (LotteryBid Bid, ulong Character, ulong Target, uint World, DateTimeOffset At)? lotteryPlacard;
@@ -27,8 +30,8 @@ public sealed partial class Plugin
     private void UpdateLottery(DateTimeOffset now)
     {
         var id=Player.IsLoaded?Player.ContentId:0;
-        if(id==0){lotteryBidNotices.Reset();lotteryLogin.Reset();lotteryPlacard=null;lotteryRefund=null;lotteryBuyerContext=null;return;}
-        if(LotteryLoaded&&config.SyncHouseDetails&&now>=nextLotteryVisibleCheck){nextLotteryVisibleCheck=now.AddMilliseconds(500);ObserveSafely("housing-lottery",()=>PollLotteryViews(now));}
+        if(id==0){lotteryBidNotices.Reset();lotteryLogin.Reset();lotteryPlacard=null;lotteryRefund=null;lotteryRefundGilBefore=null;lotteryBuyerContext=null;return;}
+        if(LotteryLoaded&&config.SyncHouseDetails&&now>=nextLotteryVisibleCheck){nextLotteryVisibleCheck=now.AddMilliseconds(500);ObserveSafely("housing-lottery",()=>{PollLotteryRefundBalance(now);PollLotteryViews(now);});}
         lotteryBidNotices.Due(id,"",now);
         if(lotteryLogin.Due(id,now,config.NotifyHousingLottery,!LotteryLoaded))
         {
@@ -141,7 +144,11 @@ public sealed partial class Plugin
     private unsafe bool ObservePublicLotteryResult(AtkUnitBase* addon,DateTimeOffset now)
     {
         var visible=LotteryVisibleText(addon);
-        ObserveLotteryRefundPrompt(visible,now);
+        if(HousingLottery.RefundAmount(visible) is not null){
+            var refundBoard=(AtkUnitBase*)GardenGui.GetAddonByName("HousingSignBoard").Address;
+            if(refundBoard!=null&&refundBoard->IsVisible)CaptureLotteryPlacard(refundBoard,now);
+            ObserveLotteryRefundPrompt(visible,now);
+        }
         var winner=HousingLottery.WinningNumber(visible);
         if(winner is null)return false;
         var board=(AtkUnitBase*)GardenGui.GetAddonByName("HousingSignBoard").Address;
@@ -157,30 +164,49 @@ public sealed partial class Plugin
         lotteryLastResult=result;
         return true;
     }
-    private void ObserveLotteryRefundPrompt(string text,DateTimeOffset now)
+    private unsafe void ObserveLotteryRefundPrompt(string text,DateTimeOffset now)
     {
-        if(HousingLottery.RefundAmount(text) is not {} amount||HousingLottery.WinningNumber(text) is not {} winner)return;
+        if(HousingLottery.RefundAmount(text) is not {} amount)return;
+        var winner=HousingLottery.WinningNumber(text);
         if(lotteryPlacard is not {} plot||plot.Character!=Player.ContentId||plot.World!=Player.CurrentWorld.RowId||Targets.Target?.GameObjectId!=plot.Target||now-plot.At>TimeSpan.FromMinutes(1))return;
         var own=HousingLotteryNotices.WithShared(config.Discoveries,config.SharedRoster)
             .Where(e=>e.Kind=="housing.lottery"&&e.Actor.ContentId==Player.ContentId.ToString()&&e.Actor.HomeWorldId==plot.World&&e.Lottery is {} b&&b.District==plot.Bid.District&&b.Ward==plot.Bid.Ward&&b.Plot==plot.Bid.Plot&&DateTimeOffset.TryParse(b.CycleStart,out var start)&&now>=start.AddDays(5)&&now<start.AddDays(95))
             .GroupBy(e=>(e.Lottery!.CycleStart,e.Lottery.Entry)).Select(g=>g.MaxBy(e=>e.At)!).ToArray();
         // A visible refund offer is not a receipt. Wait for its matching gil gain.
-        if(own.Length!=1||own[0].Lottery is not {} bid||bid.Entry==winner||bid.Status is "won" or "forfeited"||bid.Evidence is "manual-refund" or "refund-receipt")return;
+        own=own.Where(e=>e.Lottery!.Evidence is not ("manual-refund" or "refund-receipt")&&e.Lottery.Status is not ("won" or "forfeited")).ToArray();
+        if(own.Length!=1||own[0].Lottery is not {} bid){lotteryRefundDiagnostic=new{at=now,state="Refund offer has no unique uncollected ticket",candidates=own.Length,amount};return;}
+        if(winner is null&&lotteryLastResult is {} observed&&observed.WorldId==plot.World&&observed.District==bid.District&&observed.Ward==bid.Ward&&observed.Plot==bid.Plot&&DateTimeOffset.TryParse(observed.CycleStart,out var observedCycle)&&DateTimeOffset.TryParse(bid.CycleStart,out var bidCycle)&&observedCycle==bidCycle)winner=observed.Winner;
+        if(!HousingLottery.RefundEligible(bid,winner)){lotteryRefundDiagnostic=new{at=now,state="Refund offer seen; ticket loss not confirmed",winner,amount,bid.Entry};return;}
+        if(lotteryRefund is {} existing&&existing.Character==Player.ContentId&&existing.Bid.CycleStart==bid.CycleStart&&existing.Bid.Entry==bid.Entry&&existing.Bid.District==bid.District&&existing.Bid.Ward==bid.Ward&&existing.Bid.Plot==bid.Plot)return;
+        var inventory=InventoryManager.Instance();lotteryRefundGilBefore=inventory==null?null:inventory->GetGil();
         lotteryRefund=(bid with {Status="lost",Evidence="refund-receipt"},Player.ContentId,plot.World,plot.Target,amount,now);
-        lotteryDiagnostic=new{at=now,state="Refund offered; waiting for gil receipt",amount,bid.District,bid.Ward,bid.Plot,bid.Entry};
+        lotteryRefundDiagnostic=new{at=now,state="Refund offered; waiting for gil receipt",amount,bid.District,bid.Ward,bid.Plot,bid.Entry};
     }
     private void ObserveLotteryRefundReceipt(string text,DateTimeOffset now)
     {
-        if(lotteryRefund is not {} pending||HousingLottery.ReceivedGil(text) is not {} amount)return;
-        lotteryRefund=null;
+        if(HousingLottery.ReceivedGil(text) is {} amount)ConfirmLotteryRefund(amount,now,"chat receipt");
+    }
+    private void ConfirmLotteryRefund(long amount,DateTimeOffset now,string source)
+    {
+        if(lotteryRefund is not {} pending)return;
         if(!HousingLottery.RefundReceiptMatches(pending.Character,pending.World,pending.Target,pending.Amount,pending.At,Player.ContentId,Player.CurrentWorld.RowId,Targets.Target?.GameObjectId,amount,now))return;
+        lotteryRefund=null;lotteryRefundGilBefore=null;
         RecordLottery(pending.Bid,now);
-        lotteryDiagnostic=new{at=now,state="Refund collected; matching gil receipt",amount,pending.Bid.District,pending.Bid.Ward,pending.Bid.Plot,pending.Bid.Entry};
+        lotteryRefundDiagnostic=new{at=now,state="Refund collected",source,amount,pending.Bid.District,pending.Bid.Ward,pending.Bid.Plot,pending.Bid.Entry};
         nextRosterRead=default;
+    }
+    private unsafe void PollLotteryRefundBalance(DateTimeOffset now)
+    {
+        if(lotteryRefund is not {} pending)return;
+        if(pending.Character!=Player.ContentId||pending.World!=Player.CurrentWorld.RowId||now-pending.At>TimeSpan.FromSeconds(30)||Targets.Target is {} target&&target.GameObjectId!=pending.Target){
+            lotteryRefundDiagnostic=new{at=now,state="Refund offer expired or context changed; no receipt confirmed"};lotteryRefund=null;lotteryRefundGilBefore=null;return;
+        }
+        var inventory=InventoryManager.Instance();
+        if(inventory!=null&&lotteryRefundGilBefore is {} before)ConfirmLotteryRefund((long)inventory->GetGil()-before,now,"gil balance increase");
     }
     private void ObserveLotteryChat(IHandleableChatMessage message)
     {
-        if(!LotteryLoaded||!config.SyncHouseDetails||message.LogKind is not (XivChatType.SystemMessage or XivChatType.Notice or XivChatType.LootNotice or XivChatType.Item)||message.OriginalSender.ExtractText().Length!=0)return;
+        if(!LotteryLoaded||!config.SyncHouseDetails||message.OriginalSender.ExtractText().Length!=0)return;
         var text=message.OriginalMessage.ExtractText();
         ObserveLotteryRefundReceipt(text,DateTimeOffset.UtcNow);
         var m=Regex.Match(text,@"^You (?:have )?submitted a lottery entry for plot (\d+), ward (\d+), ([^.]+)\. Your lottery number is (\d+)",RegexOptions.IgnoreCase);
@@ -199,7 +225,7 @@ public sealed partial class Plugin
     {
         var actor=ReadActor();if(!SyncValidation.ActorReady(actor)||actor.HomeWorldId!=actor.CurrentWorldId)return;
         var prior=config.Discoveries.LastOrDefault(e=>e.Kind=="housing.lottery"&&e.Actor.ContentId==actor.ContentId&&e.Lottery is {} b&&b.District==bid.District&&b.Ward==bid.Ward&&b.Plot==bid.Plot&&b.Entry==bid.Entry&&b.CycleStart==bid.CycleStart);
-        if(prior?.Lottery is {} old && bid.Evidence=="timers")bid=bid with {CycleStart=old.CycleStart,Status=old.Status,Buyer=bid.Buyer=="unknown"?old.Buyer:bid.Buyer,FcId=old.FcId.Length>0?old.FcId:bid.FcId};
+        if(prior?.Lottery is {} old && bid.Evidence=="timers")bid=bid with {CycleStart=old.CycleStart,Status=old.Status,Evidence=old.Evidence is "refund-receipt" or "manual-refund"?old.Evidence:bid.Evidence,Buyer=bid.Buyer=="unknown"?old.Buyer:bid.Buyer,FcId=old.FcId.Length>0?old.FcId:bid.FcId};
         if(prior?.Lottery is {} known && bid.Buyer=="unknown" && known.Buyer!="unknown")bid=bid with {Buyer=known.Buyer,FcId=known.FcId};
         if(bid.Buyer=="fc"&&bid.FcId=="")bid=bid with {FcId=config.Discoveries.LastOrDefault(e=>e.Actor.ContentId==actor.ContentId&&e.Kind=="character.updated")?.Character is {FcMember: not false,FreeCompany: {} company}?company.Id:""};
         if(bid.Buyer=="fc"&&string.IsNullOrEmpty(bid.FcName))bid=bid with {FcName=prior?.Lottery?.FcName is {Length:>0} name?name:config.Discoveries.LastOrDefault(e=>e.Actor.ContentId==actor.ContentId&&e.Kind=="character.updated")?.Character?.FreeCompany?.Name??""};

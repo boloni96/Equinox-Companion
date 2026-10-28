@@ -3,6 +3,8 @@ public sealed record RetainerAssignment(ulong Retainer,uint[] Categories,uint[] 
 public sealed record RetainerInventoryRecord(ulong Character,ulong Retainer,DateTimeOffset At,ChestStack[] Slots);
 public static class StorageAssignments
 {
+    public static bool HasSelections(IEnumerable<RetainerAssignment> assignments,IReadOnlyList<RetrievalPreset> plans) =>
+        assignments.Any(a=>a.Items.Length>0||a.Categories.Length>0||plans.Any(p=>!string.IsNullOrEmpty(p.PlanId)&&(a.Plans??[]).Contains(p.PlanId)&&p.Items.Length>0));
     public static StorageRoute[] Apply(StorageRoute[] rules,RetainerAssignment[] assignments,IReadOnlyDictionary<ulong,ChestStack[]> inventory,Func<uint,uint> category,IReadOnlyList<RetrievalPreset>? plans=null)
     {
         // Plans are live item groups, not crafting expansion or quantity instructions.
