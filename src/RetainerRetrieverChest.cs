@@ -19,10 +19,16 @@ public sealed partial class Plugin
     private string chestStatus="Open the FC chest to use these tools.";
     private unsafe delegate int ChestQuantityMove(InventoryManager* manager,InventoryType source,ushort sourceSlot,InventoryType destination,ushort destinationSlot,int quantity);
     private ChestQuantityMove? chestMove;
-    private sealed class ChestToolsWindow(Plugin p):Window("FC chest · Equinox###EquinoxChest",ImGuiWindowFlags.AlwaysAutoResize|ImGuiWindowFlags.NoSavedSettings)
+    private sealed class ChestToolsWindow(Plugin p):Window("##EquinoxChestToolsBar",ImGuiWindowFlags.AlwaysAutoResize|ImGuiWindowFlags.NoDecoration|ImGuiWindowFlags.NoSavedSettings|ImGuiWindowFlags.NoFocusOnAppearing)
     {
-        public override void Draw()=>p.DrawRetrievalChest();
-        public override unsafe void PreDraw(){var addon=SellerAddon("FreeCompanyChest");if(p.chestDock&&addon!=null){Position=new Vector2(Math.Max(0,(int)addon->X),Math.Max(0,addon->Y-110));PositionCondition=ImGuiCond.Always;}else Position=null;}
+        public override void Draw()=>p.DrawChestToolbar();
+        public override unsafe void PreDraw(){
+            RespectCloseHotkey=false;AllowPinning=false;
+            var addon=SellerAddon("FreeCompanyChest");
+            if(p.chestDock&&addon!=null){var height=ImGui.GetFrameHeight()+8;var y=addon->Y-height-4;Position=new Vector2(Math.Max(0,(int)addon->X),y>=0?y:addon->Y+addon->GetScaledHeight(true)+4);PositionCondition=ImGuiCond.Always;}else Position=null;
+            PushRetainerToolbarStyle();
+        }
+        public override void PostDraw(){ImGui.PopStyleVar(2);ImGui.PopStyleColor(7);}
     }
     private unsafe int ChestAccess(uint container)
     {

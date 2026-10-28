@@ -1,0 +1,60 @@
+using System.Numerics;
+using Dalamud.Bindings.ImGui;
+namespace EquinoxCompanion;
+public sealed partial class Plugin
+{
+    private static void PushRetainerToolbarStyle()
+    {
+        MarketGameConfig.TryGet(Dalamud.Game.Config.SystemConfigOption.ColorThemeType,out uint theme);
+        var light=theme==1;var blue=theme>=2;
+        ImGui.PushStyleColor(ImGuiCol.WindowBg,light?new Vector4(.78f,.77f,.73f,.98f):blue?new Vector4(.08f,.14f,.25f,.98f):new Vector4(.15f,.15f,.15f,.98f));
+        ImGui.PushStyleColor(ImGuiCol.Text,light?new Vector4(.12f,.12f,.12f,1):new Vector4(.92f,.90f,.84f,1));
+        ImGui.PushStyleColor(ImGuiCol.Border,new Vector4(.55f,.51f,.39f,1));
+        ImGui.PushStyleColor(ImGuiCol.FrameBg,light?new Vector4(.88f,.87f,.83f,1):new Vector4(.08f,.08f,.08f,1));
+        ImGui.PushStyleColor(ImGuiCol.Button,light?new Vector4(.67f,.66f,.62f,1):new Vector4(.24f,.24f,.24f,1));
+        ImGui.PushStyleColor(ImGuiCol.ButtonHovered,new Vector4(.4f,.39f,.34f,1));
+        ImGui.PushStyleColor(ImGuiCol.ButtonActive,new Vector4(.5f,.46f,.34f,1));
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding,new Vector2(5,4));
+        ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing,new Vector2(4,3));
+    }
+    private void DrawChestToolbar()
+    {
+        var busy=chestRunning||organizeRunning||retrievalRun.Running||retainerGilRunning;
+        ImGui.BeginDisabled(busy);
+        ImGui.SetNextItemWidth(120);
+        if(ImGui.BeginCombo("##ChestPlan",retrievalName)){
+            foreach(var plan in config.RetrievalPresets.ToArray())if(ImGui.Selectable(plan.Name,retrievalEditingPreset==plan.Name))SelectRetrievalPreset(plan);
+            ImGui.EndCombo();
+        }
+        MarketHelp("Current plan: "+retrievalName+" · "+retrievalItems.Length+" requested items. Get and Send use this plan's quantities, crafting mode and HQ/NQ choice. Edit or create plans in Retriever.");
+        ImGui.SameLine();if(ImGui.Button("Get"))StartChest(0);MarketHelp("Retrieve the current plan from the selected chest tabs into your bags.");
+        ImGui.SameLine();if(ImGui.Button("Send"))StartChest(4);MarketHelp("Send the current plan from your bags into the selected chest tabs.");
+        ImGui.SameLine();if(ImGui.Button("Duplicates"))StartChest(1);MarketHelp($"Deposit items already stored in the selected tabs. Keep {chestKeep} of each item/quality in bags. Crystals use their own storage.");
+        ImGui.EndDisabled();ImGui.SameLine();
+        if(chestRunning){if(ImGui.Button("Stop"))StopChest("Stopped by you. An already-sent transfer may still complete.");ImGui.SameLine();}
+        if(ImGui.Button("...##ChestOptions"))ImGui.OpenPopup("Chest options");MarketHelp("Chest tabs, stack merging, move between tabs, and Retriever.");
+        var status=retrievalError.Length>0?retrievalError:chestStatus;
+        if(status.Length>0){ImGui.SameLine();ImGui.TextDisabled(chestRunning?"…":"i");MarketHelp(status);}
+        if(ImGui.BeginPopup("Chest options")){
+            ImGui.TextUnformatted("FC chest");ImGui.Separator();ImGui.BeginDisabled(busy);
+            ImGui.SetNextItemWidth(180);ImGui.Combo("Source / target",ref chestTab,"All accessible tabs\0Tab 1\0Tab 2\0Tab 3\0Tab 4\0Tab 5\0Crystals\0");
+            MarketHelp("Get reads these tabs; Send and Duplicates deposit into them. Your FC permissions still apply.");
+            if(ImGui.Button("Get selected plan items")){StartChest(0,true);ImGui.CloseCurrentPopup();}
+            MarketHelp("Retrieve only entries checked in the current plan.");
+            ImGui.Separator();
+            ImGui.SetNextItemWidth(90);ImGui.InputInt("Keep in bags",ref chestKeep);chestKeep=Math.Clamp(chestKeep,0,RetainerRetrieval.MaxQuantity);
+            MarketHelp("Duplicate deposits leave this amount of each item and quality in your bags.");
+            if(ImGui.Button("Merge partial stacks")){StartChest(2);ImGui.CloseCurrentPopup();}MarketHelp("Combine partial stacks within each selected chest tab. HQ and NQ stay separate.");
+            ImGui.Separator();
+            ImGui.SetNextItemWidth(100);ImGui.SliderInt("Destination tab",ref chestDestination,1,5);
+            if(ImGui.Button("Move plan items to this tab")){StartChest(3);ImGui.CloseCurrentPopup();}
+            MarketHelp("Move matching plan items from selected source tabs to the destination tab. Crystals stay in dedicated storage.");
+            ImGui.EndDisabled();ImGui.Separator();
+            if(ImGui.Button("Edit plans / open Retriever")){OpenRetriever();retrievalShowList=true;ImGui.CloseCurrentPopup();}
+            ImGui.Checkbox("Attach above chest",ref chestDock);
+            if(ImGui.Button("Hide toolbar")){chestToolsWindow.IsOpen=false;ImGui.CloseCurrentPopup();}
+            MarketHelp("Appears again next time you open the FC chest.");
+            ImGui.EndPopup();
+        }
+    }
+}
