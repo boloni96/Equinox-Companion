@@ -105,7 +105,7 @@ public sealed partial class Plugin
             foreach(var op in manager->PendingOperations)if(!op.IsEmpty)return;
             switch(organizeStage){
                 case 1:if(organizePort.Select(organizeSources[organizeSourceIndex]))OrganizeStage(2);break;
-                case 2:if(organizePort.OpenInventory(organizeSources[organizeSourceIndex])){organizeInventories[organizeSources[organizeSourceIndex]]=OrganizerInventory(true,false).Concat(OrganizerInventory(true,true)).ToArray();if(organizeBagsOnly&&organizeSources.Length==1){BeginStorageCalculation();}else OrganizeStage(3);}break;
+                case 2:if(organizePort.OpenInventory(organizeSources[organizeSourceIndex])&&organizePort.Read(organizeSources[organizeSourceIndex]) is not null){organizeInventories[organizeSources[organizeSourceIndex]]=OrganizerInventory(true,false).Concat(OrganizerInventory(true,true)).ToArray();if(organizeBagsOnly&&organizeSources.Length==1){BeginStorageCalculation();}else OrganizeStage(3);}break;
                 case 3:
                     if(!organizePort.Close(organizeSources[organizeSourceIndex]))break;
                     if(++organizeSourceIndex<organizeSources.Length){OrganizeStage(1);break;}

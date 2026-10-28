@@ -1,7 +1,7 @@
 name: Build and verify Companion source
 on:
   push:
-    branches: [main, fix/organizer-all-273, fix/chest-toolbar-272, fix/outfit-quality-271, fix/retainer-tools-270, fix/retriever-stock-269, fix/retriever-planning-268, fix/workshop-turnins-267, fix/retrieval-intent-266, fix/retriever-lists-265, feature/retainer-retriever-264, fix/trade-clicks-263, fix/lottery-buyer-262, feature/all-inventory-trade-261, feature/ctrl-trade-260, fix/followthem-75, feature/equinox-helper-80, feature/equinox-helper-85]
+    branches: [main, fix/retainer-menu-274, fix/organizer-all-273, fix/chest-toolbar-272, fix/outfit-quality-271, fix/retainer-tools-270, fix/retriever-stock-269, fix/retriever-planning-268, fix/workshop-turnins-267, fix/retrieval-intent-266, fix/retriever-lists-265, feature/retainer-retriever-264, fix/trade-clicks-263, fix/lottery-buyer-262, feature/all-inventory-trade-261, feature/ctrl-trade-260, fix/followthem-75, feature/equinox-helper-80, feature/equinox-helper-85]
     paths: ['src/**', 'tests/**', 'native-tests/**', 'market-tests/**', 'scripts/publish_source.py', '.github/workflows/build-from-source.yml']
   workflow_dispatch:
 permissions:
