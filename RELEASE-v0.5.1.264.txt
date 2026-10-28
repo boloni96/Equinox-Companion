@@ -1,0 +1,70 @@
+Equinox Companion 0.5.1.264 — optional Retainer Retriever
+
+Enable Settings > Optional tools > Retainer Retriever. Open /eqretrieve or the
+window launcher. /equinox retrieve is the fallback; /eqretrieve stop cancels.
+Shared Goddess Blue / Dalamud appearance, resizing and its own minimized icon.
+No Journal deployment is needed. Lists and presets are local to this client.
+
+Browse inventory groups recorded stock by retainer, or shows a flat list with
+bag and retainer counts. Optional Allagan Tools reads its current-character cache;
+otherwise Companion uses its existing storage observations. Unknown/stale stock
+is not proof of absence. Refresh at the bell to load the current retainer roster.
+Actual withdrawals verify live inventory; equipped items and market listings are
+excluded. NQ and HQ are combined, as stated in the UI. No quality preference yet.
+
+Add items: searchable whole Item/Recipe sheets, all crafting logs, and FC workshop
+projects. Workshop lists contain the required turn-in items themselves. A combined
+Shark submarine preset is offered when all four Shark-class parts are present in
+the game sheet. Select it and set multiplier 4 for four complete submarines.
+Named presets remember their multiplier. Load/append/delete; whole-list paste;
+versioned JSON preset import/export and plain-text export. Pasting is atomic:
+unknown items or invalid quantities reject the import before changing your list.
+Up to 200 combined entries (plain-text paste uses the existing 100-item parser),
+25 saved presets, multiplier 1–999, maximum 1,000,000 units per item.
+
+Existing Artisan lists: Refresh reads this client's saved Artisan.json
+NewCraftingLists format. Save edits in Artisan first. Click a list to append it.
+Skipped recipes are omitted; recipe counts become output quantities using yield.
+Every listed recipe output is included, including listed intermediate recipes.
+Unsupported formats fail visibly; no Artisan list is modified or started.
+
+Final items only NEVER expands recipes. 600x Cobalt Ingot retrieves ingots.
+All crafting materials recursively expands craftable entries into raw or
+non-craftable ingredients, including crystals. It accounts for recipe yields.
+Equivalent recipes can share a result; distinct ambiguous recipes require an
+explicit recipe or material list. Cycles and excessive quantities stop planning.
+Subtract bags applies AFTER expansion and combines NQ/HQ in ordinary bags/crystals;
+it does not count equipped/armoury/saddlebag items. Intermediate stock is not used
+to optimise raw-material mode. Crafting missing items is not an automatic action.
+
+Open the summoning bell retainer list first. Preview all/selected, then Retrieve
+all/selected. Retainers are visited in game order. Exact missing quantities are
+requested through the game's withdrawal menu. Each transfer waits for a bag-count
+increase before continuing; unconfirmed actions stop instead of being repeated.
+Stop, character/world changes, loss of bell context, missing menu actions, full
+bags or timeout halt the run. AutoRetainer scheduling is temporarily suppressed
+and its prior suppression state restored; current tasks must settle first.
+Artisan busy state and Seller/Gil Trader conflicts block retrieval.
+Stop cancels the retriever's pending item dialog; it does not log out or dismiss
+unrelated game windows. Diagnostics include the plan, mode and last run status.
+
+REFERENCE / IMPLEMENTATION
+XivHub RetainerReach was reviewed for grouped inventory organisation and workflow:
+https://github.com/XivHub/RetainerReach
+Its stock IPC is read-only. This implementation does not bundle its source/binary
+or require RetainerReach. Public Allagan Tools IPC contracts and game structures
+were checked against the upstream projects. Artisan format/IPC reference:
+https://github.com/PunishXIV/Artisan
+Native UI action reference: FFXIVClientStructs AgentInventoryContext and
+AddonInventoryRetainer; existing Equinox retainer-navigation code is reused.
+
+LIVE TESTS STILL REQUIRED
+1. One common stack item: request 3 when 1 is in bags; confirm exactly 2 withdrawn.
+2. Repeat with subtract bags off: expect 3 additional items.
+3. Two retainers holding portions of the same request; confirm exact final total.
+4. Stop during selection/quantity input; no further withdrawals; AutoRetainer resumes
+   only if it was previously running. Also test initially suppressed AutoRetainer.
+5. Artisan saved list with a multi-yield recipe, and Shark turn-in preset x4.
+6. Material expansion vs finished-item mode; no crafting starts in either mode.
+7. Full bags, missing stock, crystals, HQ/NQ, narrow window and both visual designs.
+The compiled build and offline tests do not establish live game acceptance.

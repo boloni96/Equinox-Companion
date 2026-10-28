@@ -7,7 +7,7 @@ public sealed partial class Plugin
  {
   var builder=new SeStringBuilder().AddUiForeground(543).AddText("[Equinox]").AddUiForegroundOff().AddText(" ");
   foreach(var payload in message.Payloads){
-   if(payload is TextPayload text)builder.AddText(text.Text.Replace("[Equinox] ",""));
+   if(payload is TextPayload text)builder.AddText((text.Text??"").Replace("[Equinox] ",""));
    else builder.Add(payload);
   }
   return builder.Build();
