@@ -16,7 +16,7 @@ public sealed partial class Plugin
         if(!config.EnableRetriever){if(retrievalRun.Running)retrievalRun.Stop("Retriever disabled.");retrieverWindow.IsOpen=false;ForgetOptionalLauncher("Retainer Retriever");return;}
         if(retrievalRun.Running&&retrievalRun.State!=RetrievalRun.Phase.Prepare&&retrievalPort.Pause.Held){var pause=retrievalPort.Pause.Check(now);if(!pause.Ready){retrievalRun.Stop(pause.Error.Length>0?pause.Error:"Another AutoRetainer task started; retrieval stopped.");return;}}
         if(now<retrievalTick)return;retrievalTick=now.AddMilliseconds(200);retrievalRun.Tick(now);
-        if(retrievalLastStatus!=retrievalRun.Status){retrievalLastStatus=retrievalRun.Status;Log.Information("Retainer Retriever: {Status}",retrievalLastStatus);if(retrievalLastStatus.StartsWith("Stopped:"))errorJournal.Record("retainer-retriever",retrievalLastStatus);}
+        if(retrievalLastStatus!=retrievalRun.Status){if(!retrievalRun.Running)retrievalPreviewDirty=true;retrievalLastStatus=retrievalRun.Status;Log.Information("Retainer Retriever: {Status}",retrievalLastStatus);if(retrievalLastStatus.StartsWith("Stopped:"))errorJournal.Record("retainer-retriever",retrievalLastStatus);}
     }
     private sealed unsafe class RetrieverPort:IRetrievalPort
     {
