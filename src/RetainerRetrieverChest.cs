@@ -61,7 +61,7 @@ public sealed partial class Plugin
     private unsafe void StartChest(int mode,bool selected=false)
     {
         RetrievalTry(()=>{
-            if(organizeRunning||chestRunning||retrievalRun.Running||sellerRun.Running||gilTrade.Running)throw new InvalidOperationException("Finish the current inventory operation first.");
+            if(retainerGilRunning||organizeRunning||chestRunning||retrievalRun.Running||sellerRun.Running||gilTrade.Running)throw new InvalidOperationException("Finish the current inventory operation first.");
             var agent=AgentFreeCompanyChest.Instance();var fc=InfoProxyFreeCompany.Instance();
             if(!Player.IsLoaded||Player.CurrentWorld.RowId!=Player.HomeWorld.RowId||SellerAddon("FreeCompanyChest")==null||agent==null||!agent->IsAgentActive()||fc==null||fc->Id==0)throw new InvalidOperationException("Open your FC chest on your home world first.");
             EnsureChestMove();

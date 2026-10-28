@@ -74,8 +74,8 @@ public sealed partial class Plugin
     private unsafe void StartStorageRouting(StorageRoute[] rules,bool bagsOnly)
     {
         RetrievalTry(()=>{
-            if(organizeRunning||retrievalRun.Running||chestRunning||sellerRun.Running||gilTrade.Running)throw new InvalidOperationException("Finish the current inventory operation first.");
-            if(!Player.IsLoaded||SellerAddon("RetainerList")==null)throw new InvalidOperationException("Open the summoning bell's retainer list first.");
+            if(organizeRunning||retrievalRun.Running||chestRunning||sellerRun.Running||gilTrade.Running||retainerGilRunning)throw new InvalidOperationException("Finish the current inventory operation first.");
+            if(!Player.IsLoaded||!RetainerToolsContext())throw new InvalidOperationException("Open the summoning bell's retainer list first.");
             var owned=ReadSellerRetainers().Select(x=>x.Id).ToArray();
             if(rules.Any(r=>r.To==0||!owned.Contains(r.To)||r.From!=0&&r.From!=StorageRouting.AllSources&&!owned.Contains(r.From)))throw new InvalidOperationException("Choose this character's retainers for every movement.");
             EnsureChestMove();organizeActiveRules=rules;organizeBagsOnly=bagsOnly;
@@ -92,27 +92,24 @@ public sealed partial class Plugin
         if(organizePort?.Pause.RestorePending==true&&!organizeRunning)organizePort.Pause.Release(now);
         if(!organizeRunning||now<organizeNext)return;organizeNext=now.AddMilliseconds(250);
         try{
-            if(organizePort==null||!organizePort.ContextMatches||chestRunning||retrievalRun.Running){StopOrganize("Stopped: character, bell or active task changed.");return;}
-            if(now>organizeDeadline){StopOrganize("Stopped: timed out waiting for the game. No automatic retry.");return;}
+            if(organizePort==null||!organizePort.ContextMatches||retainerGilRunning||chestRunning||retrievalRun.Running){StopOrganize("Stopped: character, bell or active task changed.");return;}
+            if(now>organizeDeadline){StopOrganize("Stopped: timed out at stage "+organizeStage+". "+organizePort.InventoryStatus);return;}
             if(organizeStage==0){if(organizePort.Prepare())OrganizeStage(1);return;}
             var pause=organizePort.Pause.Check(now);if(!pause.Ready){StopOrganize(pause.Error);return;}
             var manager=InventoryManager.Instance();if(manager==null)return;
             foreach(var op in manager->PendingOperations)if(!op.IsEmpty)return;
             switch(organizeStage){
                 case 1:if(organizePort.Select(organizeSources[organizeSourceIndex]))OrganizeStage(2);break;
-                case 2:if(organizePort.OpenInventory(organizeSources[organizeSourceIndex])){organizeInventories[organizeSources[organizeSourceIndex]]=OrganizerInventory(true,false).Concat(OrganizerInventory(true,true)).ToArray();OrganizeStage(3);}break;
+                case 2:if(organizePort.OpenInventory(organizeSources[organizeSourceIndex])){organizeInventories[organizeSources[organizeSourceIndex]]=OrganizerInventory(true,false).Concat(OrganizerInventory(true,true)).ToArray();if(organizeBagsOnly){BeginStorageCalculation();}else OrganizeStage(3);}break;
                 case 3:
                     if(!organizePort.Close(organizeSources[organizeSourceIndex]))break;
                     if(++organizeSourceIndex<organizeSources.Length){OrganizeStage(1);break;}
-                    organizeInventories[StorageRouting.Bags]=OrganizerInventory(false,false).Concat(OrganizerInventory(false,true)).ToArray();
-                    var snapshot=organizeInventories.ToDictionary(x=>x.Key,x=>x.Value.ToArray());var categories=snapshot.Values.SelectMany(x=>x).Where(x=>x.Item>0).Select(x=>x.Item).Distinct().ToDictionary(x=>x,OrganizeCategory);
-                    var routingPlan=new StorageRoutingPlan("Current movements",Player.ContentId,organizeActiveRules,organizeReserve);var bagsOnly=organizeBagsOnly;
-                    organizeRoutingTask=Task.Run(()=>StorageRouting.Build(routingPlan,snapshot,id=>categories.GetValueOrDefault(id),bagsOnly,bagsOnly));OrganizeStage(9);break;
+                    BeginStorageCalculation();break;
                 case 9:
                     if(organizeRoutingTask?.IsCompleted!=true)break;var plan=organizeRoutingTask.GetAwaiter().GetResult();organizeRoutingTask=null;
                     organizeMoves=plan.Moves;organizeUnmoved=plan.Remaining;
                     if(organizeMoves.Length==0){StopOrganize(plan.Remaining==0?"Nothing needs moving.":$"No available route for {plan.Remaining} items. Check bag and retainer space.");return;}
-                    organizeActiveRetainer=organizeMoves[0].Retainer;OrganizeStage(4);break;
+                    organizeActiveRetainer=organizeMoves[0].Retainer;OrganizeStage(organizeBagsOnly&&SellerActive(organizeActiveRetainer)?6:4);break;
                 case 4:if(organizePort.Select(organizeActiveRetainer))OrganizeStage(5);break;
                 case 5:if(organizePort.OpenInventory(organizeActiveRetainer))OrganizeStage(6);break;
                 case 6:
@@ -131,6 +128,13 @@ public sealed partial class Plugin
                     organizeActiveRetainer=organizeMoves[organizeMoveIndex].Retainer;OrganizeStage(4);break;
             }
         }catch(Exception e){StopOrganize("Stopped: "+e.Message);}
+    }
+    private void BeginStorageCalculation()
+    {
+                    organizeInventories[StorageRouting.Bags]=OrganizerInventory(false,false).Concat(OrganizerInventory(false,true)).ToArray();
+                    var snapshot=organizeInventories.ToDictionary(x=>x.Key,x=>x.Value.ToArray());var categories=snapshot.Values.SelectMany(x=>x).Where(x=>x.Item>0).Select(x=>x.Item).Distinct().ToDictionary(x=>x,OrganizeCategory);
+                    var routingPlan=new StorageRoutingPlan("Current movements",Player.ContentId,organizeActiveRules,organizeReserve);var bagsOnly=organizeBagsOnly;
+                    organizeRoutingTask=Task.Run(()=>StorageRouting.Build(routingPlan,snapshot,id=>categories.GetValueOrDefault(id),bagsOnly,bagsOnly));OrganizeStage(9);
     }
     private bool OrganizerConfirmed()
     {

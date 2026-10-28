@@ -369,6 +369,7 @@ public sealed partial class Plugin
     }
     private unsafe void StartSeller(bool apply)
     {
+        if(retainerGilRunning||organizeRunning||retrievalRun.Running||chestRunning){sellerNotice="Finish the retainer/chest transfer first.";return;}
         if(!config.Seller.Enabled||!marketHooksEnabled||marketLoad!=null||marketLoadFailed){sellerNotice="Enable Market and wait for its saved records first.";return;}
         if(sellerResultHook?.IsEnabled!=true){sellerNotice=sellerLiveError.Length>0?sellerLiveError:"Live comparison confirmation is unavailable. Toggle Market & Seller off and on to retry.";return;}
         if(sellerRun.Running||SellerAddon("RetainerSell")!=null){sellerNotice="Close the current item editor before starting a run.";return;}

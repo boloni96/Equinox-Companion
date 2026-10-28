@@ -93,6 +93,7 @@ public sealed partial class Plugin
         gilTradeNotice = "";
         TraceGilTrade($"{(gilReceive ? "Receive" : "Send")} pressed · requested {gilTotal:N0} gil · {gilPartnerName} @ {WorldName(gilPartnerWorld)} · {(gilPartnerRequiresParty ? "party" : "nearby player")}");
         void Reject(string reason) { gilTradeNotice = reason; TraceGilTrade("Not started · " + reason); }
+        if(retainerGilRunning||organizeRunning||retrievalRun.Running||chestRunning){Reject("Finish the retainer/chest transfer first.");return;}
         if (!config.EnableGilTrader) { Reject("Enable Gil Trader first."); return; }
         try {
         gilTradePrompt = DataManager.GetExcelSheet<Lumina.Excel.Sheets.Addon>().GetRowOrDefault(102223)?.Text.ExtractText() ?? "";
