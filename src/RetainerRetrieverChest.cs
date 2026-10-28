@@ -10,7 +10,7 @@ namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
     private ChestToolsWindow chestToolsWindow=null!;
-    private int chestTab,chestDestination=1,chestKeep=1,chestMode,chestMoves;
+    private int chestTab,chestDestination=1,chestKeep=1,chestMode,chestMoves,chestUnmoved;
     private bool chestRunning,chestWasOpen,chestDock=true;
     private ulong chestOwner,chestCompany;private uint chestWorld;
     private uint[] chestPages=[];private int chestPageIndex;
@@ -71,7 +71,7 @@ public sealed partial class Plugin
             chestPages=candidates.Where(p=>(ChestAccess(p)==3||mode==1&&ChestAccess(p)==2)&&(mode!=3||p!=22001&&p!=19999+chestDestination)).ToArray();
             if(mode==3&&ChestAccess((uint)(19999+chestDestination))<2)throw new InvalidOperationException("Destination tab does not allow deposits.");
             if(chestPages.Length==0)throw new InvalidOperationException("No selected chest tabs permit this action.");
-            chestOwner=Player.ContentId;chestWorld=Player.CurrentWorld.RowId;chestCompany=fc->Id;chestPageIndex=0;chestMoves=0;chestPending=null;
+            chestOwner=Player.ContentId;chestWorld=Player.CurrentWorld.RowId;chestCompany=fc->Id;chestPageIndex=0;chestMoves=0;chestUnmoved=0;chestPending=null;
             BeginChestPage(DateTimeOffset.UtcNow);chestRunning=true;
         });
     }
@@ -99,9 +99,10 @@ public sealed partial class Plugin
             }
             var next=chestMode switch{0=>ChestTransferPlanner.Withdraw(chest,bags,chestGoals,chestQuality),1=>ChestTransferPlanner.Duplicates(chest,bags,chestKeep),3=>ChestTransferPlanner.Transfer(chest,destination,chestGoals.Keys.ToHashSet(),chestQuality),_=>ChestTransferPlanner.Merge(chest)};
             if(next==null){
+                if(chestMode==3)chestUnmoved+=chest.Where(x=>chestGoals.ContainsKey(x.Item)&&RetainerRetrieval.AllowsQuality(x.Hq,chestQuality)).Sum(x=>x.Quantity);
                 if(++chestPageIndex<chestPages.Length){BeginChestPage(now);return;}
-                var missing=chestMode==0?chestGoals.Sum(x=>Math.Max(0,x.Value-RetrievalHeld(x.Key,chestQuality))):0;
-                StopChest($"{chestMoves} transfers confirmed"+(missing>0?$" · {missing} items still missing from selected accessible tabs.":" · Finished."));return;
+                var missing=chestMode==0?chestGoals.Sum(x=>Math.Max(0,x.Value-RetrievalHeld(x.Key,chestQuality))):chestUnmoved;
+                StopChest($"{chestMoves} transfers confirmed"+(missing>0?$" · {missing} items remain (stock or destination capacity unavailable).":" · Finished."));return;
             }
             chestPending=next;chestDeadline=now.AddSeconds(12);
             chestMove!(manager,(InventoryType)next.Source.Container,(ushort)next.Source.Slot,(InventoryType)next.Destination.Container,(ushort)next.Destination.Slot,next.Quantity);

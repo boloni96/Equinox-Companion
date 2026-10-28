@@ -3,7 +3,7 @@ using FFXIVClientStructs.FFXIV.Client.Game;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
-    private ulong organizeFrom,organizeTo;
+    private ulong organizeFrom,organizeTo;private int organizePreviewPage;
     private readonly HashSet<uint> organizeCategories=[];
     private RetrieverStock[] organizePreview=[];
     private bool organizeRunning;private int organizeStage,organizeSourceIndex,organizeTransferred;
@@ -20,7 +20,9 @@ public sealed partial class Plugin
     {
         RefreshRetrievalStock();
         organizePreview=retrievalStock.Where(x=>x.Retainer!=organizeTo&&(organizeFrom==0||x.Retainer==organizeFrom)&&(organizeCategories.Count==0||organizeCategories.Contains(OrganizeCategory(x.Item)))&&RetainerRetrieval.AllowsQuality(x.Hq,retrievalQuality)).ToArray();
-        organizeStatus=$"{organizePreview.Length} item/quality groups · recorded inventory; quantities and space are rechecked in game.";
+        organizePreview=organizePreview.OrderBy(x=>x.Name).ThenBy(x=>x.Holder).ToArray();organizePreviewPage=0;
+        var free=OrganizerInventory(false,false).Count(x=>x.Item==0);
+        organizeStatus=$"{free} free bag slots · {organizePreview.Length} item/quality groups · recorded inventory; quantities and space are rechecked in game.";
     }
     private void DrawRetainerOrganizer()
     {
@@ -41,7 +43,9 @@ public sealed partial class Plugin
         ImGui.EndDisabled();
         if(organizeRunning&&ImGui.Button("Stop organizer"))StopOrganize("Stopped by you; an already-sent move may still complete.");
         ImGui.TextWrapped(organizeStatus);
-        if(ImGui.BeginChild("OrganizerPreview",new(0,Math.Max(80,ImGui.GetContentRegionAvail().Y-10)),true))foreach(var row in organizePreview){DrawRetrievalIcon(row.Item);ImGui.TextUnformatted($"{row.Name}{(row.Hq?" HQ":"")} · {row.Quantity} · {row.Holder} → {names.GetValueOrDefault(organizeTo,"Choose destination")}");}ImGui.EndChild();
+        var pages=Math.Max(1,(organizePreview.Length+59)/60);organizePreviewPage=Math.Clamp(organizePreviewPage,0,pages-1);
+        ImGui.BeginDisabled(organizePreviewPage==0);if(ImGui.SmallButton("Previous page"))organizePreviewPage--;ImGui.EndDisabled();ImGui.SameLine();ImGui.TextUnformatted($"{organizePreviewPage+1}/{pages}");ImGui.SameLine();ImGui.BeginDisabled(organizePreviewPage+1>=pages);if(ImGui.SmallButton("Next page"))organizePreviewPage++;ImGui.EndDisabled();
+        if(ImGui.BeginChild("OrganizerPreview",new(0,Math.Max(80,ImGui.GetContentRegionAvail().Y-10)),true))foreach(var row in organizePreview.Skip(organizePreviewPage*60).Take(60)){DrawRetrievalIcon(row.Item);ImGui.TextUnformatted($"{row.Name}{(row.Hq?" HQ":"")} · {row.Quantity} · {row.Holder} → {names.GetValueOrDefault(organizeTo,"Choose destination")}");}ImGui.EndChild();
     }
     private unsafe void StartOrganize()
     {
