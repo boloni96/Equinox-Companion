@@ -1069,6 +1069,7 @@ public sealed partial class Plugin : IDalamudPlugin
                 helperDiagnostics = new { character=Player.CharacterName, enabled=config.EnableFollowThem, armed=followSession.Armed, target=config.FollowThem.TargetName, questPermission=helperPermission.Quest, paused=HelperPaused, questPaused=helperPermission.QuestPaused, shareQuest=config.FollowThem.ShareQuestActions, stopOnMovement=config.FollowThem.StopOnMovement, followStatus, helperError, helperLastIssue, observedQuest=helperObservedQuest, followers=helperFollowers.Select(f=>new {f.Name,f.Status,f.Quest,f.QuestPaused,f.Control,f.Updated}).ToArray() },
                 eventExchangeDiagnostics=HelperExchangeDiagnostic(),
                 lotteryDiagnostics = lotteryDiagnostic,
+                lotteryRefundDiagnostics = lotteryRefundDiagnostic,
                 companyProfileDiagnostics = new { latest = companyProfileDiagnostic, history = companyProfileHistory.ToArray(), status = discoveryStatus },
                 mode = "local-diagnostics", gardeningConfirmed = false, performance = new { maxDrawMs,maxUpdateMs,maxSnapshotMs, configurationError, stages=performanceStages.ToDictionary(x=>x.Key,x=>x.Value), recent=rollingPerformance.Snapshot(PerformanceClock), optionalTools=optionalToolFailures.ToDictionary(x=>x.Key,x=>x.Value) },
                 houseObservations = config.Houses.ToArray(), confirmedTending = config.Tending.ToArray(), confirmedPlanting = config.Planting.ToArray(), observedDetails = config.Discoveries.ToArray(), diagnostics=diagnostics.ToArray()

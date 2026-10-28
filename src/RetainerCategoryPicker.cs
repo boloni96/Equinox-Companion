@@ -8,6 +8,8 @@ public sealed partial class Plugin
     {
         var changed=false;
         if(ImGui.BeginCombo(label,selected.Count==0?empty:selected.Count+" subcategories",ImGuiComboFlags.HeightLarge)){
+            if(ImGui.SmallButton("Select all")){foreach(var category in StorageGroups().SelectMany(g=>g.Categories))selected.Add(category.Id);changed=true;}ImGui.SameLine();
+            if(ImGui.SmallButton("Clear all")){selected.Clear();changed=true;}
             foreach(var group in StorageGroups()){
                 ImGui.PushID(group.Name);
                 var count=group.Categories.Count(c=>selected.Contains(c.Id));var all=count==group.Categories.Length;
