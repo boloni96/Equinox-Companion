@@ -37,20 +37,18 @@ public sealed partial class Plugin
         void Choose(string label,ref ulong id,bool all){if(ImGui.BeginCombo(label,id==StorageAutoRouting.AllRetainers?"All retainers":id==0?(all?"All other retainers":"Choose retainer"):names.GetValueOrDefault(id,id.ToString()))){if(!all&&ImGui.Selectable("All retainers · consolidate duplicates",id==StorageAutoRouting.AllRetainers)){id=StorageAutoRouting.AllRetainers;organizePreview=[];}if(all&&ImGui.Selectable("All other retainers",id==0)){id=0;organizePreview=[];}foreach(var n in names)if(ImGui.Selectable(n.Value+"##"+n.Key,id==n.Key)){id=n.Key;organizePreview=[];}ImGui.EndCombo();}}
         Choose("From",ref organizeFrom,true);Choose("To",ref organizeTo,false);
         if(ImGui.IsItemHovered())ImGui.SetTooltip("All retainers consolidates duplicates from last to first in game order. Enable assignments to use your chosen category homes instead. Known inventories are planned before travel; relevant slots are verified on arrival.");
-        if(ImGui.SmallButton("All items")){organizeCategories.Clear();organizePreview=[];}ImGui.SameLine();
+        if(ImGui.SmallButton("All items")){organizeCategories.Clear();foreach(var category in StorageGroups().SelectMany(g=>g.Categories))organizeCategories.Add(category.Id);organizePreview=[];}ImGui.SameLine();
         if(ImGui.SmallButton("Materia")){organizeCategories.Clear();organizeCategories.Add(58);organizePreview=[];}ImGui.SameLine();
-        if(ImGui.SmallButton("Housing")){organizeCategories.Clear();foreach(var id in Enumerable.Range(64,17).Select(x=>(uint)x).Concat(new uint[]{56,57,94,95}))organizeCategories.Add(id);organizePreview=[];}ImGui.SameLine();
+        if(ImGui.SmallButton("Housing")){organizeCategories.Clear();AddStorageGroup(organizeCategories,"Housing");organizePreview=[];}ImGui.SameLine();
         if(ImGui.SmallButton("Gardening")){organizeCategories.Clear();organizeCategories.Add(82);organizePreview=[];}
-        if(ImGui.BeginCombo("Categories",organizeCategories.Count==0?"All item categories":organizeCategories.Count+" selected")){
-            foreach(var cat in DataManager.GetExcelSheet<Lumina.Excel.Sheets.ItemUICategory>().Where(c=>c.RowId>0&&!string.IsNullOrWhiteSpace(c.Name.ToString()))){var enabled=organizeCategories.Contains(cat.RowId);if(ImGui.Checkbox(cat.Name.ToString()+"##"+cat.RowId,ref enabled)){if(enabled)organizeCategories.Add(cat.RowId);else organizeCategories.Remove(cat.RowId);organizePreview=[];}}
-            ImGui.EndCombo();}
+        if(DrawStorageCategoryPicker("Categories",organizeCategories))organizePreview=[];
         var q=(int)retrievalQuality;ImGui.SetNextItemWidth(140);if(ImGui.Combo("Quality",ref q,"Any quality\0NQ only\0HQ only\0")){retrievalQuality=(RetrievalQuality)q;organizePreview=[];retrievalPreviewDirty=true;}
         ImGui.SetNextItemWidth(90);ImGui.SliderInt("Leave bag slots free",ref organizeReserve,0,10);
         if(ImGui.IsItemHovered())ImGui.SetTooltip("Fill available space per trip. One spare slot helps rearrange full retainers; it may be used temporarily to unblock a swap.");
-        ImGui.BeginDisabled(organizeTo==0);if(ImGui.SmallButton("Add movement")){organizeRules.Add(CurrentOrganizeRule());organizePreview=[];}ImGui.EndDisabled();ImGui.SameLine();if(ImGui.SmallButton("Clear movements")){organizeRules.Clear();organizePreview=[];}
+        ImGui.BeginDisabled(organizeTo==0||organizeCategories.Count==0);if(ImGui.SmallButton("Add movement")){organizeRules.Add(CurrentOrganizeRule());organizePreview=[];}ImGui.EndDisabled();ImGui.SameLine();if(ImGui.SmallButton("Clear movements")){organizeRules.Clear();organizePreview=[];}
         foreach(var rule in organizeRules.ToArray()){ImGui.PushID(organizeRules.IndexOf(rule));if(ImGui.SmallButton("×")){organizeRules.Remove(rule);organizePreview=[];}ImGui.SameLine();ImGui.TextUnformatted($"{(rule.AllItems?"All items":string.Join(", ",rule.Categories.Select(c=>DataManager.GetExcelSheet<Lumina.Excel.Sheets.ItemUICategory>().GetRowOrDefault(c)?.Name.ToString()??c.ToString())))} · {(rule.From==StorageRouting.AllSources?"All retainers":names.GetValueOrDefault(rule.From,"Retainer"))} → {(rule.To==StorageAutoRouting.AllRetainers?"All retainers":names.GetValueOrDefault(rule.To,"Retainer"))}");ImGui.PopID();}
         if(ImGui.Button("Check"))RetrievalTry(CheckOrganize);ImGui.SameLine();
-        ImGui.BeginDisabled(organizeTo==0&&organizeRules.Count==0);if(ImGui.Button("Organise"))StartOrganize();ImGui.EndDisabled();
+        ImGui.BeginDisabled(organizeRules.Count==0&&(organizeTo==0||organizeCategories.Count==0));if(ImGui.Button("Organise"))StartOrganize();ImGui.EndDisabled();
         ImGui.EndDisabled();
         if(organizeRunning&&ImGui.Button("Stop organizer"))StopOrganize("Stopped by you; an already-sent move may still complete.");
         ImGui.TextWrapped(organizeStatus);
@@ -59,7 +57,7 @@ public sealed partial class Plugin
         if(ImGui.BeginChild("OrganizerPreview",new(0,Math.Max(80,ImGui.GetContentRegionAvail().Y-10)),true))foreach(var row in organizePreview.Skip(organizePreviewPage*60).Take(60)){DrawRetrievalIcon(row.Item);ImGui.TextUnformatted($"{row.Name}{(row.Hq?" HQ":"")} · {row.Quantity} · {row.Holder} → {names.GetValueOrDefault(organizeResolvedRules.FirstOrDefault(r=>(r.From==StorageRouting.AllSources||r.From==row.Retainer)&&(r.AllItems||r.Items.Contains(row.Item)||r.Categories.Contains(OrganizeCategory(row.Item)))&&RetainerRetrieval.AllowsQuality(row.Hq,r.Quality))?.To??organizeTo,"Choose destination")}");}ImGui.EndChild();
     }
     private StorageRoute[] OrganizeRules()=>organizeRules.Count>0?organizeRules.ToArray():[CurrentOrganizeRule()];
-    private StorageRoute CurrentOrganizeRule()=>new(organizeFrom==0?StorageRouting.AllSources:organizeFrom,organizeTo,organizeCategories.ToArray(),[],AllItems:organizeCategories.Count==0,Quality:retrievalQuality);
+    private StorageRoute CurrentOrganizeRule()=>new(organizeFrom==0?StorageRouting.AllSources:organizeFrom,organizeTo,organizeCategories.ToArray(),[],AllItems:false,Quality:retrievalQuality);
     private readonly List<StorageRoute> organizeRules=[];
     private StorageRoute[] organizeActiveRules=[];private int organizeReserve=1;
     private bool organizeBagsOnly;private readonly Dictionary<ulong,ChestStack[]> organizeInventories=[];
