@@ -6,6 +6,7 @@ public static class OptionalToolAvailability
     public static bool Available(Configuration config, string name) => name switch
     {
         "Equinox Market" or "Equinox Seller" => config.Seller.Enabled,
+        "Retainer Retriever" => config.EnableRetriever,
         "Gil Trader" => config.EnableGilTrader,
         "QuickLoot" => config.EnableQuickLoot,
         "Helper" => config.EnableFollowThem,

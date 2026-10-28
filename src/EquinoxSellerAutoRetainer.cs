@@ -18,6 +18,7 @@ public sealed partial class Plugin
     }
     private SellerPreparation PrepareSellerAutomation()
     {
+        if(retrievalRun?.Running==true)return new(false,"Retriever is running.","Stop retrieval before starting Seller.");
         var result=sellerAutoRetainerPause.Check(DateTimeOffset.UtcNow);TraceAutoRetainerHandoff();
         if(!result.Ready)return result;
         if(!AcquireMarketBuddyLock())return new(false,sellerNotice,sellerNotice);

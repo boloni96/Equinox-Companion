@@ -3,6 +3,8 @@ namespace EquinoxCompanion;
 [Serializable]
 public sealed class Configuration : IPluginConfiguration
 {
+    public bool EnableRetriever { get; set; }
+    public List<RetrievalPreset> RetrievalPresets { get; set; } = [];
     public bool EnableGilTrader { get; set; }
     public bool EnableTradeItemShortcut { get; set; }
     public SellerSettings Seller { get; set; } = new();

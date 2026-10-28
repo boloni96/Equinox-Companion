@@ -223,7 +223,7 @@ public sealed partial class Plugin : IDalamudPlugin
         config.FollowThem ??= new();
         config.PairingKey = config.PairingKey.Trim().ToLowerInvariant();
         if(!System.Text.RegularExpressions.Regex.IsMatch(config.InstallationId??"", "^[a-f0-9]{32}$")){config.InstallationId=Guid.NewGuid().ToString("N");SaveConfiguration();}
-        sync.InstallationId=config.InstallationId;
+        sync.InstallationId=config.InstallationId!;
         syncStatus = config.PairingKey.Length == 64 ? "Saved pairing key loaded. Waiting to sync." : "Not paired. Local records only.";
         if (config.Version < 5) { config.RefreshSharedInBackground = true; config.Version = 5; SaveConfiguration(); }
         try { plantHook = Interop.HookFromAddress<ConfirmPlantDelegate>(AgentHousingPlant.MemberFunctionPointers.ConfirmSeedAndSoilSelection, ObservePlantSelection); }
@@ -250,6 +250,8 @@ public sealed partial class Plugin : IDalamudPlugin
         InitializeMarketSearch();
         InitializeEquinoxMarket();
         InitializeGilTrader();
+        config.RetrievalPresets??=[];
+        InitializeRetriever();
         InitializeTradeItemShortcut();
         InitializeBidSearch();
         InitializeAdventures();
@@ -294,6 +296,7 @@ public sealed partial class Plugin : IDalamudPlugin
     {
         if(args.Trim().Equals("tests",StringComparison.OrdinalIgnoreCase)){OpenTesting();return;}
         if(args.Trim().Equals("market",StringComparison.OrdinalIgnoreCase)){OpenEquinoxMarket();return;}
+        if(args.Trim().Equals("retrieve",StringComparison.OrdinalIgnoreCase)){OpenRetriever();return;}
         if(args.Trim().Equals("seller",StringComparison.OrdinalIgnoreCase)){OpenEquinoxSeller();return;}
         if(args.Trim().Equals("adventure",StringComparison.OrdinalIgnoreCase)){OpenAdventure();return;}
         if(args.Trim().Equals("bid",StringComparison.OrdinalIgnoreCase)){OpenBidSearch();return;}
@@ -367,6 +370,7 @@ public sealed partial class Plugin : IDalamudPlugin
         UpdateSharedRoster(now);
         RunOptionalTool("Equinox Market",now);
         RunOptionalTool("Gil Trader",now);
+        RunOptionalTool("Retainer Retriever",now);
         RunOptionalTool("Trade item shortcut",now);
         UpdateAdventure();
         UpdateTesting(now);
@@ -1057,6 +1061,7 @@ public sealed partial class Plugin : IDalamudPlugin
                 schemaVersion = 7, characterSync = ReadCharacterSyncStatus(), followTravel = followTravelDiagnostics.ToArray(), pluginVersion = typeof(Plugin).Assembly.GetName().Version?.ToString(), exportedAt = DateTimeOffset.UtcNow,
                 syncDiagnostics = new { enabled = config.SyncEnabled, paired = config.PairingKey.Length == 64, endpoint = "https://equinoxjournal.pages.dev", status = syncStatus, pending = pendingSyncRecords, eligible = readySyncRecords, held = heldSyncRecords, historicalHeld = historicalHeldSyncRecords, unsupported = unsupportedSyncRecords, acknowledgedLocal = config.SentEvents.Count, lastSyncReceiptAt, lastSyncBatchSize, lastSyncBatchOldest, lastSyncBatchNewest, nextAttemptAt = nextSync, inFlight = syncTask is not null },
                 gardenPickerDetails=gardenPickerCaptures.ToArray(),
+                retainerRetriever=new { enabled=config.EnableRetriever,state=retrievalRun.State.ToString(),status=retrievalRun.Status,mode=retrievalMode.ToString(),multiplier=retrievalMultiplier,subtractBags=retrievalSubtract,items=retrievalItems,preview=retrievalPreview,stockStatus=retrievalStockNotice },
                 marketSellerDiagnostics=ReadSellerDiagnosticExport(),
                 marketSharingDiagnostics=new {projectionVersion=config.SharedRoster?.MarketProjectionVersion??0,historyStatus=marketSharedStatus,historyCursor=marketSharedHistory.Cursor,sharedRecords=marketSharedHistory.Records.Length,acknowledgedRecords=marketSharedHistory.Sent.Count,historyInFlight=marketSharedTask!=null,backgroundStatus=marketWatchNotice,backgroundInFlight=marketWatchTask!=null,backgroundCachedItems=marketWatchCache.Count},
                 tradeItemShortcutDiagnostics=new {enabled=config.EnableTradeItemShortcut,actions=tradeItemShortcutActions,confirmedAdditions=tradeItemShortcutConfirmed,status=tradeItemShortcutStatus,pending=pendingTradeItemShortcut is not null,menuCleanup=tradeItemMenuCleanup is not null,awaitingOffer=tradeItemOfferWatch is not null,trace=tradeItemShortcutTrace.ToArray()},
@@ -1312,6 +1317,7 @@ public sealed partial class Plugin : IDalamudPlugin
         Pi.UiBuilder.Draw -= Draw;
         DisposeMarketSearch();
         DisposeTradeItemShortcut();
+        DisposeRetriever();
         DisposeGilTrader();
         DisposeBidSearch();
         DisposeAdventures();
