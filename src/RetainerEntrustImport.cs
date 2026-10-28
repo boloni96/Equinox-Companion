@@ -9,6 +9,10 @@ public sealed partial class Plugin
     private void ImportRetrievalAsNewPlan()
     {
         var imported=RetainerRetrieval.Import(retrievalPaste,ResolveRetrievalItem,ReadAutoRetainerProtection);
+        SaveNewRetrievalPlan(imported);
+    }
+    private void SaveNewRetrievalPlan(RetrievalPreset imported)
+    {
         var current=new RetrievalPreset(retrievalName,retrievalItems.ToArray(),retrievalMultiplier,retrievalIncludesSubcrafts,Mode:retrievalMode,RecipeChoices:new(retrievalRecipeOverrides),Quality:retrievalQuality,DestinationRetainer:retrievalSendTo,SendCategories:retrievalSendCategories.ToArray(),Entrust:retrievalEntrust);
         var updated=EntrustSelection.AddImportedPlan(config.RetrievalPresets,current,retrievalEditingPreset,imported);
         config.RetrievalPresets=updated.ToList();SaveConfiguration();SelectRetrievalPreset(updated[^1]);
@@ -18,7 +22,7 @@ public sealed partial class Plugin
     {
         var plan=retrievalEntrust!;
         ImGui.TextUnformatted($"Entrust selection · {retrievalItems.Length} items");
-        MarketHelp("Entrust all matching items from bags and crystals, minus Keep. HQ/NQ share the keep amount. No crafting expansion. Protected items were copied from all saved AutoRetainer protection lists at import; reimport to refresh them.");
+        MarketHelp("Entrust all matching items from bags and crystals, minus Keep. HQ/NQ share the keep amount. No crafting expansion. Imported protection is a saved snapshot. Plans created here use your selected items; they do not read AutoRetainer protection.");
         var q=(int)retrievalQuality;if(ImGui.Combo("Quality",ref q,"Any quality\0NQ only\0HQ only\0")){retrievalQuality=(RetrievalQuality)q;if(retrievalEditingPreset!=null)RetrievalTry(SaveRetrievalPreset);}
         DrawRetrievalSendControls();
         ImGui.TextDisabled($"{plan.Protected.Length} protected item IDs copied");
