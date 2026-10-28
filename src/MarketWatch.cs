@@ -20,7 +20,7 @@ public static class MarketWatchPolicy
         $"Universalis: {batch.Items.Count(x=>x.Error.Length==0)}/{batch.Items.Length} items received"+
         (batch.Items.Any(x=>x.Error.Length>0)?" · unavailable items will retry. Data age is shown on each listing.":" · data age is shown on each listing.");
 
-    public static SellerDecision Assess(MarketStock item,uint world,MarketWatchSnapshot? data,ISet<string> ownNames,SellerSettings settings,DateTimeOffset now)
+    public static SellerDecision Assess(MarketStock item,uint world,MarketWatchSnapshot? data,ISet<string> ownNames,SellerSettings settings,DateTimeOffset now,bool levelOneOutfit=false)
     {
         SellerDecision Unknown(string reason)=>new(SellerStatus.Unknown,null,reason,"Universalis");
         if(settings.ExcludedItems.Contains(item.ItemId))return Unknown("Excluded from price updates by your item rule.");
@@ -30,12 +30,12 @@ public static class MarketWatchPolicy
         if(data.Error.Length>0)return Unknown(checkedText+data.Error+" Live comparison is still available.");
         if(data.Uploaded==default||data.Uploaded>now.AddMinutes(5)||now-data.Uploaded>TimeSpan.FromMinutes(Math.Clamp(settings.BackgroundMaxAgeMinutes,5,1440)))
             return Unknown(checkedText+"Old market data. Universalis has not supplied a recent upload; requesting it again does not perform an in-game search. Check live prices at the bell.");
-        var offers=data.Offers.Where(x=>x.Hq==item.Hq&&!x.Mannequin).ToArray();
+        var offers=data.Offers.Where(x=>((settings.CombineLevelOneOutfitQuality&&levelOneOutfit)||x.Hq==item.Hq)&&!x.Mannequin).ToArray();
         if(offers.Length==0)return Unknown(checkedText+"No listings of this quality in cached data. Check live listings/history before deciding.");
         // The cache age is checked above; this is deliberately not a live receipt.
         // Synthetic IDs only distinguish known names on this world from other offers.
         var comparison=new SellerComparison(item.ItemId,world,now,true,offers.Select(x=>new SellerOffer(x.Retainer.Length>0&&ownNames.Contains(x.Retainer)?1UL:0UL,x.Price,x.Hq,x.Quantity,false,x.Materia)).ToArray(),data.History!=null,data.History??[]);
-        var d=SellerPricing.Decide(item.ItemId,world,item.Hq,item.Price,comparison,new HashSet<ulong>{1},settings,now,item.Materia);
+        var d=SellerPricing.Decide(item.ItemId,world,item.Hq,item.Price,comparison,new HashSet<ulong>{1},settings,now,item.Materia,levelOneOutfit);
         if (!SellerMateria.Known(item.Materia)) d=d with {Status=SellerStatus.Unknown};
         return d with {Source="Universalis",Reason=checkedText+$"{d.Reason} Live verification required before changing a price."};
     }

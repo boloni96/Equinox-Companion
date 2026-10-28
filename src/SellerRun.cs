@@ -4,6 +4,7 @@ public sealed record SellerRetainerRef(ulong Id,string Name);
 public interface ISellerPort
 {
     SellerPreparation Prepare()=>new(true);
+    bool IsLevelOneOutfit(uint item)=>false;
     bool ContextMatches(ulong character,uint world);
     bool SelectRetainer(SellerRetainerRef retainer);
     bool OpenMarket(ulong retainer);
@@ -123,7 +124,7 @@ public sealed class SellerRun(ISellerPort port)
                 if(item is null || !port.EditorMatches(retainer.Id,item)){Stop("Stopped: the selected listing changed.");break;}
                 var result=port.Comparison;
                 if(result is null)break;
-                decision=SellerPricing.Decide(item.ItemId,world,item.Hq,item.Price,result,own,settings,now,item.Materia);
+                decision=SellerPricing.Decide(item.ItemId,world,item.Hq,item.Price,result,own,settings,now,item.Materia,port.IsLevelOneOutfit(item.ItemId));
                 if(!Apply || !decision.CanApply)
                 {port.Review(retainer,item,decision,false);if(decision.Status==SellerStatus.Skipped)Skipped++;if(!port.CancelEditor(retainer.Id,item)){Stop("Stopped: the selected listing changed.");break;}Advance(now);break;}
                 if(port.ApplyPrice(retainer.Id,item,decision.Price!.Value))Move(Phase.Commit,now);

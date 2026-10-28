@@ -15,7 +15,7 @@ public sealed partial class Plugin
                     return (live.Decision,live.At,live.At.AddMinutes(5),true);
                 if(config.Seller.BackgroundChecks&&marketWatchCache.TryGetValue((r.WorldId,item.ItemId),out var cached)){
                     var names=namesByWorld.GetValueOrDefault(r.WorldId)??new HashSet<string>();
-                    return (MarketWatchPolicy.Assess(item,r.WorldId,cached,names,config.Seller,now),cached.Checked,
+                    return (MarketWatchPolicy.Assess(item,r.WorldId,cached,names,config.Seller,now,IsSellerLevelOneOutfit(item.ItemId)),cached.Checked,
                         cached.Error.Length==0?cached.Uploaded.AddMinutes(Math.Clamp(config.Seller.BackgroundMaxAgeMinutes,5,1440)):cached.Checked.AddMinutes(5),false);
                 }
                 return (new SellerDecision(SellerStatus.Unknown,null,"Waiting for a usable price check.","None"),now,now.AddMinutes(5),false);

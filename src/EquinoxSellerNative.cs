@@ -329,7 +329,7 @@ public sealed partial class Plugin
             if(x.ItemId%1_000_000!=capture.Item||!capture.Contains(x.ListingId,offer))return null;
             rows.Add(offer);
         }
-        var wantHistory=(sellerRun.Running?config.Seller.OpenHistory:manualShowHistory) || SellerPricing.NeedsHistory(rows,capture.Hq,capture.Materia,KnownSellerRetainers(),config.Seller);
+        var wantHistory=(sellerRun.Running?config.Seller.OpenHistory:manualShowHistory) || SellerPricing.NeedsHistory(rows,capture.Hq,capture.Materia,KnownSellerRetainers(),config.Seller,IsSellerLevelOneOutfit(capture.Item));
         if(wantHistory&&!capture.HistoryRequested)capture.HistoryRequested=SellerButton((AtkUnitBase*)result,result->History,23);
         if(wantHistory&&!capture.HistoryReceived)return null;
         return new(capture.Item,capture.World,capture.RequestedAt,true,rows.ToArray(),capture.HistoryReceived,capture.History);
@@ -446,7 +446,7 @@ public sealed partial class Plugin
             if(BeginSellerComparison(manualEditor.ItemId))manualCompareAt=now;
         }
         if(manualEditor!=null&&ReadSellerComparison() is {} comparison){
-            var decision=SellerPricing.Decide(manualEditor.ItemId,Player.CurrentWorld.RowId,manualEditor.Hq,manualEditor.Price,comparison,KnownSellerRetainers(),config.Seller,now,manualEditor.Materia);
+            var decision=SellerPricing.Decide(manualEditor.ItemId,Player.CurrentWorld.RowId,manualEditor.Hq,manualEditor.Price,comparison,KnownSellerRetainers(),config.Seller,now,manualEditor.Materia,IsSellerLevelOneOutfit(manualEditor.ItemId));
             if(decision!=manualDecision){manualDecision=decision;TraceSellerDecision(active,manualEditor,decision,false,"Manual suggestion");}
             sellerReviews[(active,manualEditor.Slot)]=(manualEditor,decision,comparison.At);
         }
@@ -530,6 +530,7 @@ public sealed partial class Plugin
     private sealed class SellerPort(Plugin p):ISellerPort
     {
         public SellerPreparation Prepare()=>p.PrepareSellerAutomation();
+        public bool IsLevelOneOutfit(uint item)=>p.IsSellerLevelOneOutfit(item);
         private (ulong Retainer,int Slot)? requestedEditor;
         private ulong requestedMarket;
         public bool ContextMatches(ulong c,uint w)=>p.SellerContext(c,w);
