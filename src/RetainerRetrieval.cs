@@ -3,7 +3,7 @@ namespace EquinoxCompanion;
 
 public enum RetrievalMode { FinalItems, AllMaterials }
 public sealed record RetrievalEntry(uint ItemId, string Name, int Quantity, uint RecipeId = 0);
-public sealed record RetrievalPreset(string Name, RetrievalEntry[] Items, int Multiplier = 1);
+public sealed record RetrievalPreset(string Name, RetrievalEntry[] Items, int Multiplier = 1, bool IncludesSubcrafts = false, bool ArtisanPreset = false);
 internal sealed record RetrievalRecipe(uint Id,uint ItemId,int Yield,RetrievalEntry[] Ingredients,string Job);
 internal sealed record RetrievalPreview(uint ItemId,string Name,int Required,int Held,int? Available)
 {
@@ -55,22 +55,52 @@ internal static class RetainerRetrieval
             if(result[e.ItemId].Quantity>MaxQuantity||result.Count>MaxEntries)throw new ArgumentException("List exceeds 200 items or 1,000,000 per item.");}
         return result.Values.ToArray();
     }
-    internal static RetrievalEntry[] Expand(IEnumerable<RetrievalEntry> entries,int multiplier,RetrievalMode mode,IReadOnlyDictionary<uint,RetrievalRecipe[]> recipes)
+    internal sealed record CraftStep(uint RecipeId,uint ItemId,string Name,int Crafts,int Yield);
+    internal sealed record CraftPlan(RetrievalEntry[] Materials,CraftStep[] Steps);
+    private static RetrievalRecipe? Recipe(RetrievalEntry e,IReadOnlyDictionary<uint,RetrievalRecipe[]> recipes)
+    {
+        if(!recipes.TryGetValue(e.ItemId,out var choices)||choices.Length==0)return null;
+        var r=e.RecipeId!=0?choices.FirstOrDefault(r=>r.Id==e.RecipeId):choices.Select(x=>x.Yield+"|"+string.Join(";",x.Ingredients.OrderBy(i=>i.ItemId).Select(i=>i.ItemId+":"+i.Quantity))).Distinct().Count()==1?choices[0]:null;
+        return r??throw new ArgumentException("Choose a recipe for "+e.Name+" in Add items → Crafting logs; multiple recipes are available.");
+    }
+    internal static RetrievalEntry[] Requested(IEnumerable<RetrievalEntry> entries,int multiplier,bool includesSubcrafts,IReadOnlyDictionary<uint,RetrievalRecipe[]> recipes)
     {
         if(multiplier is <1 or >999)throw new ArgumentException("Multiplier must be 1–999.");
-        var requested=Combine(entries.Select(e=>e with {Quantity=checked(e.Quantity*multiplier)}));
-        if(mode==RetrievalMode.FinalItems)return requested;
-        var leaves=new List<RetrievalEntry>();var spare=new Dictionary<uint,int>();
+        var listed=Combine(entries.Select(e=>e with{Quantity=checked(e.Quantity*multiplier)}));
+        if(!includesSubcrafts)return listed;
+        // Explicit opt-in: listed intermediate outputs are consumed by the other listed recipes.
+        // Preserve any surplus as a requested output; do not infer intent from a list title.
+        var consumed=new Dictionary<uint,int>();
+        foreach(var e in listed){var r=Recipe(e,recipes);if(r is null)continue;if(r.Yield<1)throw new ArgumentException("Invalid recipe yield.");
+            var crafts=checked((e.Quantity+r.Yield-1)/r.Yield);
+            foreach(var i in r.Ingredients)consumed[i.ItemId]=checked(consumed.GetValueOrDefault(i.ItemId)+i.Quantity*crafts);}
+        var outputs=listed.Select(e=>e with{Quantity=Math.Max(0,e.Quantity-consumed.GetValueOrDefault(e.ItemId))}).Where(e=>e.Quantity>0).ToArray();
+        if(listed.Length>0&&outputs.Length==0)throw new ArgumentException("No final outputs remain. Check the list and its subcraft option.");
+        return outputs;
+    }
+    internal static CraftPlan PlanCrafts(IEnumerable<RetrievalEntry> entries,IReadOnlyDictionary<uint,RetrievalRecipe[]> recipes)
+    {
+        var leaves=new List<RetrievalEntry>();var spare=new Dictionary<uint,int>();var steps=new List<CraftStep>();
         void Visit(RetrievalEntry e,HashSet<uint> path){
-            if(!recipes.TryGetValue(e.ItemId,out var choices)||choices.Length==0){leaves.Add(e with{RecipeId=0});return;}
-            var r=e.RecipeId!=0?choices.FirstOrDefault(r=>r.Id==e.RecipeId):choices.Select(x=>x.Yield+"|"+string.Join(";",x.Ingredients.OrderBy(i=>i.ItemId).Select(i=>i.ItemId+":"+i.Quantity))).Distinct().Count()==1?choices[0]:null;
-            if(r is null)throw new ArgumentException("Multiple recipes for "+e.Name+". Select an explicit top-level recipe, or use Final items with an explicit material list.");
+            var r=Recipe(e,recipes);if(r is null){leaves.Add(e with{RecipeId=0});return;}
             if(r.Yield<1||!path.Add(e.ItemId)||path.Count>32)throw new ArgumentException("Invalid or cyclic recipe for "+e.Name);
             var needed=Math.Max(0,e.Quantity-spare.GetValueOrDefault(e.ItemId));spare[e.ItemId]=Math.Max(0,spare.GetValueOrDefault(e.ItemId)-e.Quantity);
             var crafts=checked((needed+r.Yield-1)/r.Yield);spare[e.ItemId]+=crafts*r.Yield-needed;
-            if(crafts>0)foreach(var i in r.Ingredients)Visit(i with{Quantity=checked(i.Quantity*crafts)},new(path));
+            if(crafts>0){foreach(var i in r.Ingredients)Visit(i with{Quantity=checked(i.Quantity*crafts)},new(path));steps.Add(new(r.Id,e.ItemId,e.Name,crafts,r.Yield));}
         }
-        foreach(var e in requested)Visit(e,[]);return Combine(leaves);
+        foreach(var e in Combine(entries))Visit(e,[]);
+        return new(Combine(leaves),steps.GroupBy(s=>s.RecipeId).Select(g=>g.First() with{Crafts=checked(g.Sum(s=>s.Crafts))}).ToArray());
+    }
+    internal static RetrievalEntry[] Expand(IEnumerable<RetrievalEntry> entries,int multiplier,RetrievalMode mode,IReadOnlyDictionary<uint,RetrievalRecipe[]> recipes)
+    {
+        var requested=Requested(entries,multiplier,false,recipes);
+        return mode==RetrievalMode.FinalItems?requested:PlanCrafts(requested,recipes).Materials;
+    }
+    internal static string ExportArtisan(string name,CraftStep[] steps)
+    {
+        if(steps.Length==0)throw new ArgumentException("There are no craftable items in this selection.");
+        // Artisan's documented UI import reads plain NewCraftingList JSON and assigns its own ID.
+        return JsonSerializer.Serialize(new{Name=name,ID=0,Recipes=steps.Select(s=>new{ID=s.RecipeId,Quantity=s.Crafts,ListItemOptions=new{Skipping=false}}).ToArray(),SkipIfEnough=false,IsPremade=false},new JsonSerializerOptions{WriteIndented=true});
     }
     internal static string Export(RetrievalPreset list)=>JsonSerializer.Serialize(new {Format="EquinoxRetrieval",Version=1,List=list},new JsonSerializerOptions{WriteIndented=true});
     internal static RetrievalPreset Import(string text,Func<string,RetrievalEntry?> resolve)
