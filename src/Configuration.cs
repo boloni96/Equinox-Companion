@@ -4,6 +4,9 @@ namespace EquinoxCompanion;
 public sealed class Configuration : IPluginConfiguration
 {
     public bool EnableRetriever { get; set; }
+    public Dictionary<ulong,List<RetainerAssignment>> RetainerAssignments { get; set; } = [];
+    public HashSet<ulong> UseRetainerAssignments { get; set; } = [];
+    public List<RetainerInventoryRecord> OrganizerInventories { get; set; } = [];
     public List<RetrievalPreset> RetrievalPresets { get; set; } = [];
     public bool EnableGilTrader { get; set; }
     public bool EnableTradeItemShortcut { get; set; }

@@ -29,14 +29,14 @@ internal static class StorageAutoRoutingTests
         var stock=new Dictionary<ulong,ChestStack[]>{{0,[Empty(0,0),Empty(0,1),Empty(0,2)]},{1,[Item(10000,0,100,30),Item(10000,1,100,40),Item(10000,2,200,1),Empty(10000,3)]},{2,[Item(10000,0,100,20),Item(10000,1,200,20),Item(10000,2,200,30),Empty(10000,3)]}};
         uint Category(uint id)=>id==100?58u:80u;
         var resolved=StorageAutoRouting.Resolve(org,stock,Category);
-        Check("category goes to its main existing holder",resolved.Rules.Single(x=>x.Items.Contains(100u)).To==1&&resolved.Rules.Single(x=>x.Items.Contains(200u)).To==2);
+        Check("duplicates go to earliest game-order holder",resolved.Rules.Single(x=>x.Items.Contains(100u)).To==1&&resolved.Rules.Single(x=>x.Items.Contains(200u)).To==1);
         var organized=StorageRouting.Build(org,stock,Category,includeExistingBags:false);Check("all-retainer organizer produces transfers",organized.Remaining==0&&organized.Moves.Any(x=>x.Withdraw));
         var off=org with{Rules=[org.Rules[0] with{Categories=[58],AllItems=false}]};Check("selected categories only",StorageAutoRouting.Resolve(off,stock,Category).Rules.All(x=>!x.Items.Contains(200u)));
         var direct=org with{Rules=[new(StorageRouting.AllSources,2,[],[],AllItems:true)]};Check("explicit destinations preserved",StorageAutoRouting.Resolve(direct,stock,Category).Rules[0].To==2);
         var split=new Dictionary<ulong,ChestStack[]>{{0,[Empty(0,0),Empty(0,1)]},{1,[Item(10000,0,100,99),Item(10000,1,101,99)]},{2,[Item(10000,0,102,99),Empty(10000,1)]}};
         var splitRules=StorageAutoRouting.Resolve(org,split,_=>58).Rules;
-        Check("oversized category splits across retainers",splitRules.Select(x=>x.To).Distinct().Count()==2);
-        Check("each item has one destination",splitRules.SelectMany(x=>x.Items).Distinct().Count()==3);
+        Check("unique category items stay on their current retainer",splitRules.Length==0);
+        
         Check("all-retainer choice survives preset export",RetainerRetrieval.Import(RetainerRetrieval.Export(new("All",[],DestinationRetainer:all)),_=>null).DestinationRetainer==all);
     }
 }

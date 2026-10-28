@@ -10,7 +10,7 @@ public sealed partial class Plugin
         if(ImGui.BeginCombo("Entrust categories",retrievalSendCategories.Count==0?"None · listed items only":retrievalSendCategories.Count+" categories")){
             foreach(var cat in DataManager.GetExcelSheet<Lumina.Excel.Sheets.ItemUICategory>().Where(c=>c.RowId>0&&!string.IsNullOrWhiteSpace(c.Name.ToString()))){var selected=retrievalSendCategories.Contains(cat.RowId);if(ImGui.Checkbox(cat.Name.ToString()+"##send"+cat.RowId,ref selected)){if(selected)retrievalSendCategories.Add(cat.RowId);else retrievalSendCategories.Remove(cat.RowId);}}ImGui.EndCombo();}
         if(ImGui.IsItemHovered())ImGui.SetTooltip("Entrust all matching items in your bags, plus the listed quantities. Categories affect entrusting only; withdraw uses the explicit item list. Save preset remembers the destination and categories.");
-        if(ImGui.Button("Entrust plan"))SendRetrievalList(false);ImGui.SameLine();if(ImGui.Button("Entrust duplicates"))SendRetrievalList(true);
-        if(ImGui.IsItemHovered())ImGui.SetTooltip("Entrust bag items already stored on this destination retainer. Quality selection applies. No items are discarded or sold.");
+        if(ImGui.Button("Entrust plan"))SendRetrievalList(false);if(retrievalEntrust==null){ImGui.SameLine();if(ImGui.Button("Entrust duplicates"))SendRetrievalList(true);
+        if(ImGui.IsItemHovered())ImGui.SetTooltip("Entrust bag items already stored on this destination retainer. Quality selection applies. No items are discarded or sold.");}
     }
 }

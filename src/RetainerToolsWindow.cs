@@ -20,7 +20,7 @@ public sealed partial class Plugin
     {
         if(string.IsNullOrWhiteSpace(retrievalName))throw new ArgumentException("Name this plan first.");
         var at=config.RetrievalPresets.FindIndex(x=>x.Name==(retrievalEditingPreset??retrievalName));
-        var p=new RetrievalPreset(retrievalName,RetainerRetrieval.Combine(retrievalItems),retrievalMultiplier,retrievalIncludesSubcrafts,Mode:retrievalMode,RecipeChoices:new(retrievalRecipeOverrides),Quality:retrievalQuality,DestinationRetainer:retrievalSendTo,SendCategories:retrievalSendCategories.ToArray());
+        var p=new RetrievalPreset(retrievalName,RetainerRetrieval.Combine(retrievalItems),retrievalMultiplier,retrievalIncludesSubcrafts,Mode:retrievalMode,RecipeChoices:new(retrievalRecipeOverrides),Quality:retrievalQuality,DestinationRetainer:retrievalSendTo,SendCategories:retrievalSendCategories.ToArray(),Entrust:retrievalEntrust);
         if(config.RetrievalPresets.Any(x=>x.Name==p.Name)&&at!=config.RetrievalPresets.FindIndex(x=>x.Name==p.Name))throw new ArgumentException("Another plan already has this name.");
         if(at>=0)config.RetrievalPresets[at]=p;else if(config.RetrievalPresets.Count<25)config.RetrievalPresets.Add(p);else throw new ArgumentException("Maximum 25 presets.");
         retrievalEditingPreset=p.Name;SaveConfiguration();
@@ -57,7 +57,7 @@ public sealed partial class Plugin
         if(ImGui.SmallButton("×##HideRetainerTools")){retainerToolsWindow.IsOpen=false;retrievalPickItems=false;}
         MarketHelp("Hide this toolbar until the next summoning bell visit.");
         ImGui.BeginDisabled(busy||retrievalCatalog==null);
-        if(ImGui.SmallButton("Withdraw"))StartRetrieval(false);MarketHelp("Withdraw the calculated materials below, respecting the plan's quality and bag subtraction settings.");ImGui.SameLine();
+        ImGui.BeginDisabled(retrievalEntrust!=null);if(ImGui.SmallButton("Withdraw"))StartRetrieval(false);ImGui.EndDisabled();MarketHelp("Withdraw the calculated materials below, respecting the plan's quality and bag subtraction settings.");ImGui.SameLine();
         if(ImGui.SmallButton("Entrust"))SendRetrievalList(false);MarketHelp("Entrust the calculated quantities from your bags to the plan's destination. Entrust categories, if selected, are additional.");ImGui.SameLine();
         if(ImGui.SmallButton("Gil"))StartRetainerGil();MarketHelp("Withdraw available gil from the open retainer, or all retainers from the retainer list. Checks your gil cap.");
         ImGui.EndDisabled();ImGui.SameLine();
@@ -95,6 +95,7 @@ public sealed partial class Plugin
         var status=retainerGilRunning?retainerGilStatus:organizeRunning?organizeStatus:retrievalRun.Running?retrievalRun.Status:retrievalError.Length>0?retrievalError:retainerGilStatus;
         if(status.Length>0){ImGui.SameLine();ImGui.TextDisabled(busy?"…":"i");MarketHelp(status);}
         if(!retainerToolsMaterials)return;
+        if(retrievalEntrust!=null){ImGui.TextDisabled($"Entrust selection · {retrievalItems.Length} items · bags only");MarketHelp("All matching quantities, minus keep amounts and imported protected items. Edit in Organizer to review the list.");return;}
         if(retrieverWindow.IsOpen){ImGui.TextDisabled("Preview and edit in Organizer");return;}
         if(retrievalCatalog==null){ImGui.TextDisabled("Loading item catalogue…");return;}
         if(retrievalError.Length>0){ImGui.TextWrapped(retrievalError);if(retrievalRecipeChoice!=0&&ImGui.SmallButton("Choose recipe")){OpenRetriever();retrievalShowList=true;}return;}
