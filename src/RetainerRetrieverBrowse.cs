@@ -4,6 +4,7 @@ public sealed partial class Plugin
 {
     private sealed record RetrieverStock(ulong Retainer,string Holder,uint Item,string Name,int Quantity,DateTimeOffset? At,bool Hq=false);
     private Dictionary<uint,int> retrievalBrowseBags=[];
+    private Dictionary<ulong,HashSet<ulong[]>> retrievalRawInventory=[];
     private RetrieverStock[] retrievalStock=[];private bool retrievalStockComplete;private string retrievalStockNotice="Refresh at a summoning bell to identify this character's retainers.";
     private string retrievalBrowseSearch="";private bool retrievalBrowseGroups=true;
     private bool retrievalRefreshPending=true;
@@ -33,6 +34,7 @@ public sealed partial class Plugin
             }
         }
         catch{allagan=false;notice=" · Allagan unavailable; using saved data";}
+        retrievalRawInventory=rawById;
         var stocks=new List<RetrieverStock>();var complete=live.Length>0;
         foreach(var (id,name) in names)
         {

@@ -1,5 +1,5 @@
 namespace EquinoxCompanion;
-public sealed record StorageRoute(ulong From,ulong To,uint[] Categories,uint[] Items,bool AllItems=false,bool Duplicates=false,RetrievalQuality Quality=RetrievalQuality.Any,Dictionary<uint,int>? Amounts=null);
+public sealed record StorageRoute(ulong From,ulong To,uint[] Categories,uint[] Items,bool AllItems=false,bool Duplicates=false,RetrievalQuality Quality=RetrievalQuality.Any,Dictionary<uint,int>? Amounts=null,ulong[]? Destinations=null);
 public sealed record StorageRoutingPlan(string Name,ulong Character,StorageRoute[] Rules,int ReserveSlots=1,int KeepInBags=0);
 public sealed record RoutedMove(ulong Retainer,ChestMove Move,bool Withdraw,bool Internal=false);
 public sealed record RoutingResult(RoutedMove[] Moves,int Remaining);
@@ -10,8 +10,9 @@ public static class StorageRouting
     private static bool Crystal(uint item)=>item is >=2 and <=19;
     public static RoutingResult Build(StorageRoutingPlan plan,IReadOnlyDictionary<ulong,ChestStack[]> inventories,Func<uint,uint> category,bool bagsOnly=false,bool includeExistingBags=true)
     {
-        if(plan.Rules.Any(r=>r.To==StorageAutoRouting.AllRetainers)){if(bagsOnly)return StorageAutoRouting.Entrust(plan,inventories,category);plan=StorageAutoRouting.Resolve(plan,inventories,category);}
-        var state=inventories.ToDictionary(x=>x.Key,x=>x.Value.ToList());
+        var lastFirst=plan.Rules.Any(r=>r.To==StorageAutoRouting.AllRetainers);
+        if(lastFirst){if(bagsOnly)return StorageAutoRouting.Entrust(plan,inventories,category);plan=StorageAutoRouting.Resolve(plan,inventories,category);}
+        var state=(lastFirst?inventories.Reverse():inventories).ToDictionary(x=>x.Key,x=>x.Value.ToList());
         if(!state.ContainsKey(Bags))throw new ArgumentException("Player inventory is required.");
         if(plan.Rules.Any(r=>r.To==0||r.To==AllSources||!state.ContainsKey(r.To)))throw new ArgumentException("A destination retainer is unavailable.");
         var goals=new Dictionary<(ulong,uint,bool),ulong>();
@@ -38,19 +39,33 @@ public static class StorageRouting
         var moves=new List<RoutedMove>();ulong current=0;
         int FreeBags()=>state[Bags].Count(s=>s.Container<=3&&s.Item==0);
         ChestStack? Target(ChestStack source,ulong owner,bool allowReserve){
-            var rows=state[owner].Where(d=>Crystal(source.Item)?d.Container is 2001 or 12001:owner==Bags?d.Container<=3:d.Container is >=10000 and <=10006).ToArray();
+            var rows=state[owner].Where(d=>d.CanDeposit).Where(d=>Crystal(source.Item)?d.Container is 2001 or 12001:owner==Bags?d.Container<=3:d.Container is >=10000 and <=10006).ToArray();
             return rows.FirstOrDefault(d=>Same(d,source)&&d.Quantity<d.Limit)??
                 (owner==Bags&&!allowReserve&&FreeBags()<=Math.Max(0,plan.ReserveSlots)?null:rows.FirstOrDefault(d=>d.Item==0));
         }
         ChestMove? Make(ChestStack source,ulong to,int maximum,bool allowReserve){var dst=Target(source,to,allowReserve);if(dst==null)return null;var qty=Math.Min(source.Quantity,Math.Min(maximum,(dst.Item==0?source.Limit:dst.Limit)-dst.Quantity));return qty>0?new(source,dst,qty):null;}
         bool HasOutgoing(ulong owner)=>outgoing.Any(x=>x.Key.Item1==owner&&x.Value>0);
         (ChestMove? move,bool withdraw,ulong destination) Next(ulong owner,bool reserve){
-            foreach(var c in cargo.Where(x=>x.Key.Item3==owner&&x.Value>0))foreach(var b in state[Bags].Where(s=>s.Item==c.Key.Item1&&s.Hq==c.Key.Item2&&s.Quantity>0&&!protectedBagSlots.Contains((s.Container,s.Slot))))if(Make(b,owner,c.Value,true) is {} deposit)return(deposit,false,owner);
+            foreach(var c in cargo.Where(x=>x.Key.Item3==owner&&x.Value>0).ToArray())foreach(var b in state[Bags].Where(s=>s.Item==c.Key.Item1&&s.Hq==c.Key.Item2&&s.Quantity>0&&!protectedBagSlots.Contains((s.Container,s.Slot)))){
+                if(Make(b,owner,c.Value,true) is {} deposit)return(deposit,false,owner);
+                var allowed=plan.Rules.FirstOrDefault(r=>r.To==owner&&r.Destinations!=null&&RetainerRetrieval.AllowsQuality(b.Hq,r.Quality)&&(r.AllItems||r.Items.Contains(b.Item)||r.Categories.Contains(category(b.Item))))?.Destinations;
+                var next=allowed?.Where(id=>id!=owner&&state.ContainsKey(id)&&Target(b,id,true)!=null).OrderByDescending(id=>state[id].Any(x=>Same(x,b)&&x.Quantity<x.Limit)).FirstOrDefault()??0;
+                if(next>0){cargo[c.Key]=0;var key=(c.Key.Item1,c.Key.Item2,next);cargo[key]=cargo.GetValueOrDefault(key)+c.Value;break;}
+            }
             if(bagsOnly)return(null,false,0);
             foreach(var s in state[owner].Where(s=>s.Item>0&&s.Quantity>0)){
                 if(!goals.TryGetValue((owner,s.Item,s.Hq),out var dest)||dest==owner||outgoing.GetValueOrDefault((owner,s.Item,s.Hq))<=0)continue;
                 // Do not strand items for a full destination that has nothing to move elsewhere.
-                if(Target(s,dest,true)==null&&!HasOutgoing(dest))continue;
+                if(Target(s,dest,true)==null&&!HasOutgoing(dest)){
+                    var rule=plan.Rules.FirstOrDefault(r=>(r.From==AllSources||r.From==owner)&&RetainerRetrieval.AllowsQuality(s.Hq,r.Quality)&&(r.AllItems||r.Items.Contains(s.Item)||r.Categories.Contains(category(s.Item))));
+                    var alternatives=rule?.Destinations;
+                    if(alternatives==null)continue;
+                    // An assigned holder may keep overflow once earlier destinations
+                    // are full. An unassigned source can use the next eligible holder.
+                    if(alternatives.Contains(owner)){outgoing[(owner,s.Item,s.Hq)]=0;continue;}
+                    var fallback=alternatives.Where(id=>id!=owner&&state.ContainsKey(id)&&Target(s,id,true)!=null).OrderByDescending(id=>state[id].Any(x=>Same(x,s)&&x.Quantity<x.Limit)).FirstOrDefault();
+                    if(fallback==0)continue;dest=fallback;
+                }
                 if(Make(s,Bags,outgoing[(owner,s.Item,s.Hq)],reserve) is {} pickup)return(pickup,true,dest);
             }
             return(null,false,0);
@@ -86,7 +101,7 @@ public static class StorageRouting
             if(action.move==null){
                 current=0;
                 // Unload staged cargo before collecting another batch.
-                var order=cargo.Where(c=>c.Value>0).Select(c=>c.Key.Item3).Concat(state.Keys.Where(k=>k!=Bags)).Distinct();
+                var order=cargo.Where(c=>c.Value>0).Select(c=>c.Key.Item3).Concat(state.Keys.Where(k=>k!=Bags)).Distinct().ToArray();
                 foreach(var owner in order){action=Next(owner,false);if(action.move!=null){current=owner;break;}}
                 if(current==0){
                     // A spare slot may break a full-retainer cycle; only use it at a cargo destination.
