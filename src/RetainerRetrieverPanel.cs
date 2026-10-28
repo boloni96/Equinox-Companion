@@ -5,7 +5,7 @@ using Dalamud.Interface.Windowing;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
-    private RetrieverWindow retrieverWindow=null!;private bool retrieverCommand;
+    private RetrieverWindow retrieverWindow=null!;private bool retrieverCommand,organizerCommand;
     private string retrievalName="New list",retrievalPaste="",retrievalSearch="",retrievalJob="All crafting logs",retrievalError="";
     private RetrievalEntry[] retrievalItems=[],retrievalPlan=[];private RetrievalPreview[] retrievalPreview=[];
     private readonly HashSet<uint> retrievalSelected=[];private int retrievalMultiplier=1,retrievalQuantity=1,retrievalSource;
@@ -13,16 +13,16 @@ public sealed partial class Plugin
     private RetrievalQuality retrievalQuality;private bool retrievalIncludesSubcrafts;private bool retrievalPreviewSelected;private bool retrievalShowList, retrievalPreviewDirty=true;private bool retrievalSubtract=true;private RetrievalMode retrievalMode=RetrievalMode.DirectIngredients;private RetrievalPreset? retrievalCleared;
     private int retrievalSearchPage;private RetrievalPreset[] retrievalSearchWorkshop=[];
     private string retrievalLastFilter="";private RetrievalRecipe[] retrievalSearchRecipes=[];private KeyValuePair<uint,string>[] retrievalSearchItems=[];
-    private sealed class RetrieverWindow(Plugin p):Window("Retainer Retriever · Equinox###EquinoxRetriever")
+    private sealed class RetrieverWindow(Plugin p):Window("Equinox Organizer###EquinoxRetriever")
     {
         public override void OnOpen(){Size??=new(720,500);SizeCondition=ImGuiCond.FirstUseEver;SizeConstraints=new(){MinimumSize=new(420,340),MaximumSize=new(float.MaxValue)};RespectCloseHotkey=false;AllowPinning=true;}
         public override void OnClose(){p.retrievalPickItems=false;p.retrievalPickLast=0;}
         public override void Draw()=>p.DrawWindowWithLauncher(p.DrawRetriever);
-        public override void PostDraw()=>HandleNativeCollapse(this,()=>p.MinimizeLauncher("Retainer Retriever"));
+        public override void PostDraw()=>HandleNativeCollapse(this,()=>p.MinimizeLauncher("Equinox Organizer"));
     }
-    private void InitializeRetriever(){retrievalPort=new(this);retrievalRun=new(retrievalPort);retrieverWindow=new(this);windows.AddWindow(retrieverWindow);chestToolsWindow=new(this);windows.AddWindow(chestToolsWindow);retainerToolsWindow=new(this);windows.AddWindow(retainerToolsWindow);retrieverCommand=Commands.AddHandler("/eqretrieve",new CommandInfo((_,args)=>{if(args.Trim().Equals("stop",StringComparison.OrdinalIgnoreCase))retrievalRun.Stop("Stopped by command.");else OpenRetriever();}){HelpMessage="Retrieve finished items or crafting materials from your retainers. /eqretrieve stop cancels."});}
-    private void DisposeRetriever(){StopRetainerGil("Companion unloaded.");StopChest("Companion unloaded.");StopOrganize("Companion unloaded.");retrievalRun.Stop("Companion unloaded.");if(retrieverCommand)Commands.RemoveHandler("/eqretrieve");}
-    private void OpenRetriever(){if(!RequireOptionalTool("Retainer Retriever"))return;retrieverWindow.IsOpen=true;minimizedLaunchers.Remove("Retainer Retriever");retrievalRefreshPending=true;LoadRetrievalCatalog();if(retrievalCatalog!=null)LoadRetrievalArtisan();}
+    private void InitializeRetriever(){retrievalPort=new(this);retrievalRun=new(retrievalPort);retrieverWindow=new(this);windows.AddWindow(retrieverWindow);chestToolsWindow=new(this);windows.AddWindow(chestToolsWindow);retainerToolsWindow=new(this);windows.AddWindow(retainerToolsWindow);organizerCommand=Commands.AddHandler("/eqorganizer",new CommandInfo((_,args)=>{if(args.Trim().Equals("stop",StringComparison.OrdinalIgnoreCase)){StopOrganize("Stopped by command.");StopRetainerGil("Stopped by command.");retrievalRun.Stop("Stopped by command.");StopChest("Stopped by command.");}else OpenRetriever();}){HelpMessage="Equinox Organizer · withdraw, entrust and organize retainer/FC chest storage."});retrieverCommand=Commands.AddHandler("/eqretrieve",new CommandInfo((_,args)=>{if(args.Trim().Equals("stop",StringComparison.OrdinalIgnoreCase))retrievalRun.Stop("Stopped by command.");else OpenRetriever();}){HelpMessage="Withdraw finished items or crafting materials from your retainers. /eqretrieve stop cancels."});}
+    private void DisposeRetriever(){StopRetainerGil("Companion unloaded.");StopChest("Companion unloaded.");StopOrganize("Companion unloaded.");retrievalRun.Stop("Companion unloaded.");if(organizerCommand)Commands.RemoveHandler("/eqorganizer");if(retrieverCommand)Commands.RemoveHandler("/eqretrieve");}
+    private void OpenRetriever(){if(!RequireOptionalTool("Equinox Organizer"))return;retrieverWindow.IsOpen=true;minimizedLaunchers.Remove("Equinox Organizer");retrievalRefreshPending=true;LoadRetrievalCatalog();if(retrievalCatalog!=null)LoadRetrievalArtisan();}
     private void RetrievalTry(Action work){try{work();retrievalError="";}catch(RetrievalRecipeChoiceException e){retrievalRecipeChoice=e.ItemId;retrievalError=e.Message;}catch(Exception e){retrievalError=e.Message;}}
     private void AddRetrieval(RetrievalEntry[] items){retrievalItems=RetainerRetrieval.Combine(retrievalItems.Concat(items));foreach(var e in items)retrievalSelected.Add(e.ItemId);retrievalPreview=[];retrievalPreviewDirty=true;if(retrievalEditingPreset!=null)RetrievalTry(SaveRetrievalPreset);}
     private void PreviewRetrieval(bool selected=false,bool refreshStock=true)
@@ -67,7 +67,7 @@ public sealed partial class Plugin
         DrawRetrievalPicker();
         if(ImGui.BeginTabBar("RetrieverTabs")){
             if(ImGui.BeginTabItem("Browse inventory")){ImGui.BeginDisabled(retrievalRun.Running||organizeRunning||chestRunning);DrawRetrievalBrowse();ImGui.EndDisabled();ImGui.EndTabItem();}
-            if(ImGui.BeginTabItem("Retrieve",retrievalShowList?ImGuiTabItemFlags.SetSelected:ImGuiTabItemFlags.None)){retrievalShowList=false;ImGui.BeginDisabled(retrievalRun.Running||organizeRunning||chestRunning);DrawRetrievalList();ImGui.EndDisabled();ImGui.EndTabItem();}
+            if(ImGui.BeginTabItem("Withdraw",retrievalShowList?ImGuiTabItemFlags.SetSelected:ImGuiTabItemFlags.None)){retrievalShowList=false;ImGui.BeginDisabled(retrievalRun.Running||organizeRunning||chestRunning);DrawRetrievalList();ImGui.EndDisabled();ImGui.EndTabItem();}
             if(ImGui.BeginTabItem("Organize retainers")){DrawRetainerOrganizer();ImGui.EndTabItem();}
             if(ImGui.BeginTabItem("FC chest")){DrawRetrievalChest();ImGui.EndTabItem();}
             if(ImGui.BeginTabItem("Add items")){ImGui.BeginChild("RetrieverSourcesScroll",new Vector2(0,Math.Max(80,ImGui.GetContentRegionAvail().Y-8)),false);ImGui.BeginDisabled(retrievalRun.Running||organizeRunning||chestRunning);DrawRetrievalSources();ImGui.EndDisabled();ImGui.EndChild();ImGui.EndTabItem();}
@@ -80,7 +80,7 @@ public sealed partial class Plugin
     {
         var modes=new[]{RetrievalMode.DirectIngredients,RetrievalMode.AllMaterials,RetrievalMode.CompletedItems};var mode=Array.IndexOf(modes,retrievalMode);if(mode<0)mode=2;
         ImGui.SetNextItemWidth(Math.Max(170,ImGui.GetContentRegionAvail().X-130));if(ImGui.Combo("##RetrievalMode",ref mode,"Recipe ingredients / workshop turn-ins\0All raw ingredients (expand subcrafts)\0Listed items themselves\0")){retrievalMode=modes[mode];retrievalPreview=[];retrievalPreviewDirty=true;}
-        if(ImGui.IsItemHovered())ImGui.SetTooltip("Recipe ingredients: gear → its direct recipe materials; workshop parts → all phase turn-ins. All raw ingredients: expand subcrafts as well. Listed items themselves: retrieve exactly what you entered, e.g. 600 finished ingots. Non-craftable items remain listed; no ingredients are invented.");
+        if(ImGui.IsItemHovered())ImGui.SetTooltip("Recipe ingredients: gear → its direct recipe materials; workshop parts → all phase turn-ins. All raw ingredients: expand subcrafts as well. Listed items themselves: withdraw exactly what you entered, e.g. 600 finished ingots. Non-craftable items remain listed; no ingredients are invented.");
         ImGui.SameLine();ImGui.SetNextItemWidth(90);if(ImGui.InputInt("×",ref retrievalMultiplier)){retrievalMultiplier=Math.Clamp(retrievalMultiplier,1,999);retrievalPreview=[];retrievalPreviewDirty=true;}
         var quality=(int)retrievalQuality;ImGui.SetNextItemWidth(180);if(ImGui.Combo("Quality",ref quality,"Any quality (NQ + HQ)\0NQ only\0HQ only\0")){retrievalQuality=(RetrievalQuality)quality;retrievalPreviewDirty=true;}
         if(ImGui.IsItemHovered())ImGui.SetTooltip("Filters bag counts, recorded retainer stock and actual withdrawals. HQ only never substitutes NQ, including items such as crystals that have no HQ version.");
@@ -90,7 +90,7 @@ public sealed partial class Plugin
         if(ImGui.Checkbox("Subtract matching items in bags",ref retrievalSubtract)){retrievalPreview=[];retrievalPreviewDirty=true;}
         }
         if(ImGui.Button("Preview all"))RetrievalTry(()=>PreviewRetrieval());ImGui.SameLine();if(ImGui.Button("Preview selected"))RetrievalTry(()=>PreviewRetrieval(true));ImGui.SameLine();if(ImGui.SmallButton("Prepare Artisan list…"))RetrievalTry(PrepareRetrievalArtisanExport);
-        if(ImGui.Button("Retrieve all"))StartRetrieval(false);ImGui.SameLine();if(ImGui.Button("Retrieve selected"))StartRetrieval(true);
+        if(ImGui.Button("Withdraw all"))StartRetrieval(false);ImGui.SameLine();if(ImGui.Button("Withdraw selected"))StartRetrieval(true);
         DrawRetrievalSendControls();
         DrawRetrievalArtisanExport();
         DrawRetrievalRecipeChoice();
@@ -161,7 +161,7 @@ public sealed partial class Plugin
             if(ImGui.Button("Refresh Artisan lists"))LoadRetrievalArtisan();if(ImGui.IsItemHovered())ImGui.SetTooltip("Reads saved Artisan lists on this computer. Save edits in Artisan before refreshing. Skipped recipes are omitted; recipe counts are converted using their output yields.");
             ImGui.TextWrapped(retrievalArtisanConnection);
             ImGui.TextWrapped(retrievalArtisanNotice);
-            foreach(var name in retrievalArtisanLive.Where(n=>!retrievalArtisan.Any(p=>p.Name==n))){ImGui.TextDisabled(name+" · contents unavailable");if(ImGui.IsItemHovered())ImGui.SetTooltip("Artisan reports this list, but its saved quantities could not be read. Save it in Artisan and Refresh. See the reading message above; no partial list will be retrieved.");}
+            foreach(var name in retrievalArtisanLive.Where(n=>!retrievalArtisan.Any(p=>p.Name==n))){ImGui.TextDisabled(name+" · contents unavailable");if(ImGui.IsItemHovered())ImGui.SetTooltip("Artisan reports this list, but its saved quantities could not be read. Save it in Artisan and Refresh. See the reading message above; no partial list will be withdrawd.");}
             void Group(string label,bool premade){if(!ImGui.CollapsingHeader(label,premade?ImGuiTreeNodeFlags.None:ImGuiTreeNodeFlags.DefaultOpen))return;
                 ImGui.PushID(label);for(var i=0;i<retrievalArtisan.Length;i++){var p=retrievalArtisan[i];if(p.ArtisanPreset!=premade)continue;ImGui.PushID(i);if(ImGui.SmallButton("Load"))SelectRetrievalPreset(p);ImGui.SameLine();if(ImGui.SmallButton("Add"))RetrievalTry(()=>AddRetrieval(p.Items));ImGui.SameLine();ImGui.TextUnformatted(p.Name+" · "+p.Items.Length+" items");DrawRetrievalPresetContents(p);ImGui.PopID();}ImGui.PopID();}
             Group("My lists",false);Group("Artisan presets",true);}

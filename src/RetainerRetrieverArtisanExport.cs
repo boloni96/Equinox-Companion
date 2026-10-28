@@ -28,7 +28,7 @@ public sealed partial class Plugin
             }
             var plan=RetainerRetrieval.PlanCrafts(outputs,RetrievalRecipes());retrievalExportSteps=plan.Steps;retrievalExportMaterials=plan.Materials;
         }
-        catch(RetrievalRecipeChoiceException e){retrievalRecipeChoice=e.ItemId;retrievalExportError=e.Message+" Close this review, choose the recipe in Retrieve, then prepare again.";}
+        catch(RetrievalRecipeChoiceException e){retrievalRecipeChoice=e.ItemId;retrievalExportError=e.Message+" Close this review, choose the recipe in Withdraw, then prepare again.";}
         catch(Exception e){retrievalExportError=e.Message;}
     }
     private void DrawRetrievalArtisanExport()
@@ -39,7 +39,7 @@ public sealed partial class Plugin
         ImGui.TextWrapped("Review the crafting order below. Copy, then use Artisan → Lists → Import List From Clipboard (Artisan Export). No crafting starts automatically.");
         ImGui.BeginChild("CraftExportReview",new Vector2(0,Math.Max(100,ImGui.GetContentRegionAvail().Y-100)),false);
         foreach(var s in retrievalExportSteps){DrawRetrievalIcon(s.ItemId);ImGui.TextUnformatted($"{s.Name} · {s.Crafts} crafts → {s.Crafts*s.Yield} items");}
-        if(ImGui.CollapsingHeader("Ingredients to gather / buy / retrieve"))foreach(var e in retrievalExportMaterials){DrawRetrievalIcon(e.ItemId);ImGui.TextUnformatted($"{e.Quantity} × {e.Name}");}
+        if(ImGui.CollapsingHeader("Ingredients to gather / buy / withdraw"))foreach(var e in retrievalExportMaterials){DrawRetrievalIcon(e.ItemId);ImGui.TextUnformatted($"{e.Quantity} × {e.Name}");}
         if(retrievalExportSteps.Length==0&&retrievalExportError.Length==0)ImGui.TextWrapped("No craftable quantities remain. Non-craftable items are listed under ingredients.");
         if(retrievalExportError.Length>0)ImGui.TextWrapped(retrievalExportError);
         ImGui.EndChild();

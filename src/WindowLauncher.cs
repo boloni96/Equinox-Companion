@@ -59,7 +59,7 @@ public sealed partial class Plugin
   Row("Adventure","/adventure","adventure",OpenAdventure,adventureWindow.IsOpen);
   Row("Where is it cheapest?","/whereischeap","market-search",()=>OpenMarketSearch(""),marketWindow.IsOpen);
   Row("Equinox Market","/eqmarket · paired listings, history and earnings","market",OpenEquinoxMarket,equinoxMarketWindow.IsOpen);
-  Row("Retainer Retriever","/eqretrieve · retrieve exact items or crafting materials","retriever",OpenRetriever,retrieverWindow.IsOpen);
+  Row("Equinox Organizer","/eqorganizer · withdraw exact items or crafting materials","retriever",OpenRetriever,retrieverWindow.IsOpen);
   Row("Gil Trader","/eqtrade · gil transfers with a nearby player","gil-trader",OpenGilTrader,gilTraderWindow.IsOpen);
   if(config.Seller.Enabled)Row("Equinox Seller","/eqseller · check and update retainer prices","seller",OpenEquinoxSeller,sellerWindow.IsOpen);
   Row("Do I already have it?","/doihaveit","item-search",()=>OpenItemSearch(""),itemSearchWindow.IsOpen);

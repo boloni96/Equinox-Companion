@@ -14,7 +14,7 @@ public sealed partial class Plugin
         public override void OnClose(){p.retrievalPickItems=false;}
         public override unsafe void PreDraw(){var a=SellerAddon("RetainerList");if(a!=null){Position=new Vector2(Math.Max(0,(int)a->X),Math.Max(0,a->Y+a->GetScaledHeight(true)+4));PositionCondition=ImGuiCond.Always;}else Position=null;RespectCloseHotkey=false;}
     }
-    private static unsafe bool RetainerToolsContext(){var rm=RetainerManager.Instance();return SellerAddon("RetainerList")!=null||(rm!=null&&SellerActive(rm->LastSelectedRetainerId));}
+    private static unsafe bool RetainerToolsContext(){var rm=RetainerManager.Instance();return SellerAddon("RetainerList")!=null||(rm!=null&&RetrieverActive(rm->LastSelectedRetainerId));}
     private void SaveRetrievalPreset()
     {
         if(string.IsNullOrWhiteSpace(retrievalName))throw new ArgumentException("Name this plan first.");
@@ -48,8 +48,8 @@ public sealed partial class Plugin
         ImGui.BeginDisabled(busy);DrawRetrievalPlanSelector();ImGui.SameLine();
         if(ImGui.SmallButton("Edit / new")){OpenRetriever();retrievalShowList=true;}
         DrawRetrievalPicker();
-        if(ImGui.SmallButton("Retrieve plan"))StartRetrieval(false);ImGui.SameLine();
-        if(ImGui.SmallButton("Send plan"))SendRetrievalList(false);ImGui.SameLine();
+        if(ImGui.SmallButton("Withdraw plan"))StartRetrieval(false);ImGui.SameLine();
+        if(ImGui.SmallButton("Entrust plan"))SendRetrievalList(false);ImGui.SameLine();
         if(ImGui.SmallButton("Withdraw gil"))StartRetainerGil();
         if(ImGui.IsItemHovered())ImGui.SetTooltip("Withdraw available gil from the currently open retainer, or all retainers when the retainer list is open. Never deposits gil; verifies receipt and respects your gil cap.");
         ImGui.EndDisabled();
