@@ -16,6 +16,7 @@ public sealed partial class Plugin
     private sealed class RetrieverWindow(Plugin p):Window("Retainer Retriever · Equinox###EquinoxRetriever")
     {
         public override void OnOpen(){Size??=new(720,500);SizeCondition=ImGuiCond.FirstUseEver;SizeConstraints=new(){MinimumSize=new(420,340),MaximumSize=new(float.MaxValue)};RespectCloseHotkey=false;AllowPinning=true;}
+        public override void OnClose(){p.retrievalPickItems=false;p.retrievalPickLast=0;}
         public override void Draw()=>p.DrawWindowWithLauncher(p.DrawRetriever);
         public override void PostDraw()=>HandleNativeCollapse(this,()=>p.MinimizeLauncher("Retainer Retriever"));
     }
@@ -57,11 +58,12 @@ public sealed partial class Plugin
         ImGui.BeginDisabled(retrievalRun.Running||organizeRunning||chestRunning);
         ImGui.SetNextItemWidth(Math.Max(100,ImGui.GetContentRegionAvail().X-(retrievalCleared!=null?270:180)));ImGui.InputText("##ListName",ref retrievalName,100);ImGui.SameLine();
         if(ImGui.Button("Save preset"))RetrievalTry(()=>{if(string.IsNullOrWhiteSpace(retrievalName))throw new ArgumentException("Name this list first.");var at=config.RetrievalPresets.FindIndex(x=>x.Name==retrievalName);var p=new RetrievalPreset(retrievalName,RetainerRetrieval.Combine(retrievalItems),retrievalMultiplier,retrievalIncludesSubcrafts,Mode:retrievalMode,RecipeChoices:new(retrievalRecipeOverrides),Quality:retrievalQuality,DestinationRetainer:retrievalSendTo,SendCategories:retrievalSendCategories.ToArray());if(at>=0)config.RetrievalPresets[at]=p;else if(config.RetrievalPresets.Count<25)config.RetrievalPresets.Add(p);else throw new ArgumentException("Maximum 25 presets.");SaveConfiguration();});
-        ImGui.SameLine();if(ImGui.SmallButton("Clear list")){retrievalCleared=new(retrievalName,retrievalItems.ToArray(),retrievalMultiplier,retrievalIncludesSubcrafts,Mode:retrievalMode,RecipeChoices:new(retrievalRecipeOverrides),Quality:retrievalQuality,DestinationRetainer:retrievalSendTo,SendCategories:retrievalSendCategories.ToArray());retrievalItems=[];retrievalPreviewSelected=false;retrievalSelected.Clear();retrievalPlan=[];retrievalPreview=[];retrievalCraftSteps=[];retrievalExportSteps=[];retrievalRecipeChoice=0;retrievalRecipeOverrides.Clear();retrievalError="";retrievalPreviewDirty=true;retrievalName="New list";retrievalMultiplier=1;retrievalIncludesSubcrafts=false;retrievalMode=RetrievalMode.DirectIngredients;retrievalQuality=RetrievalQuality.Any;retrievalSendTo=0;retrievalSendCategories.Clear();}
+        ImGui.SameLine();if(ImGui.SmallButton("Clear list")){retrievalCleared=new(retrievalName,retrievalItems.ToArray(),retrievalMultiplier,retrievalIncludesSubcrafts,Mode:retrievalMode,RecipeChoices:new(retrievalRecipeOverrides),Quality:retrievalQuality,DestinationRetainer:retrievalSendTo,SendCategories:retrievalSendCategories.ToArray());retrievalPickItems=false;retrievalPickLast=0;retrievalItems=[];retrievalPreviewSelected=false;retrievalSelected.Clear();retrievalPlan=[];retrievalPreview=[];retrievalCraftSteps=[];retrievalExportSteps=[];retrievalRecipeChoice=0;retrievalRecipeOverrides.Clear();retrievalError="";retrievalPreviewDirty=true;retrievalName="New list";retrievalMultiplier=1;retrievalIncludesSubcrafts=false;retrievalMode=RetrievalMode.DirectIngredients;retrievalQuality=RetrievalQuality.Any;retrievalSendTo=0;retrievalSendCategories.Clear();}
         if(retrievalCleared!=null){ImGui.SameLine();if(ImGui.SmallButton("Undo clear")){SelectRetrievalPreset(retrievalCleared);retrievalCleared=null;}}
 
         if(retrievalItems.Length>0&&ImGui.SmallButton($"View current list · {retrievalItems.Length} items"))retrievalShowList=true;
         ImGui.EndDisabled();
+        DrawRetrievalPicker();
         if(ImGui.BeginTabBar("RetrieverTabs")){
             if(ImGui.BeginTabItem("Browse inventory")){ImGui.BeginDisabled(retrievalRun.Running||organizeRunning||chestRunning);DrawRetrievalBrowse();ImGui.EndDisabled();ImGui.EndTabItem();}
             if(ImGui.BeginTabItem("Retrieve",retrievalShowList?ImGuiTabItemFlags.SetSelected:ImGuiTabItemFlags.None)){retrievalShowList=false;ImGui.BeginDisabled(retrievalRun.Running||organizeRunning||chestRunning);DrawRetrievalList();ImGui.EndDisabled();ImGui.EndTabItem();}
@@ -123,7 +125,7 @@ public sealed partial class Plugin
     private void SelectRetrievalPreset(RetrievalPreset p)
     {
         retrievalItems=p.Items.ToArray();retrievalSelected.Clear();foreach(var e in retrievalItems)retrievalSelected.Add(e.ItemId);
-        retrievalRecipeOverrides.Clear();foreach(var pair in p.RecipeChoices??[])retrievalRecipeOverrides[pair.Key]=pair.Value;retrievalRecipeChoice=0;retrievalMode=p.Mode;retrievalQuality=p.Quality;retrievalPreviewSelected=false;retrievalPlan=[];retrievalCraftSteps=[];retrievalName=p.Name;retrievalSendTo=p.DestinationRetainer;retrievalSendCategories.Clear();foreach(var category in p.SendCategories??[])retrievalSendCategories.Add(category);retrievalMultiplier=p.Multiplier;retrievalIncludesSubcrafts=p.IncludesSubcrafts;retrievalPreview=[];retrievalPreviewDirty=true;retrievalShowList=true;
+        retrievalRecipeOverrides.Clear();foreach(var pair in p.RecipeChoices??[])retrievalRecipeOverrides[pair.Key]=pair.Value;retrievalRecipeChoice=0;retrievalMode=p.Mode;retrievalQuality=p.Quality;retrievalPreviewSelected=false;retrievalPlan=[];retrievalCraftSteps=[];retrievalPickItems=false;retrievalPickLast=0;retrievalName=p.Name;retrievalSendTo=p.DestinationRetainer;retrievalSendCategories.Clear();foreach(var category in p.SendCategories??[])retrievalSendCategories.Add(category);retrievalMultiplier=p.Multiplier;retrievalIncludesSubcrafts=p.IncludesSubcrafts;retrievalPreview=[];retrievalPreviewDirty=true;retrievalShowList=true;
     }
     private void DrawRetrievalPresetContents(RetrievalPreset p)
     {

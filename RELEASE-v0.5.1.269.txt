@@ -54,3 +54,5 @@ New chest and organizer movement paths require in-game verification; compiled an
 
 Organizer and transfer plans are separate. Organizer supports multiple category movements and fills available bag space before delivering. It can clear misplaced stock from full destinations when a valid route exists, and consolidates partial stacks. Calculation runs off the game thread. Saved transfer presets remember sending categories and a destination retainer; Send respects listed quantities and Entrust duplicates is explicit. FC chest also supports sending the current list.
 Validation adds simulations for 49/50-slot batches, full-retainer swaps, blocked destinations, exact send quantities, gear already in bags, and preventing repeated movement of delivered cargo.
+
+Plan picking: enable Pick items while editing, then hover an item with Shift to add or Alt to remove it. Brief corner notifications confirm changes. Holding a key does not repeatedly increase quantities; existing entries keep their quantity. Save preset retains edits.
