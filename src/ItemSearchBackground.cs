@@ -33,10 +33,11 @@ public sealed partial class Plugin
             catch(Exception e){ownedItemSearchStatus="Search unavailable: "+e.Message;}
             ownedItemQueryTask=null;
         }
-        var lastDiscovery=config.Discoveries.Count==0?"":config.Discoveries[^1].Id;
-        if(ownedItemNames!=null&&ownedItemIndexTask==null&&now>=ownedItemIndexAfter&&(itemSearchRoster!=config.SharedRoster||itemSearchDiscoveryCount!=config.Discoveries.Count||itemSearchLastDiscovery!=lastDiscovery)){
-            itemSearchRoster=config.SharedRoster;itemSearchDiscoveryCount=config.Discoveries.Count;itemSearchLastDiscovery=lastDiscovery;
-            var roster=itemSearchRoster;var events=config.Discoveries.ToArray();var names=ownedItemNames;
+        var storage=DiscoveryReads().Kind("storage.observed");
+        var lastDiscovery=storage.Count==0?"":storage[^1].Id;
+        if(ownedItemNames!=null&&ownedItemIndexTask==null&&now>=ownedItemIndexAfter&&(itemSearchRoster!=config.SharedRoster||itemSearchDiscoveryCount!=storage.Count||itemSearchLastDiscovery!=lastDiscovery)){
+            itemSearchRoster=config.SharedRoster;itemSearchDiscoveryCount=storage.Count;itemSearchLastDiscovery=lastDiscovery;
+            var roster=itemSearchRoster;var events=storage.ToArray();var names=ownedItemNames;
             ownedItemIndexAfter=now.AddSeconds(1);ownedItemIndexTask=Task.Run(()=>ItemSearchIndex.Build(roster,events,names));
         }
         if(query.Length>0&&ownedItemIndex!=null&&ownedItemQueryTask==null&&itemSearchBuiltQuery!=query&&now>=ownedItemQueryAfter){

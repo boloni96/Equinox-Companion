@@ -36,7 +36,7 @@ public sealed partial class Plugin
     {
         itemExactId=uint.TryParse(query.Trim(),out var id)&&id>0?id:null;
         itemSearchQuery=itemExactId is {} selected?SearchItemName(selected):query.Trim();
-        itemSearchDiscoveryCount=-1;itemSelectCurrentPerson=true;itemSearchWindow.IsOpen=true;
+        itemSearchDiscoveryCount=-1;itemSelectCurrentPerson=true;itemSearchWindow.IsOpen=true;nextRosterRead=default;
         minimizedLaunchers.Remove("Do I already have it?");
     }
     private unsafe uint ContextSearchItem(IMenuOpenedArgs args)

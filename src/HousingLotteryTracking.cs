@@ -30,6 +30,7 @@ public sealed partial class Plugin
     private void UpdateLottery(DateTimeOffset now)
     {
         var id=Player.IsLoaded?Player.ContentId:0;
+        CompleteLotteryNotices(id,now);
         if(id==0){lotteryBidNotices.Reset();lotteryLogin.Reset();lotteryPlacard=null;lotteryRefund=null;lotteryRefundGilBefore=null;lotteryBuyerContext=null;return;}
         if(LotteryLoaded&&config.SyncHouseDetails&&now>=nextLotteryVisibleCheck){nextLotteryVisibleCheck=now.AddMilliseconds(500);ObserveSafely("housing-lottery",()=>{PollLotteryRefundBalance(now);PollLotteryViews(now);});}
         lotteryBidNotices.Due(id,"",now);
@@ -40,8 +41,7 @@ public sealed partial class Plugin
         }
         if(!config.NotifyHousingLottery||!LotteryLoaded||now<nextLotteryReminderCheck)return;
         nextLotteryReminderCheck=now.AddSeconds(15);
-        foreach(var notice in HousingLotteryNotices.Messages(HousingLotteryNotices.WithShared(config.Discoveries,config.SharedRoster),id.ToString(),now))
-            if(lotteryBidNotices.Due(id,notice.Key,now))PrintEquinox(notice.Text);
+        QueueLotteryNotices(id,now);
     }
 
     private static unsafe string LotteryText(AtkUnitBase* addon,int i)
@@ -69,7 +69,7 @@ public sealed partial class Plugin
                 // at the exact targeted plot. Never infer a result from a public winner.
                 var target=Targets.Target;
                 if(target is null||lotteryPlacard is not {} plot||plot.Character!=Player.ContentId||plot.Target!=target.GameObjectId||plot.World!=Player.CurrentWorld.RowId||now-plot.At>TimeSpan.FromMinutes(1))return;
-                var matches=HousingLotteryNotices.WithShared(config.Discoveries,config.SharedRoster).Where(e=>e.Kind=="housing.lottery"&&e.Actor.ContentId==Player.ContentId.ToString()&&e.Lottery is {} b&&b.District==plot.Bid.District&&b.Ward==plot.Bid.Ward&&b.Plot==plot.Bid.Plot&&e.Actor.HomeWorldId==plot.World&&DateTimeOffset.TryParse(b.CycleStart,out var cycle)&&cycle==HousingLottery.Period(now).Start&&!HousingLottery.Period(now).Entry).GroupBy(e=>(e.Lottery!.CycleStart,e.Lottery.Entry)).Select(g=>g.MaxBy(e=>e.At)!).Where(e=>e.Lottery!.Status=="entered").ToArray();
+                var matches=HousingLotteryNotices.WithShared(LotteryRecords(),config.SharedRoster).Where(e=>e.Kind=="housing.lottery"&&e.Actor.ContentId==Player.ContentId.ToString()&&e.Lottery is {} b&&b.District==plot.Bid.District&&b.Ward==plot.Bid.Ward&&b.Plot==plot.Bid.Plot&&e.Actor.HomeWorldId==plot.World&&DateTimeOffset.TryParse(b.CycleStart,out var cycle)&&cycle==HousingLottery.Period(now).Start&&!HousingLottery.Period(now).Entry).GroupBy(e=>(e.Lottery!.CycleStart,e.Lottery.Entry)).Select(g=>g.MaxBy(e=>e.At)!).Where(e=>e.Lottery!.Status=="entered").ToArray();
                 if(matches.Length==1)RecordLottery(matches[0].Lottery! with {Status=result,Evidence="result-dialog"},now);
             }
         }
@@ -169,7 +169,7 @@ public sealed partial class Plugin
         if(HousingLottery.RefundAmount(text) is not {} amount)return;
         var winner=HousingLottery.WinningNumber(text);
         if(lotteryPlacard is not {} plot||plot.Character!=Player.ContentId||plot.World!=Player.CurrentWorld.RowId||Targets.Target?.GameObjectId!=plot.Target||now-plot.At>TimeSpan.FromMinutes(1))return;
-        var own=HousingLotteryNotices.WithShared(config.Discoveries,config.SharedRoster)
+        var own=HousingLotteryNotices.WithShared(LotteryRecords(),config.SharedRoster)
             .Where(e=>e.Kind=="housing.lottery"&&e.Actor.ContentId==Player.ContentId.ToString()&&e.Actor.HomeWorldId==plot.World&&e.Lottery is {} b&&b.District==plot.Bid.District&&b.Ward==plot.Bid.Ward&&b.Plot==plot.Bid.Plot&&DateTimeOffset.TryParse(b.CycleStart,out var start)&&now>=start.AddDays(5)&&now<start.AddDays(95))
             .GroupBy(e=>(e.Lottery!.CycleStart,e.Lottery.Entry)).Select(g=>g.MaxBy(e=>e.At)!).ToArray();
         // A visible refund offer is not a receipt. Wait for its matching gil gain.

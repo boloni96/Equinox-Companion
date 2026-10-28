@@ -148,6 +148,7 @@ public sealed partial class Plugin : IDalamudPlugin
             else { syncFailures = Math.Min(syncFailures + 1, 5); errorJournal.Record("upload", "Upload task failed; records kept.", exceptionType: syncTask.Exception?.GetBaseException().GetType().Name); syncStatus = "Sync paused after a connection error; local records are kept."; nextSync = now.AddMinutes(2); }
             syncTask = null;
         }
+        if(CompleteUploadPreparation(now))return;
         if (!config.SyncEnabled || config.PairingKey.Length != 64 || syncTask is not null || now < nextSync || now < lastSyncAttempt.AddSeconds(2)) return;
         var idleStamp=new SyncIdleQueueStamp(configurationRevision,config.Houses.Count,config.Tending.Count,config.Planting.Count,config.Discoveries.Count,config.SentEvents.Count,config.SharedRoster?.ProtocolVersion??1,config.PairingKey,RegistrationScope,config.TrackGardens,config.SyncCharacterDetails,config.SyncCollections,config.SyncAutoRetainer,config.SyncActivities,config.SyncHouseDetails);
         if(idleSyncQueue.Unchanged(idleStamp,now)){nextSync=now.AddSeconds(FastGardenSync?1:30);return;}
@@ -157,32 +158,8 @@ public sealed partial class Plugin : IDalamudPlugin
             .Where(e => e.Kind is "house.entered" or "garden.tended" or "garden.planted" ||
                 (e.Kind == "market.retainers" ? config.Seller.Enabled && config.Seller.SyncToJournal : e.Kind is "garden.ready" or "garden.observed" or "garden.unmapped" or "garden.empty.unmapped" or "garden.status" or "garden.status.unmapped" or "garden.mapped" or "garden.empty" or "garden.dead" or "garden.fertilized" ? config.TrackGardens : e.Kind == "character.registered" ? config.SyncCharacterDetails && e.Registration?.PairingScope == RegistrationScope : e.Kind == "character.updated" ? config.SyncCharacterDetails : e.Kind is "collection.observed" or "storage.observed" ? config.SyncCollections : e.Kind == "submarines.cached" ? config.SyncAutoRetainer : e.Kind is "fashion.observed" or "submarines.observed" or "submarines.supplies" ? config.SyncActivities : config.SyncHouseDetails))
             .Select(e=>e.Kind is "house.entered" or "garden.tended" or "garden.planted" ? e with {Actor=WithWorldNames(e.Actor),Address=WithAddressNames(e.Address!)} : e)
-            .Where(e => !SyncValidation.SupersededIncompleteCharacter(e, observations.CharacterUpdates(e.Actor.ContentId), now))
-            .OrderBy(e => e.Kind == "character.registered" ? 0 : 1).ThenBy(e => e.At).ToArray();
-        pendingSyncRecords = pending.Length;
-        var held = pending.Where(e => !SyncValidation.CanSend(e, now)).ToArray();
-        heldSyncRecords = held.Length;
-        historicalHeldSyncRecords=held.Count(e=>SyncValidation.HistoricalCompanyPlaceholder(e,now));
-        foreach (var e in held) if(reportedHeldRecords.Add(e.Id)) errorJournal.Record("held-record", SyncValidation.HoldReason(e, now), e.Id, e.Kind);
-        var valid = pending.Where(e => SyncValidation.CanSend(e, now)).ToArray();
-        var eligible = valid.Where(e => SyncValidation.SupportedByWebsite(e, config.SharedRoster?.ProtocolVersion ?? 1)).ToArray();
-        unsupportedSyncRecords=valid.Length-eligible.Length;
-        readySyncRecords = eligible.Length;
-        var events = SyncQueue.Select(eligible, batch => JsonSerializer.SerializeToUtf8Bytes(new { events = batch }, json).Length, syncHistoryFirst);
-        if (events.Length == 0) {
-            if(eligible.Length==0)idleSyncQueue.Remember(idleStamp,now);
-            if (eligible.Length > 0) syncStatus = "Eligible records exceed the upload size limit; kept locally. Export diagnostics.";
-            else if (pending.Any(e => !SyncValidation.SupportedByWebsite(e, config.SharedRoster?.ProtocolVersion ?? 1)))
-                syncStatus = "Server update needed for some recorded actions. They are kept locally; supported actions continue syncing.";
-            nextSync = now.AddSeconds(FastGardenSync ? 1 : 30); return;
-        }
-        syncHistoryFirst = !syncHistoryFirst;
-        lastSyncBatchSize = events.Length;
-        lastSyncBatchOldest = events.Min(e => e.At); lastSyncBatchNewest = events.Max(e => e.At);
-        syncStatus = $"Sending {events.Length} events · recent actions and history recovery…";
-        lastSyncAttempt = now;
-        syncTaskKey=config.PairingKey;
-        syncTask = sync.Send(syncTaskKey, events);
+            .ToArray();
+        PrepareUpload(pending,idleStamp,now);
     }
 
     public unsafe Plugin()
@@ -267,7 +244,7 @@ public sealed partial class Plugin : IDalamudPlugin
         Pi.UiBuilder.OpenConfigUi += OpenSettings;
         Framework.Update += Update;
         Client.Login += OnGardenNoticeLogin;
-        InitializeLottery();
+        InitializeLottery();InitializeSaddleTracking();
         Client.Login += ResetMaintenanceLogin;
         maintenanceLogout=(_,_)=>ResetMaintenanceLogin();
         Client.Logout += maintenanceLogout;
@@ -351,7 +328,8 @@ public sealed partial class Plugin : IDalamudPlugin
         UpdateLoginAccount(now);
         RunOptionalTool("Camera",now);
         UpdateMaintenanceNotices(now);
-        UpdateLottery(now);
+        UpdateSaddleTracking(now);
+        ObserveSafely("lottery tracking and reminders",()=>UpdateLottery(now));
         RunOptionalTool("QuickLoot",now);
         RunOptionalTool("Coffer markers",now);
         // Give a coffer click a short uncontested turn before other automatic interactions.
@@ -380,9 +358,9 @@ public sealed partial class Plugin : IDalamudPlugin
         UpdateHousingUpgrades(now);
         UpdateGoSeeHome(now);
         UpdateGoSeeFriend(now);
-        UpdateCharacterRegistration(now);
-        UpdateHouseNotices(now);
-        UpdateGardenCareNotices(now);
+        ObserveSafely("character registration",()=>UpdateCharacterRegistration(now));
+        ObserveSafely("house entry reminders",()=>UpdateHouseNotices(now));
+        ObserveSafely("garden care reminders",()=>UpdateGardenCareNotices(now));
         MaintainRecords(now);
         TrackPerformance("roster and maintenance", perf);
         if (faulted) return;
@@ -1311,7 +1289,7 @@ public sealed partial class Plugin : IDalamudPlugin
         foreach (var menuEvent in MenuEvents) Addons.UnregisterListener(menuEvent, GardenMenus, OnGardenMenu);
         Framework.Update -= Update;
         Client.Login -= OnGardenNoticeLogin;
-        DisposeLottery();
+        DisposeLottery();Addons.UnregisterListener(ObserveSaddleAddon);
         Client.Login -= ResetMaintenanceLogin;
         Client.Logout -= maintenanceLogout;
         Client.TerritoryChanged -= OnCofferTerritoryChanged;

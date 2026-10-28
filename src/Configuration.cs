@@ -30,10 +30,12 @@ public sealed class Configuration : IPluginConfiguration
         // Published observation/roster records are immutable. Copy their mutable list
         // containers, but do not serialize the large history on the game's thread.
         var small=(Configuration)MemberwiseClone();
-        small.TestingByPairing=[];small.MarketJournal=new();
+        small.TestingByPairing=[];small.MarketJournal=new();small.OrganizerInventories=[];
         small.CachedAdventures=[];small.SharedRoster=null;small.Discoveries=[];small.Houses=[];
-        small.Planting=[];small.Tending=[];small.SentEvents=[];
+        small.Planting=[];small.Tending=[];small.SentEvents=[];small.RetrievalPresets=[];
         var copy=System.Text.Json.JsonSerializer.Deserialize<Configuration>(System.Text.Json.JsonSerializer.Serialize(small))!;
+        copy.OrganizerInventories=OrganizerInventories.Select(r=>r with {Slots=r.Slots.ToArray()}).ToList();
+        copy.RetrievalPresets=RetrievalPresets.Select(p=>p with {Items=p.Items.ToArray(),RecipeChoices=p.RecipeChoices is null?null:new(p.RecipeChoices),SendCategories=p.SendCategories?.ToArray(),Entrust=p.Entrust is {} e?new(new(e.Keep),new(e.CategoryKeep),e.Protected.ToArray()):null}).ToList();
         copy.TestingByPairing=new(TestingByPairing);copy.MarketJournal=MarketJournal.Snapshot();
         copy.CachedAdventures=CachedAdventures;copy.SharedRoster=SharedRoster;copy.Discoveries=[..Discoveries];copy.Houses=[..Houses];
         copy.Planting=[..Planting];copy.Tending=[..Tending];copy.SentEvents=[..SentEvents];

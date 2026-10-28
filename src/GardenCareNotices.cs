@@ -16,6 +16,9 @@ public sealed partial class Plugin
         nextGardenNotice = now.AddSeconds(30);
         if (roster.GardenCare is null || !gardenNotices.TrySummary()) return;
         var allPlans=GardenPlanSources();
+        var reads=DiscoveryReads();
+        var plants=config.Planting.GroupBy(t=>(t.Address.HouseId,t.Patch,t.Bed)).ToDictionary(g=>g.Key,g=>g.Max(t=>t.ConfirmedAt));
+        var tends=config.Tending.GroupBy(t=>(t.Address.HouseId,t.Patch,t.Bed)).ToDictionary(g=>g.Key,g=>g.Max(t=>t.ConfirmedAt));
         var notices = new List<GardenPersonNotice>();
         foreach (var house in roster.GardenCare.GroupBy(g => g.HouseId))
         {
@@ -28,10 +31,11 @@ public sealed partial class Plugin
                 foreach (var bed in batch.Beds)
                 {
                     // Local confirmed care already happened, even if the browser has not saved it yet.
-                    var lastPlant = config.Planting.Where(t => t.Address.HouseId == batch.GameHouseId && t.Patch == (batch.PhysicalPatch>0?batch.PhysicalPatch:batch.Batch) && t.Bed == bed.Bed).Select(t => t.ConfirmedAt).DefaultIfEmpty(DateTimeOffset.MinValue).Max();
-                    var lastTend = config.Tending.Where(t => t.Address.HouseId == batch.GameHouseId && t.Patch == (batch.PhysicalPatch>0?batch.PhysicalPatch:batch.Batch) && t.Bed == bed.Bed).Select(t => t.ConfirmedAt).DefaultIfEmpty(DateTimeOffset.MinValue).Max();
+                    var key=(batch.GameHouseId,(batch.PhysicalPatch>0?batch.PhysicalPatch:batch.Batch),bed.Bed);
+                    var lastPlant = plants.GetValueOrDefault(key,DateTimeOffset.MinValue);
+                    var lastTend = tends.GetValueOrDefault(key,DateTimeOffset.MinValue);
                     var localCare = lastPlant > lastTend ? lastPlant : lastTend;
-                    var empty = config.Discoveries.Where(e => e.Kind == "garden.empty" && e.Address?.HouseId == batch.GameHouseId && e.Patch == (batch.PhysicalPatch>0?batch.PhysicalPatch:batch.Batch) && e.Bed == bed.Bed).Select(e => e.At).DefaultIfEmpty(DateTimeOffset.MinValue).Max();
+                    var empty = reads.EmptyAt(key.GameHouseId,key.Item2,key.Bed);
                     if (empty > (bed.Watered ?? DateTimeOffset.MinValue) && empty >= localCare) continue;
                     var effective = localCare > (bed.Watered ?? DateTimeOffset.MinValue) ? bed with { Watered = localCare, NextTend = localCare.AddHours(12), DeathAt = bed.WiltHours is > 0 ? localCare.AddHours(bed.WiltHours.Value+24) : null } : bed;
                     var projected=projection?.Beds.FirstOrDefault(b=>b.Bed==bed.Bed);

@@ -12,8 +12,9 @@ public sealed partial class Plugin
     private SyncEvent? registrationSnapshot;
     private DateTimeOffset registrationStartedAt;
     private readonly HashSet<string> registrationNotified=[];
-    private bool RegistrationNeedsRoster => Player.IsLoaded && (registrationSession!=config.PairingKey+":"+Player.ContentId || registrationFreshKey!=config.PairingKey || registrationWindow.IsOpen || config.Discoveries.Any(e=>e.Kind=="character.registered"&&e.Actor.ContentId==Player.ContentId.ToString()&&e.Registration?.PairingScope==RegistrationScope&&!registrationNotified.Contains(e.Id)));
-    private string RegistrationScope => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(config.PairingKey))).ToLowerInvariant();
+    private bool RegistrationNeedsRoster => Player.IsLoaded && (registrationSession!=config.PairingKey+":"+Player.ContentId || registrationFreshKey!=config.PairingKey || registrationWindow.IsOpen || DiscoveryReads().Kind("character.registered").Any(e=>e.Kind=="character.registered"&&e.Actor.ContentId==Player.ContentId.ToString()&&e.Registration?.PairingScope==RegistrationScope&&!registrationNotified.Contains(e.Id)));
+    private string registrationScopeKey="",registrationScopeHash="";
+    private string RegistrationScope {get{if(registrationScopeKey!=config.PairingKey){registrationScopeKey=config.PairingKey;registrationScopeHash=Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(registrationScopeKey))).ToLowerInvariant();}return registrationScopeHash;}}
     private void UpdateCharacterRegistration(DateTimeOffset now)
     {
         if(!Player.IsLoaded||Player.ContentId==0||!config.SyncEnabled||!config.SyncCharacterDetails||config.PairingKey.Length!=64){registrationWindow.IsOpen=false;registrationSession="";minimizedLaunchers.Remove("New Character");return;}
@@ -22,14 +23,14 @@ public sealed partial class Plugin
         if(now<characterReadyAt||registrationFreshKey!=config.PairingKey||config.SharedRoster is not {ProtocolVersion:>=14} roster)return;
         var actor=ReadActor();
         if(!SyncValidation.ActorReady(actor))return;
-        var pending=config.Discoveries.LastOrDefault(e=>e.Kind=="character.registered"&&e.Actor.ContentId==actor.ContentId&&e.Registration?.PairingScope==RegistrationScope);
+        var pending=DiscoveryReads().Kind("character.registered").LastOrDefault(e=>e.Kind=="character.registered"&&e.Actor.ContentId==actor.ContentId&&e.Registration?.PairingScope==RegistrationScope);
         if(CharacterRegistrationPolicy.Find(roster,actor) is {} known){
             registrationWindow.IsOpen=false;minimizedLaunchers.Remove("New Character");
             if(pending is not null&&registrationNotified.Add(pending.Id))PrintEquinox($"[Equinox] {known.Name} added to the Journal · {roster.People.First(p=>p.Characters.Contains(known)).Name} / {known.Account}.");
             return;
         }
         if(pending is not null){registrationWindow.IsOpen=false;minimizedLaunchers.Remove("New Character");return;}
-        registrationSnapshot=config.Discoveries.LastOrDefault(e=>e.Kind=="character.updated"&&e.Actor.ContentId==actor.ContentId&&e.At>=registrationStartedAt&&e.At>=characterReadyAt.AddSeconds(-15)&&SyncValidation.CharacterReady(e.Character));
+        registrationSnapshot=DiscoveryReads().Kind("character.updated").LastOrDefault(e=>e.Kind=="character.updated"&&e.Actor.ContentId==actor.ContentId&&e.At>=registrationStartedAt&&e.At>=characterReadyAt.AddSeconds(-15)&&SyncValidation.CharacterReady(e.Character));
         if(registrationSnapshot is null)return;
         if(CharacterRegistrationPolicy.Destination(roster,registrationSnapshot.Character!.AccountKey) is {} destination){SubmitCharacterRegistration(destination.Person,destination.Account);return;}
         if(!registrationDeferred)registrationWindow.IsOpen=true;
