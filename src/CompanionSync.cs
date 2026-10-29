@@ -47,7 +47,7 @@ public sealed partial class CompanionSync : IDisposable
             return SyncReceipt.Parse(await response.Content.ReadAsStringAsync(cancel.Token), events.Select(x => x.Id));
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
-        { return new([], "Connection unavailable; local records are kept for retry.", true); }
+        { return new([], ex switch { TaskCanceledException => "Upload cancelled or timed out; local records are kept for retry.", JsonException => "Website returned invalid upload JSON; local records are kept for retry.", HttpRequestException http => $"Upload connection failed ({http.HttpRequestError}); local records are kept for retry.", _ => "Connection unavailable; local records are kept for retry." }, true); }
     }
     private string? rosterETag;
     private string? rosterETagKey;
@@ -88,7 +88,7 @@ public sealed partial class CompanionSync : IDisposable
             return WithRosterReceipt(new(roster, "Shared profiles updated."),response);
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException or InvalidOperationException)
-        { return new(null, "Shared profiles unavailable; showing saved copy."); }
+        { return new(null, ex switch { TaskCanceledException => "Shared profiles request cancelled or timed out; showing saved copy.", JsonException => "Website returned invalid shared-profile JSON; showing saved copy.", HttpRequestException http => $"Shared profiles connection failed ({http.HttpRequestError}); showing saved copy.", _ => "Invalid shared-profile response; showing saved copy." }); }
     }
     public void Dispose() { cancel.Cancel(); client.Dispose(); cancel.Dispose(); }
 }
