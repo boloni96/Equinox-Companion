@@ -13,13 +13,13 @@ public sealed partial class Plugin
     private Dictionary<uint,uint>? cabinetItems;
     private bool collectingStorage, storageChanged;
     private readonly StorageCaptureGate storageCaptureGate=new();
-    private void ObserveStorage(DateTimeOffset now,bool saddlebagsOnly=false)
+    private void ObserveStorage(DateTimeOffset now,bool saddlebagsOnly=false,bool retainersOnly=false)
     {
         collectingStorage=true;storageChanged=false;
-        try { ObserveStorageCore(now,saddlebagsOnly); }
+        try { ObserveStorageCore(now,saddlebagsOnly,retainersOnly); }
         finally { collectingStorage=false;if(storageChanged)SaveConfiguration(); }
     }
-    private unsafe void ObserveStorageCore(DateTimeOffset now,bool saddlebagsOnly)
+    private unsafe void ObserveStorageCore(DateTimeOffset now,bool saddlebagsOnly,bool retainersOnly)
     {
         if (!config.SyncCollections || !Player.IsLoaded || now < collectionReadyAt) return;
         var actor = ReadActor();
@@ -47,6 +47,8 @@ public sealed partial class Plugin
             }
             return stacks.GroupBy(x=>(x.ItemId,x.Hq)).Select(g=>new StorageStack(g.Key.ItemId,g.Sum(x=>x.Quantity),g.Key.Hq,g.First().Name,g.SelectMany(x=>x.Positions??[]).OrderBy(x=>x.Slot).ToArray())).OrderBy(x=>x.ItemId).ThenBy(x=>x.Hq).ToArray();
         }
+        if(!retainersOnly)
+        {
         Span<StorageSlotValue> slotValues=stackalloc StorageSlotValue[200];
         foreach (var type in Enum.GetValues<InventoryType>())
         {
@@ -126,11 +128,14 @@ public sealed partial class Plugin
                 Save($"fc:{proxy->Id}:{(uint)type}",$"Available in FC Chest · {((uint)type==22001?"Crystals":$"Inventory {(uint)type-19999}")} · {proxy->NameString}",items,ReadStacks(container));
             }
         }
+        }
         // A stable, open retainer inventory is required before attributing its containers.
         var retainers=RetainerManager.Instance();
         var agent=AgentRetainer.Instance();
         var active=retainers==null?0:retainers->LastSelectedRetainerId;
         if(agent==null || !agent->IsAgentActive() || active==0){storageRetainer=0;return;}
+        // The fast path has already verified native ownership and a stable full snapshot.
+        if(retainersOnly){storageRetainer=active;storageRetainerReady=now;}
         if(storageRetainer!=active){storageRetainer=active;storageRetainerReady=now.AddSeconds(10);return;}
         if(now<storageRetainerReady)return;
         if(retainers==null)return;
