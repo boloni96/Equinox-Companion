@@ -2,6 +2,7 @@ namespace EquinoxCompanion;
 public sealed record StoragePreviewRow(uint Item,bool Hq,ulong From,ulong To,int Quantity,bool Merge);
 public static class StoragePreview
 {
+    public static StorageRoute[] KnownRules(IEnumerable<StorageRoute> rules,IReadOnlySet<ulong> known)=>rules.Where(r=>(r.To==StorageAutoRouting.AllRetainers||known.Contains(r.To))&&(r.From==StorageRouting.AllSources||known.Contains(r.From))).ToArray();
     // Track the source of staged cargo rather than displaying the player's bags
     // as the origin of every delivery. No player inventory data is needed here.
     public static StoragePreviewRow[] Describe(RoutedMove[] moves)

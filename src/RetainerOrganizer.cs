@@ -34,7 +34,7 @@ public sealed partial class Plugin
         if(ImGui.IsItemHovered())ImGui.SetTooltip("Fill available space per trip. One spare slot helps rearrange full retainers; it may be used temporarily to unblock a swap.");
         ImGui.BeginDisabled(organizeTo==0);if(ImGui.SmallButton("Add movement")){organizeRules.Add(CurrentOrganizeRule());InvalidateOrganizePreview();}ImGui.EndDisabled();ImGui.SameLine();if(ImGui.SmallButton("Clear movements")){organizeRules.Clear();InvalidateOrganizePreview();}
         foreach(var rule in organizeRules.ToArray()){ImGui.PushID(organizeRules.IndexOf(rule));if(ImGui.SmallButton("×")){organizeRules.Remove(rule);InvalidateOrganizePreview();}ImGui.SameLine();ImGui.TextUnformatted($"{(rule.AllItems?"All items":string.Join(", ",rule.Categories.Select(c=>DataManager.GetExcelSheet<Lumina.Excel.Sheets.ItemUICategory>().GetRowOrDefault(c)?.Name.ToString()??c.ToString())))} · {(rule.From==StorageRouting.AllSources?"All retainers":names.GetValueOrDefault(rule.From,"Retainer"))} → {(rule.To==StorageAutoRouting.AllRetainers?"All retainers":names.GetValueOrDefault(rule.To,"Retainer"))}");ImGui.PopID();}
-        if(ImGui.Button("Check"))RetrievalTry(CheckOrganize);ImGui.SameLine();
+        if(ImGui.Button("Preview selection"))RetrievalTry(CheckOrganize);ImGui.SameLine();
         ImGui.BeginDisabled(organizeRules.Count==0&&(organizeTo==0));if(ImGui.Button("Organise"))StartOrganize();ImGui.EndDisabled();
         ImGui.EndDisabled();
         if(organizeRunning&&ImGui.Button("Stop organizer"))StopOrganize("Stopped by you; an already-sent move may still complete.");

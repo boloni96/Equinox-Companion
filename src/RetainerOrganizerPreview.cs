@@ -8,8 +8,9 @@ public sealed partial class Plugin
     private bool organizePreviewDirty=true,organizePreviewAll,organizePreviewBell;
     private DateTimeOffset organizePreviewAfter;
     private string organizePreviewMessage="Open the summoning bell to preview recorded retainer movements.";
+    private string organizePreviewCoverage="";
     private Dictionary<ulong,string> organizePreviewNames=[];
-    private void InvalidateOrganizePreview(){organizePreviewVersion++;organizePreview=[];organizePreviewDirty=true;organizePreviewAll=false;organizePreviewAfter=DateTimeOffset.UtcNow.AddMilliseconds(250);organizePreviewMessage="Preview needs updating…";}
+    private void InvalidateOrganizePreview(){organizePreviewVersion++;organizePreviewCoverage="";organizePreview=[];organizePreviewDirty=true;organizePreviewAll=false;organizePreviewAfter=DateTimeOffset.UtcNow.AddMilliseconds(250);organizePreviewMessage="Preview needs updating…";}
     private void CheckOrganize(){InvalidateOrganizePreview();organizePreviewAfter=default;}
     private void CheckAllOrganize(){CheckOrganize();organizePreviewAll=true;}
     private unsafe void BeginOrganizePreview()
@@ -21,7 +22,10 @@ public sealed partial class Plugin
         organizePreviewNames=retainers.ToDictionary(x=>x.Id,x=>x.Name);
         if(config.UseRetainerAssignments.Contains(Player.ContentId)&&rules.Any(r=>r.To==StorageAutoRouting.AllRetainers)&&!StorageAssignments.HasSelections(config.RetainerAssignments.GetValueOrDefault(Player.ContentId)??[],config.RetrievalPresets)){organizePreviewMessage="Choose saved plans, items or categories in Retainer assignments, or turn off Use assignments.";return;}
         var cached=RecordedOrganizerInventories(owners,false);
-        if(cached.Count<owners.Length){organizePreviewMessage=$"{cached.Count}/{owners.Length} inventories recorded. Missing: "+string.Join(", ",retainers.Where(x=>owners.Contains(x.Id)&&!cached.ContainsKey(x.Id)).Select(x=>x.Name))+". Open those inventories once; previews never summon retainers or move items.";return;}
+        organizePreviewCoverage=cached.Count<owners.Length?$"Partial preview · {cached.Count}/{owners.Length} inventories recorded · excludes "+string.Join(", ",retainers.Where(x=>owners.Contains(x.Id)&&!cached.ContainsKey(x.Id)).Select(x=>x.Name)):"";
+        if(cached.Count==0){organizePreviewMessage="Open a retainer inventory once to record its contents.";return;}
+        rules=StoragePreview.KnownRules(rules,cached.Keys.ToHashSet());
+        if(rules.Length==0){organizePreviewMessage="The selected movement needs an unrecorded inventory; open that retainer once.";return;}
         cached[StorageRouting.Bags]=OrganizerInventory(false,false).Concat(OrganizerInventory(false,true)).ToArray();
         if(config.UseRetainerAssignments.Contains(Player.ContentId))rules=StorageAssignments.Apply(rules,(config.RetainerAssignments.GetValueOrDefault(Player.ContentId)??[]).ToArray(),cached,OrganizeCategory,config.RetrievalPresets);
         var categories=cached.Values.SelectMany(x=>x).Where(x=>x.Item>0).Select(x=>x.Item).Distinct().ToDictionary(x=>x,OrganizeCategory);
@@ -36,12 +40,13 @@ public sealed partial class Plugin
         organizePreviewBell=bell;
         if(organizePreviewTask?.IsCompleted==true){
             var task=organizePreviewTask;organizePreviewTask=null;
-            try{var result=task.GetAwaiter().GetResult();if(result.Version==organizePreviewVersion&&result.Character==owner){organizePreview=result.Rows;organizePreviewPage=0;organizePreviewMessage=organizePreview.Length==0?(result.Remaining>0?$"No safe movements available · {result.Remaining:N0} items blocked by space.":"No movements needed for this selection."):$"{organizePreview.Length} planned movements"+(result.Remaining>0?$" · {result.Remaining:N0} items blocked by space":"")+" · live slots checked before moving";}}
+            try{var result=task.GetAwaiter().GetResult();if(result.Version==organizePreviewVersion&&result.Character==owner){organizePreview=result.Rows;organizePreviewPage=0;organizePreviewMessage=organizePreview.Length==0?(result.Remaining>0?$"No safe movements available · {result.Remaining:N0} items blocked by space.":(organizePreviewCoverage.Length>0?"No movements found among recorded retainers.":"No movements needed for this selection.")):$"{organizePreview.Length} planned movements"+(result.Remaining>0?$" · {result.Remaining:N0} items blocked by space":"")+" · live slots checked before moving";}}
             catch(Exception e){organizePreviewMessage="Preview unavailable: "+e.Message;}
         }
         if(organizePreviewDirty&&organizePreviewTask==null&&!organizeRunning&&!retrievalRun.Running&&!chestRunning&&DateTimeOffset.UtcNow>=organizePreviewAfter){
             organizePreviewDirty=false;try{BeginOrganizePreview();}catch(Exception e){organizePreviewMessage="Preview unavailable: "+e.Message;}
         }
+        if(organizePreviewCoverage.Length>0&&organizePreviewTask==null){ImGui.TextWrapped(organizePreviewCoverage);MarketHelp("Missing inventories are excluded, never assumed empty. Open the named retainer inventory once for a complete preview. Organise checks missing inventories and live slots before moving anything.");}
         ImGui.TextWrapped(organizePreviewMessage);
         if(organizePreview.Length==0)return;
         var pages=(organizePreview.Length+39)/40;organizePreviewPage=Math.Clamp(organizePreviewPage,0,pages-1);

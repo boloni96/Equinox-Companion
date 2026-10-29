@@ -24,11 +24,12 @@ public sealed partial class Plugin
         retrievalEditingPreset=null;
         if(entrust)SendRetrievalList(false);else StartRetrieval(false);
     }
+    private int RetrievalTradeFilter=>config.WithdrawUntradableOnly?2:config.WithdrawTradableOnly?1:0;
     private void DrawWithdrawTradableOption()
     {
-        var value=config.WithdrawTradableOnly;
-        if(ImGui.Checkbox("Withdraw tradable only",ref value)){config.WithdrawTradableOnly=value;retrievalPreviewDirty=true;SaveConfiguration();}
-        MarketHelp("Withdraw only tradeable item types and unbound stacks. Actual retainer slots are checked before each withdrawal. Does not change Entrust.");
+        var value=RetrievalTradeFilter;ImGui.SetNextItemWidth(165);
+        if(ImGui.Combo("##WithdrawalTradeFilter",ref value,"Any items\0Tradable only\0Untradable only\0")){config.WithdrawTradableOnly=value==1;config.WithdrawUntradableOnly=value==2;retrievalPreviewDirty=true;SaveConfiguration();}
+        MarketHelp("Withdrawal filter: Any items, Tradable only, or Untradable only. Checks actual stacks, including bound gear and collectibles. Applies to retainer withdrawals and matching bag counts; does not change Entrust. Your choice is remembered.");
     }
     private void DrawRetrievalBrowse()
     {

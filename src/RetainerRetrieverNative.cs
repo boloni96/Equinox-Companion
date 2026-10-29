@@ -7,11 +7,11 @@ namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
     private static bool RetrievalTradableItem(uint item)=>DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>().GetRowOrDefault(item) is {} row&&!row.IsUntradable;
-    private static bool RetrievalTradableStack(InventoryItem slot){var row=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>().GetRowOrDefault(slot.ItemId);return WithdrawalTradePolicy.Allows(true,row.HasValue,row?.IsUntradable??true,slot.SpiritbondOrCollectability,(slot.Flags&InventoryItem.ItemFlags.Collectable)!=0);}
+    private static bool RetrievalAllowsTradeFilter(InventoryItem slot,int filter){var row=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>().GetRowOrDefault(slot.ItemId);return WithdrawalTradePolicy.Allows(filter,row.HasValue,row?.IsUntradable??true,slot.SpiritbondOrCollectability,(slot.Flags&InventoryItem.ItemFlags.Collectable)!=0);}
     private RetrievalRun retrievalRun=null!;
     private RetrieverPort retrievalPort=null!;
     private DateTimeOffset retrievalTick;private string retrievalLastStatus="";
-    private unsafe int RetrievalHeld(uint item,RetrievalQuality quality=RetrievalQuality.Any,bool tradableOnly=false){var m=InventoryManager.Instance();if(m==null)return 0;var count=0;foreach(var t in new[]{InventoryType.Inventory1,InventoryType.Inventory2,InventoryType.Inventory3,InventoryType.Inventory4,InventoryType.Crystals}){var c=m->GetInventoryContainer(t);if(c==null||!c->IsLoaded)continue;for(var i=0;i<c->Size;i++)if(c->Items[i].ItemId==item&&(!tradableOnly||RetrievalTradableStack(c->Items[i]))&&RetainerRetrieval.AllowsQuality((c->Items[i].Flags&InventoryItem.ItemFlags.HighQuality)!=0,quality))count=checked(count+c->Items[i].Quantity);}return count;}
+    private unsafe int RetrievalHeld(uint item,RetrievalQuality quality=RetrievalQuality.Any,int tradeFilter=0){var m=InventoryManager.Instance();if(m==null)return 0;var count=0;foreach(var t in new[]{InventoryType.Inventory1,InventoryType.Inventory2,InventoryType.Inventory3,InventoryType.Inventory4,InventoryType.Crystals}){var c=m->GetInventoryContainer(t);if(c==null||!c->IsLoaded)continue;for(var i=0;i<c->Size;i++)if(c->Items[i].ItemId==item&&(tradeFilter==0||RetrievalAllowsTradeFilter(c->Items[i],tradeFilter))&&RetainerRetrieval.AllowsQuality((c->Items[i].Flags&InventoryItem.ItemFlags.HighQuality)!=0,quality))count=checked(count+c->Items[i].Quantity);}return count;}
     private void UpdateRetriever(DateTimeOffset now)
     {
         TickRetainerTools(now);TickRetainerGil(now);TickChest(now);TickOrganize(now);
@@ -25,7 +25,7 @@ public sealed partial class Plugin
     {
         private readonly Plugin p;private readonly SellerPort navigation;
         internal readonly SellerAutoRetainerPause Pause=new(new SellerAutoRetainerPort());
-        internal bool TradableOnly;internal RetrievalQuality Quality;internal ulong Character;internal uint World;
+        internal int TradeFilter;internal RetrievalQuality Quality;internal ulong Character;internal uint World;
         private ulong inventoryRetainer;private DateTimeOffset inventoryReadyAt;
         private RetrievalSlot? pending;private int quantity;private bool contextSent,numericSent,prepared;private DateTimeOffset openedAt;
         internal RetrieverPort(Plugin plugin){p=plugin;navigation=new(plugin);}
@@ -73,7 +73,7 @@ public sealed partial class Plugin
                 if(c==null||!c->IsLoaded||c->Items==null){InventoryStatus="Inventory open; waiting for container "+type;return null;}
                 var crystalBags=type==12001?p.ReadChestContainer(2001):Array.Empty<ChestStack>();
                 for(var i=0;i<c->Size;i++){
-                    var s=c->Items[i];if(TradableOnly&&!RetrievalTradableStack(s))continue;var hq=(s.Flags&InventoryItem.ItemFlags.HighQuality)!=0;
+                    var s=c->Items[i];if(TradeFilter!=0&&!RetrievalAllowsTradeFilter(s,TradeFilter))continue;var hq=(s.Flags&InventoryItem.ItemFlags.HighQuality)!=0;
                     var amount=type==12001?Math.Min(s.Quantity,CrystalStorage.Room(s.ItemId,crystalBags)):s.Quantity;
                     if(s.ItemId>0&&amount>0&&RetainerRetrieval.AllowsQuality(hq,Quality))list.Add(new(s.ItemId,amount,type,i,hq));
                 }
@@ -81,7 +81,7 @@ public sealed partial class Plugin
             return list.ToArray();
         }
         public void Confirmed(ulong id,RetrievalSlot slot,int amount)=>p.ReportStorageTransfer("Withdrew",slot.ItemId,slot.Hq,amount,p.StorageRetainerName(id));
-        public int Held(uint item)=>p.RetrievalHeld(item,Quality,TradableOnly);
+        public int Held(uint item)=>p.RetrievalHeld(item,Quality,TradeFilter);
         public bool Withdraw(ulong id,RetrievalSlot slot,int amount)
         {
             if(!RetrieverActive(id))throw new InvalidOperationException("Selected retainer changed.");
