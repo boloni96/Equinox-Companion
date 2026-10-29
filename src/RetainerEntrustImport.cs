@@ -13,7 +13,7 @@ public sealed partial class Plugin
     }
     private void SaveNewRetrievalPlan(RetrievalPreset imported)
     {
-        var current=new RetrievalPreset(retrievalName,retrievalItems.ToArray(),retrievalMultiplier,retrievalIncludesSubcrafts,Mode:retrievalMode,RecipeChoices:new(retrievalRecipeOverrides),Quality:retrievalQuality,DestinationRetainer:retrievalSendTo,SendCategories:retrievalSendCategories.ToArray(),Entrust:retrievalEntrust);
+        var current=new RetrievalPreset(retrievalName,retrievalItems.ToArray(),retrievalMultiplier,retrievalIncludesSubcrafts,Mode:retrievalMode,RecipeChoices:new(retrievalRecipeOverrides),Quality:retrievalQuality,DestinationRetainer:retrievalSendTo,SendCategories:retrievalSendCategories.ToArray(),CategoryWithdrawQuantity:retrievalCategoryWithdraw,CategoryKeepQuantity:retrievalCategoryKeep,Entrust:retrievalEntrust);
         var updated=EntrustSelection.AddImportedPlan(config.RetrievalPresets,current,retrievalEditingPreset,imported);
         config.RetrievalPresets=updated.ToList();SaveConfiguration();SelectRetrievalPreset(updated[^1]);
     }
@@ -22,7 +22,7 @@ public sealed partial class Plugin
     {
         var plan=retrievalEntrust!;
         if(ImGui.SmallButton("Withdraw items…")){retrievalEntrustWithdrawal=true;retrievalPreviewDirty=true;}
-        MarketHelp("Use this same item list for withdrawal. Set withdrawal quantities separately from Keep; your Entrust rules remain saved.");
+        MarketHelp("Withdraw listed items plus the selected category rules. Set withdrawal quantities separately from Keep; your Entrust rules remain saved.");
         MarketHelp("Entrust all matching items from bags and crystals, minus Keep. HQ/NQ share the keep amount. No crafting expansion. Imported protection is a saved snapshot. Plans created here use your selected items; they do not read AutoRetainer protection.");
         ImGui.SameLine();if(ImGui.SmallButton("Entrust…"))ImGui.OpenPopup("ImportedEntrustOptions");
         if(ImGui.BeginPopup("ImportedEntrustOptions")){

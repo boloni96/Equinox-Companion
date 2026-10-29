@@ -3,7 +3,7 @@ using Lumina.Excel.Sheets;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
-    private sealed record RetrievalCatalog(Dictionary<uint,string> Names,Dictionary<uint,uint> Icons,Dictionary<uint,RetrievalRecipe[]> Recipes,RetrievalPreset[] Workshop,Dictionary<uint,RetrievalEntry[]> WorkshopByItem,Dictionary<uint,RetrievalEntry[]> Outfits);
+    private sealed record RetrievalCatalog(Dictionary<uint,string> Names,Dictionary<uint,uint> Icons,Dictionary<uint,RetrievalRecipe[]> Recipes,RetrievalPreset[] Workshop,Dictionary<uint,RetrievalEntry[]> WorkshopByItem,Dictionary<uint,RetrievalEntry[]> Outfits,Dictionary<uint,RetrievalEntry[]> Categories);
     private Task<RetrievalCatalog>? retrievalCatalogTask;private RetrievalCatalog? retrievalCatalog;
     private Task<RetainerRetrieval.ArtisanLists>? retrievalArtisanTask;private RetrievalPreset[] retrievalArtisan=[];private string retrievalArtisanNotice="";private bool retrievalArtisanRequested;private string[] retrievalArtisanLive=[];private string retrievalArtisanConnection="";
     private void LoadRetrievalCatalog(){if(retrievalCatalog!=null||retrievalCatalogTask!=null)return;retrievalCatalogTask=Task.Run(()=>{
@@ -19,7 +19,7 @@ public sealed partial class Plugin
             if(!names.ContainsKey(set.RowId))continue;
             var ids=new[]{set.MainHand.RowId,set.OffHand.RowId,set.Head.RowId,set.Body.RowId,set.Hands.RowId,set.Legs.RowId,set.Feet.RowId,set.Earrings.RowId,set.Necklace.RowId,set.Bracelets.RowId,set.Ring.RowId}.Where(id=>id>0&&id!=set.RowId&&names.ContainsKey(id)).Distinct().ToArray();
             if(ids.Length>0)outfits[set.RowId]=ids.Select(id=>new RetrievalEntry(id,names[id],1)).ToArray();}
-        return new RetrievalCatalog(names,DataManager.GetExcelSheet<Item>().Where(x=>x.RowId>0).ToDictionary(x=>x.RowId,x=>(uint)x.Icon),recipes,workshop.OrderBy(x=>x.Name).ToArray(),workshopByItem,outfits);});}
+        return new RetrievalCatalog(names,DataManager.GetExcelSheet<Item>().Where(x=>x.RowId>0).ToDictionary(x=>x.RowId,x=>(uint)x.Icon),recipes,workshop.OrderBy(x=>x.Name).ToArray(),workshopByItem,outfits,DataManager.GetExcelSheet<Item>().Where(x=>names.ContainsKey(x.RowId)).GroupBy(x=>x.ItemUICategory.RowId).ToDictionary(g=>g.Key,g=>g.Select(x=>new RetrievalEntry(x.RowId,names[x.RowId],1)).ToArray()));});}
     private RetrievalEntry? ResolveRetrievalItem(string name){if(retrievalCatalog==null)return null;if(uint.TryParse(name,out var id)&&retrievalCatalog.Names.TryGetValue(id,out var text))return new(id,text,1);var matches=retrievalCatalog.Names.Where(x=>x.Value.Equals(name,StringComparison.OrdinalIgnoreCase)).Take(2).ToArray();return matches.Length==1?new(matches[0].Key,matches[0].Value,1):null;}
     private void LoadRetrievalArtisan(){if(retrievalCatalog==null||retrievalArtisanTask!=null)return;
         var path=Path.Combine(Pi.ConfigFile.DirectoryName!,"Artisan.json");var recipes=retrievalCatalog.Recipes.Values.SelectMany(x=>x).ToDictionary(x=>x.Id);var names=retrievalCatalog.Names;

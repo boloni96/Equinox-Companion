@@ -62,10 +62,10 @@ public sealed partial class Plugin
             if(duplicates&&retrievalEntrust!=null)throw new InvalidOperationException("Use Entrust plan to preserve this imported plan’s protection and keep amounts.");
             if(duplicates){StartStorageRouting([new(StorageRouting.Bags,retrievalSendTo,[],[],Duplicates:true,Quality:retrievalQuality)],true);return;}
             if(retrievalEntrust!=null){var amounts=retrievalEntrust.Amounts(retrievalItems.Select(x=>x.ItemId),OrganizerInventory(false,false).Concat(OrganizerInventory(false,true)),retrievalQuality,OrganizeCategory,retrievalSendCategories);if(amounts.Count==0)throw new InvalidOperationException("No matching bag items to entrust after keep amounts and protection.");StartStorageRouting([new(StorageRouting.Bags,retrievalSendTo,[],amounts.Keys.ToArray(),Quality:retrievalQuality,Amounts:amounts)],true);return;}
-            PreviewRetrieval(false,false);if(retrievalPlan.Length==0&&retrievalSendCategories.Count==0)throw new InvalidOperationException("Choose items or send categories first.");
+            PreviewRetrieval(false,false,false);if(retrievalPlan.Length==0&&retrievalSendCategories.Count==0)throw new InvalidOperationException("Choose items or send categories first.");
             var rules=new List<StorageRoute>();
             if(retrievalPlan.Length>0)rules.Add(new(StorageRouting.Bags,retrievalSendTo,[],retrievalPlan.Select(x=>x.ItemId).ToArray(),Quality:retrievalQuality,Amounts:retrievalPlan.ToDictionary(x=>x.ItemId,x=>x.Quantity)));
-            if(retrievalSendCategories.Count>0)rules.Add(new(StorageRouting.Bags,retrievalSendTo,retrievalSendCategories.ToArray(),[],Quality:retrievalQuality));
+            if(retrievalSendCategories.Count>0){var amounts=CategoryEntrustAmounts(OrganizerInventory(false,false).Concat(OrganizerInventory(false,true)),retrievalPlan.Select(x=>x.ItemId),retrievalQuality);if(amounts.Count>0)rules.Add(new(StorageRouting.Bags,retrievalSendTo,[],amounts.Keys.ToArray(),Quality:retrievalQuality,Amounts:amounts));}
             StartStorageRouting(rules.ToArray(),true);
         });
     }

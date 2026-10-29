@@ -25,8 +25,7 @@ public sealed partial class Plugin
     {
         if(!inline&&!ImGui.CollapsingHeader("Entrust this plan"))return;
         ImGui.SetNextItemWidth(200);DrawEntrustDestination("To retainer");ImGui.SameLine();DrawAssignmentEditor();
-        ImGui.SetNextItemWidth(200);if(DrawStorageCategoryPicker("Entrust categories",retrievalSendCategories,"None · listed items only")&&retrievalEditingPreset!=null)RetrievalTry(SaveRetrievalPreset);
-        if(ImGui.IsItemHovered())ImGui.SetTooltip("Entrust all matching items in your bags, plus the listed quantities. Categories affect entrusting only; withdraw uses the explicit item list. Save preset remembers the destination and categories.");
+        if(retrievalSendCategories.Count>0)ImGui.TextDisabled($"Includes {retrievalSendCategories.Count} plan category rules");
         if(ImGui.Button("Entrust plan"))SendRetrievalList(false);if(retrievalEntrust==null){ImGui.SameLine();if(ImGui.Button("Entrust duplicates"))SendRetrievalList(true);
         if(ImGui.IsItemHovered())ImGui.SetTooltip("Entrust bag items already stored on this destination retainer. Quality selection applies. No items are discarded or sold.");}
     }
