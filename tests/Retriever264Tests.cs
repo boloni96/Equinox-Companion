@@ -21,6 +21,8 @@ internal static class Retriever264Tests
         Check("selected recipe controls expansion",RetainerRetrieval.Expand([ingot with{RecipeId=11}],1,RetrievalMode.AllMaterials,alternate).Single().ItemId==3);
         var port=new Port();var run=new RetrievalRun(port);var now=DateTimeOffset.UtcNow;run.Start([1,2],[new(1,"Ingot",600)],true,now);for(var i=0;i<30&&run.Running;i++)run.Tick(now.AddSeconds(i));Check("multi-retainer exact partial withdrawal",port.Confirmations==2&&port.Count==600&&port.Taken.SequenceEqual(new[]{100,300})&&!run.Running&&port.Released);
         port=new Port();run=new(port);run.Start([1],[new(1,"Ingot",50)],false,now);for(var i=0;i<20&&run.Running;i++)run.Tick(now.AddSeconds(i));Check("subtract disabled retrieves additional quantity",port.Count==250);
+        port=new Port();run=new(port);run.Start([1,2],[new(1,"Ingot",1)],true,now,allAvailable:true);for(var i=0;i<40&&run.Running;i++)run.Tick(now.AddSeconds(i));Check("all available ignores quantity one and already held bags",port.Count==800&&port.Taken.SequenceEqual(new[]{100,500})&&!run.Running&&run.Status.StartsWith("Complete"));
+        port=new Port{Confirm=false};run=new(port);run.Start([1,2],[new(1,"Ingot",1)],false,now,allAvailable:true);for(var i=0;i<40;i++)run.Tick(now.AddSeconds(i));Check("all available still requires transfer confirmation",port.Taken.Count==1&&!run.Running);
         port=new Port{Confirm=false};run=new(port);run.Start([1],[new(1,"Ingot",300)],true,now);for(var i=0;i<30;i++)run.Tick(now.AddSeconds(i));Check("no blind repeat when acknowledgement missing",port.Taken.Count==1&&!run.Running);
         port=new Port();run=new(port);run.Start([1],[ingot],true,now);port.ContextMatches=false;run.Tick(now);Check("character or world change stops before action",port.Taken.Count==0&&!run.Running&&port.Released);
         port=new Port();run=new(port);run.Start([1],[ingot],true,now);run.Stop("cancel");run.Tick(now);Check("cancel releases and performs no actions",port.Released&&port.Taken.Count==0);
@@ -28,7 +30,8 @@ internal static class Retriever264Tests
     private sealed class Port:IRetrievalPort
     {
         public bool ContextMatches{get;set;}=true;public bool Confirm=true,Released;public int Confirmations;public void Confirmed(ulong r,RetrievalSlot s,int q)=>Confirmations++;public int Count=200;public List<int>Taken=[];private Dictionary<ulong,int> stock=new(){{1,100},{2,500}};
-        public bool Prepare()=>true;public bool Select(ulong r)=>true;public bool OpenInventory(ulong r)=>true;public RetrievalSlot[] Read(ulong r)=>stock[r]>0?[new(1,stock[r],10000,0)]:[];public int Held(uint i)=>Count;
-        public bool Withdraw(ulong r,RetrievalSlot s,int q){Taken.Add(q);if(Confirm){Count+=q;stock[r]-=q;}return true;}public bool Close(ulong r)=>true;public void Release()=>Released=true;
+        public bool Prepare()=>true;public bool Select(ulong r)=>true;public bool OpenInventory(ulong r)=>true;public RetrievalSlot[] Read(ulong r)=>stock[r]>0?[new(999,99,10000,1),new(1,stock[r],10000,0)]:[new(999,99,10000,1)];public int Held(uint i)=>Count;
+        public bool Withdraw(ulong r,RetrievalSlot s,int q){if(s.ItemId!=1)throw new Exception("Moved an item outside the plan");Taken.Add(q);if(Confirm){Count+=q;stock[r]-=q;}return true;}public bool Close(ulong r)=>true;public void Release()=>Released=true;
     }
 }
+

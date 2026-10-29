@@ -67,7 +67,7 @@ public sealed partial class Plugin
             if(!gilReceive&&tradeItemLabelsTask?.IsCompletedSuccessfully!=true)throw new InvalidOperationException("Loading item trade actions. Try again in a moment.");
             gilSessionWorld=Player.CurrentWorld.RowId;gilSessionTerritory=Client.TerritoryType;
             var selected=itemTradeSelection.Select(x=>new TradeItemAmount(x.Key.Item,x.Key.Hq,x.Value)).ToArray();
-            if(!itemTrade.Start(!gilReceive,selected,ReadItemTradeFrame(),DateTimeOffset.UtcNow)){gilTradeNotice=itemTrade.Status;return;}
+            if(!itemTrade.Start(!gilReceive,selected,ReadItemTradeFrame(),DateTimeOffset.UtcNow)){gilTradeNotice=itemTrade.Status;TraceGilTrade("Items start: "+itemTrade.Status);return;}
             itemTradePending=null;itemTradeOwned=false;itemTradePoll=default;itemTradeCompletion.Clear();
             TraceGilTrade($"Items: {(gilReceive?"receive":"send")} with {gilPartnerName} @ {WorldName(gilPartnerWorld)}");
         }catch(Exception e){gilTradeNotice=e.Message;}
@@ -166,7 +166,7 @@ public sealed partial class Plugin
             if(f.TradeOpen&&f.Character==itemTrade.Character&&f.TradePartner==itemTrade.Partner)itemTradeOwned=true;
             if(itemTradePending!=null){TickItemOffer(frame,now);return;}
             var trades=itemTrade.Trades;var action=itemTrade.Step(frame,now);
-            if(trades!=itemTrade.Trades){itemTradeCompletion.Clear();TraceGilTrade($"Items: {itemTrade.Done} confirmed in {itemTrade.Trades} trades");itemTradeBagRefresh=default;}
+            if(trades!=itemTrade.Trades){if(itemTrade.Sending){itemTradeSelection.Clear();foreach(var remaining in itemTrade.Remaining)itemTradeSelection[remaining.Key]=remaining.Quantity;}itemTradeCompletion.Clear();TraceGilTrade($"Items: {itemTrade.Done} confirmed in {itemTrade.Trades} trades");itemTradeBagRefresh=default;}
             var inv=InventoryManager.Instance();if(action!=ItemTradeAction.None&&inv==null)throw new InvalidOperationException("Trade manager unavailable.");
             switch(action){
                 case ItemTradeAction.Request:
@@ -180,8 +180,9 @@ public sealed partial class Plugin
                     if(dialog==null||dialog->PromptText==null||dialog->YesButton==null||!dialog->YesButton->IsEnabled||!GilTradeNative.PromptMatches(dialog->PromptText->NodeText.ToString(),gilTradePrompt))throw new InvalidOperationException("Trade confirmation changed.");
                     dialog->FireCallbackInt(0);break;
             }
-            if(!itemTrade.Running){itemTradeCompletion.Clear();CancelOwnedItemTrade();PrintEquinox("Item Trader · "+itemTrade.Status);}
+            if(!itemTrade.Running){TraceGilTrade("Items: "+itemTrade.Status);itemTradeCompletion.Clear();CancelOwnedItemTrade();PrintEquinox("Item Trader · "+itemTrade.Status);}
         }catch(Exception e){StopItemTrade("Stopped: "+e.Message);Log.Warning(e,"Item Trader stopped");}
     }
 }
+
 

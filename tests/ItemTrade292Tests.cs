@@ -37,9 +37,14 @@ internal static class ItemTrade292Tests
    var closed=idle with{Bags=current,Context=context with{CompletionObserved=false}};
    r.Step(closed,t.AddSeconds(4.5));Check("inventory delta alone cannot complete",r.Trades==round);
    r.Step(closed with{Context=context with{CompletionObserved=true}},t.AddSeconds(4.7));Check("receipt and exact inventory delta complete",r.Trades==round+1);
+   if(round==0){var resume=new ItemTradeRun();Check("restart from remaining quantities",resume.Start(true,r.Remaining,initial with{Bags=current},t.AddSeconds(5)));Check("restart excludes confirmed batch",resume.Remaining.Length==1&&resume.Remaining[0].Item==105&&resume.Remaining[0].Quantity==5);}
    t=t.AddSeconds(7);
   }
   Check("all quantities sent across batches",r.Stage==ItemTradeStage.Complete&&r.Done==30&&r.Trades==2);
+  var selected=new Dictionary<TradeItemKey,int>{{new(100,false),10},{new(100,true),8},{new(999,false),1},{new(200,false),1}};
+  ItemTradePlan.RefreshSelection(selected,[new(0,0,100,false,3,99,true),new(0,1,100,true,20,99,true),new(0,2,200,false,1,99,false),new(0,3,300,false,4,99,true)]);
+  Check("refresh removes missing and untradable selections without adding items",selected.Count==2&&!selected.ContainsKey(new(300,false)));
+  Check("refresh clamps quantity and preserves quality and smaller requests",selected[new(100,false)]==3&&selected[new(100,true)]==8);
   ItemTradeRun Started(){var run=new ItemTradeRun();run.Start(true,[new(100,false,5)],initial,t);run.Step(initial,t);return run;}
   var open=initial with{Context=context with{TradeOpen=true,TradePartner=22,LocalState=3,RemoteState=3}};
   r=Started();r.Step(open with{Context=open.Context with{TradePartner=23}},t);Check("partner swap stops",!r.Running);
@@ -57,3 +62,4 @@ internal static class ItemTrade292Tests
   Check("receiver records exact inventory gain",r.Done==5&&r.Trades==1);
  }
 }
+

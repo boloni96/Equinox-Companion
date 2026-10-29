@@ -13,7 +13,7 @@ public sealed partial class Plugin
     private bool itemTradeSelectedOnly;
     private void RefreshItemTradePicker()
     {
-        itemTradeBags=ReadItemTradeBags();itemTradeNames.Clear();
+        itemTradeBags=ReadItemTradeBags();ItemTradePlan.RefreshSelection(itemTradeSelection,itemTradeBags);itemTradeNames.Clear();
         foreach(var id in itemTradeBags.Where(x=>x.Item>0).Select(x=>x.Item).Distinct())itemTradeNames[id]=SearchItemName(id);
         itemTradeBagRefresh=DateTimeOffset.UtcNow.AddSeconds(2);
     }
@@ -64,4 +64,5 @@ public sealed partial class Plugin
         }
     }
 }
+
 

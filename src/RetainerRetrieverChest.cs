@@ -11,7 +11,7 @@ public sealed partial class Plugin
 {
     private ChestToolsWindow chestToolsWindow=null!;
     private int chestTab,chestDestination=1,chestKeep,chestMode,chestMoves,chestUnmoved;
-    private bool chestRunning,chestWasOpen,chestDock=true;
+    private bool chestRunning,chestWasOpen,chestDock=true,chestAllAvailable;
     private ulong chestOwner,chestCompany;private uint chestWorld;
     private uint[] chestPages=[];private int chestPageIndex;
     private DateTimeOffset chestNext,chestDeadline;private ChestMove? chestPending;
@@ -71,11 +71,11 @@ public sealed partial class Plugin
             var agent=AgentFreeCompanyChest.Instance();var fc=InfoProxyFreeCompany.Instance();
             if(!Player.IsLoaded||Player.CurrentWorld.RowId!=Player.HomeWorld.RowId||SellerAddon("FreeCompanyChest")==null||agent==null||!agent->IsAgentActive()||fc==null||fc->Id==0)throw new InvalidOperationException("Open your FC chest on your home world first.");
             EnsureChestMove();
-            chestMode=mode;chestQuality=retrievalQuality;chestGoals=[];
+            chestMode=mode;chestQuality=retrievalQuality;chestGoals=[];chestAllAvailable=retrievalTransferAll&&!chestCrystals;
             if(chestCrystals&&(mode==0||mode==4)){chestQuality=RetrievalQuality.Any;chestGoals=CrystalTransferSelection.Goals(mode==0,chestCrystalFamily,chestCrystalElement,chestCrystalAmount,chestKeep,ReadChestContainer(2001));}
             else if(mode==4&&retrievalEntrust!=null){chestGoals=retrievalEntrust.Amounts(FilteredPlanItems().Select(x=>x.ItemId),new uint[]{0,1,2,3,2001}.SelectMany(ReadChestContainer),chestQuality,OrganizeCategory,Array.Empty<uint>());if(chestGoals.Count==0)throw new InvalidOperationException("No matching inventory items or crystals to entrust after keep amounts and protection.");}
             else if(mode==4){chestGoals=PlanEntrustEntries().ToDictionary(e=>e.ItemId,e=>e.Quantity);if(chestGoals.Count==0)throw new InvalidOperationException("No listed items match the plan filters.");}
-            else if(mode==0||mode==3){if(retrievalEntrust!=null)retrievalEntrustWithdrawal=true;PreviewRetrieval(selected,false,mode!=4);if(retrievalPlan.Length==0&&(mode!=4||retrievalSendCategories.Count==0))throw new InvalidOperationException("Choose items in Organizer first.");chestGoals=retrievalPlan.ToDictionary(x=>x.ItemId,x=>checked(x.Quantity+(mode!=0||retrievalSubtract?0:RetrievalHeld(x.ItemId,chestQuality))));}
+            else if(mode==0||mode==3){if(retrievalEntrust!=null)retrievalEntrustWithdrawal=true;PreviewRetrieval(selected,false,mode!=4);if(retrievalPlan.Length==0&&(mode!=4||retrievalSendCategories.Count==0))throw new InvalidOperationException("Choose items in Organizer first.");chestGoals=retrievalPlan.ToDictionary(x=>x.ItemId,x=>chestAllAvailable?int.MaxValue:checked(x.Quantity+(mode!=0||retrievalSubtract?0:RetrievalHeld(x.ItemId,chestQuality))));}
             if(chestCrystals&&mode==3)throw new InvalidOperationException("Crystals stay in dedicated storage.");
             var candidates=chestCrystals?new uint[]{22001}:chestTab==0?new uint[]{20000,20001,20002,20003,20004,22001}:new[]{chestTab==6?22001u:19999u+(uint)chestTab};
             chestPages=candidates.Where(p=>(ChestAccess(p)==3||(mode==1||mode==4)&&ChestAccess(p)==2)&&(mode!=3||p!=22001&&p!=19999+chestDestination)).ToArray();
@@ -112,7 +112,7 @@ public sealed partial class Plugin
             if(next==null){
                 if(chestMode==3)chestUnmoved+=chest.Where(x=>chestGoals.ContainsKey(x.Item)&&RetainerRetrieval.AllowsQuality(x.Hq,chestQuality)).Sum(x=>x.Quantity);
                 if(++chestPageIndex<chestPages.Length){BeginChestPage(now);return;}
-                var missing=chestMode==0?chestGoals.Sum(x=>Math.Max(0,x.Value-RetrievalHeld(x.Key,chestQuality))):chestMode==4?chestGoals.Values.Sum():chestUnmoved;
+                var missing=chestMode==0&&chestAllAvailable?0:chestMode==0?chestGoals.Sum(x=>Math.Max(0,x.Value-RetrievalHeld(x.Key,chestQuality))):chestMode==4?chestGoals.Values.Sum():chestUnmoved;
                 StopChest($"{chestMoves} transfers confirmed"+(missing>0?$" · {missing} items remain (stock or destination capacity unavailable).":" · Finished."));return;
             }
             chestPending=next;chestDeadline=now.AddSeconds(12);
@@ -126,7 +126,7 @@ public sealed partial class Plugin
             ImGui.TableNextRow();ImGui.TableNextColumn();DrawChestSelection();ImGui.TableNextColumn();
             ImGui.BeginDisabled(chestCrystals);ImGui.SetNextItemWidth(-1);ImGui.Combo("##ChestTabs",ref chestTab,"All accessible tabs\0Tab 1\0Tab 2\0Tab 3\0Tab 4\0Tab 5\0Crystals\0");ImGui.EndDisabled();ImGui.EndTable();
         }
-        if(chestCrystals)DrawChestCrystalOptions();
+        if(chestCrystals)DrawChestCrystalOptions();else DrawTransferAmount();
         if(ImGui.Button("Withdraw"))StartChest(0);ImGui.SameLine();if(ImGui.Button("Entrust"))StartChest(4);ImGui.SameLine();
         if(ImGui.SmallButton("Options…"))ImGui.OpenPopup("ChestPanelOptions");
         if(ImGui.BeginPopup("ChestPanelOptions")){
@@ -144,4 +144,5 @@ public sealed partial class Plugin
         ImGui.EndChild();
     }
 }
+
 

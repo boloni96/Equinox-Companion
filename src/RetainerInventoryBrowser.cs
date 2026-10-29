@@ -3,7 +3,7 @@ namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
     private readonly HashSet<uint> browseCategories=[],browseSelected=[];
-    private bool browseAllCategories=true,browseDirty=true;
+    private bool browseAllCategories=true,browseDirty=true,browseTransferAll;
     private ulong browseOwner;
     private RetrieverStock[]? browseSource;
     private BrowseRow[] browseAllRows=[],browseMatchedRows=[];
@@ -21,7 +21,7 @@ public sealed partial class Plugin
             craftingWithdrawalPreviousEditing=retrievalEditingPreset;
         }
         SelectRetrievalPreset(InventoryBrowseSelection.Plan(BrowseSelectedEntries(),entrust,retrievalQuality));
-        retrievalEditingPreset=null;
+        retrievalEditingPreset=null;retrievalTransferAll=browseTransferAll;
         if(entrust)SendRetrievalList(false);else StartRetrieval(false);
     }
     private int RetrievalTradeFilter=>config.WithdrawUntradableOnly?2:config.WithdrawTradableOnly?1:0;
@@ -52,8 +52,9 @@ public sealed partial class Plugin
             var filtered=retrievalStock.Where(r=>InventoryBrowseSelection.Matches(r.Name,browseItemCategories.GetValueOrDefault(r.Item),retrievalBrowseSearch,browseCategories,browseAllCategories)).ToArray();
             browseMatchedRows=BrowseRows(filtered);browseHolders=filtered.GroupBy(x=>x.Retainer).Select(g=>(g.Key,g.First().Holder,BrowseRows(g))).ToArray();browseDirty=false;
         }
+        ImGui.Checkbox("All available",ref browseTransferAll);ImGui.SameLine();ImGui.BeginDisabled(browseTransferAll);
         ImGui.SetNextItemWidth(70);ImGui.InputInt("##BrowseQuantity",ref retrievalQuantity,0,0);retrievalQuantity=Math.Clamp(retrievalQuantity,1,RetainerRetrieval.MaxQuantity);
-        MarketHelp("Quantity of each item to withdraw. Entrust moves matching bag quantities.");ImGui.SameLine();
+        ImGui.EndDisabled();MarketHelp("Withdraw Quantity each, or All available selected items. Entrust moves matching bag quantities and respects Keep amounts.");ImGui.SameLine();
         if(ImGui.SmallButton("Select all"))browseSelected.UnionWith(browseMatchedRows.Select(x=>x.Item));ImGui.SameLine();
         if(ImGui.SmallButton("Clear"))browseSelected.Clear();ImGui.SameLine();
         if(ImGui.SmallButton("Options…"))ImGui.OpenPopup("BrowseOptions");
@@ -66,7 +67,7 @@ public sealed partial class Plugin
         ImGui.BeginDisabled(browseSelected.Count==0);
         if(ImGui.SmallButton("Withdraw now"))RetrievalTry(()=>UseBrowseSelection(false));ImGui.SameLine();
         if(ImGui.SmallButton("Entrust now"))RetrievalTry(()=>UseBrowseSelection(true));
-        MarketHelp("Use selected items immediately without saving a plan. Entrust moves matching bag quantities to all retainers; Withdraw uses Quantity each and the current quality setting. Your previous list can be restored.");
+        MarketHelp("Use selected items immediately without saving a plan. Entrust moves matching bag quantities to all retainers; Withdraw uses Quantity each or All available and the current quality setting. Your previous list can be restored.");
         ImGui.SameLine();if(ImGui.SmallButton("Plan…"))ImGui.OpenPopup("BrowsePlanActions");
         if(ImGui.BeginPopup("BrowsePlanActions")){
         if(ImGui.SmallButton("Add selected to plan"))RetrievalTry(()=>{
@@ -108,4 +109,5 @@ public sealed partial class Plugin
         clip.End();clip.Destroy();ImGui.EndTable();
     }
 }
+
 

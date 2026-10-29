@@ -14,6 +14,14 @@ internal static class ItemTradePlan
     internal static Dictionary<TradeItemKey,int> Counts(IEnumerable<TradeItemAmount> items)=>items
         .GroupBy(x=>x.Key).ToDictionary(g=>g.Key,g=>checked(g.Sum(x=>x.Quantity)));
     internal static Dictionary<TradeItemKey,int> BagCounts(IEnumerable<TradeBagSlot> bags)=>Counts(bags.Where(x=>x.Item>0).Select(x=>new TradeItemAmount(x.Item,x.Hq,x.Quantity)));
+    internal static void RefreshSelection(Dictionary<TradeItemKey,int> selected,IEnumerable<TradeBagSlot> bags)
+    {
+        var available=BagCounts(bags.Where(x=>x.Tradable&&x.Quantity>0));
+        foreach(var key in selected.Keys.ToArray()){
+            var quantity=Math.Min(selected[key],available.GetValueOrDefault(key));
+            if(quantity>0)selected[key]=quantity;else selected.Remove(key);
+        }
+    }
     internal static bool Same(IEnumerable<TradeItemAmount> a,IEnumerable<TradeItemAmount> b){var x=Counts(a);var y=Counts(b);return x.Count==y.Count&&x.All(p=>y.GetValueOrDefault(p.Key)==p.Value);}
     internal static TradeItemAmount[] Amounts(IEnumerable<TradeBatchSlot> batch)=>batch.Select(x=>new TradeItemAmount(x.Source.Item,x.Source.Hq,x.Quantity)).ToArray();
     internal static TradeBatchSlot[] Next(TradeItemAmount[] remaining,TradeBagSlot[] bags)
@@ -40,3 +48,4 @@ internal static class ItemTradePlan
         return empty>=0;
     }
 }
+
