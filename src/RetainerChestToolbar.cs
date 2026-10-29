@@ -38,6 +38,7 @@ public sealed partial class Plugin
         if(ImGui.Button("...##ChestOptions"))ImGui.OpenPopup("Chest options");MarketHelp("Chest tabs, stack merging, move between tabs, and Organizer.");
         var status=retrievalError.Length>0?retrievalError:chestStatus;
         if(status.Length>0){ImGui.SameLine();ImGui.TextDisabled(chestRunning?"…":"i");MarketHelp(status);}
+        ImGui.SetNextWindowSize(new(420,0),ImGuiCond.Always);
         if(ImGui.BeginPopup("Chest options")){
             ImGui.TextUnformatted("FC chest");ImGui.Separator();ImGui.BeginDisabled(busy);
             if(chestCrystals)DrawChestCrystalOptions();

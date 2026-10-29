@@ -42,7 +42,7 @@ public sealed partial class Plugin
         if(!open){retainerToolsWindow.IsOpen=false;if(!retrieverWindow.IsOpen)retrievalPickItems=false;}
         retainerToolsWasOpen=open;
         if(retrievalCatalogTask?.IsCompleted==true){try{retrievalCatalog=retrievalCatalogTask.GetAwaiter().GetResult();}catch(Exception e){retrievalError=e.Message;}retrievalCatalogTask=null;retrievalPreviewDirty=true;}
-        if(open&&retrievalRefreshPending&&!organizeRunning&&!retrievalRun.Running&&!retainerGilRunning){retrievalRefreshPending=false;RetrievalTry(RefreshRetrievalStock);}
+        if(open&&retrievalRefreshPending&&(!retrieverWindow.IsOpen||!organizerResizeGate.Active)&&!organizeRunning&&!retrievalRun.Running&&!retainerGilRunning){retrievalRefreshPending=false;RetrievalTry(RefreshRetrievalStock);}
     }
     private bool retainerToolsMaterials=true;
     private unsafe void DrawRetainerTools()

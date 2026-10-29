@@ -190,10 +190,7 @@ public sealed partial class Plugin
 
     private static string FitOverviewText(string text,float width)
     {
-        if(ImGui.CalcTextSize(text).X<=width)return text;
-        const string tail="…";
-        while(text.Length>0&&ImGui.CalcTextSize(text+tail).X>width)text=text[..^1];
-        return text+tail;
+        return BoundedUiText.Fit(text,width,value=>ImGui.CalcTextSize(value).X);
     }
 
     private static string OverviewOwner(GardenOverviewHouse house) => house.House?.Type=="Free Company house"

@@ -14,9 +14,11 @@ public sealed partial class Plugin
         MarketHelp("Assignments apply to All retainers in Organise and Entrust. Explicit destinations still override them. Unassigned items are left alone. Settings belong to this character.");
 
         if(ImGui.SmallButton("Assignments…"))ImGui.OpenPopup("RetainerAssignmentsPopup");
-        ImGui.SetNextWindowSize(new(540,400),ImGuiCond.Appearing);
+        // Size comes from the viewport, never the auto-sized popup/child from the previous frame.
+        var viewport=ImGui.GetMainViewport().WorkSize;
+        ImGui.SetNextWindowSize(new(Math.Min(540,Math.Max(100,viewport.X-24)),Math.Min(400,Math.Max(100,viewport.Y-24))),ImGuiCond.Always);
         if(!ImGui.BeginPopup("RetainerAssignmentsPopup"))return;
-        ImGui.BeginChild("AssignmentRows",new(0,Math.Max(80,ImGui.GetContentRegionAvail().Y-8)),false);
+        ImGui.BeginChild("AssignmentRows",System.Numerics.Vector2.Zero,false);
         if(!config.RetainerAssignments.TryGetValue(character,out var rows))config.RetainerAssignments[character]=rows=[];
         var owned=ReadSellerRetainers();if(owned.Length==0)owned=(retrievalKnownRetainers.GetValueOrDefault(character)??new Dictionary<ulong,string>()).Select(x=>new SellerRetainerRef(x.Key,x.Value)).ToArray();var names=owned.ToDictionary(x=>x.Id,x=>x.Name);
         foreach(var retainer in owned)if(rows.All(x=>x.Retainer!=retainer.Id))rows.Add(new(retainer.Id,[],[]));

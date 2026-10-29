@@ -33,7 +33,7 @@ public sealed partial class Plugin
   if(windowFooter is {} footer){footer();ImGui.SameLine();}
   if(windowStatus.Length>0){
    var remaining=ImGui.GetContentRegionAvail().X-height-ImGui.GetStyle().ItemSpacing.X;
-   if(remaining>12){var full=windowStatus.Replace("\n"," ");var shown=full;while(shown.Length>0&&ImGui.CalcTextSize(shown+"…").X>remaining)shown=shown[..^1];if(shown!=full)shown+="…";ImGui.TextUnformatted(shown);if(ImGui.IsItemHovered())ImGui.SetTooltip(windowStatus);ImGui.SameLine();}
+   if(remaining>12){var shown=BoundedUiText.Fit(windowStatus,remaining,text=>ImGui.CalcTextSize(text).X);ImGui.TextUnformatted(shown);if(ImGui.IsItemHovered())ImGui.SetTooltip(BoundedUiText.Prefix(windowStatus,4096));ImGui.SameLine();}
   }
   DrawWindowLauncher();
  }

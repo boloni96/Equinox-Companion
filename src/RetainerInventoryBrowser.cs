@@ -95,9 +95,10 @@ public sealed partial class Plugin
     {
         if(!ImGui.BeginTable("Inventory##"+key,4,ImGuiTableFlags.RowBg|ImGuiTableFlags.Resizable))return;
         foreach(var title in new[]{"Item · select","Retainer stock","Bags at refresh","Holder"})ImGui.TableSetupColumn(title);ImGui.TableHeadersRow();
-        var clip=ImGui.ImGuiListClipper();clip.Begin(rows.Length);
+        var rowHeight=Math.Max(ImGui.GetFrameHeight(),ImGui.GetTextLineHeight()+4)+ImGui.GetStyle().CellPadding.Y*2;
+        var clip=ImGui.ImGuiListClipper();clip.Begin(rows.Length,rowHeight);
         while(clip.Step())for(var i=clip.DisplayStart;i<clip.DisplayEnd;i++){
-            var row=rows[i];ImGui.PushID((int)row.Item);ImGui.TableNextRow();ImGui.TableNextColumn();
+            var row=rows[i];ImGui.PushID((int)row.Item);ImGui.TableNextRow(ImGuiTableRowFlags.None,rowHeight);ImGui.TableNextColumn();
             ImGui.BeginGroup();var selected=browseSelected.Contains(row.Item);if(ImGui.Checkbox("##Selected",ref selected)){if(selected)browseSelected.Add(row.Item);else browseSelected.Remove(row.Item);}ImGui.SameLine();DrawRetrievalIcon(row.Item);
             if(ImGui.Selectable(row.Name,selected)){if(selected)browseSelected.Remove(row.Item);else browseSelected.Add(row.Item);}
             ImGui.EndGroup();if(ImGui.IsItemHovered()&&!ImGui.GetIO().WantTextInput){var io=ImGui.GetIO();if(io.KeyShift&&!io.KeyAlt)browseSelected.Add(row.Item);else if(io.KeyAlt&&!io.KeyShift)browseSelected.Remove(row.Item);}

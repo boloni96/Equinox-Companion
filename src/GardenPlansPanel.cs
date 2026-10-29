@@ -305,7 +305,7 @@ public sealed partial class Plugin
             if(wrong)GardenPlanOutline("different",at,tile);
             var label=EquinoxCompanion.GardenVisualState.DisplayCrop(b,showPlan);
             var captionInset=Math.Max(7,tile*8/128);
-            while(label.Length>1&&ImGui.CalcTextSize(label).X>tile-2*captionInset)label=label[..^2]+"…";
+            label=BoundedUiText.Fit(label,tile-2*captionInset,value=>ImGui.CalcTextSize(value).X);
             var bedLabelSize=ImGui.CalcTextSize(label);var bedLabelAt=at+new Vector2(Math.Max(4,(tile-bedLabelSize.X)/2),tile-bedLabelSize.Y-captionInset);
             draw.PushClipRect(at,at+new Vector2(tile),true);
             draw.AddRectFilled(new Vector2(at.X+captionInset,bedLabelAt.Y-1),at+new Vector2(tile-captionInset,tile-captionInset+1),0xdd201710);

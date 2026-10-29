@@ -33,8 +33,8 @@ public sealed partial class Plugin
         ImGui.BeginChild("EntrustSelectionItems",new(0,Math.Max(80,ImGui.GetContentRegionAvail().Y-8)),false);
         if(ImGui.BeginTable("EntrustSelection",3,ImGuiTableFlags.RowBg|ImGuiTableFlags.ScrollY|ImGuiTableFlags.Resizable)){
             ImGui.TableSetupColumn("Item",ImGuiTableColumnFlags.WidthStretch);ImGui.TableSetupColumn("Keep",ImGuiTableColumnFlags.WidthFixed,85);ImGui.TableSetupColumn("",ImGuiTableColumnFlags.WidthFixed,25);ImGui.TableHeadersRow();
-            var rows=retrievalItems;var clip=ImGui.ImGuiListClipper();clip.Begin(rows.Length);while(clip.Step())for(var index=clip.DisplayStart;index<clip.DisplayEnd;index++){var e=rows[index];
-                ImGui.PushID((int)e.ItemId);ImGui.TableNextRow();ImGui.TableNextColumn();DrawRetrievalIcon(e.ItemId);ImGui.TextUnformatted(e.Name);
+            var rows=retrievalItems;var rowHeight=Math.Max(ImGui.GetFrameHeight(),ImGui.GetTextLineHeight()+4)+ImGui.GetStyle().CellPadding.Y*2;var clip=ImGui.ImGuiListClipper();clip.Begin(rows.Length,rowHeight);while(clip.Step())for(var index=clip.DisplayStart;index<clip.DisplayEnd;index++){var e=rows[index];
+                ImGui.PushID((int)e.ItemId);ImGui.TableNextRow(ImGuiTableRowFlags.None,rowHeight);ImGui.TableNextColumn();DrawRetrievalIcon(e.ItemId);ImGui.TextUnformatted(e.Name);
                 if(plan.Protected.Contains(e.ItemId)){ImGui.SameLine();ImGui.TextDisabled("(protected)");}
                 ImGui.TableNextColumn();var keep=plan.Keep.GetValueOrDefault(e.ItemId);ImGui.SetNextItemWidth(-1);
                 if(ImGui.InputInt("##Keep",ref keep)){plan.Keep[e.ItemId]=Math.Clamp(keep,0,RetainerRetrieval.MaxQuantity);if(retrievalEditingPreset!=null)RetrievalTry(SaveRetrievalPreset);}
