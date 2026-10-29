@@ -6,7 +6,7 @@ public sealed partial class Plugin
     private void DrawOrganizerWindow()
     {
         var size=ImGui.GetWindowSize();var cursor=ImGui.GetMouseCursor();
-        var resize=cursor is ImGuiMouseCursor.ResizeNWSE or ImGuiMouseCursor.ResizeNESW or ImGuiMouseCursor.ResizeEW or ImGuiMouseCursor.ResizeNS;
+        var resize=cursor is ImGuiMouseCursor.ResizeNwse or ImGuiMouseCursor.ResizeNesw or ImGuiMouseCursor.ResizeEw or ImGuiMouseCursor.ResizeNs;
         var position=ImGui.GetWindowPos();var mouse=ImGui.GetMousePos();
         resize&=WindowResizeGate.OnBorder(mouse.X-position.X,mouse.Y-position.Y,size.X,size.Y);
         var paused=organizerResizeGate.Update(size.X,size.Y,ImGui.IsMouseDown(ImGuiMouseButton.Left),resize,Environment.TickCount64);
