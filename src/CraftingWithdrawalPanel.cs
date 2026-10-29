@@ -79,6 +79,7 @@ public sealed partial class Plugin
             if (!retrievalPort.Prepare()) return;
             if (SellerAddon("RetainerList") != null && RetainerToolsContext())
             {
+                if (ReadSellerRetainers().Length == 0) return;
                 craftingWithdrawalPending = false;
                 StartRetrieval(craftingWithdrawalSelected);
                 if (!retrievalRun.Running) retrievalPort.Release();

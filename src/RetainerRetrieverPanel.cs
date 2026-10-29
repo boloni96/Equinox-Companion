@@ -46,7 +46,11 @@ public sealed partial class Plugin
         if(!RetainerToolsContext()){QueueCraftingWithdrawal(selected);return;}
         if(sellerRun.Running||gilTrade.Running)throw new InvalidOperationException("Finish Seller or Gil Trader before retrieval.");
         retrievalPort.Quality=retrievalQuality;retrievalPort.Character=Player.ContentId;retrievalPort.World=Player.CurrentWorld.RowId;
-        retrievalRun.Start(ReadSellerRetainers().Select(x=>x.Id).ToArray(),retrievalPlan,retrievalSubtract,DateTimeOffset.UtcNow);
+        var owned=ReadSellerRetainers().Select(x=>x.Id).ToArray();
+        if(owned.Length==0)throw new InvalidOperationException("Retainer list is still loading. Try Withdraw again once it appears.");
+        var order=WithdrawalRetainerOrder.Build(owned,retrievalStock.Select(s=>new WithdrawalStock(s.Retainer,s.Item,s.Quantity,s.Hq)),retrievalPlan,id=>RetrievalHeld(id,retrievalQuality),retrievalSubtract,retrievalQuality);
+        if(order.Retainers.Length==0){retrievalPort.Release();PrintEquinox("You already have the required materials in your bags.");return;}
+        retrievalRun.Start(order.Retainers,retrievalPlan,retrievalSubtract,DateTimeOffset.UtcNow,order.KnownHolders);
     });}
     private void DrawRetriever()
     {
