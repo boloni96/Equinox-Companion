@@ -24,7 +24,7 @@ public sealed partial class Plugin
     private unsafe void StartRetainerGil()
     {
         RetrievalTry(()=>{
-            if(organizeRunning||retrievalRun.Running||chestRunning||sellerRun.Running||gilTrade.Running||retainerGilRunning)throw new InvalidOperationException("Finish the current operation first.");
+            if(craftingWithdrawalPending||organizeRunning||retrievalRun.Running||chestRunning||sellerRun.Running||gilTrade.Running||retainerGilRunning)throw new InvalidOperationException("Finish the current operation first.");
             var rm=RetainerManager.Instance();var active=rm==null?0:rm->LastSelectedRetainerId;
             if(!Player.IsLoaded||rm==null||(SellerAddon("RetainerList")==null&&!RetrieverActive(active)))throw new InvalidOperationException("Open your retainer list or a retainer first.");
             if(SellerAddon("Bank")!=null)throw new InvalidOperationException("Close the existing gil window first.");

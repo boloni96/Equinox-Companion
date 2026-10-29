@@ -74,6 +74,11 @@ public sealed partial class Plugin
         if(id == 0 || DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>().GetRowOrDefault(id) is not {} row || row.Name.IsEmpty) return;
         args.AddMenuItem(new MenuItem{PrefixChar='E',Name=new SeStringBuilder().AddText("Where is it cheapest?").Build(),OnClicked=_=>OpenMarketItem(id)});
         args.AddMenuItem(new MenuItem{PrefixChar='E',Name=new SeStringBuilder().AddText("Do I already have it?").Build(),OnClicked=_=>OpenItemSearch(id.ToString())});
+        if(OptionalToolAvailable("Equinox Organizer") && args.AddonName is "RecipeNote" or "RecipeTree" or "RecipeMaterialList" or "RecipeProductList")
+        {
+            args.AddMenuItem(new MenuItem{PrefixChar='E',Name=new SeStringBuilder().AddText("Withdraw recipe ingredients…").Build(),OnClicked=_=>PluginItemAction(()=>OpenCraftingWithdrawal(id,false))});
+            args.AddMenuItem(new MenuItem{PrefixChar='E',Name=new SeStringBuilder().AddText("Withdraw raw materials…").Build(),OnClicked=_=>PluginItemAction(()=>OpenCraftingWithdrawal(id,true))});
+        }
     }
     private static int ItemLocationKind(string key)
     {

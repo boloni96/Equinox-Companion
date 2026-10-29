@@ -66,7 +66,7 @@ public sealed partial class Plugin
     private unsafe void StartStorageRouting(StorageRoute[] rules,bool bagsOnly)
     {
         RetrievalTry(()=>{
-            if(organizeRunning||retrievalRun.Running||chestRunning||sellerRun.Running||gilTrade.Running||retainerGilRunning)throw new InvalidOperationException("Finish the current inventory operation first.");
+            if(craftingWithdrawalPending||organizeRunning||retrievalRun.Running||chestRunning||sellerRun.Running||gilTrade.Running||retainerGilRunning)throw new InvalidOperationException("Finish the current inventory operation first.");
             if(!Player.IsLoaded||!RetainerToolsContext())throw new InvalidOperationException("Open the summoning bell's retainer list first.");
             var owned=ReadSellerRetainers().Select(x=>x.Id).ToArray();
             if(rules.Any(r=>r.To==0||r.To!=StorageAutoRouting.AllRetainers&&!owned.Contains(r.To)||r.From!=0&&r.From!=StorageRouting.AllSources&&!owned.Contains(r.From)))throw new InvalidOperationException("Choose this character's retainers for every movement.");

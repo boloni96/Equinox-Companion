@@ -81,6 +81,12 @@ public sealed partial class Plugin
     ImGui.Separator();ImGui.BeginDisabled(!ready);
     if(ImGui.MenuItem("Search crafting recipes"))PluginItemAction(()=>OpenPluginRecipe(id));
     ImGui.EndDisabled();
+    if(OptionalToolAvailable("Equinox Organizer")){
+     if(ImGui.MenuItem("Withdraw recipe ingredients…"))PluginItemAction(()=>OpenCraftingWithdrawal(id,false));
+     if(ImGui.IsItemHovered())ImGui.SetTooltip("Open a nearby bell and withdraw the final recipe's direct ingredients for one item, including ready-made subcrafts. Subtracts items already in your bags.");
+     if(ImGui.MenuItem("Withdraw raw materials…"))PluginItemAction(()=>OpenCraftingWithdrawal(id,true));
+     if(ImGui.IsItemHovered())ImGui.SetTooltip("Open a nearby bell and withdraw raw materials for one item, expanding subcrafts. Subtracts items already in your bags.");
+    }
    }
    ImGui.Separator();ImGui.BeginDisabled(!ready);
    if(ImGui.MenuItem("Game & plugin actions"))PluginItemAction(()=>OpenNativePluginItemMenu(id));
