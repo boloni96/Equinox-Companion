@@ -26,9 +26,9 @@ internal static class AssignmentCoverage303Tests
     Check("reports categories needing split/manual review",recommendation.Suggestions.Length==0&&recommendation.NeedsSpace.SequenceEqual(new uint[]{1}));
     bool refused=false;try{AssignmentRecommendations.Build([1,2,3],inventory,[],[],id=>1);}catch(InvalidOperationException){refused=true;}
     Check("recommendation requires complete inventory coverage",refused);
-    var roomy=new Dictionary<ulong,ChestStack[]>{[1]=[S(10,999),S(20,999,true,1)],[2]=[]};
-    var existing=new[]{new RetainerAssignment(2,[],[10])};
-    recommendation=AssignmentRecommendations.Build([1,2],roomy,existing,[],id=>1,AssignmentRecommendationStyle.MoreSpace);
+    var roomy=new Dictionary<ulong,ChestStack[]>{[1]=[S(10,999),S(20,999,true,1),S(30),S(31),S(32)],[2]=[]};
+    var existing=new[]{new RetainerAssignment(2,[],[10]),new RetainerAssignment(1,[2],[])};
+    recommendation=AssignmentRecommendations.Build([1,2],roomy,existing,[],id=>id>=30?2u:1u,AssignmentRecommendationStyle.MoreSpace);
     Check("reserves existing incoming stock before proposing additions",recommendation.Suggestions.Single().Retainer==2&&recommendation.Suggestions.Single().FreeAfter==173);
     Check("recommendations preserve input rules and inventory",existing[0].Categories.Length==0&&roomy[2].Length==0);
     var saved=AssignmentRecommendations.Copy([new(1,[1],[10],["group"])]);
