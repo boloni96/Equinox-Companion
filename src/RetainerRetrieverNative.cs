@@ -21,7 +21,7 @@ public sealed partial class Plugin
         if(now<retrievalTick)return;retrievalTick=now.AddMilliseconds(200);TickCraftingWithdrawal(now);retrievalRun.Tick(now);
         if(retrievalLastStatus!=retrievalRun.Status){if(!retrievalRun.Running)retrievalPreviewDirty=true;retrievalLastStatus=retrievalRun.Status;Log.Information("Equinox Organizer: {Status}",retrievalLastStatus);if(retrievalLastStatus.StartsWith("Stopped:"))errorJournal.Record("retainer-retriever",retrievalLastStatus);}
     }
-    private sealed unsafe class RetrieverPort:IRetrievalPort
+    private sealed unsafe partial class RetrieverPort:IRetrievalPort
     {
         private readonly Plugin p;private readonly SellerPort navigation;
         internal readonly SellerAutoRetainerPause Pause=new(new SellerAutoRetainerPort());
@@ -85,17 +85,15 @@ public sealed partial class Plugin
         public bool Withdraw(ulong id,RetrievalSlot slot,int amount)
         {
             if(!RetrieverActive(id))throw new InvalidOperationException("Selected retainer changed.");
+            if(slot.Container==12001){
+                var source=p.ReadChestContainer(12001).First(s=>s.Slot==slot.Slot);
+                var target=p.ReadChestContainer(2001).FirstOrDefault(s=>CrystalStorage.CanReceive(source,s));
+                if(source.Item!=slot.ItemId||target==null)throw new InvalidOperationException("Crystal inventory changed; rebuild the preview.");
+                return TransferCrystals(id,new(source,target,amount));
+            }
             if(pending is null){
                 if(SellerAddon("ContextMenu")!=null||SellerAddon("InputNumeric")!=null)throw new InvalidOperationException("Close the existing item menu before withdrawing.");
                 var stock=Read(id);if(stock is null||!stock.Contains(slot))throw new InvalidOperationException("Retainer stock changed; rebuild the preview.");
-                if(slot.Container==12001){
-                    var source=p.ReadChestContainer(12001).First(s=>s.Slot==slot.Slot);
-                    var crystalTarget=p.ReadChestContainer(2001).FirstOrDefault(s=>CrystalStorage.CanReceive(source,s));
-                    if(crystalTarget==null||amount<=0||amount>crystalTarget.Limit-crystalTarget.Quantity||amount>source.Quantity)throw new InvalidOperationException("Crystal quantity or dedicated capacity changed; rebuild the preview.");
-                    p.EnsureChestMove();
-                    p.chestMove!(InventoryManager.Instance(),InventoryType.RetainerCrystals,(ushort)slot.Slot,InventoryType.Crystals,(ushort)crystalTarget.Slot,amount);
-                    return true; // RetrievalRun still waits for the observed quantity increase.
-                }
                 if(InventoryManager.Instance()->GetEmptySlotsInBag()==0)throw new InvalidOperationException("Free a bag slot before withdrawing.");
                 pending=slot;quantity=amount;contextSent=numericSent=false;openedAt=DateTimeOffset.UtcNow;
                 AgentInventoryContext.Instance()->OpenForItemSlot((InventoryType)slot.Container,slot.Slot,0,AgentRetainer.Instance()->GetAddonId());return false;
@@ -115,6 +113,6 @@ public sealed partial class Plugin
             if(!numericSent){var value=new AtkValue{Type=AtkValueType.Int,Int=quantity};numeric->FireCallback(1,&value,true);numericSent=true;pending=null;return true;}return false;
         }
         public bool Close(ulong id){pending=null;inventoryRetainer=0;if(AgentRetainer.Instance()!=null&&AgentRetainer.Instance()->IsAgentActive()&&InventoryOpen){AgentRetainer.Instance()->Hide();return false;}var menu=(AddonSelectString*)SellerAddon("SelectString");if(RetrieverActive(id)&&menu!=null){var quit=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Addon>().GetRow(2383).Text.ExtractText();for(var i=0;i<Math.Min(20,(int)menu->PopupMenu.PopupMenu.EntryCount);i++)if(RetainerMenuPolicy.Matches(TravelMenuText(menu->PopupMenu.PopupMenu.EntryNames[i].Value),quit)){if(DateTimeOffset.UtcNow>=inventoryMenuNext){SelectTravelChoice((AtkUnitBase*)menu,i);inventoryMenuNext=DateTimeOffset.UtcNow.AddSeconds(1);}return false;}}return navigation.CloseRetainer(id);}
-        public void Release(){prepared=false;if(pending is {} s){var a=AgentInventoryContext.Instance();if(a!=null&&(int)a->TargetInventoryId==s.Container&&a->TargetInventorySlotId==s.Slot){CloseSellerAddon("ContextMenu");if(contextSent)CloseSellerAddon("InputNumeric");}}pending=null;Pause.Release(DateTimeOffset.UtcNow);}
+        public void Release(){CancelCrystalTransfer();prepared=false;if(pending is {} s){var a=AgentInventoryContext.Instance();if(a!=null&&(int)a->TargetInventoryId==s.Container&&a->TargetInventorySlotId==s.Slot){CloseSellerAddon("ContextMenu");if(contextSent)CloseSellerAddon("InputNumeric");}}pending=null;Pause.Release(DateTimeOffset.UtcNow);}
     }
 }

@@ -119,6 +119,10 @@ public sealed partial class Plugin
                     var action=organizeMoves[organizeMoveIndex];var move=action.Move;
                     var src=ReadChestContainer(move.Source.Container).First(s=>s.Slot==move.Source.Slot);var dst=ReadChestContainer(move.Destination.Container).First(s=>s.Slot==move.Destination.Slot);
                     if(!OrganizerSlotMatches(move.Source,src)||!OrganizerSlotMatches(move.Destination,dst)){StopOrganize("Inventory changed after the space check. Stopped before moving another item; Check again.");return;}
+                    if(CrystalStorage.IsItem(src.Item)){
+                        if(!organizePort.TransferCrystals(organizeActiveRetainer,move))break;
+                        organizePending=move;organizerLastTransfer=new {retainer=organizeActiveRetainer,action.Withdraw,move,command="Retainer crystal quantity",at=now};OrganizeStage(7);break;
+                    }
                     organizePending=move;var submitted=chestMove!(manager,(InventoryType)src.Container,(ushort)src.Slot,(InventoryType)dst.Container,(ushort)dst.Slot,move.Quantity);organizerLastTransfer=new {retainer=organizeActiveRetainer,action.Withdraw,action.Internal,move,nativeResult=submitted,at=now};OrganizeStage(7);break;
                 case 7:
                     if(!OrganizerConfirmed())break;
