@@ -1,0 +1,33 @@
+# Organizer and Trader request audit — 0.5.1.307
+This is an implementation audit, not a claim that every path has been tested in game.
+
+## Completed in this update
+- Trader: item icons loaded independently of opening Organizer; Nearby players first and default; Gil & Item Trader labels in launcher/settings/floating icons. Existing standalone window retained.
+- Organizer: Inventory / Plans / Transfer / Organize / FC chest. Inventory contains current bags and recorded-storage browsing; Plans contains Add items and saved/Artisan/import/export sources.
+- Organize: one scope selector and one Preview/Organize pair. Source/destination appear for Selected movement. Assignments grouped together; Sort after organizing and staging reserve in Options.
+- Visible category/quality filters also narrow the All retainers scope with a selected plan.
+- Goddess Blue Organizer launcher artwork; Classic retains the original icon. Organizer added to floating-icon settings.
+
+## Already implemented
+- Item trading: tradable copies only; bulk select shown, clear selection, Shift-hover add and Alt-hover remove; refresh remaining selection after transfers/restarts.
+- Temporary inventory selection and Entrust without saving a plan; categories, HQ/NQ and tradable/untradable filtering.
+- Add all matching items / Clear all / Undo clear when building a plan. Categories plus Add all can populate a whole category.
+- Plan quantities or All available listed items for transfers. Imported Entrust Keep/protection rules remain in force.
+- Assignment-driven destinations do not expand a selected plan. No plan allows all eligible RETAINER items; existing bag items remain protected staging exclusions.
+- Company chest direct crystal controls without a saved plan; dedicated retainer crystal storage handling.
+- Inventory export includes latest recorded bags, saddlebags, retainers, FC/housing storage, armoury, armoire and glamour dresser plus assignment and plan snapshots. Missing or old observations are not a live universal scan.
+- Assignment hover summaries: full parent category only; selected children for partial categories; linked plans and specific items.
+- Assignment checker counts unassigned item types, occupied slots and affected categories; hover summaries plus expanded item/retainer detail. Reports incomplete inventory coverage.
+- Capacity recommendations compare all recorded owned retainers, quantities, HQ/NQ, stack capacity and existing incoming assignments. Priorities: fewer moves, more spare space, fewer new homes. Optional Relieve full homes adds category destinations for overflow; explicit-item/plan homes are preserved.
+- Apply saves recommendations immediately. Save/Load named setups, Undo recommendation, Clear assignments and Undo clear. Restoring rules does not reverse completed transfers.
+- Organizing continues with independent feasible transfers after a stranded speculative batch, preserves completed safe prefixes, and revisits blocked groups after progress.
+- Sort items after organizing visits owned retainers and invokes normal item-menu Sort.
+- Assignment footer no longer claims “available space first.”
+- Goddess Blue light-blue control borders; Classic style unchanged.
+- Sales table shows recorded Gross gil separately from confirmed Net gil; inferred last listing prices are identified.
+
+## Verification limits and remaining review
+- Build and regression results are recorded in GitHub Actions; native game interaction and visual behavior still need in-game checking.
+- The original reported trade stop could not be conclusively reconstructed from the available reports; stale selections/restart behavior was addressed.
+- Leonis inventory assignment coverage was reviewed. A complete item-by-item keep/sell/usefulness review has not been performed.
+- Recommendation heuristics estimate storage fit conservatively; they do not value items or claim a globally optimal layout.

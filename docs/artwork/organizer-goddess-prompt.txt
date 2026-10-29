@@ -1,0 +1,5 @@
+Mode: built-in image_gen; transparent background.
+Output: src/garden-art/assets/category-icons/retriever-goddess.png
+References: retriever.png (target), gil-trader.png and options.png (style).
+
+Use case: style-transfer. Asset type: small transparent game-plugin launcher icon for Equinox Organizer. Image 1 is the edit target: a blue storage basket with an upward transfer arrow. Images 2 and 3 are style references from the same Goddess Blue icon set. Redesign the storage basket/treasure-chest and transfer-arrow symbol to match their polished faceted sapphire-blue crystal, bright icy highlights, fine gold metallic trim, and restrained star glints. Keep a clear storage-and-transfer silhouette that remains legible at 32-64px. One centered icon, square canvas, transparent background, generous edge clearance, no text or letters, no enclosing square badge. Match the references' ornate crystalline fantasy UI treatment, not a flat pictogram. Keep the storage function recognisable; do not copy the coin or gear subject.
