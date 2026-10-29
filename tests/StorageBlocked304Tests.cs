@@ -30,6 +30,14 @@ internal static class StorageBlocked304Tests
     var partialRules=new[]{new StorageRoute(1,2,[],[100]),new StorageRoute(2,3,[],[300])};
     var partialResult=StorageRouting.Build(new("Partial",1,partialRules,1),partial,id=>1,includeExistingBags:false);
     Check("retry preserves an already delivered prefix of a subsequently blocked item",partialResult.Moves.Count(x=>!x.Withdraw&&!x.Internal&&x.Move.Source.Item==100)==1&&partialResult.Remaining==2);
+    var chain=new Dictionary<ulong,ChestStack[]>{
+        [1]=[S(100)],[2]=[S(200)],[3]=[S(300)],[4]=[S(0)],
+        [0]=[new(0,0,0,0,false,0),new(0,1,0,0,false,0)]
+    };
+    var chainRules=new[]{new StorageRoute(1,2,[],[100]),new StorageRoute(2,3,[],[200]),new StorageRoute(3,4,[],[300])};
+    var continued=StorageRouting.Build(new("Continue",1,chainRules,1),chain,id=>1,includeExistingBags:false);
+    Check("later retainer frees capacity and previously blocked transfers are retried",continued.Remaining==0&&continued.Moves.Count(x=>!x.Withdraw&&!x.Internal)==3);
+    Check("continued chain leaves no staged cargo",continued.Moves.Where(x=>x.Withdraw).Sum(x=>x.Move.Quantity)==continued.Moves.Where(x=>!x.Withdraw&&!x.Internal).Sum(x=>x.Move.Quantity));
     var blockedOnly=StorageAssignments.Apply([new(StorageRouting.AllSources,StorageAutoRouting.AllRetainers,[],[200,300])],homes,stock,id=>1);
     var none=StorageRouting.Build(new("Blocked",1,blockedOnly,1),stock,id=>1,includeExistingBags:false);
     Check("fully blocked plans remain safely empty",none.Moves.Length==0&&none.Remaining==2);
