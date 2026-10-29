@@ -42,7 +42,7 @@ public sealed partial class Plugin
             if(ImGui.Button("Withdraw selected plan items")){StartChest(0,true);ImGui.CloseCurrentPopup();}
             MarketHelp("Withdraw only entries checked in the current plan.");
             ImGui.Separator();
-            ImGui.SetNextItemWidth(90);ImGui.InputInt("Keep in bags",ref chestKeep);chestKeep=Math.Clamp(chestKeep,0,RetainerRetrieval.MaxQuantity);
+            ImGui.SetNextItemWidth(90);if(ImGui.InputInt("Keep in bags",ref chestKeep)){chestKeep=Math.Clamp(chestKeep,0,RetainerRetrieval.MaxQuantity);config.StorageKeepInBags=chestKeep;SaveConfiguration();}
             MarketHelp("Duplicate deposits leave this amount of each item and quality in your bags.");
             if(ImGui.Button("Merge partial stacks")){StartChest(2);ImGui.CloseCurrentPopup();}MarketHelp("Combine partial stacks within each selected chest tab. HQ and NQ stay separate.");
             ImGui.Separator();

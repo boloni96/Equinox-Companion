@@ -4,6 +4,8 @@ namespace EquinoxCompanion;
 public sealed class Configuration : IPluginConfiguration
 {
     public bool ShowStorageTransfersInChat { get; set; }
+    public int StorageKeepInBags { get; set; }
+    public bool WithdrawTradableOnly { get; set; }
     public bool EnableRetriever { get; set; }
     public Dictionary<ulong,List<RetainerAssignment>> RetainerAssignments { get; set; } = [];
     public HashSet<ulong> UseRetainerAssignments { get; set; } = [];

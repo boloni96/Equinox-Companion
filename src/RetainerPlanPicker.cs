@@ -8,6 +8,15 @@ public sealed partial class Plugin
 {
     [PluginService] internal static INotificationManager RetrievalNotifications { get; private set; }=null!;
     private bool retrievalPickItems;private uint retrievalPickLast;private int retrievalPickAction;
+    private void PickOrganizerRow(uint item,string name,uint recipe=0)
+    {
+        if(!ImGui.IsItemHovered()||ImGui.GetIO().WantTextInput||craftingWithdrawalPending||retrievalRun.Running||organizeRunning||chestRunning)return;
+        var io=ImGui.GetIO();var exists=retrievalItems.Any(x=>x.ItemId==item);string message;
+        if(io.KeyShift&&!io.KeyAlt&&!exists){AddRetrieval([new(item,name,retrievalQuantity,recipe)]);message="Added "+name;}
+        else if(io.KeyAlt&&!io.KeyShift&&exists){retrievalItems=retrievalItems.Where(x=>x.ItemId!=item).ToArray();retrievalSelected.Remove(item);retrievalPreview=[];retrievalPreviewDirty=true;if(retrievalEditingPreset!=null)RetrievalTry(SaveRetrievalPreset);message="Removed "+name;}
+        else return;
+        RetrievalNotifications.AddNotification(new Notification{Title=retrievalName,Content=message,MinimizedText=message,Type=NotificationType.Info,InitialDuration=TimeSpan.FromSeconds(1.5),HardExpiry=DateTime.UtcNow.AddSeconds(2)});
+    }
     private unsafe void DrawRetrievalPicker()
     {
         ImGui.Checkbox("Pick items · Shift add / Alt remove",ref retrievalPickItems);
