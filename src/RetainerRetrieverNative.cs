@@ -61,7 +61,23 @@ public sealed partial class Plugin
             InventoryStatus="Inventory menu entry not found: "+string.Join(" | ",entries);
             return false;
         }
-        public RetrievalSlot[]? Read(ulong id){if(!RetrieverActive(id)||!InventoryOpen)return null;var m=InventoryManager.Instance();if(m==null)return null;var list=new List<RetrievalSlot>();foreach(var type in Enumerable.Range(10000,7).Append(12001)){var c=m->GetInventoryContainer((InventoryType)type);if(c==null||!c->IsLoaded||c->Items==null){InventoryStatus="Inventory open; waiting for container "+type;return null;}for(var i=0;i<c->Size;i++){var s=c->Items[i];if(s.ItemId>0&&s.Quantity>0&&RetainerRetrieval.AllowsQuality((s.Flags&InventoryItem.ItemFlags.HighQuality)!=0,Quality))list.Add(new(s.ItemId,s.Quantity,type,i,(s.Flags&InventoryItem.ItemFlags.HighQuality)!=0));}}return list.ToArray();}
+        public RetrievalSlot[]? Read(ulong id)
+        {
+            if(!RetrieverActive(id)||!InventoryOpen)return null;
+            var m=InventoryManager.Instance();if(m==null)return null;
+            var list=new List<RetrievalSlot>();
+            foreach(var type in Enumerable.Range(10000,7).Append(12001)){
+                var c=m->GetInventoryContainer((InventoryType)type);
+                if(c==null||!c->IsLoaded||c->Items==null){InventoryStatus="Inventory open; waiting for container "+type;return null;}
+                var crystalBags=type==12001?p.ReadChestContainer(2001):Array.Empty<ChestStack>();
+                for(var i=0;i<c->Size;i++){
+                    var s=c->Items[i];var hq=(s.Flags&InventoryItem.ItemFlags.HighQuality)!=0;
+                    var amount=type==12001?Math.Min(s.Quantity,CrystalStorage.Room(s.ItemId,crystalBags)):s.Quantity;
+                    if(s.ItemId>0&&amount>0&&RetainerRetrieval.AllowsQuality(hq,Quality))list.Add(new(s.ItemId,amount,type,i,hq));
+                }
+            }
+            return list.ToArray();
+        }
         public void Confirmed(ulong id,RetrievalSlot slot,int amount)=>p.ReportStorageTransfer("Withdrew",slot.ItemId,slot.Hq,amount,p.StorageRetainerName(id));
         public int Held(uint item)=>p.RetrievalHeld(item,Quality);
         public bool Withdraw(ulong id,RetrievalSlot slot,int amount)
@@ -70,6 +86,14 @@ public sealed partial class Plugin
             if(pending is null){
                 if(SellerAddon("ContextMenu")!=null||SellerAddon("InputNumeric")!=null)throw new InvalidOperationException("Close the existing item menu before withdrawing.");
                 var stock=Read(id);if(stock is null||!stock.Contains(slot))throw new InvalidOperationException("Retainer stock changed; rebuild the preview.");
+                if(slot.Container==12001){
+                    var source=p.ReadChestContainer(12001).First(s=>s.Slot==slot.Slot);
+                    var crystalTarget=p.ReadChestContainer(2001).FirstOrDefault(s=>CrystalStorage.CanReceive(source,s));
+                    if(crystalTarget==null||amount<=0||amount>crystalTarget.Limit-crystalTarget.Quantity||amount>source.Quantity)throw new InvalidOperationException("Crystal quantity or dedicated capacity changed; rebuild the preview.");
+                    p.EnsureChestMove();
+                    p.chestMove!(InventoryManager.Instance(),InventoryType.RetainerCrystals,(ushort)slot.Slot,InventoryType.Crystals,(ushort)crystalTarget.Slot,amount);
+                    return true; // RetrievalRun still waits for the observed quantity increase.
+                }
                 if(InventoryManager.Instance()->GetEmptySlotsInBag()==0)throw new InvalidOperationException("Free a bag slot before withdrawing.");
                 pending=slot;quantity=amount;contextSent=numericSent=false;openedAt=DateTimeOffset.UtcNow;
                 AgentInventoryContext.Instance()->OpenForItemSlot((InventoryType)slot.Container,slot.Slot,0,AgentRetainer.Instance()->GetAddonId());return false;
