@@ -35,6 +35,6 @@ static class PairedMarket251Tests
   Check("changed stock drops incompatible shared price summary",View([sameLocal with {Stock=[sameLocal.Stock[0] with {Price=1}]}],pricedRoster).Single().PriceReview==null);
   var source=Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,"../../../../src/GilTraderPanel.cs"));
   var text=File.ReadAllText(source);
-  Check("send and receive actions have distinct ImGui IDs from direction controls",text.Contains("Send gil##gil-mode-send")&&text.Contains("Receive##gil-mode-receive")&&text.Contains("Send gil###gil-start")&&!text.Contains("ImGui.Button(\"Send gil\")"));
+  Check("send and receive actions have distinct ImGui IDs from direction controls",text.Contains("Send##gil-mode-send")&&text.Contains("Receive##gil-mode-receive")&&text.Contains("Send gil###gil-start")&&text.Contains("Send items###gil-start")&&!text.Contains("ImGui.Button(\"Send gil\")"));
  }
 }

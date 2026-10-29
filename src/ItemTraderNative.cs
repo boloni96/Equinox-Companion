@@ -47,8 +47,8 @@ public sealed partial class Plugin
     private ItemTradeFrame ReadItemTradeFrame()
     {
         var context=ReadGilTradeFrame();var bags=ReadItemTradeBags();
-        var local=context.TradeOpen&&context.TradeReady?ReadItemTradeOffer(false):Array.Empty<TradeItemAmount>();
-        var remote=context.TradeOpen&&context.TradeReady?ReadItemTradeOffer(true):Array.Empty<TradeItemAmount>();
+        var local=context.TradeOpen&&context.TradeReady&&!context.SyncPending?ReadItemTradeOffer(false):Array.Empty<TradeItemAmount>();
+        var remote=context.TradeOpen&&context.TradeReady&&!context.SyncPending?ReadItemTradeOffer(true):Array.Empty<TradeItemAmount>();
         context=context with{CompletionObserved=itemTradeCompletion.Completed(context.Character,itemTrade.Partner,1,DateTimeOffset.UtcNow)};
         return new(context,bags,local,remote,ItemTradePlan.CanReceive(remote,bags,id=>CrystalStorage.IsItem(id)?9999:OrganizerStackLimit(id)));
     }
