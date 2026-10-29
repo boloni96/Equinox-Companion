@@ -35,7 +35,7 @@ public sealed partial class Plugin
         retrievalPickLast=item;retrievalPickAction=action;
         if(retrievalCatalog==null||!retrievalCatalog.Names.TryGetValue(item,out var name))return;
         var exists=retrievalItems.Any(x=>x.ItemId==item);string message;
-        if(action>0){if(exists)message=name+" is already in this plan";else{AddRetrieval([new(item,name,Math.Clamp(retrievalQuantity,1,RetainerRetrieval.MaxQuantity))]);message="Added "+name;}}
+        if(action>0){if(exists)return;AddRetrieval([new(item,name,Math.Clamp(retrievalQuantity,1,RetainerRetrieval.MaxQuantity))]);message="Added "+name;}
         else{if(!exists)return;retrievalItems=retrievalItems.Where(x=>x.ItemId!=item).ToArray();retrievalSelected.Remove(item);retrievalPreview=[];retrievalPlan=[];retrievalRecipeChoice=0;retrievalPreviewDirty=true;message="Removed "+name;}
         if(action<0&&retrievalEditingPreset!=null)RetrievalTry(SaveRetrievalPreset);
         RetrievalNotifications.AddNotification(new Notification{Title=retrievalName,Content=message,MinimizedText=message,Type=NotificationType.Info,InitialDuration=TimeSpan.FromSeconds(1.5),HardExpiry=DateTime.UtcNow.AddSeconds(2)});
