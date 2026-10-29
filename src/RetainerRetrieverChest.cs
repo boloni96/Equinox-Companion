@@ -10,7 +10,7 @@ namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
     private ChestToolsWindow chestToolsWindow=null!;
-    private int chestTab,chestDestination=1,chestKeep=1,chestMode,chestMoves,chestUnmoved;
+    private int chestTab,chestDestination=1,chestKeep,chestMode,chestMoves,chestUnmoved;
     private bool chestRunning,chestWasOpen,chestDock=true;
     private ulong chestOwner,chestCompany;private uint chestWorld;
     private uint[] chestPages=[];private int chestPageIndex;
@@ -126,7 +126,7 @@ public sealed partial class Plugin
         if(ImGui.Button("Entrust list to chest"))StartChest(4);
         if(ImGui.Button("Deposit duplicates"))StartChest(1);ImGui.SameLine();if(ImGui.Button("Merge stacks"))StartChest(2);
         if(ImGui.IsItemHovered())ImGui.SetTooltip("Combines partial stacks within each selected chest tab. HQ and NQ stay separate.");
-        ImGui.SetNextItemWidth(80);ImGui.InputInt("Keep in bags",ref chestKeep);chestKeep=Math.Clamp(chestKeep,0,RetainerRetrieval.MaxQuantity);
+        ImGui.SetNextItemWidth(80);if(ImGui.InputInt("Keep in bags",ref chestKeep)){chestKeep=Math.Clamp(chestKeep,0,RetainerRetrieval.MaxQuantity);config.StorageKeepInBags=chestKeep;SaveConfiguration();}
         if(ImGui.IsItemHovered())ImGui.SetTooltip("Duplicate deposits leave this quantity of each item and quality in your bags. Only items already present in that chest tab are deposited. No quality conversion.");
         ImGui.SetNextItemWidth(90);ImGui.SliderInt("Destination tab",ref chestDestination,1,5);
         if(ImGui.Button("Move list items to tab"))StartChest(3);

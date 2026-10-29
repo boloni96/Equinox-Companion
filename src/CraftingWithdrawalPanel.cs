@@ -109,6 +109,7 @@ public sealed partial class Plugin
             return;
         }
         if (craftingWithdrawalPrevious == null) return;
+        ImGui.BeginDisabled(retrievalRun.Running||organizeRunning||chestRunning||retainerGilRunning);
         if (ImGui.SmallButton("Restore previous list"))
         {
             SelectRetrievalPreset(craftingWithdrawalPrevious);
@@ -117,6 +118,7 @@ public sealed partial class Plugin
             craftingWithdrawalPreviousEditing = null;
             retrievalError = "";
         }
-        if (ImGui.IsItemHovered()) ImGui.SetTooltip("Restore the list you were working on before opening this crafting recipe. Saved presets are unchanged.");
+        ImGui.EndDisabled();
+        if (ImGui.IsItemHovered()) ImGui.SetTooltip("Restore the list you were working on before opening this temporary selection. Saved presets are unchanged.");
     }
 }
