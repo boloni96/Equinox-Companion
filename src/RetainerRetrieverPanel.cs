@@ -44,14 +44,14 @@ public sealed partial class Plugin
     private unsafe void StartRetrieval(bool selected){RetrievalTry(()=>{
         if(retrievalEntrust!=null)retrievalEntrustWithdrawal=true;
         if(organizeRunning||chestRunning||retainerGilRunning)throw new InvalidOperationException("Finish the chest operation first.");PreviewRetrieval(selected);if(retrievalPlan.Length==0)throw new InvalidOperationException("Choose at least one item.");
-        if(config.WithdrawTradableOnly){retrievalPlan=retrievalPlan.Where(e=>RetrievalTradableItem(e.ItemId)).ToArray();if(retrievalPlan.Length==0)throw new InvalidOperationException("No tradable items in this selection.");}
+        if(RetrievalTradeFilter==1){retrievalPlan=retrievalPlan.Where(e=>RetrievalTradableItem(e.ItemId)).ToArray();if(retrievalPlan.Length==0)throw new InvalidOperationException("No tradable items in this selection.");}
         if(!Player.IsLoaded)throw new InvalidOperationException("Log in before withdrawing.");
         if(!RetainerToolsContext()){QueueCraftingWithdrawal(selected);return;}
         if(sellerRun.Running||gilTrade.Running)throw new InvalidOperationException("Finish Seller or Gil Trader before retrieval.");
-        retrievalPort.TradableOnly=config.WithdrawTradableOnly;retrievalPort.Quality=retrievalQuality;retrievalPort.Character=Player.ContentId;retrievalPort.World=Player.CurrentWorld.RowId;
+        retrievalPort.TradeFilter=RetrievalTradeFilter;retrievalPort.Quality=retrievalQuality;retrievalPort.Character=Player.ContentId;retrievalPort.World=Player.CurrentWorld.RowId;
         var owned=ReadSellerRetainers().Select(x=>x.Id).ToArray();
         if(owned.Length==0)throw new InvalidOperationException("Retainer list is still loading. Try Withdraw again once it appears.");
-        var order=WithdrawalRetainerOrder.Build(owned,retrievalStock.Select(s=>new WithdrawalStock(s.Retainer,s.Item,s.Quantity,s.Hq)),retrievalPlan,id=>RetrievalHeld(id,retrievalQuality,config.WithdrawTradableOnly),retrievalSubtract,retrievalQuality);
+        var order=WithdrawalRetainerOrder.Build(owned,retrievalStock.Select(s=>new WithdrawalStock(s.Retainer,s.Item,s.Quantity,s.Hq)),retrievalPlan,id=>RetrievalHeld(id,retrievalQuality,RetrievalTradeFilter),retrievalSubtract,retrievalQuality);
         if(order.Retainers.Length==0){retrievalPort.Release();PrintEquinox("You already have the required materials in your bags.");return;}
         retrievalRun.Start(order.Retainers,retrievalPlan,retrievalSubtract,DateTimeOffset.UtcNow,order.KnownHolders);
     });}
