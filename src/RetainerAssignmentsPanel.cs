@@ -29,7 +29,7 @@ public sealed partial class Plugin
     {
         if(!Player.IsLoaded)return;
         var character=Player.ContentId;
-        if(ImGui.SmallButton("Assignments…"))ImGui.OpenPopup("RetainerAssignmentsPopup");
+        if(ImGui.SmallButton("Assignments…")){assignmentCoverageDirty=true;ImGui.OpenPopup("RetainerAssignmentsPopup");}
         // Size comes from the viewport, never the auto-sized popup/child from the previous frame.
         var viewport=ImGui.GetMainViewport().WorkSize;
         ImGui.SetNextWindowSize(new(Math.Min(540,Math.Max(100,viewport.X-24)),Math.Min(400,Math.Max(100,viewport.Y-24))),ImGuiCond.Always);
@@ -38,6 +38,7 @@ public sealed partial class Plugin
         if(!config.RetainerAssignments.TryGetValue(character,out var rows))config.RetainerAssignments[character]=rows=[];
         var owned=ReadSellerRetainers();if(owned.Length==0)owned=(retrievalKnownRetainers.GetValueOrDefault(character)??new Dictionary<ulong,string>()).Select(x=>new SellerRetainerRef(x.Key,x.Value)).ToArray();var names=owned.ToDictionary(x=>x.Id,x=>x.Name);
         foreach(var retainer in owned)if(rows.All(x=>x.Retainer!=retainer.Id))rows.Add(new(retainer.Id,[],[]));
+        DrawAssignmentCoverage(owned.Select(x=>x.Id).ToArray(),names,rows);
         var dirty=false;
         for(var i=0;i<config.RetrievalPresets.Count;i++)if(string.IsNullOrEmpty(config.RetrievalPresets[i].PlanId)){config.RetrievalPresets[i]=config.RetrievalPresets[i] with{PlanId=Guid.NewGuid().ToString("N")};dirty=true;}
         foreach(var entry in rows.ToArray().Where(x=>names.ContainsKey(x.Retainer))){
@@ -75,7 +76,7 @@ public sealed partial class Plugin
             }
             ImGui.PopID();
         }
-        if(dirty){SaveConfiguration();InvalidateOrganizePreview();}
+        if(dirty){assignmentCoverageDirty=true;SaveConfiguration();InvalidateOrganizePreview();}
         ImGui.TextDisabled("Allowed homes · available space first · saved per character");
         ImGui.EndChild();ImGui.EndPopup();
     }
