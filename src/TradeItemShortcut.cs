@@ -74,10 +74,12 @@ public sealed partial class Plugin
     private void OnTradeItemShortcutReady(AddonEvent _, AddonArgs args)
     {
         pendingTradeItemShortcut?.BindMenu(args.Addon.Address);
+        CaptureItemTradeMenu(args);
     }
 
     private void OnTradeItemShortcutClosed(AddonEvent _, AddonArgs args)
     {
+        if(args.AddonName=="Trade"||itemTradeMenuSelection?.Menu==args.Addon.Address)itemTradeMenuSelection=null;
         if (pendingTradeItemShortcut is {} request &&
             (args.AddonName == "Trade" || request.MenuClosed(args.Addon.Address)))
         {
@@ -304,4 +306,5 @@ public sealed partial class Plugin
         }
     }
 }
+
 

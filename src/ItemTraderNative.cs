@@ -1,3 +1,4 @@
+using Dalamud.Game.Addon.Lifecycle.AddonArgTypes;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
@@ -14,6 +15,7 @@ public sealed partial class Plugin
     private DateTimeOffset itemTradeOfferAt;
     private bool itemTradeMenuSelected,itemTradeQuantitySent;
     private nint itemTradeMenu;
+    private TradeItemMenuSelection? itemTradeMenuSelection;
     private long itemTradeOfferedBefore;
     private unsafe TradeBagSlot[] ReadItemTradeBags()
     {
@@ -75,7 +77,7 @@ public sealed partial class Plugin
         var inv=InventoryManager.Instance();
         if(itemTradeOwned&&Player.IsLoaded&&Player.ContentId==itemTrade.Character&&inv!=null&&inv->TradePartnerEntityId==itemTrade.Partner&&inv->TradePartnerNameString==gilPartnerName&&
             (SellerAddon("Trade")!=null||(int)inv->TradeLocalState==2))inv->RefuseTrade();
-        itemTradeOwned=false;itemTradePending=null;
+        itemTradeOwned=false;itemTradePending=null;itemTradeMenuSelection=null;
     }
     private void StopItemTrade(string reason)
     {
@@ -89,8 +91,30 @@ public sealed partial class Plugin
         var current=ReadItemTradeBags().SingleOrDefault(x=>x.Container==slot.Source.Container&&x.Slot==slot.Source.Slot);
         if(current!=slot.Source||!current.Tradable||slot.Quantity<=0||slot.Quantity>current.Quantity)throw new InvalidOperationException("Selected bag slot changed.");
         itemTradeOfferedBefore=ReadItemTradeOffer(false).Where(x=>x.Key==slot.Source.Key).Sum(x=>(long)x.Quantity);
-        itemTradePending=slot;itemTradeOfferAt=now;itemTradeMenuSelected=itemTradeQuantitySent=false;itemTradeMenu=0;
+        itemTradePending=slot;itemTradeOfferAt=now;itemTradeMenuSelected=itemTradeQuantitySent=false;itemTradeMenu=0;itemTradeMenuSelection=null;
         agent->OpenForItemSlot((InventoryType)slot.Source.Container,slot.Source.Slot,0,trade->Id);
+    }
+    private unsafe void CaptureItemTradeMenu(AddonArgs args)
+    {
+        if(itemTradePending is not {} slot||itemTradeMenuSelected||!itemTrade.Running)return;
+        itemTradeMenuSelection=null;
+        try{
+            var pointer=args switch{AddonSetupArgs setup=>setup.AtkValues,AddonRefreshArgs refresh=>refresh.AtkValues,_=>0};
+            var count=args switch{AddonSetupArgs setup=>setup.AtkValueCount,AddonRefreshArgs refresh=>refresh.AtkValueCount,_=>0u};
+            var agent=AgentInventoryContext.Instance();var inv=InventoryManager.Instance();var trade=SellerAddon("Trade");
+            if(pointer==0||count>72||agent==null||inv==null||trade==null||inv->TradePartnerEntityId!=itemTrade.Partner||Player.ContentId!=itemTrade.Character||
+                (uint)agent->TargetInventoryId!=slot.Source.Container||agent->TargetInventorySlotId!=slot.Source.Slot)return;
+            if(!TradeItemShortcutNative.CaptureItem(inv->GetInventorySlot((InventoryType)slot.Source.Container,slot.Source.Slot),agent->TargetInventorySlot,(InventoryType)slot.Source.Container,slot.Source.Slot,out var target)||
+                target.ItemId!=slot.Source.Item||target.Quantity!=slot.Source.Quantity||((target.Flags&1)!=0)!=slot.Source.Hq)return;
+            var labels=tradeItemLabelsTask?.IsCompletedSuccessfully==true?tradeItemLabelsTask.Result:null;if(labels==null)return;
+            var native=TradeItemShortcutNative.NativeEntry(agent,labels);if(native<0)return;
+            var label=TradeItemShortcutNative.Read(agent->EventParams[agent->ContexItemStartIndex+native].String.Value);
+            var index=TradeItemShortcutNative.DisplayedEntry((AtkValue*)pointer,(int)count,label);
+            TraceGilTrade($"Item Trade menu setup: native={native}, displayed={index}, setupValues={count}");
+            if(index<0)return;
+            target=target with{Character=itemTrade.Character,Partner=itemTrade.Partner,TradeAddon=(nint)trade};
+            itemTradeMenuSelection=new(args.Addon.Address,target,label,index,Environment.TickCount64);
+        }catch(Exception e){TraceGilTrade("Item Trade menu capture: "+e.GetType().Name);}
     }
     private unsafe void TickItemOffer(ItemTradeFrame frame,DateTimeOffset now)
     {
@@ -118,8 +142,15 @@ public sealed partial class Plugin
             if(labels==null)return;
             var native=TradeItemShortcutNative.NativeEntry(agent,labels);if(native<0)throw new InvalidOperationException("The game's Trade action is unavailable for this item.");
             var label=TradeItemShortcutNative.Read(agent->EventParams[agent->ContexItemStartIndex+native].String.Value);
-            var index=TradeItemShortcutNative.DisplayedEntry(menu->AtkValues,menu->AtkValuesCount,label);if(index<0)throw new InvalidOperationException("Could not verify Trade menu action.");
-            itemTradeMenuSelected=true;((AddonContextMenu*)menu)->OnMenuSelected(index,0);return;
+            target=target with{Character=itemTrade.Character,Partner=itemTrade.Partner,TradeAddon=(nint)SellerAddon("Trade")};
+            var selection=itemTradeMenuSelection;
+            if(!menu->IsReady||selection==null||!selection.Matches((nint)menu,target,label,Environment.TickCount64)){
+                if(now-itemTradeOfferAt<TimeSpan.FromMilliseconds(2500))return;
+                TraceGilTrade(TradeItemMenuDiagnostic());
+                throw new InvalidOperationException("Could not verify Trade menu setup for the selected item. See Details.");
+            }
+            itemTradeMenuSelected=true;itemTradeMenuSelection=null;
+            ((AddonContextMenu*)menu)->OnMenuSelected(selection.Index,0);return;
         }
         var numeric=SellerAddon("InputNumeric");
         if(numeric!=null&&!itemTradeQuantitySent){
@@ -153,3 +184,4 @@ public sealed partial class Plugin
         }catch(Exception e){StopItemTrade("Stopped: "+e.Message);Log.Warning(e,"Item Trader stopped");}
     }
 }
+

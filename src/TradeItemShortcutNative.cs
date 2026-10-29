@@ -174,3 +174,12 @@ internal sealed class TradeItemOfferWatch(TradeItemShortcutTarget target, long o
 internal sealed record TradeItemShortcutTrace(DateTimeOffset At, uint ItemId, string ItemName,
     uint Inventory, int Slot, int Quantity, string Stage, string Detail);
 
+
+
+// Setup/refresh values are transient; retain only the verified display index
+// and exact context, never pointers into Dalamud's temporary menu argument array.
+internal sealed record TradeItemMenuSelection(nint Menu,TradeItemShortcutTarget Target,string Label,int Index,long Created)
+{
+    internal bool Matches(nint menu,TradeItemShortcutTarget target,string label,long now)=>
+        Menu!=0&&Menu==menu&&Target==target&&Index is >=0 and <32&&Label.Length>0&&Label==label&&now>=Created&&now-Created<=8000;
+}
