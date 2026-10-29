@@ -8,6 +8,7 @@ namespace EquinoxCompanion;
 internal readonly struct EquinoxAppearance : IDisposable
 {
     private readonly bool enabled;
+    private readonly float previousTabBorderSize;
     private static Vector4 Ink(uint rgb) => new(((rgb >> 16) & 255) / 255f, ((rgb >> 8) & 255) / 255f, (rgb & 255) / 255f, 1);
     private static readonly (ImGuiCol Slot, Vector4 Color)[] Colors =
     [
@@ -31,10 +32,12 @@ internal readonly struct EquinoxAppearance : IDisposable
     public EquinoxAppearance(bool enabled)
     {
         this.enabled = enabled;
+        previousTabBorderSize = 0;
         if (!enabled) return;
         // Goddess Blue controls use thin outlines; Classic keeps Dalamud's style.
         ImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, 1f);
-        ImGui.PushStyleVar(ImGuiStyleVar.TabBorderSize, 1f);
+        previousTabBorderSize = ImGui.GetStyle().TabBorderSize;
+        ImGui.GetStyle().TabBorderSize = 1f;
         foreach (var (slot, color) in Colors) ImGui.PushStyleColor(slot, color);
         var scale = ImGui.GetFontSize() / 17f;
         ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(7, 6) * scale);
@@ -51,7 +54,8 @@ internal readonly struct EquinoxAppearance : IDisposable
     public void Dispose()
     {
         if (!enabled) return;
-        ImGui.PopStyleVar(12);
+        ImGui.GetStyle().TabBorderSize = previousTabBorderSize;
+        ImGui.PopStyleVar(11);
         ImGui.PopStyleColor(Colors.Length);
     }
 }
