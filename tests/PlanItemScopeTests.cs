@@ -43,6 +43,14 @@ internal static class PlanItemScopeTests
         Check(!PlanItemScope.Allows(move with{Move=move.Move with{Source=bags[1]}},nq,true,new Dictionary<uint,int>()),"quality checked at final submit");
         var organize=PlanItemScope.Restrict([new(StorageRouting.AllSources,StorageAutoRouting.AllRetainers,[],[],AllItems:true)],filtered.Select(e=>e.ItemId),Category);
         Check(organize.All(r=>!r.AllItems&&r.Categories.Length==0&&!r.Items.Contains(200)&&!r.Items.Contains(999)),"Organise all bounded by selected plan");
+        var retainerStock=new Dictionary<ulong,ChestStack[]>{
+            {0,[new(0,0,999,10,false,999),new(0,1,100,12,false,999),new(0,2,0,0,false,999),new(0,3,0,0,false,999)]},
+            {1,[new(10000,0,100,10,false,999),new(10000,1,200,10,false,999),new(10000,2,999,10,false,999)]},
+            {2,[new(10000,0,100,10,false,999),new(10000,1,0,0,false,999),new(10000,2,0,0,false,999)]}};
+        var organizeAssigned=StorageAssignments.Apply(organize,[new(2,[10,20],[])],retainerStock,Category);
+        var organized=StorageRouting.Build(new("Organize plan",1,organizeAssigned,0),retainerStock,Category,includeExistingBags:false);
+        Check(organized.Moves.Length>0&&organized.Moves.All(m=>m.Move.Source.Item==100),"organizer assignments only move eligible plan items");
+        Check(organized.Moves.All(m=>m.Move.Source.Container!=0||m.Move.Source.Slot>=2),"existing bag items never become organizer cargo");
         Check(PlanItemScope.Restrict(initial,[],Category).Length==0,"empty plan has no routes");
         amounts[100]=999;
         Check(rules[0].Amounts![100]==5,"run freezes quantity snapshot");
