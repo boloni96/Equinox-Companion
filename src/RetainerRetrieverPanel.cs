@@ -76,13 +76,14 @@ public sealed partial class Plugin
         if(ImGui.BeginPopup("Organizer options")){
             ImGui.SetNextItemWidth(220);ImGui.InputText("Name",ref retrievalName,100);
             if(ImGui.Button("Save preset"))RetrievalTry(SaveRetrievalPreset);
-        if(ImGui.SmallButton("Clear list")){retrievalCleared=new(retrievalName,retrievalItems.ToArray(),retrievalMultiplier,retrievalIncludesSubcrafts,Mode:retrievalMode,RecipeChoices:new(retrievalRecipeOverrides),Quality:retrievalQuality,DestinationRetainer:retrievalSendTo,SendCategories:retrievalSendCategories.ToArray(),CategoryWithdrawQuantity:retrievalCategoryWithdraw,CategoryKeepQuantity:retrievalCategoryKeep,FilterPlanCategories:retrievalFilterCategories,Entrust:retrievalEntrust);retrievalPickItems=false;retrievalPickLast=0;retrievalItems=[];retrievalPreviewSelected=false;retrievalSelected.Clear();retrievalPlan=[];retrievalPreview=[];retrievalCraftSteps=[];retrievalExportSteps=[];retrievalRecipeChoice=0;retrievalRecipeOverrides.Clear();retrievalError="";retrievalPreviewDirty=true;retrievalName="New list";retrievalEditingPreset=null;retrievalMultiplier=1;retrievalIncludesSubcrafts=false;retrievalMode=RetrievalMode.DirectIngredients;retrievalQuality=RetrievalQuality.Any;retrievalSendTo=0;retrievalSendCategories.Clear();retrievalFilterCategories=false;retrievalCategoryWithdraw=1;retrievalCategoryKeep=0;retrievalEntrust=null;retrievalEntrustWithdrawal=false;}
+        if(ImGui.SmallButton("Clear list"))ClearRetrievalList();
         if(retrievalCleared!=null){ImGui.SameLine();if(ImGui.SmallButton("Undo clear")){SelectRetrievalPreset(retrievalCleared);retrievalCleared=null;}}
             DrawRetrievalPicker();DrawStorageChatOption();ImGui.EndPopup();
         }
         ImGui.EndDisabled();
         if(retrievalPickItems)TickRetrievalPicker();
         if(ImGui.BeginTabBar("RetrieverTabs")){
+            if(ImGui.BeginTabItem("My inventory")){ImGui.BeginDisabled(craftingWithdrawalPending||retrievalRun.Running||organizeRunning||chestRunning);DrawMyInventory();ImGui.EndDisabled();ImGui.EndTabItem();}
             if(ImGui.BeginTabItem("Browse inventory")){ImGui.BeginDisabled(craftingWithdrawalPending||retrievalRun.Running||organizeRunning||chestRunning);DrawRetrievalBrowse();ImGui.EndDisabled();ImGui.EndTabItem();}
             if(ImGui.BeginTabItem("Transfer",retrievalShowList?ImGuiTabItemFlags.SetSelected:ImGuiTabItemFlags.None)){retrievalShowList=false;ImGui.BeginDisabled(craftingWithdrawalPending||retrievalRun.Running||organizeRunning||chestRunning);DrawRetrievalList();ImGui.EndDisabled();ImGui.EndTabItem();}
             if(ImGui.BeginTabItem("Organize retainers")){if(!organizerTabWasVisible)InvalidateOrganizePreview();organizerTabWasVisible=true;DrawRetainerOrganizer();ImGui.EndTabItem();}else organizerTabWasVisible=false;
@@ -170,6 +171,26 @@ public sealed partial class Plugin
         if(p.Items.Length>30)ImGui.TextDisabled("Load to see all "+p.Items.Length+" items");ImGui.EndTooltip();
     }
 
+    private void ClearRetrievalList()
+    {
+        retrievalCleared=new(retrievalName,retrievalItems.ToArray(),retrievalMultiplier,retrievalIncludesSubcrafts,Mode:retrievalMode,RecipeChoices:new(retrievalRecipeOverrides),Quality:retrievalQuality,DestinationRetainer:retrievalSendTo,SendCategories:retrievalSendCategories.ToArray(),CategoryWithdrawQuantity:retrievalCategoryWithdraw,CategoryKeepQuantity:retrievalCategoryKeep,FilterPlanCategories:retrievalFilterCategories,Entrust:retrievalEntrust);retrievalPickItems=false;retrievalPickLast=0;retrievalItems=[];retrievalPreviewSelected=false;retrievalSelected.Clear();retrievalPlan=[];retrievalPreview=[];retrievalCraftSteps=[];retrievalExportSteps=[];retrievalRecipeChoice=0;retrievalRecipeOverrides.Clear();retrievalError="";retrievalPreviewDirty=true;retrievalName="New list";retrievalEditingPreset=null;retrievalMultiplier=1;retrievalIncludesSubcrafts=false;retrievalMode=RetrievalMode.DirectIngredients;retrievalQuality=RetrievalQuality.Any;retrievalSendTo=0;retrievalSendCategories.Clear();retrievalFilterCategories=false;retrievalCategoryWithdraw=1;retrievalCategoryKeep=0;retrievalEntrust=null;retrievalEntrustWithdrawal=false;
+        InvalidateOrganizePreview();
+    }
+    private void AddAllRetrievalSources()
+    {
+        IEnumerable<RetrievalEntry> matches=retrievalSource switch{
+            2=>retrievalSearchWorkshop.SelectMany(p=>p.Items).Select(e=>e with{Quantity=checked(e.Quantity*retrievalQuantity)}),
+            1=>retrievalSearchRecipes.DistinctBy(r=>r.ItemId).Select(r=>new RetrievalEntry(r.ItemId,retrievalCatalog!.Names[r.ItemId],retrievalQuantity,r.Id)),
+            _=>retrievalSearchItems.Select(e=>new RetrievalEntry(e.Key,e.Value,retrievalQuantity))
+        };
+        var existing=retrievalItems.Select(e=>e.ItemId).ToHashSet();
+        var additions=matches.Where(e=>!existing.Contains(e.ItemId)).ToArray();
+        if(additions.Length==0)return;
+        if(existing.Count+additions.Select(e=>e.ItemId).Distinct().Count()>RetainerRetrieval.MaxEntries)
+            throw new InvalidOperationException("A plan supports up to 5,000 distinct items. Narrow the search or categories before Add all. Nothing was added.");
+        AddRetrieval(additions);
+    }
+
     private void DrawRetrievalSources()
     {
         if(ImGui.BeginTable("SourceFilters",2,ImGuiTableFlags.SizingStretchProp)){
@@ -186,6 +207,13 @@ public sealed partial class Plugin
         var key=retrievalSource+"|"+retrievalSearch+"|"+retrievalJob+"|"+retrievalSourceAllCategories+"|"+string.Join(",",retrievalSourceCategories.Order());
         if(key!=retrievalLastFilter){retrievalLastFilter=key;retrievalSearchPage=0;retrievalSearchWorkshop=retrievalCatalog!.Workshop.Where(x=>(retrievalSourceAllCategories||x.Items.Any(e=>MatchesCategory(e.ItemId)))&&x.Name.Contains(retrievalSearch,StringComparison.OrdinalIgnoreCase)).ToArray();retrievalSearchItems=retrievalCatalog!.Names.Where(x=>x.Value.Contains(retrievalSearch,StringComparison.OrdinalIgnoreCase)&&MatchesCategory(x.Key)).OrderBy(x=>x.Value).ThenBy(x=>x.Key).ToArray();retrievalSearchRecipes=retrievalCatalog.Recipes.Values.SelectMany(x=>x).Where(x=>MatchesCategory(x.ItemId)&&(retrievalJob=="All crafting logs"||x.Job==retrievalJob)&&retrievalCatalog.Names[x.ItemId].Contains(retrievalSearch,StringComparison.OrdinalIgnoreCase)).OrderBy(x=>retrievalCatalog.Names[x.ItemId]).ThenBy(x=>x.Id).ToArray();}
         var total=retrievalSource==2?retrievalSearchWorkshop.Length:retrievalSource==1?retrievalSearchRecipes.Length:retrievalSearchItems.Length;
+        ImGui.BeginDisabled(total==0);if(ImGui.SmallButton("Add all"))RetrievalTry(AddAllRetrievalSources);ImGui.EndDisabled();
+        MarketHelp("Add matching results across every page using the quantity above. Existing plan items keep their quantities; duplicate recipe outputs are added once. Workshop projects contribute their turn-in items. Nothing moves until you run a transfer.");
+        ImGui.SameLine();ImGui.BeginDisabled(retrievalItems.Length==0);if(ImGui.SmallButton("Clear all"))ClearRetrievalList();ImGui.EndDisabled();
+        MarketHelp("Start an empty working plan. Your saved plans are kept; Undo clear restores this working list.");
+        if(retrievalCleared!=null){ImGui.SameLine();if(ImGui.SmallButton("Undo clear##Sources")){SelectRetrievalPreset(retrievalCleared);retrievalCleared=null;retrievalShowList=false;}}
+        ImGui.SameLine();if(ImGui.SmallButton("Save plan…"))ImGui.OpenPopup("SaveSourcePlan");
+        if(ImGui.BeginPopup("SaveSourcePlan")){ImGui.SetNextItemWidth(220);ImGui.InputText("Name",ref retrievalName,100);if(ImGui.Button("Save"))RetrievalTry(()=>{SaveRetrievalPreset();ImGui.CloseCurrentPopup();});ImGui.EndPopup();}
         var pages=Math.Max(1,(total+79)/80);retrievalSearchPage=Math.Clamp(retrievalSearchPage,0,pages-1);
         ImGui.BeginDisabled(retrievalSearchPage==0);if(ImGui.SmallButton("Previous"))retrievalSearchPage--;ImGui.EndDisabled();ImGui.SameLine();
         ImGui.TextUnformatted($"Page {retrievalSearchPage+1}/{pages} · {total:N0} results");ImGui.SameLine();
@@ -234,4 +262,5 @@ public sealed partial class Plugin
         ImGui.EndTabBar();
     }
 }
+
 
