@@ -5,13 +5,13 @@ internal static class AssignmentCoverage303Tests
  [ModuleInitializer] internal static void Run(){
     void Check(string label,bool ok){if(!ok)throw new Exception(label);Console.WriteLine("PASS assignment audit "+label);}
     ChestStack S(uint item,int qty=1,bool hq=false,int slot=0)=>new(10000,slot,item,qty,hq,999);
-    var inventory=new Dictionary<ulong,ChestStack[]>{[1]=[S(10,2),S(10,3,true,1),S(20),new(11000,0,30,1,false,1),new(12002,0,40,1,false,1)],[2]=[]};
+    var inventory=new Dictionary<ulong,ChestStack[]>{[1]=[S(110,2),S(110,3,true,1),S(120),new(11000,0,130,1,false,1),new(12002,0,140,1,false,1)],[2]=[]};
     var result=AssignmentCoverage.Check([1,2,3],inventory,[new(99,[1],[])],[],id=>1);
     Check("ignores other characters, equipment and market listings",result.Missing.Length==2&&result.Missing.Sum(x=>x.Slots)==3);
-    Check("item types merge quality but preserve quantities and slots",result.Missing.Single(x=>x.Item==10) is {Slots:2,Quantity:5});
+    Check("item types merge quality but preserve quantities and slots",result.Missing.Single(x=>x.Item==110) is {Slots:2,Quantity:5});
     Check("missing inventories are counted as unknown",result.CheckedRetainers==2&&result.TotalRetainers==3);
-    var plan=new RetrievalPreset("Group",[new(20,"Item",1)],PlanId:"group");
-    result=AssignmentCoverage.Check([1,2],inventory,[new(1,[1],[]),new(2,[],[10],["group"])],[plan],id=>1);
+    var plan=new RetrievalPreset("Group",[new(120,"Item",1)],PlanId:"group");
+    result=AssignmentCoverage.Check([1,2],inventory,[new(1,[1],[]),new(2,[],[110],["group"])],[plan],id=>1);
     Check("explicit and plan homes override category homes",result.Missing.Length==0&&result.MisplacedSlots==3);
     result=AssignmentCoverage.Check([1,2],inventory,[new(2,[],[],["deleted"])],[plan],id=>1);
     Check("deleted plan does not hide gaps",result.Missing.Length==2);
@@ -26,12 +26,12 @@ internal static class AssignmentCoverage303Tests
     Check("reports categories needing split/manual review",recommendation.Suggestions.Length==0&&recommendation.NeedsSpace.SequenceEqual(new uint[]{1}));
     bool refused=false;try{AssignmentRecommendations.Build([1,2,3],inventory,[],[],id=>1);}catch(InvalidOperationException){refused=true;}
     Check("recommendation requires complete inventory coverage",refused);
-    var roomy=new Dictionary<ulong,ChestStack[]>{[1]=[S(10,999),S(20,999,true,1),S(30),S(31),S(32)],[2]=[]};
-    var existing=new[]{new RetainerAssignment(2,[],[10]),new RetainerAssignment(1,[2],[])};
-    recommendation=AssignmentRecommendations.Build([1,2],roomy,existing,[],id=>id>=30?2u:1u,AssignmentRecommendationStyle.MoreSpace);
+    var roomy=new Dictionary<ulong,ChestStack[]>{[1]=[S(110,999),S(120,999,true,1),S(130),S(131),S(132)],[2]=[]};
+    var existing=new[]{new RetainerAssignment(2,[],[110]),new RetainerAssignment(1,[2],[])};
+    recommendation=AssignmentRecommendations.Build([1,2],roomy,existing,[],id=>id>=130?2u:1u,AssignmentRecommendationStyle.MoreSpace);
     Check("reserves existing incoming stock before proposing additions",recommendation.Suggestions.Single().Retainer==2&&recommendation.Suggestions.Single().FreeAfter==173);
     Check("recommendations preserve input rules and inventory",existing[0].Categories.Length==0&&roomy[2].Length==0);
-    var saved=AssignmentRecommendations.Copy([new(1,[1],[10],["group"])]);
+    var saved=AssignmentRecommendations.Copy([new(1,[1],[110],["group"])]);
     var copied=AssignmentRecommendations.Copy(saved);copied[0].Categories[0]=7;
     Check("saved setups do not share mutable selection arrays",saved[0].Categories[0]==1);
     var serialized=System.Text.Json.JsonSerializer.Serialize(new AssignmentSetup("Mine",saved,true));
