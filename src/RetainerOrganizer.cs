@@ -52,7 +52,7 @@ public sealed partial class Plugin
     private StorageRoute CurrentOrganizeRule()=>new(organizeFrom==0?StorageRouting.AllSources:organizeFrom,organizeTo,organizeCategories.ToArray(),[],AllItems:organizeCategories.Count==0,Quality:retrievalQuality);
     private readonly List<StorageRoute> organizeRules=[];
     private StorageRoute[] organizeActiveRules=[];private int organizeReserve=1;
-    private bool organizeBagsOnly;private readonly Dictionary<ulong,ChestStack[]> organizeInventories=[];
+    private bool organizeBagsOnly;private int organizeBagTradeFilter;private readonly Dictionary<ulong,ChestStack[]> organizeInventories=[];
     private Task<RoutingResult>? organizeRoutingTask;private RoutedMove[] organizeMoves=[];private int organizeMoveIndex,organizeUnmoved;
     private ulong organizeActiveRetainer;
     private unsafe void StartOrganize()=>StartStorageRouting(OrganizeRules(),false);
@@ -66,7 +66,7 @@ public sealed partial class Plugin
             StartStorageRouting([new(StorageRouting.Bags,retrievalSendTo,[],amounts.Keys.ToArray(),Quality:retrievalQuality,Amounts:amounts)],true);
         });
     }
-    private unsafe void StartStorageRouting(StorageRoute[] rules,bool bagsOnly,bool temporarySelection=false)
+    private unsafe void StartStorageRouting(StorageRoute[] rules,bool bagsOnly,bool temporarySelection=false,int temporaryTradeFilter=0)
     {
         RetrievalTry(()=>{
             if(craftingWithdrawalPending||organizeRunning||retrievalRun.Running||chestRunning||sellerRun.Running||TraderRunning||retainerGilRunning)throw new InvalidOperationException("Finish the current inventory operation first.");
@@ -74,7 +74,7 @@ public sealed partial class Plugin
             var owned=ReadSellerRetainers().Select(x=>x.Id).ToArray();
             if(rules.Any(r=>r.To==0||r.To!=StorageAutoRouting.AllRetainers&&!owned.Contains(r.To)||r.From!=0&&r.From!=StorageRouting.AllSources&&!owned.Contains(r.From)))throw new InvalidOperationException("Choose this character's retainers for every movement.");
             if(config.UseRetainerAssignments.Contains(Player.ContentId)&&rules.Any(r=>r.To==StorageAutoRouting.AllRetainers)&&!StorageAssignments.HasSelections(config.RetainerAssignments.GetValueOrDefault(Player.ContentId)??[],config.RetrievalPresets))throw new InvalidOperationException("Choose retainer assignments, or turn off Use assignments for regular duplicate organisation.");
-            EnsureChestMove();if(temporarySelection&&!bagsOnly)throw new InvalidOperationException("Temporary selection is only valid for Entrust.");rules=temporarySelection?PlanItemScope.Restrict(rules,rules.SelectMany(r=>r.Items),OrganizeCategory):ScopeOrganizeRules(rules);if(rules.Length==0)throw new InvalidOperationException("No listed plan items match these filters.");organizeActiveRules=rules;organizeBagsOnly=bagsOnly;
+            EnsureChestMove();if(temporarySelection&&!bagsOnly)throw new InvalidOperationException("Temporary selection is only valid for Entrust.");rules=temporarySelection?PlanItemScope.Restrict(rules,rules.SelectMany(r=>r.Items),OrganizeCategory):ScopeOrganizeRules(rules);if(rules.Length==0)throw new InvalidOperationException("No listed plan items match these filters.");organizeActiveRules=rules;organizeBagsOnly=bagsOnly;organizeBagTradeFilter=temporarySelection?Math.Clamp(temporaryTradeFilter,0,2):0;
             organizeSources=owned.Where(id=>rules.Any(r=>r.To==StorageAutoRouting.AllRetainers||r.To==id||!bagsOnly&&(r.From==StorageRouting.AllSources||r.From==id))).ToArray();
             organizeOwnerOrder=organizeSources.ToArray();var recorded=RecordedOrganizerInventories(organizeSources);
             organizePort=new(this){Character=Player.ContentId,World=Player.CurrentWorld.RowId,Quality=RetrievalQuality.Any};
@@ -117,6 +117,7 @@ public sealed partial class Plugin
                     if(!PlanItemScope.Allows(action,organizeActiveRules,organizeBagsOnly,organizerEntrusted)){StopOrganize("Stopped: movement is outside the selected plan or its remaining quantity.");return;}
                     var src=ReadChestContainer(move.Source.Container).First(s=>s.Slot==move.Source.Slot);var dst=ReadChestContainer(move.Destination.Container).First(s=>s.Slot==move.Destination.Slot);
                     if(!OrganizerSlotMatches(move.Source,src)||!OrganizerSlotMatches(move.Destination,dst)){StopOrganize("Inventory changed after the space check. Stopped before moving another item; Check again.");return;}
+                    if(organizeBagsOnly&&!InventoryTradeFilterAllows(src,organizeBagTradeFilter)){StopOrganize("Stopped: item no longer matches the selected tradability filter.");return;}
                     if(CrystalStorage.IsItem(src.Item)){
                         if(!organizePort.TransferCrystals(organizeActiveRetainer,move))break;
                         organizePending=move;organizerLastTransfer=new {retainer=organizeActiveRetainer,action.Withdraw,move,command="Retainer crystal quantity",at=now};OrganizeStage(7);break;
@@ -139,7 +140,7 @@ public sealed partial class Plugin
     }
     private void BeginStorageCalculation()
     {
-                    organizeInventories[StorageRouting.Bags]=OrganizerInventory(false,false).Concat(OrganizerInventory(false,true)).ToArray();
+                    organizeInventories[StorageRouting.Bags]=OrganizerInventory(false,false).Concat(OrganizerInventory(false,true)).Where(s=>!organizeBagsOnly||InventoryTradeFilterAllows(s,organizeBagTradeFilter)).ToArray();
                     var snapshot=organizeOwnerOrder.Where(organizeInventories.ContainsKey).Append(StorageRouting.Bags).ToDictionary(id=>id,id=>organizeInventories[id].ToArray());var categories=snapshot.Values.SelectMany(x=>x).Where(x=>x.Item>0).Select(x=>x.Item).Distinct().ToDictionary(x=>x,OrganizeCategory);
                     var rules=organizeActiveRules.Select(r=>r.Amounts==null?r:r with{Amounts=r.Amounts.ToDictionary(x=>x.Key,x=>Math.Max(0,x.Value-organizerEntrusted.GetValueOrDefault(x.Key)))}).ToArray();
                     if(config.UseRetainerAssignments.Contains(Player.ContentId))rules=StorageAssignments.Apply(rules,(config.RetainerAssignments.GetValueOrDefault(Player.ContentId)??[]).ToArray(),snapshot,id=>categories.GetValueOrDefault(id),config.RetrievalPresets);
@@ -156,4 +157,5 @@ public sealed partial class Plugin
         return confirmed;
     }
 }
+
 

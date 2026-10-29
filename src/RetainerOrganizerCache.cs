@@ -63,7 +63,7 @@ public sealed partial class Plugin
         var slots=OrganizerInventory(true,false).Concat(OrganizerInventory(true,true)).ToArray();RememberOrganizerInventory(organizeActiveRetainer,slots);
         var visit=organizeMoves.Skip(organizeMoveIndex).TakeWhile(x=>x.Retainer==organizeActiveRetainer).ToArray();
         RoutedMove[] rebound;
-        try{rebound=StorageVisit.Bind(visit,OrganizerInventory(false,false).Concat(OrganizerInventory(false,true)).ToArray(),slots,!organizeBagsOnly,organizerProtectedBagSlots);}
+        try{rebound=StorageVisit.Bind(visit,OrganizerInventory(false,false).Concat(OrganizerInventory(false,true)).Where(s=>!organizeBagsOnly||InventoryTradeFilterAllows(s,organizeBagTradeFilter)).ToArray(),slots,!organizeBagsOnly,organizerProtectedBagSlots);}
         catch(InvalidOperationException) when(organizeCarry==0&&organizeActiveRules.All(r=>r.From==StorageRouting.AllSources||r.From==StorageRouting.Bags)&&organizerReplans.Add(organizeActiveRetainer)){
             // No cargo in transit: safely regenerate only the remaining intent
             // using this refreshed inventory and the unchanged recorded others.
@@ -73,3 +73,4 @@ public sealed partial class Plugin
         if(rebound.Length>0)OrganizeStage(6);else OrganizeStage(8);
     }
 }
+

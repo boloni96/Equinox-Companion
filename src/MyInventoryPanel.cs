@@ -1,3 +1,4 @@
+using FFXIVClientStructs.FFXIV.Client.Game;
 using Dalamud.Bindings.ImGui;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
@@ -6,19 +7,28 @@ public sealed partial class Plugin
     private readonly HashSet<uint> myInventoryCategories=[];
     private readonly Dictionary<uint,int> myInventorySelected=[];
     private bool myInventoryAllCategories=true;
-    private RetrievalQuality myInventoryQuality;
+    private RetrievalQuality myInventoryQuality;private int myInventoryTradeFilter;
     private ulong myInventoryCharacter,myInventoryDestination=StorageAutoRouting.AllRetainers;
     private DateTimeOffset myInventoryRefresh;
     private ChestStack[] myInventoryStock=[];
     private string MyInventoryName(uint id)=>retrievalCatalog?.Names.GetValueOrDefault(id)??id.ToString();
     private bool MyInventoryMatches(uint id)=>MyInventoryName(id).Contains(myInventorySearch,StringComparison.OrdinalIgnoreCase)&&(myInventoryAllCategories||myInventoryCategories.Contains(OrganizeCategory(id)));
-    private unsafe ChestStack[] ReadMyInventory()=>OrganizerInventory(false,false).Concat(OrganizerInventory(false,true)).Where(s=>s.Item>0&&s.Quantity>0).ToArray();
+    private unsafe bool InventoryTradeFilterAllows(ChestStack stack,int filter)
+    {
+        if(filter==0||stack.Item==0)return true;
+        var manager=InventoryManager.Instance();if(manager==null)return false;
+        var container=manager->GetInventoryContainer((InventoryType)stack.Container);
+        if(container==null||!container->IsLoaded||container->Items==null||stack.Slot<0||stack.Slot>=container->Size)return false;
+        var slot=container->Items[stack.Slot];
+        return slot.ItemId==stack.Item&&RetrievalAllowsTradeFilter(slot,filter);
+    }
+    private unsafe ChestStack[] ReadMyInventory()=>OrganizerInventory(false,false).Concat(OrganizerInventory(false,true)).Where(s=>s.Item>0&&s.Quantity>0&&InventoryTradeFilterAllows(s,myInventoryTradeFilter)).ToArray();
     private Dictionary<uint,int> MyInventoryAmounts(IEnumerable<ChestStack> stock)=>TemporaryInventorySelection.Amounts(stock,myInventorySelected,myInventoryQuality,MyInventoryMatches);
     private unsafe void EntrustMyInventory()
     {
         var amounts=MyInventoryAmounts(ReadMyInventory());
         if(amounts.Count==0)throw new InvalidOperationException("Select matching items from your current inventory first.");
-        StartStorageRouting([new(StorageRouting.Bags,myInventoryDestination,[],amounts.Keys.ToArray(),Quality:myInventoryQuality,Amounts:amounts)],true,true);
+        StartStorageRouting([new(StorageRouting.Bags,myInventoryDestination,[],amounts.Keys.ToArray(),Quality:myInventoryQuality,Amounts:amounts)],true,true,myInventoryTradeFilter);
     }
     private void DrawMyInventory()
     {
@@ -30,8 +40,11 @@ public sealed partial class Plugin
             ImGui.TableNextRow();ImGui.TableNextColumn();ImGui.SetNextItemWidth(-1);ImGui.InputTextWithHint("##MyInventorySearch","Search my bags…",ref myInventorySearch,100);
             ImGui.TableNextColumn();ImGui.SetNextItemWidth(-1);if(DrawStorageCategoryPicker("##MyInventoryCategories",myInventoryCategories,myInventoryAllCategories?"All categories":"None selected"))myInventoryAllCategories=false;
             ImGui.TableNextRow();ImGui.TableNextColumn();var quality=(int)myInventoryQuality;ImGui.SetNextItemWidth(-1);if(ImGui.Combo("##MyInventoryQuality",ref quality,"Any quality\0NQ only\0HQ only\0"))myInventoryQuality=(RetrievalQuality)quality;
-            ImGui.TableNextColumn();if(ImGui.SmallButton("Reset filters")){myInventorySearch="";myInventoryCategories.Clear();myInventoryAllCategories=true;myInventoryQuality=RetrievalQuality.Any;}ImGui.EndTable();
+            ImGui.TableNextColumn();if(ImGui.SmallButton("Reset filters")){myInventorySearch="";myInventoryCategories.Clear();myInventoryAllCategories=true;myInventoryQuality=RetrievalQuality.Any;myInventoryTradeFilter=0;myInventoryRefresh=default;}
+            ImGui.TableNextRow();ImGui.TableNextColumn();ImGui.SetNextItemWidth(-1);if(ImGui.Combo("##MyInventoryTradeFilter",ref myInventoryTradeFilter,"Any items\0Tradable only\0Untradable only\0"))myInventoryRefresh=default;
+            MarketHelp("Filters actual copies, including bound gear and collectibles. Entrust selected uses this filter too.");ImGui.EndTable();
         }
+        if(myInventoryRefresh==default){myInventoryStock=ReadMyInventory();myInventoryRefresh=DateTimeOffset.UtcNow.AddSeconds(1);}
         var rows=myInventoryStock.Where(s=>RetainerRetrieval.AllowsQuality(s.Hq,myInventoryQuality)&&MyInventoryMatches(s.Item)).GroupBy(s=>s.Item).Select(g=>(Id:g.Key,Name:MyInventoryName(g.Key),Quantity:g.Sum(s=>s.Quantity))).OrderBy(x=>x.Name).ToArray();
         if(ImGui.SmallButton("Select all"))foreach(var row in rows)myInventorySelected.TryAdd(row.Id,row.Quantity);ImGui.SameLine();
         if(ImGui.SmallButton("Clear selection"))myInventorySelected.Clear();ImGui.SameLine();if(ImGui.SmallButton("Refresh"))myInventoryRefresh=default;
@@ -71,3 +84,4 @@ public sealed partial class Plugin
         ImGui.EndDisabled();
     }
 }
+
