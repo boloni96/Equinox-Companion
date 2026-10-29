@@ -42,7 +42,7 @@ public static class AssignmentRecommendations
         var suggestions=new List<AssignmentSuggestion>();var needsSpace=new List<uint>();
         foreach(var group in coverage.Missing.GroupBy(x=>x.Category).OrderByDescending(g=>g.Sum(x=>x.Slots))){
             var ids=group.Select(x=>x.Item).ToHashSet();
-            if(group.Any(x=>x.Item is >=2 and <=19)){needsSpace.Add(group.Key);continue;}
+            if(group.Key==0||group.Any(x=>x.Item is >=2 and <=19)){needsSpace.Add(group.Key);continue;}
             var choices=new List<(ulong Owner,List<ChestStack> Stock,int Added,int Already)>();
             foreach(var home in owners){
                 var candidate=stock[home].ToList();var before=candidate.Count;var ok=true;

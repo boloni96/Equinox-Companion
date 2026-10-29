@@ -77,7 +77,7 @@ public sealed partial class Plugin
             ImGui.PopID();
         }
         if(dirty){assignmentCoverageDirty=true;SaveConfiguration();InvalidateOrganizePreview();}
-        ImGui.TextDisabled("Allowed homes · available space first · saved per character");
+        ImGui.TextDisabled("Assigned homes · stack consolidation · saved per character");
         ImGui.EndChild();ImGui.EndPopup();
     }
 }
