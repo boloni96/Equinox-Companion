@@ -1,7 +1,7 @@
 namespace EquinoxCompanion;
 public enum AssignmentRecommendationStyle { FewerMoves, MoreSpace, FewerHomes }
 public sealed record AssignmentSetup(string Name,RetainerAssignment[] Assignments,bool Enabled);
-public sealed record AssignmentSuggestion(uint Category,ulong Retainer,int AdditionalSlots,int FreeAfter);
+public sealed record AssignmentSuggestion(uint Category,ulong Retainer,int AdditionalSlots,int FreeAfter,int MovedStacks);
 public sealed record AssignmentRecommendation(AssignmentSuggestion[] Suggestions,uint[] NeedsSpace,int ExistingUnplacedSlots);
 public static class AssignmentRecommendations
 {
@@ -43,22 +43,22 @@ public static class AssignmentRecommendations
         foreach(var group in coverage.Missing.GroupBy(x=>x.Category).OrderByDescending(g=>g.Sum(x=>x.Slots))){
             var ids=group.Select(x=>x.Item).ToHashSet();
             if(group.Key==0||group.Any(x=>x.Item is >=2 and <=19)){needsSpace.Add(group.Key);continue;}
-            var choices=new List<(ulong Owner,List<ChestStack> Stock,int Added,int Already)>();
+            var choices=new List<(ulong Owner,List<ChestStack> Stock,int Added,int Already,int Moved)>();
             foreach(var home in owners){
-                var candidate=stock[home].ToList();var before=candidate.Count;var ok=true;
+                var candidate=stock[home].ToList();var before=candidate.Count;var ok=true;var moved=0;
                 foreach(var source in owners.Where(x=>x!=home))foreach(var item in inventory[source].Where(s=>s.Container is >=10000 and <=10006&&s.Quantity>0&&ids.Contains(s.Item))){
-                    if(!Pack(candidate,item,5)){ok=false;break;}
+                    moved++;if(!Pack(candidate,item,5)){ok=false;break;}
                 }
-                if(ok)choices.Add((home,candidate,candidate.Count-before,inventory[home].Count(s=>s.Quantity>0&&ids.Contains(s.Item)&&s.Container is >=10000 and <=10006)));
+                if(ok)choices.Add((home,candidate,candidate.Count-before,inventory[home].Count(s=>s.Quantity>0&&ids.Contains(s.Item)&&s.Container is >=10000 and <=10006),moved));
             }
             var ranked=style switch{
                 AssignmentRecommendationStyle.MoreSpace=>choices.OrderByDescending(x=>Free(x.Stock)).ThenBy(x=>x.Added),
                 AssignmentRecommendationStyle.FewerHomes=>choices.OrderByDescending(x=>suggestions.Any(s=>s.Retainer==x.Owner)).ThenBy(x=>x.Added).ThenByDescending(x=>Free(x.Stock)),
-                _=>choices.OrderBy(x=>x.Added).ThenByDescending(x=>x.Already).ThenByDescending(x=>Free(x.Stock))
+                _=>choices.OrderBy(x=>x.Moved).ThenBy(x=>x.Added).ThenByDescending(x=>x.Already).ThenByDescending(x=>Free(x.Stock))
             };
             var best=ranked.FirstOrDefault();
             if(best.Stock==null){needsSpace.Add(group.Key);continue;}
-            stock[best.Owner]=best.Stock;suggestions.Add(new(group.Key,best.Owner,best.Added,Free(best.Stock)));
+            stock[best.Owner]=best.Stock;suggestions.Add(new(group.Key,best.Owner,best.Added,Free(best.Stock),best.Moved));
         }
         return new(suggestions.ToArray(),needsSpace.ToArray(),unplaced);
     }

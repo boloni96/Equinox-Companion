@@ -41,7 +41,7 @@ public sealed partial class Plugin
         if(assignmentRecommendation is {} proposal){
             string Category(uint id)=>StorageGroups().SelectMany(g=>g.Categories).FirstOrDefault(c=>c.Id==id)?.Name??("Category "+id);
             ImGui.TextWrapped("Suggested additions · current assignments stay in place");
-            foreach(var suggestion in proposal.Suggestions)ImGui.TextWrapped(Category(suggestion.Category)+" → "+names.GetValueOrDefault(suggestion.Retainer,suggestion.Retainer.ToString())+$" · +{suggestion.AdditionalSlots} slots · {suggestion.FreeAfter} free after this addition");
+            foreach(var suggestion in proposal.Suggestions)ImGui.TextWrapped(Category(suggestion.Category)+" → "+names.GetValueOrDefault(suggestion.Retainer,suggestion.Retainer.ToString())+$" · {suggestion.MovedStacks} stacks to relocate · +{suggestion.AdditionalSlots} slots · {suggestion.FreeAfter} free after this addition");
             if(proposal.ExistingUnplacedSlots>0)ImGui.TextWrapped($"{proposal.ExistingUnplacedSlots} existing assigned stacks could not be reserved in the conservative capacity estimate. Review space before organizing.");
             if(proposal.NeedsSpace.Length>0)ImGui.TextWrapped("Needs manual review / split homes: "+string.Join(", ",proposal.NeedsSpace.Select(Category)));
             ImGui.TextDisabled("Estimates use recorded stock; actual transfers recheck space.");
