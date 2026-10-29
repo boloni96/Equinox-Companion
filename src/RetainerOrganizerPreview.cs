@@ -18,6 +18,7 @@ public sealed partial class Plugin
         var retainers=ReadSellerRetainers();
         if(!Player.IsLoaded||retainers.Length==0){organizePreviewMessage="Open the summoning bell to preview this character’s retainers.";return;}
         var rules=organizePreviewAll?new StorageRoute[]{new(StorageRouting.AllSources,StorageAutoRouting.AllRetainers,[],[],AllItems:true)}:OrganizeRules();
+        rules=ScopeOrganizeRules(rules);
         var owners=retainers.Select(x=>x.Id).Where(id=>rules.Any(r=>r.To==StorageAutoRouting.AllRetainers||r.To==id||r.From==StorageRouting.AllSources||r.From==id)).ToArray();
         organizePreviewNames=retainers.ToDictionary(x=>x.Id,x=>x.Name);
         if(config.UseRetainerAssignments.Contains(Player.ContentId)&&rules.Any(r=>r.To==StorageAutoRouting.AllRetainers)&&!StorageAssignments.HasSelections(config.RetainerAssignments.GetValueOrDefault(Player.ContentId)??[],config.RetrievalPresets)){organizePreviewMessage="Choose saved plans, items or categories in Retainer assignments, or turn off Use assignments.";return;}
@@ -59,3 +60,4 @@ public sealed partial class Plugin
         }ImGui.EndChild();
     }
 }
+

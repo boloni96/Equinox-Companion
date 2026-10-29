@@ -20,7 +20,7 @@ public sealed partial class Plugin
     private void LoadOrganizerTradeItems()
     {
         RefreshItemTradePicker();itemTradeSelection.Clear();var missing=0;
-        foreach(var entry in RetainerRetrieval.Combine(retrievalItems)){
+        foreach(var entry in RetainerRetrieval.Combine(FilteredPlanItems())){
             var wanted=checked(entry.Quantity*retrievalMultiplier);
             foreach(var group in itemTradeBags.Where(x=>x.Item==entry.ItemId&&x.Tradable&&RetainerRetrieval.AllowsQuality(x.Hq,retrievalQuality)).GroupBy(x=>x.Key).OrderBy(g=>g.Key.Hq)){
                 var count=Math.Min(wanted,group.Sum(x=>x.Quantity));if(count>0)itemTradeSelection[group.Key]=count;wanted-=count;
@@ -59,3 +59,4 @@ public sealed partial class Plugin
         }
     }
 }
+

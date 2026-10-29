@@ -12,13 +12,14 @@ public sealed partial class Plugin
     private ChestMove? organizePending;
     private object? organizerLastTransfer;
     private int organizeCarry;
-    private string organizeStatus="Preview all or Organise all. Use assignments for category homes; custom movements remain below.";
+    private string organizeStatus="Preview or organise the selected plan. Assignments choose homes for eligible listed items.";
     private void OrganizeStage(int stage){organizeStage=stage;organizeStatus=$"{organizeTransferred} delivered · {organizeMoveIndex}/{organizeMoves.Length} transfers · "+(stage switch{0=>"Preparing",1 or 2 or 3=>$"Refreshing missing inventory {organizeSourceIndex+1}/{organizeSources.Length}",4 or 5=>"Opening retainer",6 or 7=>"Moving batch",9=>"Calculating batch space",_=>"Next retainer"});organizeDeadline=DateTimeOffset.UtcNow.AddSeconds(60);}
     private void StopOrganize(string reason){organizeRunning=false;organizePort?.Release();organizePending=null;organizeStatus=reason+(organizeCarry>0?$" · {organizeCarry} transferred items remain in your bags.":"");SaveOrganizerInventories();InvalidateOrganizePreview();retrievalRefreshPending=true;Log.Information("Retainer organizer: {Status}",organizeStatus);}
     private uint OrganizeCategory(uint item)=>DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>().GetRowOrDefault(item)?.ItemUICategory.RowId??0;
     private void DrawRetainerOrganizer()
     {
         ImGui.BeginDisabled(organizeRunning||retrievalRun.Running||chestRunning);
+        DrawPlanCategoryRules();
         DrawRetainerAssignments();
         var names=retrievalKnownRetainers.GetValueOrDefault(Player.ContentId)??new Dictionary<ulong,string>();
         void Choose(string label,ref ulong id,bool all){if(ImGui.BeginCombo(label,id==StorageAutoRouting.AllRetainers?"All retainers":id==0?(all?"All other retainers":"Choose retainer"):names.GetValueOrDefault(id,id.ToString()))){if(!all&&ImGui.Selectable("All retainers · consolidate duplicates",id==StorageAutoRouting.AllRetainers)){id=StorageAutoRouting.AllRetainers;InvalidateOrganizePreview();}if(all&&ImGui.Selectable("All other retainers",id==0)){id=0;InvalidateOrganizePreview();}foreach(var n in names)if(ImGui.Selectable(n.Value+"##"+n.Key,id==n.Key)){id=n.Key;InvalidateOrganizePreview();}ImGui.EndCombo();}}
@@ -47,7 +48,7 @@ public sealed partial class Plugin
         if(organizeRunning||organizeMoves.Length>0)ImGui.TextWrapped(organizeStatus);
         DrawOrganizePreview();
     }
-    private StorageRoute[] OrganizeRules()=>organizeRules.Count>0?organizeRules.ToArray():[CurrentOrganizeRule()];
+    private StorageRoute[] OrganizeRules()=>ScopeOrganizeRules(organizeRules.Count>0?organizeRules.ToArray():[CurrentOrganizeRule()]);
     private StorageRoute CurrentOrganizeRule()=>new(organizeFrom==0?StorageRouting.AllSources:organizeFrom,organizeTo,organizeCategories.ToArray(),[],AllItems:organizeCategories.Count==0,Quality:retrievalQuality);
     private readonly List<StorageRoute> organizeRules=[];
     private StorageRoute[] organizeActiveRules=[];private int organizeReserve=1;
@@ -59,14 +60,10 @@ public sealed partial class Plugin
     {
         RetrievalTry(()=>{
             if(retrievalSendTo==0)throw new InvalidOperationException("Choose a destination retainer for this plan first.");
-            if(duplicates&&retrievalEntrust!=null)throw new InvalidOperationException("Use Entrust plan to preserve this imported plan’s protection and keep amounts.");
-            if(duplicates){StartStorageRouting([new(StorageRouting.Bags,retrievalSendTo,[],[],Duplicates:true,Quality:retrievalQuality)],true);return;}
-            if(retrievalEntrust!=null){var amounts=retrievalEntrust.Amounts(retrievalItems.Select(x=>x.ItemId),OrganizerInventory(false,false).Concat(OrganizerInventory(false,true)),retrievalQuality,OrganizeCategory,retrievalSendCategories);if(amounts.Count==0)throw new InvalidOperationException("No matching bag items to entrust after keep amounts and protection.");StartStorageRouting([new(StorageRouting.Bags,retrievalSendTo,[],amounts.Keys.ToArray(),Quality:retrievalQuality,Amounts:amounts)],true);return;}
-            PreviewRetrieval(false,false,false);if(retrievalPlan.Length==0&&retrievalSendCategories.Count==0)throw new InvalidOperationException("Choose items or send categories first.");
-            var rules=new List<StorageRoute>();
-            if(retrievalPlan.Length>0)rules.Add(new(StorageRouting.Bags,retrievalSendTo,[],retrievalPlan.Select(x=>x.ItemId).ToArray(),Quality:retrievalQuality,Amounts:retrievalPlan.ToDictionary(x=>x.ItemId,x=>x.Quantity)));
-            if(retrievalSendCategories.Count>0){var amounts=CategoryEntrustAmounts(OrganizerInventory(false,false).Concat(OrganizerInventory(false,true)),retrievalPlan.Select(x=>x.ItemId),retrievalQuality);if(amounts.Count>0)rules.Add(new(StorageRouting.Bags,retrievalSendTo,[],amounts.Keys.ToArray(),Quality:retrievalQuality,Amounts:amounts));}
-            StartStorageRouting(rules.ToArray(),true);
+            if(duplicates)throw new InvalidOperationException("Use Entrust plan to move only the filtered plan items and preserve quantities and Keep amounts.");
+            var amounts=retrievalEntrust!=null?retrievalEntrust.Amounts(FilteredPlanItems().Select(x=>x.ItemId),OrganizerInventory(false,false).Concat(OrganizerInventory(false,true)),retrievalQuality,OrganizeCategory,Array.Empty<uint>()):PlanEntrustEntries().ToDictionary(e=>e.ItemId,e=>e.Quantity);
+            if(amounts.Count==0)throw new InvalidOperationException("No listed items match this plan’s filters, Keep amounts and protection.");
+            StartStorageRouting([new(StorageRouting.Bags,retrievalSendTo,[],amounts.Keys.ToArray(),Quality:retrievalQuality,Amounts:amounts)],true);
         });
     }
     private unsafe void StartStorageRouting(StorageRoute[] rules,bool bagsOnly)
@@ -77,7 +74,7 @@ public sealed partial class Plugin
             var owned=ReadSellerRetainers().Select(x=>x.Id).ToArray();
             if(rules.Any(r=>r.To==0||r.To!=StorageAutoRouting.AllRetainers&&!owned.Contains(r.To)||r.From!=0&&r.From!=StorageRouting.AllSources&&!owned.Contains(r.From)))throw new InvalidOperationException("Choose this character's retainers for every movement.");
             if(config.UseRetainerAssignments.Contains(Player.ContentId)&&rules.Any(r=>r.To==StorageAutoRouting.AllRetainers)&&!StorageAssignments.HasSelections(config.RetainerAssignments.GetValueOrDefault(Player.ContentId)??[],config.RetrievalPresets))throw new InvalidOperationException("Choose retainer assignments, or turn off Use assignments for regular duplicate organisation.");
-            EnsureChestMove();organizeActiveRules=rules;organizeBagsOnly=bagsOnly;
+            EnsureChestMove();rules=ScopeOrganizeRules(rules);if(rules.Length==0)throw new InvalidOperationException("No listed plan items match these filters.");organizeActiveRules=rules;organizeBagsOnly=bagsOnly;
             organizeSources=owned.Where(id=>rules.Any(r=>r.To==StorageAutoRouting.AllRetainers||r.To==id||!bagsOnly&&(r.From==StorageRouting.AllSources||r.From==id))).ToArray();
             organizeOwnerOrder=organizeSources.ToArray();var recorded=RecordedOrganizerInventories(organizeSources);
             organizePort=new(this){Character=Player.ContentId,World=Player.CurrentWorld.RowId,Quality=RetrievalQuality.Any};
@@ -117,6 +114,7 @@ public sealed partial class Plugin
                 case 5:if(organizePort.OpenInventory(organizeActiveRetainer)&&organizePort.Read(organizeActiveRetainer) is not null)BindOrganizerVisit();break;
                 case 6:
                     var action=organizeMoves[organizeMoveIndex];var move=action.Move;
+                    if(!PlanItemScope.Allows(action,organizeActiveRules,organizeBagsOnly,organizerEntrusted)){StopOrganize("Stopped: movement is outside the selected plan or its remaining quantity.");return;}
                     var src=ReadChestContainer(move.Source.Container).First(s=>s.Slot==move.Source.Slot);var dst=ReadChestContainer(move.Destination.Container).First(s=>s.Slot==move.Destination.Slot);
                     if(!OrganizerSlotMatches(move.Source,src)||!OrganizerSlotMatches(move.Destination,dst)){StopOrganize("Inventory changed after the space check. Stopped before moving another item; Check again.");return;}
                     if(CrystalStorage.IsItem(src.Item)){
@@ -158,3 +156,4 @@ public sealed partial class Plugin
         return confirmed;
     }
 }
+

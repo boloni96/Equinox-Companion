@@ -17,7 +17,7 @@ public sealed partial class Plugin
     private void UseBrowseSelection(bool entrust)
     {
         if(craftingWithdrawalPrevious==null){
-            craftingWithdrawalPrevious=new(retrievalName,retrievalItems.ToArray(),retrievalMultiplier,retrievalIncludesSubcrafts,Mode:retrievalMode,RecipeChoices:new(retrievalRecipeOverrides),Quality:retrievalQuality,DestinationRetainer:retrievalSendTo,SendCategories:retrievalSendCategories.ToArray(),CategoryWithdrawQuantity:retrievalCategoryWithdraw,CategoryKeepQuantity:retrievalCategoryKeep,Entrust:retrievalEntrust);
+            craftingWithdrawalPrevious=new(retrievalName,retrievalItems.ToArray(),retrievalMultiplier,retrievalIncludesSubcrafts,Mode:retrievalMode,RecipeChoices:new(retrievalRecipeOverrides),Quality:retrievalQuality,DestinationRetainer:retrievalSendTo,SendCategories:retrievalSendCategories.ToArray(),CategoryWithdrawQuantity:retrievalCategoryWithdraw,CategoryKeepQuantity:retrievalCategoryKeep,FilterPlanCategories:retrievalFilterCategories,Entrust:retrievalEntrust);
             craftingWithdrawalPreviousEditing=retrievalEditingPreset;
         }
         SelectRetrievalPreset(InventoryBrowseSelection.Plan(BrowseSelectedEntries(),entrust,retrievalQuality));
@@ -108,3 +108,4 @@ public sealed partial class Plugin
         clip.End();clip.Destroy();ImGui.EndTable();
     }
 }
+

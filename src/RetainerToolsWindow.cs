@@ -20,7 +20,7 @@ public sealed partial class Plugin
     {
         if(string.IsNullOrWhiteSpace(retrievalName))throw new ArgumentException("Name this plan first.");
         var at=config.RetrievalPresets.FindIndex(x=>x.Name==(retrievalEditingPreset??retrievalName));
-        var p=new RetrievalPreset(retrievalName,RetainerRetrieval.Combine(retrievalItems),retrievalMultiplier,retrievalIncludesSubcrafts,Mode:retrievalMode,RecipeChoices:new(retrievalRecipeOverrides),Quality:retrievalQuality,DestinationRetainer:retrievalSendTo,SendCategories:retrievalSendCategories.ToArray(),CategoryWithdrawQuantity:retrievalCategoryWithdraw,CategoryKeepQuantity:retrievalCategoryKeep,Entrust:retrievalEntrust,PlanId:at>=0?config.RetrievalPresets[at].PlanId:Guid.NewGuid().ToString("N"));
+        var p=new RetrievalPreset(retrievalName,RetainerRetrieval.Combine(retrievalItems),retrievalMultiplier,retrievalIncludesSubcrafts,Mode:retrievalMode,RecipeChoices:new(retrievalRecipeOverrides),Quality:retrievalQuality,DestinationRetainer:retrievalSendTo,SendCategories:retrievalSendCategories.ToArray(),CategoryWithdrawQuantity:retrievalCategoryWithdraw,CategoryKeepQuantity:retrievalCategoryKeep,FilterPlanCategories:retrievalFilterCategories,Entrust:retrievalEntrust,PlanId:at>=0?config.RetrievalPresets[at].PlanId:Guid.NewGuid().ToString("N"));
         if(config.RetrievalPresets.Any(x=>x.Name==p.Name)&&at!=config.RetrievalPresets.FindIndex(x=>x.Name==p.Name))throw new ArgumentException("Another plan already has this name.");
         if(at>=0)config.RetrievalPresets[at]=p;else if(config.RetrievalPresets.Count<25)config.RetrievalPresets.Add(p);else throw new ArgumentException("Maximum 25 presets.");
         retrievalEditingPreset=p.Name;SaveConfiguration();InvalidateOrganizePreview();
@@ -113,3 +113,4 @@ public sealed partial class Plugin
         }
     }
 }
+

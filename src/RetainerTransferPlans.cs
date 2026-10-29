@@ -25,8 +25,7 @@ public sealed partial class Plugin
     {
         if(!inline&&!ImGui.CollapsingHeader("Entrust this plan"))return;
         ImGui.SetNextItemWidth(200);DrawEntrustDestination("To retainer");ImGui.SameLine();DrawAssignmentEditor();
-        if(retrievalSendCategories.Count>0)ImGui.TextDisabled($"Includes {retrievalSendCategories.Count} plan category rules");
-        if(ImGui.Button("Entrust plan"))SendRetrievalList(false);if(retrievalEntrust==null){ImGui.SameLine();if(ImGui.Button("Entrust duplicates"))SendRetrievalList(true);
-        if(ImGui.IsItemHovered())ImGui.SetTooltip("Entrust bag items already stored on this destination retainer. Quality selection applies. No items are discarded or sold.");}
+        ImGui.TextDisabled($"{FilteredPlanItems().Length} listed items eligible · assignments choose destinations only");
+        if(ImGui.Button("Entrust plan"))SendRetrievalList(false);
     }
 }

@@ -13,7 +13,7 @@ public sealed partial class Plugin
     }
     private void SaveNewRetrievalPlan(RetrievalPreset imported)
     {
-        var current=new RetrievalPreset(retrievalName,retrievalItems.ToArray(),retrievalMultiplier,retrievalIncludesSubcrafts,Mode:retrievalMode,RecipeChoices:new(retrievalRecipeOverrides),Quality:retrievalQuality,DestinationRetainer:retrievalSendTo,SendCategories:retrievalSendCategories.ToArray(),CategoryWithdrawQuantity:retrievalCategoryWithdraw,CategoryKeepQuantity:retrievalCategoryKeep,Entrust:retrievalEntrust);
+        var current=new RetrievalPreset(retrievalName,retrievalItems.ToArray(),retrievalMultiplier,retrievalIncludesSubcrafts,Mode:retrievalMode,RecipeChoices:new(retrievalRecipeOverrides),Quality:retrievalQuality,DestinationRetainer:retrievalSendTo,SendCategories:retrievalSendCategories.ToArray(),CategoryWithdrawQuantity:retrievalCategoryWithdraw,CategoryKeepQuantity:retrievalCategoryKeep,FilterPlanCategories:retrievalFilterCategories,Entrust:retrievalEntrust);
         var updated=EntrustSelection.AddImportedPlan(config.RetrievalPresets,current,retrievalEditingPreset,imported);
         config.RetrievalPresets=updated.ToList();SaveConfiguration();SelectRetrievalPreset(updated[^1]);
     }
@@ -22,7 +22,7 @@ public sealed partial class Plugin
     {
         var plan=retrievalEntrust!;
         if(ImGui.SmallButton("Withdraw items…")){retrievalEntrustWithdrawal=true;retrievalPreviewDirty=true;}
-        MarketHelp("Withdraw listed items plus the selected category rules. Set withdrawal quantities separately from Keep; your Entrust rules remain saved.");
+        MarketHelp("Withdraw listed items allowed by the category filter. Set withdrawal quantities separately from Keep; your Entrust rules remain saved.");
         MarketHelp("Entrust all matching items from bags and crystals, minus Keep. HQ/NQ share the keep amount. No crafting expansion. Imported protection is a saved snapshot. Plans created here use your selected items; they do not read AutoRetainer protection.");
         ImGui.SameLine();if(ImGui.SmallButton("Entrust…"))ImGui.OpenPopup("ImportedEntrustOptions");
         if(ImGui.BeginPopup("ImportedEntrustOptions")){
@@ -33,7 +33,7 @@ public sealed partial class Plugin
         ImGui.BeginChild("EntrustSelectionItems",new(0,Math.Max(80,ImGui.GetContentRegionAvail().Y-8)),false);
         if(ImGui.BeginTable("EntrustSelection",3,ImGuiTableFlags.RowBg|ImGuiTableFlags.ScrollY|ImGuiTableFlags.Resizable)){
             ImGui.TableSetupColumn("Item",ImGuiTableColumnFlags.WidthStretch);ImGui.TableSetupColumn("Keep",ImGuiTableColumnFlags.WidthFixed,85);ImGui.TableSetupColumn("",ImGuiTableColumnFlags.WidthFixed,25);ImGui.TableHeadersRow();
-            var rows=retrievalItems;var rowHeight=Math.Max(ImGui.GetFrameHeight(),ImGui.GetTextLineHeight()+4)+ImGui.GetStyle().CellPadding.Y*2;var clip=ImGui.ImGuiListClipper();clip.Begin(rows.Length,rowHeight);while(clip.Step())for(var index=clip.DisplayStart;index<clip.DisplayEnd;index++){var e=rows[index];
+            var rows=FilteredPlanItems();var rowHeight=Math.Max(ImGui.GetFrameHeight(),ImGui.GetTextLineHeight()+4)+ImGui.GetStyle().CellPadding.Y*2;var clip=ImGui.ImGuiListClipper();clip.Begin(rows.Length,rowHeight);while(clip.Step())for(var index=clip.DisplayStart;index<clip.DisplayEnd;index++){var e=rows[index];
                 ImGui.PushID((int)e.ItemId);ImGui.TableNextRow(ImGuiTableRowFlags.None,rowHeight);ImGui.TableNextColumn();DrawRetrievalIcon(e.ItemId);ImGui.TextUnformatted(e.Name);
                 if(plan.Protected.Contains(e.ItemId)){ImGui.SameLine();ImGui.TextDisabled("(protected)");}
                 ImGui.TableNextColumn();var keep=plan.Keep.GetValueOrDefault(e.ItemId);ImGui.SetNextItemWidth(-1);
@@ -43,3 +43,4 @@ public sealed partial class Plugin
         }ImGui.EndChild();
     }
 }
+
