@@ -11,15 +11,15 @@ public sealed partial class Plugin
     private string organizePreviewCoverage="";
     private Dictionary<ulong,string> organizePreviewNames=[];
     private void InvalidateOrganizePreview(){organizePreviewVersion++;organizePreviewCoverage="";organizePreview=[];organizePreviewDirty=true;organizePreviewAll=false;organizePreviewAfter=DateTimeOffset.UtcNow.AddMilliseconds(250);organizePreviewMessage="Preview needs updating…";}
-    private string OrganizeScopeMessage()=>retrievalItems.Length==0
-        ?"No plan items selected. Load a plan, add items, or Restore previous list. Assignments choose destinations; they do not add items."
+    private string OrganizeScopeMessage()=>NoOrganizerPlan
+        ?"No retainer items match the selected movement filters."
         :"No listed items match the plan categories, protection rules or selected movement. Adjust those filters.";
     private void CheckOrganize(){retrievalError="";InvalidateOrganizePreview();organizePreviewAfter=default;}
     private void CheckAllOrganize(){CheckOrganize();organizePreviewAll=true;}
     private unsafe void BeginOrganizePreview()
     {
-        var rules=organizePreviewAll?new StorageRoute[]{new(StorageRouting.AllSources,StorageAutoRouting.AllRetainers,[],[],AllItems:true,Quality:retrievalQuality)}:OrganizeRules();
-        rules=ScopeOrganizeRules(rules);
+        var rules=organizePreviewAll?WholeOrganizerRules():OrganizeRules();
+        if(!NoOrganizerPlan)rules=ScopeOrganizeRules(rules);
         if(rules.Length==0){organizePreviewMessage=OrganizeScopeMessage();return;}
         var retainers=ReadSellerRetainers();
         if(!Player.IsLoaded||retainers.Length==0){organizePreviewMessage="Open the summoning bell to preview this character’s retainers.";return;}
@@ -32,6 +32,7 @@ public sealed partial class Plugin
         if(cached.Count==0){organizePreviewMessage="Open a retainer inventory once to record its contents.";return;}
         rules=StoragePreview.KnownRules(rules,cached.Keys.ToHashSet());
         if(rules.Length==0){organizePreviewMessage="The selected movement needs an unrecorded inventory; open that retainer once.";return;}
+        if(NoOrganizerPlan)rules=PlanItemScope.FromRetainers(rules,cached,OrganizeCategory);
         cached[StorageRouting.Bags]=OrganizerInventory(false,false).Concat(OrganizerInventory(false,true)).ToArray();
         if(config.UseRetainerAssignments.Contains(Player.ContentId))rules=StorageAssignments.Apply(rules,(config.RetainerAssignments.GetValueOrDefault(Player.ContentId)??[]).ToArray(),cached,OrganizeCategory,config.RetrievalPresets);
         var categories=cached.Values.SelectMany(x=>x).Where(x=>x.Item>0).Select(x=>x.Item).Distinct().ToDictionary(x=>x,OrganizeCategory);

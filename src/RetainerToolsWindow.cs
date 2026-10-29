@@ -28,11 +28,12 @@ public sealed partial class Plugin
     private void DrawRetrievalPlanSelector(bool compact=false)
     {
         ImGui.SetNextItemWidth(compact?200:220);
-        if(ImGui.BeginCombo(compact?"##ToolbarPlan":"Plan",retrievalEditingPreset??retrievalName)){
+        if(ImGui.BeginCombo(compact?"##ToolbarPlan":"Plan",NoOrganizerPlan?"No plan · all retainer items":retrievalEditingPreset??retrievalName)){
+            if(ImGui.Selectable("No plan · all retainer items",NoOrganizerPlan)&&!NoOrganizerPlan)RetrievalTry(()=>{if(retrievalEditingPreset!=null)SaveRetrievalPreset();ClearRetrievalList();InvalidateOrganizePreview();});
             foreach(var plan in config.RetrievalPresets.ToArray())if(ImGui.Selectable(plan.Name,retrievalEditingPreset==plan.Name)){if(retrievalEditingPreset!=null)RetrievalTry(SaveRetrievalPreset);SelectRetrievalPreset(config.RetrievalPresets.First(x=>x.Name==plan.Name));}
             ImGui.EndCombo();
         }
-        if(ImGui.IsItemHovered())ImGui.SetTooltip("Select the saved plan you want to edit or run. Shift/Alt changes are saved to that selected plan. HQ/NQ and crafting modes remain part of the plan.");
+        if(ImGui.IsItemHovered())ImGui.SetTooltip("Choose No plan to organize all retainer items using movement filters, or select a saved plan to restrict eligible items. No plan does not entrust existing bag items. Shift/Alt changes are saved to that selected plan. HQ/NQ and crafting modes remain part of the plan.");
     }
     private unsafe void TickRetainerTools(DateTimeOffset now)
     {

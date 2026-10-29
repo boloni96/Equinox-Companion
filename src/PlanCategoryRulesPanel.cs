@@ -10,6 +10,8 @@ public sealed partial class Plugin
         if(ImGui.Combo("##TransferAmount",ref mode,"Plan quantities\0All available listed items\0")){retrievalTransferAll=mode==1;retrievalPreviewDirty=true;retrievalPreview=[];}
         MarketHelp("All available transfers only the listed items matching plan categories and quality. No recipe expansion. Entrust keeps imported Keep amounts and protected items. This temporary option resets when loading a plan.");
     }
+    private bool NoOrganizerPlan=>retrievalEditingPreset==null&&retrievalItems.Length==0&&retrievalEntrust==null;
+    private StorageRoute[] WholeOrganizerRules()=>[new(StorageRouting.AllSources,StorageAutoRouting.AllRetainers,NoOrganizerPlan?organizeCategories.ToArray():[],[],AllItems:!NoOrganizerPlan||organizeCategories.Count==0,Quality:retrievalQuality)];
     private RetrievalEntry[] FilteredPlanItems()=>PlanItemScope.Filter(retrievalItems,retrievalFilterCategories,retrievalSendCategories,OrganizeCategory);
     private RetrievalEntry[] PlanEntrustEntries()=>retrievalTransferAll
         ?FilteredPlanItems().Select(e=>e with{Quantity=Math.Max(0,RetrievalHeld(e.ItemId,retrievalQuality)-chestKeep)}).Where(e=>e.Quantity>0).ToArray()

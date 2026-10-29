@@ -17,6 +17,8 @@ public static class PlanItemScope
             Amounts=r.Amounts==null?null:new(r.Amounts),Destinations=r.Destinations?.ToArray()
         }).Where(r=>r.Items.Length>0).ToArray();
     }
+    public static StorageRoute[] FromRetainers(IEnumerable<StorageRoute> rules,IReadOnlyDictionary<ulong,ChestStack[]> inventories,Func<uint,uint> category)=>
+        Restrict(rules,inventories.Where(x=>x.Key!=StorageRouting.Bags).SelectMany(x=>x.Value).Where(s=>s.Item>0&&s.Quantity>0).Select(s=>s.Item),category);
     public static bool Allows(RoutedMove action,IEnumerable<StorageRoute> rules,bool entrust,IReadOnlyDictionary<uint,int> spent)
     {
         var move=action.Move;var source=move.Source;

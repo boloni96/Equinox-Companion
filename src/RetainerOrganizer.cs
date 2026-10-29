@@ -19,7 +19,7 @@ public sealed partial class Plugin
     private void DrawRetainerOrganizer()
     {
         ImGui.BeginDisabled(organizeRunning||retrievalRun.Running||chestRunning);
-        DrawPlanCategoryRules();
+        if(NoOrganizerPlan)ImGui.TextDisabled("No plan · all retainer items, narrowed by movement filters");else DrawPlanCategoryRules();
         DrawRetainerAssignments();
         var names=retrievalKnownRetainers.GetValueOrDefault(Player.ContentId)??new Dictionary<ulong,string>();
         void Choose(string label,ref ulong id,bool all){if(ImGui.BeginCombo(label,id==StorageAutoRouting.AllRetainers?"All retainers":id==0?(all?"All other retainers":"Choose retainer"):names.GetValueOrDefault(id,id.ToString()))){if(!all&&ImGui.Selectable("All retainers · consolidate duplicates",id==StorageAutoRouting.AllRetainers)){id=StorageAutoRouting.AllRetainers;InvalidateOrganizePreview();}if(all&&ImGui.Selectable("All other retainers",id==0)){id=0;InvalidateOrganizePreview();}foreach(var n in names)if(ImGui.Selectable(n.Value+"##"+n.Key,id==n.Key)){id=n.Key;InvalidateOrganizePreview();}ImGui.EndCombo();}}
@@ -50,11 +50,11 @@ public sealed partial class Plugin
         DrawOrganizePreview();
         windowStatus=organizeRunning?organizeStatus:retrievalError.Length>0?retrievalError:organizePreviewMessage;
     }
-    private StorageRoute[] OrganizeRules()=>ScopeOrganizeRules(organizeRules.Count>0?organizeRules.ToArray():[CurrentOrganizeRule()]);
+    private StorageRoute[] OrganizeRules(){var rules=organizeRules.Count>0?organizeRules.ToArray():[CurrentOrganizeRule()];return NoOrganizerPlan?rules:ScopeOrganizeRules(rules);}
     private StorageRoute CurrentOrganizeRule()=>new(organizeFrom==0?StorageRouting.AllSources:organizeFrom,organizeTo,organizeCategories.ToArray(),[],AllItems:organizeCategories.Count==0,Quality:retrievalQuality);
     private readonly List<StorageRoute> organizeRules=[];
     private StorageRoute[] organizeActiveRules=[];private int organizeReserve=1;
-    private bool organizeBagsOnly;private int organizeBagTradeFilter;private readonly Dictionary<ulong,ChestStack[]> organizeInventories=[];
+    private bool organizeBagsOnly,organizeNoPlan;private int organizeBagTradeFilter;private readonly Dictionary<ulong,ChestStack[]> organizeInventories=[];
     private Task<RoutingResult>? organizeRoutingTask;private RoutedMove[] organizeMoves=[];private int organizeMoveIndex,organizeUnmoved;
     private ulong organizeActiveRetainer;
     private unsafe void StartOrganize()=>StartStorageRouting(OrganizeRules(),false);
@@ -76,7 +76,7 @@ public sealed partial class Plugin
             var owned=ReadSellerRetainers().Select(x=>x.Id).ToArray();
             if(rules.Any(r=>r.To==0||r.To!=StorageAutoRouting.AllRetainers&&!owned.Contains(r.To)||r.From!=0&&r.From!=StorageRouting.AllSources&&!owned.Contains(r.From)))throw new InvalidOperationException("Choose this character's retainers for every movement.");
             if(config.UseRetainerAssignments.Contains(Player.ContentId)&&rules.Any(r=>r.To==StorageAutoRouting.AllRetainers)&&!StorageAssignments.HasSelections(config.RetainerAssignments.GetValueOrDefault(Player.ContentId)??[],config.RetrievalPresets))throw new InvalidOperationException("Choose retainer assignments, or turn off Use assignments for regular duplicate organisation.");
-            EnsureChestMove();if(temporarySelection&&!bagsOnly)throw new InvalidOperationException("Temporary selection is only valid for Entrust.");rules=temporarySelection?PlanItemScope.Restrict(rules,rules.SelectMany(r=>r.Items),OrganizeCategory):ScopeOrganizeRules(rules);if(rules.Length==0)throw new InvalidOperationException(OrganizeScopeMessage());organizeActiveRules=rules;organizeBagsOnly=bagsOnly;organizeBagTradeFilter=temporarySelection?Math.Clamp(temporaryTradeFilter,0,2):0;
+            EnsureChestMove();if(temporarySelection&&!bagsOnly)throw new InvalidOperationException("Temporary selection is only valid for Entrust.");organizeNoPlan=!bagsOnly&&NoOrganizerPlan;rules=temporarySelection?PlanItemScope.Restrict(rules,rules.SelectMany(r=>r.Items),OrganizeCategory):organizeNoPlan?rules:ScopeOrganizeRules(rules);if(rules.Length==0)throw new InvalidOperationException(OrganizeScopeMessage());organizeActiveRules=rules;organizeBagsOnly=bagsOnly;organizeBagTradeFilter=temporarySelection?Math.Clamp(temporaryTradeFilter,0,2):0;
             organizeSources=owned.Where(id=>rules.Any(r=>r.To==StorageAutoRouting.AllRetainers||r.To==id||!bagsOnly&&(r.From==StorageRouting.AllSources||r.From==id))).ToArray();
             organizeOwnerOrder=organizeSources.ToArray();var recorded=RecordedOrganizerInventories(organizeSources);
             organizePort=new(this){Character=Player.ContentId,World=Player.CurrentWorld.RowId,Quality=RetrievalQuality.Any};
@@ -144,6 +144,7 @@ public sealed partial class Plugin
     {
                     organizeInventories[StorageRouting.Bags]=OrganizerInventory(false,false).Concat(OrganizerInventory(false,true)).Where(s=>!organizeBagsOnly||InventoryTradeFilterAllows(s,organizeBagTradeFilter)).ToArray();
                     var snapshot=organizeOwnerOrder.Where(organizeInventories.ContainsKey).Append(StorageRouting.Bags).ToDictionary(id=>id,id=>organizeInventories[id].ToArray());var categories=snapshot.Values.SelectMany(x=>x).Where(x=>x.Item>0).Select(x=>x.Item).Distinct().ToDictionary(x=>x,OrganizeCategory);
+                    if(organizeNoPlan)organizeActiveRules=PlanItemScope.FromRetainers(organizeActiveRules,snapshot,OrganizeCategory);
                     var rules=organizeActiveRules.Select(r=>r.Amounts==null?r:r with{Amounts=r.Amounts.ToDictionary(x=>x.Key,x=>Math.Max(0,x.Value-organizerEntrusted.GetValueOrDefault(x.Key)))}).ToArray();
                     if(config.UseRetainerAssignments.Contains(Player.ContentId))rules=StorageAssignments.Apply(rules,(config.RetainerAssignments.GetValueOrDefault(Player.ContentId)??[]).ToArray(),snapshot,id=>categories.GetValueOrDefault(id),config.RetrievalPresets);
                     var routingPlan=new StorageRoutingPlan("Current movements",Player.ContentId,rules,organizeReserve);var bagsOnly=organizeBagsOnly;
