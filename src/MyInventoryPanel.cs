@@ -48,6 +48,10 @@ public sealed partial class Plugin
         if(ImGui.SmallButton("Add selected to plan"))RetrievalTry(()=>AddRetrieval(amounts.Select(x=>new RetrievalEntry(x.Key,MyInventoryName(x.Key),x.Value)).ToArray()));ImGui.EndDisabled();
         ImGui.TextDisabled($"{amounts.Count} selected matching items · bags + crystals · temporary selection");
         MarketHelp("Entrust selected uses only checked items matching these filters and their quantities. Assignments choose destinations only. Your loaded plan is unchanged. Open the summoning bell to entrust. Shift-hover selects; Alt-hover removes.");
+        ImGui.EndDisabled();
+        if(organizeRunning&&ImGui.Button("Stop entrust"))StopOrganize("Stopped by you; an already-sent move may still complete.");
+        if(organizeMoves.Length>0||organizeRunning)ImGui.TextWrapped(organizeStatus);
+        ImGui.BeginDisabled(craftingWithdrawalPending||retrievalRun.Running||organizeRunning||chestRunning);
         if(ImGui.BeginChild("MyInventoryRows",new(0,Math.Max(80,ImGui.GetContentRegionAvail().Y-8)),false)){
             if(ImGui.BeginTable("MyInventoryItems",3,ImGuiTableFlags.RowBg|ImGuiTableFlags.SizingStretchProp)){
                 ImGui.TableSetupColumn("Item",ImGuiTableColumnFlags.WidthStretch,3);ImGui.TableSetupColumn("In bags");ImGui.TableSetupColumn("Entrust quantity");ImGui.TableHeadersRow();
@@ -55,7 +59,7 @@ public sealed partial class Plugin
                 var clip=ImGui.ImGuiListClipper();clip.Begin(rows.Length,height);
                 while(clip.Step())for(var i=clip.DisplayStart;i<clip.DisplayEnd;i++){
                     var row=rows[i];ImGui.PushID((int)row.Id);ImGui.TableNextRow(ImGuiTableRowFlags.None,height);ImGui.TableNextColumn();
-                    var selected=myInventorySelected.ContainsKey(row.Id);if(ImGui.Checkbox("##Selected",ref selected)){if(selected)myInventorySelected[row.Id]=row.Quantity;else myInventorySelected.Remove(row.Id);}ImGui.SameLine();DrawRetrievalIcon(row.Id);ImGui.TextUnformatted(row.Name);
+                    ImGui.BeginGroup();var selected=myInventorySelected.ContainsKey(row.Id);if(ImGui.Checkbox("##Selected",ref selected)){if(selected)myInventorySelected[row.Id]=row.Quantity;else myInventorySelected.Remove(row.Id);}ImGui.SameLine();DrawRetrievalIcon(row.Id);ImGui.TextUnformatted(row.Name);ImGui.EndGroup();
                     if(ImGui.IsItemHovered()&&!ImGui.GetIO().WantTextInput){if(ImGui.GetIO().KeyShift&&!ImGui.GetIO().KeyAlt)myInventorySelected.TryAdd(row.Id,row.Quantity);else if(ImGui.GetIO().KeyAlt&&!ImGui.GetIO().KeyShift)myInventorySelected.Remove(row.Id);}
                     ImGui.TableNextColumn();ImGui.TextUnformatted(row.Quantity.ToString());ImGui.TableNextColumn();
                     if(myInventorySelected.TryGetValue(row.Id,out var quantity)){quantity=Math.Clamp(quantity,1,row.Quantity);ImGui.SetNextItemWidth(-1);ImGui.InputInt("##Amount",ref quantity,0,0);myInventorySelected[row.Id]=Math.Clamp(quantity,1,row.Quantity);}else ImGui.TextDisabled("—");ImGui.PopID();
@@ -65,7 +69,5 @@ public sealed partial class Plugin
             if(rows.Length==0)ImGui.TextDisabled("No bag items match these filters.");
         }ImGui.EndChild();
         ImGui.EndDisabled();
-        if(organizeRunning&&ImGui.Button("Stop entrust"))StopOrganize("Stopped by you; an already-sent move may still complete.");
-        if(organizeMoves.Length>0||organizeRunning)ImGui.TextWrapped(organizeStatus);
     }
 }
