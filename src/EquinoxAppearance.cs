@@ -13,7 +13,7 @@ internal readonly struct EquinoxAppearance : IDisposable
     [
         (ImGuiCol.Text, Ink(0xe5edf7)), (ImGuiCol.TextDisabled, Ink(0xa5b5c9)),
         (ImGuiCol.WindowBg, Ink(0x0d1724)), (ImGuiCol.ChildBg, Ink(0x0d1724)),
-        (ImGuiCol.PopupBg, Ink(0x122030)), (ImGuiCol.Border, Ink(0x2d4056)),
+        (ImGuiCol.PopupBg, Ink(0x122030)), (ImGuiCol.Border, Ink(0x6589b0)),
         (ImGuiCol.TitleBg, Ink(0x101c2b)), (ImGuiCol.TitleBgActive, Ink(0x1a2c40)),
         (ImGuiCol.TitleBgCollapsed, Ink(0x101c2b)),
         (ImGuiCol.FrameBg, Ink(0x1a2c40)), (ImGuiCol.FrameBgHovered, Ink(0x253d56)), (ImGuiCol.FrameBgActive, Ink(0x1f4264)),
@@ -31,6 +31,11 @@ internal readonly struct EquinoxAppearance : IDisposable
     public EquinoxAppearance(bool enabled)
     {
         this.enabled = enabled;
+        // Consistent, thin light-blue outlines in both Equinox designs.
+        // Scope these pushes so other plugins retain their own styling.
+        ImGui.PushStyleColor(ImGuiCol.Border, Ink(0x6589b0));
+        ImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, 1f);
+        ImGui.PushStyleVar(ImGuiStyleVar.TabBorderSize, 1f);
         if (!enabled) return;
         foreach (var (slot, color) in Colors) ImGui.PushStyleColor(slot, color);
         var scale = ImGui.GetFontSize() / 17f;
@@ -47,8 +52,12 @@ internal readonly struct EquinoxAppearance : IDisposable
     }
     public void Dispose()
     {
-        if (!enabled) return;
-        ImGui.PopStyleVar(10);
-        ImGui.PopStyleColor(Colors.Length);
+        if (enabled)
+        {
+            ImGui.PopStyleVar(10);
+            ImGui.PopStyleColor(Colors.Length);
+        }
+        ImGui.PopStyleVar(2);
+        ImGui.PopStyleColor();
     }
 }
