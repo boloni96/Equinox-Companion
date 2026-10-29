@@ -21,11 +21,12 @@ public sealed partial class Plugin
     private void DrawImportedEntrust()
     {
         var plan=retrievalEntrust!;
-        ImGui.TextUnformatted($"Entrust selection · {retrievalItems.Length} items");
+        if(ImGui.SmallButton("Withdraw items…")){retrievalEntrustWithdrawal=true;retrievalPreviewDirty=true;}
+        MarketHelp("Use this same item list for withdrawal. Set withdrawal quantities separately from Keep; your Entrust rules remain saved.");
         MarketHelp("Entrust all matching items from bags and crystals, minus Keep. HQ/NQ share the keep amount. No crafting expansion. Imported protection is a saved snapshot. Plans created here use your selected items; they do not read AutoRetainer protection.");
         var q=(int)retrievalQuality;if(ImGui.Combo("Quality",ref q,"Any quality\0NQ only\0HQ only\0")){retrievalQuality=(RetrievalQuality)q;if(retrievalEditingPreset!=null)RetrievalTry(SaveRetrievalPreset);}
         DrawRetrievalSendControls();
-        ImGui.TextDisabled($"{plan.Protected.Length} protected item IDs copied");
+        if(plan.Protected.Length>0){ImGui.TextDisabled($"{plan.Protected.Length} protected items");MarketHelp("Protected items are excluded from Entrust. The imported protection snapshot is unchanged by withdrawal.");}
         ImGui.BeginChild("EntrustSelectionItems",new(0,Math.Max(80,ImGui.GetContentRegionAvail().Y-8)),false);
         if(ImGui.BeginTable("EntrustSelection",3,ImGuiTableFlags.RowBg|ImGuiTableFlags.ScrollY|ImGuiTableFlags.Resizable)){
             ImGui.TableSetupColumn("Item",ImGuiTableColumnFlags.WidthStretch);ImGui.TableSetupColumn("Keep",ImGuiTableColumnFlags.WidthFixed,85);ImGui.TableSetupColumn("",ImGuiTableColumnFlags.WidthFixed,25);ImGui.TableHeadersRow();

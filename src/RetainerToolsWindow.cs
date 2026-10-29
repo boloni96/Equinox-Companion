@@ -57,7 +57,7 @@ public sealed partial class Plugin
         if(ImGui.SmallButton("×##HideRetainerTools")){retainerToolsWindow.IsOpen=false;retrievalPickItems=false;}
         MarketHelp("Hide this toolbar until the next summoning bell visit.");
         ImGui.BeginDisabled(busy||retrievalCatalog==null);
-        ImGui.BeginDisabled(retrievalEntrust!=null);if(ImGui.SmallButton("Withdraw"))StartRetrieval(false);ImGui.EndDisabled();MarketHelp("Withdraw the calculated materials below, respecting the plan's quality and bag subtraction settings.");ImGui.SameLine();
+        if(ImGui.SmallButton("Withdraw")){if(retrievalEntrust!=null){retrievalEntrustWithdrawal=true;retrievalPreviewDirty=true;OpenRetriever();retrievalShowList=true;}else StartRetrieval(false);}MarketHelp("Withdraw the calculated materials below, respecting the plan's quality and bag subtraction settings.");ImGui.SameLine();
         if(ImGui.SmallButton("Entrust"))SendRetrievalList(false);MarketHelp("Entrust the calculated quantities from your bags to the plan's destination. Entrust categories, if selected, are additional.");ImGui.SameLine();
         if(ImGui.SmallButton("Gil"))StartRetainerGil();MarketHelp("Withdraw available gil from the open retainer, or all retainers from the retainer list. Checks your gil cap.");
         ImGui.EndDisabled();ImGui.SameLine();
