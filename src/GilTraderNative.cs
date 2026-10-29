@@ -45,8 +45,7 @@ public sealed partial class Plugin
         gilTradeDiagnostics.Enqueue($"{DateTimeOffset.Now:HH:mm:ss} · {message}");
         while (gilTradeDiagnostics.Count > 40) gilTradeDiagnostics.Dequeue();
     }
-    private void ObserveGilTradeCompletion(ILogMessage message) =>
-        gilTradeCompletion.Observe(message.LogMessageId, DateTimeOffset.UtcNow);
+    private void ObserveGilTradeCompletion(ILogMessage message) { gilTradeCompletion.Observe(message.LogMessageId, DateTimeOffset.UtcNow); itemTradeCompletion.Observe(message.LogMessageId, DateTimeOffset.UtcNow); }
     private IPlayerCharacter? GilTradePartner()
     {
         if (gilPartnerRequiresParty && (gilPartnerContent == 0 || !FollowParty.Any(x => x.ContentId == gilPartnerContent &&
@@ -69,7 +68,7 @@ public sealed partial class Plugin
             !Conditions[ConditionFlag.WatchingCutscene] && !Conditions[ConditionFlag.WatchingCutscene78] && !Conditions[ConditionFlag.OccupiedInCutSceneEvent] &&
             !Conditions[ConditionFlag.OccupiedInEvent] && !Conditions[ConditionFlag.OccupiedInQuestEvent] &&
             sellerRun?.Running != true && !HelperTravelBusy && !followSession.Armed && !followStopPending && !followStopUnconfirmed;
-        if (gilTrade.Running) ready &= Player.CurrentWorld.RowId == gilSessionWorld && Client.TerritoryType == gilSessionTerritory;
+        if (TraderRunning) ready &= Player.CurrentWorld.RowId == gilSessionWorld && Client.TerritoryType == gilSessionTerritory;
         var nearby = self != null && partner != null && Vector3.DistanceSquared(self.Position, partner.Position) <= 25;
         var items = false; uint local = 0, remote = 0;
         var offersReady = false;
@@ -90,6 +89,8 @@ public sealed partial class Plugin
     }
     private unsafe void StartGilTrade()
     {
+        if (gilItemsMode) { StartItemTrade(); return; }
+        if (TraderRunning) return;
         gilTradeNotice = "";
         TraceGilTrade($"{(gilReceive ? "Receive" : "Send")} pressed · requested {gilTotal:N0} gil · {gilPartnerName} @ {WorldName(gilPartnerWorld)} · {(gilPartnerRequiresParty ? "party" : "nearby player")}");
         void Reject(string reason) { gilTradeNotice = reason; TraceGilTrade("Not started · " + reason); }
@@ -120,6 +121,7 @@ public sealed partial class Plugin
     }
     private void StopGilTrade(string reason)
     {
+        StopItemTrade(reason);
         if (!gilTrade.Running) return;
         gilTrade.Stop(reason);
         gilTradeCompletion.Clear();
@@ -128,6 +130,7 @@ public sealed partial class Plugin
     }
     private unsafe void UpdateGilTrader(DateTimeOffset now)
     {
+        UpdateItemTrader(now);
         if (!gilTrade.Running || now < gilTradePoll) return;
         gilTradePoll = now.AddMilliseconds(150);
         try

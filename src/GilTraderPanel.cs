@@ -11,12 +11,12 @@ public sealed partial class Plugin
     private int gilTargetSource;
     private string gilNameSearch = "";
     private int gilTotal = 1_000_000;
-    private sealed class GilTraderWindow(Plugin p) : Window("Gil Trader · Equinox###EquinoxGilTrader")
+    private sealed class GilTraderWindow(Plugin p) : Window("Gil & Item Trader · Equinox###EquinoxGilTrader")
     {
         public override void OnOpen()
         {
-            Size ??= new(390, 315); SizeCondition = ImGuiCond.FirstUseEver;
-            SizeConstraints = new() { MinimumSize = new(300, 260), MaximumSize = new(float.MaxValue) };
+            Size ??= new(460, 500); SizeCondition = ImGuiCond.FirstUseEver;
+            SizeConstraints = new() { MinimumSize = new(360, 300), MaximumSize = new(float.MaxValue) };
             RespectCloseHotkey = false; AllowPinning = true;
         }
         public override void Draw() => p.DrawWindowWithLauncher(p.DrawGilTrader);
@@ -34,7 +34,7 @@ public sealed partial class Plugin
         {
             if (args.Trim().Equals("stop", StringComparison.OrdinalIgnoreCase)) StopGilTrade("Stopped by command.");
             else OpenGilTrader();
-        }) { HelpMessage = "Gil Trader: send or receive gil with a selected nearby player. /eqtrade stop stops the session." });
+        }) { HelpMessage = "Gil & Item Trader: send or receive gil or selected bag items with a nearby player. /eqtrade stop stops the session." });
         if (!gilTraderCommand) Log.Warning("/eqtrade is already registered. Open Gil Trader from the window launcher.");
     }
     private void DisposeGilTrader()
@@ -55,7 +55,8 @@ public sealed partial class Plugin
     private unsafe void DrawGilTrader()
     {
         if (!config.EnableGilTrader) return;
-        ImGui.BeginDisabled(gilTrade.Running);
+        ImGui.BeginDisabled(TraderRunning);
+        var mode=gilItemsMode?1:0;ImGui.SetNextItemWidth(-1);if(ImGui.Combo("##TraderMode",ref mode,"Gil\0Items\0")){gilItemsMode=mode==1;gilTradeNotice="";if(gilItemsMode)PrepareTradeItemShortcutLabels();}
         ImGui.SetNextItemWidth(-1);
         ImGui.Combo("##gil-target-source", ref gilTargetSource, "Party\0Nearby players\0Friends\0Find by name\0");
         if (gilTargetSource == 3) { ImGui.SetNextItemWidth(-1); ImGui.InputTextWithHint("##gil-name-search", "Player name", ref gilNameSearch, 80); }
@@ -78,13 +79,14 @@ public sealed partial class Plugin
             ImGui.EndCombo();
         }
         if (ImGui.IsItemHovered()) ImGui.SetTooltip(gilPartnerName.Length == 0 ? "Choose a player and check their home world before starting." : $"{gilPartnerName} · {WorldName(gilPartnerWorld)}\nStand nearby. Only this player is allowed for this session.");
-        if (ImGui.RadioButton("Send gil##gil-mode-send", !gilReceive)) gilReceive = false;
+        if (ImGui.RadioButton("Send##gil-mode-send", !gilReceive)) gilReceive = false;
         ImGui.SameLine(); if (ImGui.RadioButton("Receive##gil-mode-receive", gilReceive)) gilReceive = true;
         if (gilReceive)
         {
-            ImGui.TextDisabled("Receive only from the selected player.");
+            ImGui.TextDisabled(gilItemsMode?"Receive items only · selected player":"Receive gil only · selected player");
             if (ImGui.IsItemHovered()) ImGui.SetTooltip("Start receiving before they start sending. Your side must contain no gil or items. Stops after 60 seconds without progress, moving away or changing area. Party selection also stops if they leave the party. This permission is never saved.");
         }
+        else if(gilItemsMode) DrawItemTradePicker();
         else
         {
             ImGui.SetNextItemWidth(Math.Min(190, Math.Max(100, ImGui.GetContentRegionAvail().X - 80)));
@@ -92,23 +94,24 @@ public sealed partial class Plugin
             if (ImGui.IsItemHovered()) ImGui.SetTooltip("The total to send, divided into trades of at most 1,000,000 gil. The final trade sends only the remainder. The amount is checked against your character’s wallet.");
             ImGui.TextDisabled($"{gilTotal:N0} gil · {(gilTotal + (long)GilTradeRun.TradeLimit - 1) / GilTradeRun.TradeLimit:N0} trades");
         }
-        if (ImGui.Button(gilReceive ? "Start receiving###gil-start" : "Send gil###gil-start")) StartGilTrade();
+        if (ImGui.Button(gilReceive ? "Start receiving###gil-start" : gilItemsMode ? "Send items###gil-start" : "Send gil###gil-start")) StartGilTrade();
         ImGui.EndDisabled();
-        ImGui.SameLine(); ImGui.BeginDisabled(!gilTrade.Running);
+        ImGui.SameLine(); ImGui.BeginDisabled(!TraderRunning);
         if (ImGui.Button("Stop")) StopGilTrade("Stopped. Confirmed transfers are kept.");
         ImGui.EndDisabled();
-        if (ImGui.IsItemHovered()) ImGui.SetTooltip("Stops further actions and cancels our pending trade. Gil already transferred cannot be taken back. /eqtrade stop also works while minimized.");
-        if (gilTrade.Running || gilTrade.Done > 0)
+        if (ImGui.IsItemHovered()) ImGui.SetTooltip("Stops further actions and cancels our pending trade. Items or gil already transferred remain with the recipient. /eqtrade stop also works while minimized.");
+        if(gilItemsMode) ImGui.TextUnformatted($"{itemTrade.Done:N0} items · {itemTrade.Trades} completed trades");
+        else if (gilTrade.Running || gilTrade.Done > 0)
         {
             if (gilTrade.Sending) ImGui.ProgressBar(gilTrade.Total == 0 ? 0 : (float)gilTrade.Done / gilTrade.Total, new(-1, 0), $"{gilTrade.Done:N0} / {gilTrade.Total:N0} gil");
             else ImGui.TextUnformatted($"Received {gilTrade.Done:N0} gil · {gilTrade.Trades} trades");
         }
-        ImGui.TextWrapped(gilTradeNotice.Length > 0 ? gilTradeNotice : gilTrade.Status);
+        ImGui.TextWrapped(gilTradeNotice.Length > 0 ? gilTradeNotice : gilItemsMode ? itemTrade.Status : gilTrade.Status);
         if (ImGui.CollapsingHeader("Details")) DrawGilTradeDiagnostics();
     }
     private void DrawGilTradeDiagnostics()
     {
-        ImGui.TextWrapped("Both people can use /eqtrade. The receiver starts Receive; the sender selects Send and a total. Manual acceptance on the other client also works. Minimizing keeps this session running; Stop or closing with X ends it.");
+        ImGui.TextWrapped("Items mode sends selected quantities in batches of five stacks; the receiver uses Items + Receive. Gil mode keeps its existing behavior. Both people can use /eqtrade. The receiver starts Receive; the sender selects Send and a total. Manual acceptance on the other client also works. Minimizing keeps this session running; Stop or closing with X ends it.");
         if (ImGui.SmallButton("Export diagnostics##gil")) Export();
         ImGui.SameLine(); if (ImGui.SmallButton("Open exports##gil")) OpenDiagnosticFolder(Path.Combine(Pi.GetPluginConfigDirectory(), "exports"));
         foreach (var line in gilTradeDiagnostics) ImGui.TextWrapped(line);

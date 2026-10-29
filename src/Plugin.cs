@@ -335,7 +335,7 @@ public sealed partial class Plugin : IDalamudPlugin
         RunOptionalTool("Coffer markers",now);
         // Give a coffer click a short uncontested turn before other automatic interactions.
         // Movement-stop handling remains responsive during this brief priority window.
-        if(now>=cofferPriorityUntil&&sellerRun?.Running!=true&&!gilTrade.Running)
+        if(now>=cofferPriorityUntil&&sellerRun?.Running!=true&&!TraderRunning)
         {
             RunOptionalTool("Follow portals",now);
             RunOptionalTool("Quest Helper",now);
@@ -1044,6 +1044,7 @@ public sealed partial class Plugin : IDalamudPlugin
                 marketSellerDiagnostics=ReadSellerDiagnosticExport(),
                 marketSharingDiagnostics=new {projectionVersion=config.SharedRoster?.MarketProjectionVersion??0,historyStatus=marketSharedStatus,historyCursor=marketSharedHistory.Cursor,sharedRecords=marketSharedHistory.Records.Length,acknowledgedRecords=marketSharedHistory.Sent.Count,historyInFlight=marketSharedTask!=null,backgroundStatus=marketWatchNotice,backgroundInFlight=marketWatchTask!=null,backgroundCachedItems=marketWatchCache.Count},
                 tradeItemShortcutDiagnostics=new {enabled=config.EnableTradeItemShortcut,actions=tradeItemShortcutActions,confirmedAdditions=tradeItemShortcutConfirmed,status=tradeItemShortcutStatus,pending=pendingTradeItemShortcut is not null,menuCleanup=tradeItemMenuCleanup is not null,awaitingOffer=tradeItemOfferWatch is not null,trace=tradeItemShortcutTrace.ToArray()},
+                itemTraderDiagnostics=new {stage=itemTrade.Stage.ToString(),itemTrade.Status,itemTrade.Sending,itemTrade.Done,itemTrade.Trades,remaining=itemTrade.Remaining,offer=itemTrade.Offer,pending=itemTradePending},
                 gilTraderDiagnostics=new {enabled=config.EnableGilTrader,selectedDirection=gilReceive?"Receive":"Send",requestedTotal=gilTotal,requiresParty=gilPartnerRequiresParty,stage=gilTrade.Stage.ToString(),gilTrade.Status,gilTrade.Sending,gilTrade.Total,gilTrade.Done,gilTrade.Trades,partner=gilPartnerName,world=gilPartnerWorld,trace=gilTradeDiagnostics.ToArray()},
                 helperDiagnostics = new { character=Player.CharacterName, enabled=config.EnableFollowThem, armed=followSession.Armed, target=config.FollowThem.TargetName, questPermission=helperPermission.Quest, paused=HelperPaused, questPaused=helperPermission.QuestPaused, shareQuest=config.FollowThem.ShareQuestActions, stopOnMovement=config.FollowThem.StopOnMovement, followStatus, helperError, helperLastIssue, observedQuest=helperObservedQuest, followers=helperFollowers.Select(f=>new {f.Name,f.Status,f.Quest,f.QuestPaused,f.Control,f.Updated}).ToArray() },
                 eventExchangeDiagnostics=HelperExchangeDiagnostic(),

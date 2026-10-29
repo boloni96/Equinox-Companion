@@ -29,7 +29,7 @@ public sealed partial class Plugin
         private ulong inventoryRetainer;private DateTimeOffset inventoryReadyAt;
         private RetrievalSlot? pending;private int quantity;private bool contextSent,numericSent,prepared;private DateTimeOffset openedAt;
         internal RetrieverPort(Plugin plugin){p=plugin;navigation=new(plugin);}
-        public bool ContextMatches=>p.config.EnableRetriever&&Player.IsLoaded&&Player.ContentId==Character&&Player.CurrentWorld.RowId==World&&Player.HomeWorld.RowId==World&&Conditions[ConditionFlag.OccupiedSummoningBell]&&!Conditions[ConditionFlag.InCombat]&&!Conditions[ConditionFlag.BetweenAreas]&&!Conditions[ConditionFlag.BetweenAreas51]&&!p.HelperInCutscene()&&!p.sellerRun.Running&&!p.gilTrade.Running;
+        public bool ContextMatches=>p.config.EnableRetriever&&Player.IsLoaded&&Player.ContentId==Character&&Player.CurrentWorld.RowId==World&&Player.HomeWorld.RowId==World&&Conditions[ConditionFlag.OccupiedSummoningBell]&&!Conditions[ConditionFlag.InCombat]&&!Conditions[ConditionFlag.BetweenAreas]&&!Conditions[ConditionFlag.BetweenAreas51]&&!p.HelperInCutscene()&&!p.sellerRun.Running&&!p.TraderRunning;
         public bool Prepare(){var result=prepared?Pause.Check(DateTimeOffset.UtcNow):Pause.Acquire(DateTimeOffset.UtcNow);prepared=true;if(result.Error.Length>0)throw new InvalidOperationException(result.Error);if(Pi.InstalledPlugins.Any(x=>x.IsLoaded&&x.InternalName=="Artisan")&&Pi.GetIpcSubscriber<bool>("Artisan.IsBusy").InvokeFunc())throw new InvalidOperationException("Artisan is busy. Stop its current task first.");return result.Ready;}
         public bool Select(ulong id){
             var rm=RetainerManager.Instance();var current=rm==null?0:rm->LastSelectedRetainerId;

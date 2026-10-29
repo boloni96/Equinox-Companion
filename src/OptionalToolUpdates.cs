@@ -8,7 +8,7 @@ public sealed partial class Plugin
     {
         "Equinox Market"=>true,
         "Equinox Organizer"=>config.EnableRetriever||retainerGilRunning||retainerGilPort?.Pause.RestorePending==true||retrievalRun.Running||chestRunning||organizeRunning||organizePort?.Pause.RestorePending==true||retrievalPort.Pause.RestorePending,
-        "Gil Trader"=>gilTrade.Running,
+        "Gil Trader"=>TraderRunning,
         "Trade item shortcut"=>pendingTradeItemShortcut is not null||tradeItemMenuCleanup is not null||tradeItemOfferWatch is not null,
         "Camera"=>OptionalToolAvailable("Camera")&&config.RememberCameraHeight||cameraHeightDefaultPending,
         "QuickLoot"=>config.EnableQuickLoot,

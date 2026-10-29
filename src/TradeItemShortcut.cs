@@ -95,7 +95,7 @@ public sealed partial class Plugin
         target = default;
         reason = ""; syncPending = false;
         if (!config.EnableTradeItemShortcut) { reason = "The item shortcut is disabled."; return false; }
-        if (gilTrade.Running) { reason = "Stop the active Gil Trader session before adding items."; return false; }
+        if (TraderRunning) { reason = "Stop the active Gil Trader session before adding items."; return false; }
         if (!Player.IsLoaded || Player.ContentId == 0 ||
             Conditions[ConditionFlag.BetweenAreas] || Conditions[ConditionFlag.BetweenAreas51] ||
             Conditions[ConditionFlag.LoggingOut] || Conditions[ConditionFlag.InCombat])
@@ -286,7 +286,7 @@ public sealed partial class Plugin
         var trade = SellerAddon("Trade");
         var inv = InventoryManager.Instance();
         var agent = AgentInventoryContext.Instance();
-        var same = config.EnableTradeItemShortcut && !gilTrade.Running &&
+        var same = config.EnableTradeItemShortcut && !TraderRunning &&
             Player.IsLoaded && Player.ContentId == cleanup.Target.Character &&
             menu != null && (nint)menu == cleanup.Menu && trade != null && (nint)trade == cleanup.Target.TradeAddon &&
             inv != null && inv->TradePartnerEntityId == cleanup.Target.Partner &&

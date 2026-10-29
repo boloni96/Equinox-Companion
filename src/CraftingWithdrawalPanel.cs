@@ -62,7 +62,7 @@ public sealed partial class Plugin
         if (!craftingWithdrawalPending) return;
         try
         {
-            if (!config.EnableRetriever || !retrieverWindow.IsOpen || !Player.IsLoaded || Player.ContentId != craftingWithdrawalCharacter || Player.CurrentWorld.RowId != craftingWithdrawalWorld || Player.HomeWorld.RowId != craftingWithdrawalWorld || Conditions[ConditionFlag.InCombat] || Conditions[ConditionFlag.BetweenAreas] || Conditions[ConditionFlag.BetweenAreas51] || HelperInCutscene() || sellerRun.Running || gilTrade.Running || organizeRunning || chestRunning || retainerGilRunning)
+            if (!config.EnableRetriever || !retrieverWindow.IsOpen || !Player.IsLoaded || Player.ContentId != craftingWithdrawalCharacter || Player.CurrentWorld.RowId != craftingWithdrawalWorld || Player.HomeWorld.RowId != craftingWithdrawalWorld || Conditions[ConditionFlag.InCombat] || Conditions[ConditionFlag.BetweenAreas] || Conditions[ConditionFlag.BetweenAreas51] || HelperInCutscene() || sellerRun.Running || TraderRunning || organizeRunning || chestRunning || retainerGilRunning)
                 throw new InvalidOperationException("Withdrawal cancelled: character, world or active operation changed. Use a bell on your home world.");
             if (now >= craftingWithdrawalDeadline) throw new InvalidOperationException("Could not open the summoning bell in time. Move within reach and try Withdraw again.");
             if (retrievalCatalogTask?.IsCompleted == true) { retrievalCatalog = retrievalCatalogTask.GetAwaiter().GetResult(); retrievalCatalogTask = null; }

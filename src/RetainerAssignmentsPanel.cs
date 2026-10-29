@@ -13,7 +13,10 @@ public sealed partial class Plugin
         if(ImGui.Checkbox("Use assignments",ref use)){if(use)config.UseRetainerAssignments.Add(character);else config.UseRetainerAssignments.Remove(character);SaveConfiguration();InvalidateOrganizePreview();}
         MarketHelp("Assignments apply to All retainers in Organise and Entrust. Explicit destinations still override them. Unassigned items are left alone. Settings belong to this character.");
 
-        if(!ImGui.CollapsingHeader("Retainer assignments"))return;
+        if(ImGui.SmallButton("Assignments…"))ImGui.OpenPopup("RetainerAssignmentsPopup");
+        ImGui.SetNextWindowSize(new(540,400),ImGuiCond.Appearing);
+        if(!ImGui.BeginPopup("RetainerAssignmentsPopup"))return;
+        ImGui.BeginChild("AssignmentRows",new(0,Math.Max(80,ImGui.GetContentRegionAvail().Y-8)),false);
         if(!config.RetainerAssignments.TryGetValue(character,out var rows))config.RetainerAssignments[character]=rows=[];
         var owned=ReadSellerRetainers();if(owned.Length==0)owned=(retrievalKnownRetainers.GetValueOrDefault(character)??new Dictionary<ulong,string>()).Select(x=>new SellerRetainerRef(x.Key,x.Value)).ToArray();var names=owned.ToDictionary(x=>x.Id,x=>x.Name);
         foreach(var retainer in owned)if(rows.All(x=>x.Retainer!=retainer.Id))rows.Add(new(retainer.Id,[],[]));
@@ -45,5 +48,6 @@ public sealed partial class Plugin
         }
         if(dirty){SaveConfiguration();InvalidateOrganizePreview();}
         ImGui.TextDisabled("Allowed homes · available space first · saved per character");
+        ImGui.EndChild();ImGui.EndPopup();
     }
 }

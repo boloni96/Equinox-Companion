@@ -2,9 +2,9 @@ using Dalamud.Bindings.ImGui;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
-    private void DrawRetrievalSendControls()
+    private void DrawRetrievalSendControls(bool inline=false)
     {
-        if(!ImGui.CollapsingHeader("Entrust this plan"))return;
+        if(!inline&&!ImGui.CollapsingHeader("Entrust this plan"))return;
         var names=retrievalKnownRetainers.GetValueOrDefault(Player.ContentId)??new Dictionary<ulong,string>();
         if(ImGui.BeginCombo("To retainer",retrievalSendTo==StorageAutoRouting.AllRetainers?"All retainers":names.GetValueOrDefault(retrievalSendTo,"Choose destination"))){if(ImGui.Selectable("All retainers",retrievalSendTo==StorageAutoRouting.AllRetainers))retrievalSendTo=StorageAutoRouting.AllRetainers;foreach(var row in names)if(ImGui.Selectable(row.Value+"##send"+row.Key,retrievalSendTo==row.Key))retrievalSendTo=row.Key;ImGui.EndCombo();}
         if(DrawStorageCategoryPicker("Entrust categories",retrievalSendCategories,"None · listed items only")&&retrievalEditingPreset!=null)RetrievalTry(SaveRetrievalPreset);
