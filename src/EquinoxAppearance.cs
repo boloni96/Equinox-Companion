@@ -31,12 +31,10 @@ internal readonly struct EquinoxAppearance : IDisposable
     public EquinoxAppearance(bool enabled)
     {
         this.enabled = enabled;
-        // Consistent, thin light-blue outlines in both Equinox designs.
-        // Scope these pushes so other plugins retain their own styling.
-        ImGui.PushStyleColor(ImGuiCol.Border, Ink(0x6589b0));
+        if (!enabled) return;
+        // Goddess Blue controls use thin outlines; Classic keeps Dalamud's style.
         ImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, 1f);
         ImGui.PushStyleVar(ImGuiStyleVar.TabBorderSize, 1f);
-        if (!enabled) return;
         foreach (var (slot, color) in Colors) ImGui.PushStyleColor(slot, color);
         var scale = ImGui.GetFontSize() / 17f;
         ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(7, 6) * scale);
@@ -52,12 +50,8 @@ internal readonly struct EquinoxAppearance : IDisposable
     }
     public void Dispose()
     {
-        if (enabled)
-        {
-            ImGui.PopStyleVar(10);
-            ImGui.PopStyleColor(Colors.Length);
-        }
-        ImGui.PopStyleVar(2);
-        ImGui.PopStyleColor();
+        if (!enabled) return;
+        ImGui.PopStyleVar(12);
+        ImGui.PopStyleColor(Colors.Length);
     }
 }
