@@ -41,18 +41,23 @@ public sealed partial class Plugin
         }
         if(ImGui.SmallButton("Organizer list")){try{LoadOrganizerTradeItems();}catch(Exception e){gilTradeNotice=e.Message;}}
         MarketHelp("Load the current Organizer's listed items and quantities from your bags. No crafting expansion or retainer withdrawal. HQ/NQ choice applies; unavailable or untradable copies are reported. Review before sending.");
-        ImGui.SameLine();if(ImGui.SmallButton("Clear"))itemTradeSelection.Clear();ImGui.SameLine();ImGui.Checkbox("Selected only",ref itemTradeSelectedOnly);
-        ImGui.TextDisabled($"{itemTradeSelection.Count} selected · {itemTradeSelection.Values.Sum():N0} items");
-        MarketHelp("Only tradable copies in your bags and crystals. HQ and NQ are separate. Each trade contains at most five stacks. Choose quantities; nothing moves until Send items.");
+        ImGui.SameLine();ImGui.Checkbox("Selected only",ref itemTradeSelectedOnly);
         var rows=itemTradeBags.Where(x=>x.Item>1&&x.Quantity>0&&x.Tradable).GroupBy(x=>x.Key).Select(g=>(Key:g.Key,Count:g.Sum(x=>x.Quantity)))
             .Where(x=>(!itemTradeSelectedOnly||itemTradeSelection.ContainsKey(x.Key))&&(itemTradeCategories.Count==0||itemTradeCategories.Contains(OrganizeCategory(x.Key.Item)))&&itemTradeNames.GetValueOrDefault(x.Key.Item,"").Contains(itemTradeSearch,StringComparison.OrdinalIgnoreCase))
             .OrderBy(x=>itemTradeNames.GetValueOrDefault(x.Key.Item)).ThenBy(x=>x.Key.Hq).ToArray();
+        if(ImGui.SmallButton("Select all shown"))foreach(var row in rows)itemTradeSelection.TryAdd(row.Key,row.Count);
+        MarketHelp("Select every item matching the current search, categories and Selected only filter, including rows below the scroll area. Existing selected quantities are preserved.");
+        ImGui.SameLine();if(ImGui.SmallButton("Clear selection"))itemTradeSelection.Clear();
+        ImGui.TextDisabled($"{itemTradeSelection.Count} selected · {itemTradeSelection.Values.Sum():N0} items");
+        MarketHelp("Only tradable copies in your bags and crystals. HQ and NQ are separate. Shift-hover an item to select it; Alt-hover to deselect. Each trade contains at most five stacks. Review quantities; nothing moves until Send items.");
         var height=Math.Max(90,Math.Min(260,ImGui.GetContentRegionAvail().Y-100));
         if(ImGui.BeginTable("TradeBagItems",3,ImGuiTableFlags.ScrollY|ImGuiTableFlags.RowBg|ImGuiTableFlags.SizingStretchProp,new(0,height))){
             ImGui.TableSetupColumn("Item",ImGuiTableColumnFlags.WidthStretch);ImGui.TableSetupColumn("Have",ImGuiTableColumnFlags.WidthFixed,45);ImGui.TableSetupColumn("Send",ImGuiTableColumnFlags.WidthFixed,80);ImGui.TableSetupScrollFreeze(0,1);ImGui.TableHeadersRow();
-            foreach(var row in rows){ImGui.PushID(row.Key.Item+":"+row.Key.Hq);ImGui.TableNextRow();ImGui.TableNextColumn();var selected=itemTradeSelection.ContainsKey(row.Key);
+            foreach(var row in rows){ImGui.PushID(row.Key.Item+":"+row.Key.Hq);ImGui.TableNextRow();ImGui.TableNextColumn();ImGui.BeginGroup();var selected=itemTradeSelection.ContainsKey(row.Key);
                 if(ImGui.Checkbox("##Selected",ref selected)){if(selected)itemTradeSelection[row.Key]=row.Count;else itemTradeSelection.Remove(row.Key);}ImGui.SameLine();
-                ImGui.TextUnformatted(itemTradeNames.GetValueOrDefault(row.Key.Item,row.Key.Item.ToString())+(row.Key.Hq?" HQ":""));
+                ImGui.TextUnformatted(itemTradeNames.GetValueOrDefault(row.Key.Item,row.Key.Item.ToString())+(row.Key.Hq?" HQ":""));ImGui.EndGroup();
+                if(!TraderRunning&&ImGui.IsItemHovered()&&!ImGui.GetIO().WantTextInput){if(ImGui.GetIO().KeyShift&&!ImGui.GetIO().KeyAlt)itemTradeSelection.TryAdd(row.Key,row.Count);else if(ImGui.GetIO().KeyAlt&&!ImGui.GetIO().KeyShift)itemTradeSelection.Remove(row.Key);}
+                selected=itemTradeSelection.ContainsKey(row.Key);
                 ImGui.TableNextColumn();ImGui.TextUnformatted(row.Count.ToString());ImGui.TableNextColumn();ImGui.BeginDisabled(!selected);
                 var qty=itemTradeSelection.GetValueOrDefault(row.Key);ImGui.SetNextItemWidth(-1);if(ImGui.InputInt("##Quantity",ref qty,0,0))itemTradeSelection[row.Key]=Math.Clamp(qty,1,row.Count);ImGui.EndDisabled();ImGui.PopID();
             }ImGui.EndTable();
