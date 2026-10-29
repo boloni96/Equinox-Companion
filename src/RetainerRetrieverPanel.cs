@@ -57,6 +57,7 @@ public sealed partial class Plugin
     });}
     private void DrawRetriever()
     {
+        PollInventoryReviewExport();
         if(!retrievalRun.Running&&retrievalPreviewOwner!=Player.ContentId){retrievalPreviewOwner=Player.ContentId;retrievalRefreshPending=true;retrievalStock=[];retrievalStockComplete=false;retrievalPreview=[];retrievalPlan=[];retrievalPreviewDirty=true;}
 
         if(retrievalCatalogTask?.IsCompleted==true){try{retrievalCatalog=retrievalCatalogTask.GetAwaiter().GetResult();}catch(Exception e){retrievalError="Item catalogue: "+e.Message;}retrievalCatalogTask=null;}
@@ -78,7 +79,7 @@ public sealed partial class Plugin
             if(ImGui.Button("Save preset"))RetrievalTry(SaveRetrievalPreset);
         if(ImGui.SmallButton("Clear list"))ClearRetrievalList();
         if(retrievalCleared!=null){ImGui.SameLine();if(ImGui.SmallButton("Undo clear")){SelectRetrievalPreset(retrievalCleared);retrievalCleared=null;}}
-            DrawRetrievalPicker();DrawStorageChatOption();ImGui.EndPopup();
+            DrawRetrievalPicker();DrawStorageChatOption();ImGui.Separator();DrawInventoryReviewExport();ImGui.EndPopup();
         }
         ImGui.EndDisabled();
         if(retrievalPickItems)TickRetrievalPicker();
