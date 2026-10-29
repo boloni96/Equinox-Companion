@@ -14,9 +14,9 @@ public sealed partial class Plugin
     {
         TickRetainerTools(now);TickRetainerGil(now);TickChest(now);TickOrganize(now);
         if(retrievalPort.Pause.RestorePending)retrievalPort.Pause.Release(now);
-        if(!config.EnableRetriever){if(retrievalRun.Running)retrievalRun.Stop("Retriever disabled.");retrieverWindow.IsOpen=false;ForgetOptionalLauncher("Equinox Organizer");return;}
+        if(!config.EnableRetriever){CancelCraftingWithdrawal("");if(retrievalRun.Running)retrievalRun.Stop("Retriever disabled.");retrieverWindow.IsOpen=false;ForgetOptionalLauncher("Equinox Organizer");return;}
         if(retrievalRun.Running&&retrievalRun.State!=RetrievalRun.Phase.Prepare&&retrievalPort.Pause.Held){var pause=retrievalPort.Pause.Check(now);if(!pause.Ready){retrievalRun.Stop(pause.Error.Length>0?pause.Error:"Another AutoRetainer task started; retrieval stopped.");return;}}
-        if(now<retrievalTick)return;retrievalTick=now.AddMilliseconds(200);retrievalRun.Tick(now);
+        if(now<retrievalTick)return;retrievalTick=now.AddMilliseconds(200);TickCraftingWithdrawal(now);retrievalRun.Tick(now);
         if(retrievalLastStatus!=retrievalRun.Status){if(!retrievalRun.Running)retrievalPreviewDirty=true;retrievalLastStatus=retrievalRun.Status;Log.Information("Equinox Organizer: {Status}",retrievalLastStatus);if(retrievalLastStatus.StartsWith("Stopped:"))errorJournal.Record("retainer-retriever",retrievalLastStatus);}
     }
     private sealed unsafe class RetrieverPort:IRetrievalPort

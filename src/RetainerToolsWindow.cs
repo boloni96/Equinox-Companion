@@ -47,7 +47,7 @@ public sealed partial class Plugin
     private bool retainerToolsMaterials=true;
     private unsafe void DrawRetainerTools()
     {
-        var busy=organizeRunning||retrievalRun.Running||chestRunning||retainerGilRunning;
+        var busy=craftingWithdrawalPending||organizeRunning||retrievalRun.Running||chestRunning||retainerGilRunning;
         ImGui.BeginDisabled(busy);DrawRetrievalPlanSelector(true);ImGui.SameLine();
         if(ImGui.SmallButton("Edit")){OpenRetriever();retrievalShowList=true;}
         MarketHelp("Edit the requested outputs, quantities and recipes in Equinox Organizer.");
@@ -62,7 +62,7 @@ public sealed partial class Plugin
         if(ImGui.SmallButton("Gil"))StartRetainerGil();MarketHelp("Withdraw available gil from the open retainer, or all retainers from the retainer list. Checks your gil cap.");
         ImGui.EndDisabled();ImGui.SameLine();
         if(ImGui.SmallButton(retainerToolsMaterials?"Hide materials":"Materials"))retainerToolsMaterials=!retainerToolsMaterials;
-        if(busy){ImGui.SameLine();if(ImGui.SmallButton("Stop")){StopRetainerGil("Stopped by you.");if(organizeRunning)StopOrganize("Stopped by you.");if(retrievalRun.Running)retrievalRun.Stop("Stopped by you.");}}
+        if(busy){ImGui.SameLine();if(ImGui.SmallButton("Stop")){CancelCraftingWithdrawal("Stopped by you.");StopRetainerGil("Stopped by you.");if(organizeRunning)StopOrganize("Stopped by you.");if(retrievalRun.Running)retrievalRun.Stop("Stopped by you.");}}
         if(ImGui.BeginPopup("Retainer plan options")){
             ImGui.BeginDisabled(busy);
             var changed=false;
