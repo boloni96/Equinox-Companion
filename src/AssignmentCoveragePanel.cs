@@ -29,7 +29,7 @@ public sealed partial class Plugin
             assignmentCoverageDetails=string.Join("\n",lines);
         }
         var check=assignmentCoverage!;
-        ImGui.TextWrapped($"{check.Missing.Select(x=>x.Category).Distinct().Count()} categories with unassigned items · {check.Missing.Length} item types · {check.Missing.Sum(x=>x.Slots)} slots");
+        ImGui.TextWrapped($"{check.Missing.Select(x=>x.Category).Distinct().Count()} categories · {check.Missing.Length} item types without homes · {check.Missing.Sum(x=>x.Slots)} slots");
         if(ImGui.IsItemHovered()){
             ImGui.BeginTooltip();ImGui.PushTextWrapPos(ImGui.GetFontSize()*38);
             var groups=check.Missing.GroupBy(x=>x.Category).ToArray();
@@ -46,7 +46,8 @@ public sealed partial class Plugin
         if(check.CheckedRetainers<check.TotalRetainers)ImGui.TextWrapped("Incomplete check: open the bell and missing retainer inventories, then Refresh.");
         if(!config.UseRetainerAssignments.Contains(Player.ContentId))ImGui.TextDisabled("Assignments are currently disabled.");
         if(ImGui.TreeNode("Missing assignment details")){
-            ImGui.TextWrapped(assignmentCoverageDetails);ImGui.TreePop();
+            ImGui.BeginChild("assignmentMissingDetails",new System.Numerics.Vector2(0,ImGui.GetTextLineHeightWithSpacing()*9),true);
+            ImGui.TextWrapped(assignmentCoverageDetails);ImGui.EndChild();ImGui.TreePop();
         }
         DrawAssignmentSetups(owners,names,rows);
         ImGui.Separator();

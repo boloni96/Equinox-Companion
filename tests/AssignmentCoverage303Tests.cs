@@ -21,9 +21,9 @@ internal static class AssignmentCoverage303Tests
     var tight=new Dictionary<ulong,ChestStack[]>{[1]=full,[2]=Enumerable.Range(0,174).Select(i=>new ChestStack((uint)(10000+i/25),i%25,5000,1,false,1)).ToArray()};
     recommendation=AssignmentRecommendations.Build([1,2],tight,[new(1,[2],[]),new(2,[2],[])],[],id=>id==1000?1u:2u);
     Check("does not promise space on full homes",recommendation.Suggestions.Length==1&&recommendation.Suggestions[0].Retainer==1&&recommendation.Suggestions[0].AdditionalSlots==0);
-    // A category split across full homes cannot be collected into either with a spare-slot reserve.
+    // Large categories can retain shared homes instead of silently being omitted.
     recommendation=AssignmentRecommendations.Build([1,2],tight,[],[],id=>1);
-    Check("reports categories needing split/manual review",recommendation.Suggestions.Length==0&&recommendation.NeedsSpace.SequenceEqual(new uint[]{1}));
+    Check("covers split categories across full homes",recommendation.Suggestions.Length==2&&recommendation.Remaining.Length==0);
     bool refused=false;try{AssignmentRecommendations.Build([1,2,3],inventory,[],[],id=>1);}catch(InvalidOperationException){refused=true;}
     Check("recommendation requires complete inventory coverage",refused);
     var roomy=new Dictionary<ulong,ChestStack[]>{[1]=[S(110,999),S(120,999,true,1),S(130),S(131),S(132)],[2]=[]};

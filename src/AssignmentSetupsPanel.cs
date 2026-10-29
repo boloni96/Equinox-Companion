@@ -37,7 +37,7 @@ public sealed partial class Plugin
             assignmentRecommendationTask=Task.Run(()=>Enum.GetValues<AssignmentRecommendationStyle>().Select(style=>AssignmentRecommendations.Build(owners,inventory,snapshot,plans,id=>categories.GetValueOrDefault(id),style,relieve)).ToArray());
         }
         ImGui.EndDisabled();
-        MarketHelp("Compare all recorded retainers. Fill missing category homes, optionally relieving full assigned homes, while preserving existing rules. Uses recorded quantities, stack limits, HQ/NQ and capacity; reserves room for existing incoming assignments and aims to leave five spare slots. Review before applying. Does not decide item value or move items.");
+        MarketHelp("Compare all recorded retainers. Fill missing category homes, optionally relieving full assigned homes, while preserving existing rules. Uses recorded quantities, stack limits, HQ/NQ and capacity; reserves existing incoming assignments, prefers five spare slots, and shares large categories across existing holders when needed. Crystals use separate per-item capacity. Review before applying. Does not decide item value or move items.");
         if(assignmentRecommendationTask!=null)ImGui.TextDisabled("Calculating suggested homes…");
         if(assignmentRecommendation!=null&&assignmentRecommendationOptions.Length>0){
             ImGui.SetNextItemWidth(220);
@@ -45,21 +45,40 @@ public sealed partial class Plugin
         }
         if(assignmentRecommendation is {} proposal){
             string Category(uint id)=>StorageGroups().SelectMany(g=>g.Categories).FirstOrDefault(c=>c.Id==id)?.Name??("Category "+id);
-            ImGui.TextWrapped("Suggested additions · current assignments stay in place");
-            foreach(var suggestion in proposal.Suggestions)ImGui.TextWrapped((suggestion.CapacityRelief?"Extra home · ":"Missing home · ")+Category(suggestion.Category)+" → "+names.GetValueOrDefault(suggestion.Retainer,suggestion.Retainer.ToString())+$" · {suggestion.MovedStacks} stacks to relocate · +{suggestion.AdditionalSlots} slots · {suggestion.FreeAfter} free after this addition");
-            if(proposal.ExistingUnplacedSlots>0)ImGui.TextWrapped($"{proposal.ExistingUnplacedSlots} assigned stacks did not fit their existing homes in the initial conservative estimate. Extra-home suggestions address category overflow; explicit item/plan homes need manual review.");
-            if(proposal.NeedsSpace.Length>0)ImGui.TextWrapped("Needs manual review / split homes: "+string.Join(", ",proposal.NeedsSpace.Select(Category)));
-            ImGui.TextDisabled("Estimates use recorded stock; actual transfers recheck space.");
-            ImGui.BeginDisabled(busy||proposal.Suggestions.Length==0);
-            if(ImGui.SmallButton("Apply suggested additions")){
-                BackupAssignmentSetup(character,"Before last recommended assignments");
-                foreach(var suggestion in proposal.Suggestions){
-                    var index=rows.FindIndex(x=>x.Retainer==suggestion.Retainer);
-                    if(index<0)rows.Add(new(suggestion.Retainer,[suggestion.Category],[]));
-                    else rows[index]=rows[index] with{Categories=rows[index].Categories.Append(suggestion.Category).Distinct().Order().ToArray()};
+            string Label(AssignmentSuggestion suggestion)=>suggestion.Item>0?
+                (retrievalCatalog?.Names.GetValueOrDefault(suggestion.Item)??($"Item {suggestion.Item}")):Category(suggestion.Category);
+            ImGui.TextUnformatted($"{proposal.Suggestions.Length} additions · {proposal.Suggestions.Select(x=>x.Retainer).Distinct().Count()} retainers · {proposal.Remaining.Length} item types without a home after applying");
+            MarketHelp("All recorded retainer storage is checked, including crystals, independently of the current transfer plan or filters. Shared categories have several allowed homes. Having a home does not guarantee every transfer can run immediately; Preview checks the movement plan and available staging space.");
+            if(ImGui.TreeNode("Proposed homes")){
+                ImGui.BeginChild("assignmentProposedHomes",new System.Numerics.Vector2(0,ImGui.GetTextLineHeightWithSpacing()*9),true);
+                foreach(var group in proposal.Suggestions.GroupBy(x=>x.Retainer)){
+                    var labels=string.Join(", ",group.Select(Label));
+                    ImGui.TextWrapped(names.GetValueOrDefault(group.Key,group.Key.ToString())+" · "+labels);
+                    if(ImGui.IsItemHovered()){
+                        ImGui.BeginTooltip();ImGui.PushTextWrapPos(ImGui.GetFontSize()*34);
+                        foreach(var suggestion in group)ImGui.TextWrapped(Label(suggestion)+
+                            (suggestion.CapacityRelief?" · extra home":"")+$" · {suggestion.MovedStacks} stacks to relocate · +{suggestion.AdditionalSlots} normal slots");
+                        ImGui.TextWrapped("Zero moves means existing stock can stay here. Crystal capacity is separate from normal inventory slots. Final free-space estimates are conservative; outgoing slots are not assumed free.");
+                        ImGui.PopTextWrapPos();ImGui.EndTooltip();
+                    }
                 }
+                ImGui.EndChild();ImGui.TreePop();
+            }
+            if(proposal.ExistingUnplacedSlots>0){
+                ImGui.TextDisabled($"Initial capacity warnings: {proposal.ExistingUnplacedSlots} stacks");
+                MarketHelp("Before additions, these assigned stacks did not fit their homes in the conservative estimate. Enable Relieve full homes to add category homes. Specific item/plan restrictions are preserved and may need manual changes. This is separate from the count of items with no assigned home.");
+            }
+            if(proposal.Remaining.Length>0){
+                ImGui.TextWrapped("Incomplete proposal · some items still need homes.");
+                if(ImGui.IsItemHovered())ImGui.SetTooltip(string.Join("\n",proposal.Remaining.Select(x=>(retrievalCatalog?.Names.GetValueOrDefault(x.Item)??x.Item.ToString())+$" ×{x.Quantity:N0}")));
+            }
+            ImGui.BeginDisabled(busy||proposal.Suggestions.Length==0);
+            if(ImGui.SmallButton(proposal.Remaining.Length>0?"Apply partial additions":"Apply suggested additions")){
+                BackupAssignmentSetup(character,"Before last recommended assignments");
+                var applied=AssignmentRecommendations.Apply(rows,proposal.Suggestions);
+                rows.Clear();rows.AddRange(applied);
                 SaveConfiguration();InvalidateOrganizePreview();assignmentCoverageDirty=true;assignmentRecommendation=null;
-                assignmentSetupNotice="Applied additions. Previous assignments saved; no items moved.";
+                assignmentSetupNotice=$"Saved · {proposal.Remaining.Length} item types without a home. Undo available; no items moved.";
             }
             ImGui.EndDisabled();
         }
@@ -71,6 +90,7 @@ public sealed partial class Plugin
             SaveConfiguration();InvalidateOrganizePreview();assignmentCoverageDirty=true;assignmentRecommendation=null;
             assignmentSetupNotice=message;
         }
+        if(ImGui.TreeNode("Restore / clear")){
         var undo=config.RetainerAssignmentSetups.GetValueOrDefault(character)?.FirstOrDefault(s=>s.Name=="Before last recommended assignments");
         ImGui.BeginDisabled(busy);
         if(undo!=null&&ImGui.SmallButton("Undo recommendation"))Restore(undo,"Before undo recommendation","Restored previous assignments. Already-moved items stay where they are.");
@@ -85,6 +105,8 @@ public sealed partial class Plugin
         var undoClear=config.RetainerAssignmentSetups.GetValueOrDefault(character)?.FirstOrDefault(s=>s.Name=="Before last clear assignments");
         if(undoClear!=null){ImGui.SameLine();if(ImGui.SmallButton("Undo clear"))Restore(undoClear,"Before undo clear assignments","Restored assignments from before Clear.");}
         ImGui.EndDisabled();
+        ImGui.TreePop();
+        }
         if(ImGui.TreeNode("Save / load assignments")){
             ImGui.SetNextItemWidth(220);ImGui.InputText("Setup name",ref assignmentSetupName,80);
             var name=assignmentSetupName.Trim();
