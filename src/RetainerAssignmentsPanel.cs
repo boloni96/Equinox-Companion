@@ -9,10 +9,24 @@ public sealed partial class Plugin
         if(ImGui.Button("Preview all"))CheckAllOrganize();ImGui.SameLine();
         if(ImGui.Button("Organise all"))StartStorageRouting([new(StorageRouting.AllSources,StorageAutoRouting.AllRetainers,[],[],AllItems:true)],false);
         MarketHelp("Regular: consolidate duplicates from the last retainer toward the first in game order; unique items stay put. With assignments enabled: use the selected category/item homes, choosing available space across them. Your existing bag items stay untouched; only empty space is used for staging. No routine inventory tour when recorded stock is complete.");
-        var character=Player.ContentId;var use=config.UseRetainerAssignments.Contains(character);ImGui.SameLine();
-        if(ImGui.Checkbox("Use assignments",ref use)){if(use)config.UseRetainerAssignments.Add(character);else config.UseRetainerAssignments.Remove(character);SaveConfiguration();InvalidateOrganizePreview();}
-        MarketHelp("Assignments apply to All retainers in Organise and Entrust. Explicit destinations still override them. Unassigned items are left alone. Settings belong to this character.");
-
+        ImGui.SameLine();DrawUseRetainerAssignments();
+        DrawAssignmentEditor();
+    }
+    private void DrawUseRetainerAssignments()
+    {
+        var character=Player.ContentId;var use=config.UseRetainerAssignments.Contains(character);
+        ImGui.BeginDisabled(!Player.IsLoaded);
+        if(ImGui.Checkbox("Use assignments",ref use)){
+            if(use)config.UseRetainerAssignments.Add(character);else config.UseRetainerAssignments.Remove(character);
+            SaveConfiguration();InvalidateOrganizePreview();
+        }
+        ImGui.EndDisabled();
+        MarketHelp("Shared with Organise retainers, saved per character. Entrust to All retainers follows assigned items, plans and categories; unassigned items stay in bags. Choosing a specific retainer overrides assignments. Keep amounts and protection still apply.");
+    }
+    private void DrawAssignmentEditor()
+    {
+        if(!Player.IsLoaded)return;
+        var character=Player.ContentId;
         if(ImGui.SmallButton("Assignments…"))ImGui.OpenPopup("RetainerAssignmentsPopup");
         // Size comes from the viewport, never the auto-sized popup/child from the previous frame.
         var viewport=ImGui.GetMainViewport().WorkSize;

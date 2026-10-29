@@ -1,6 +1,7 @@
 # 0.5.1.293
 
 - Retainer crystal withdrawals and deposits use the retainer command and numeric quantity dialog, followed by inventory confirmation, instead of the generic slot-transfer call.
+- Transfer → Entrust → To retainer offers Assignments for the current character, with its editor beside the destination. Saved Keep/protection rules still apply, and named destinations override assignments.
 - Assignments keeps a stable popup size with a scrolling list, fixing progressive shrinking on every frame.
 - Chest options keeps a stable width when using crystal filters.
 - Organizer temporarily pauses rendering its contents while its outer window is resized; active transfers continue.

@@ -74,13 +74,7 @@ public sealed partial class Plugin
             if(ImGui.Combo("Quality",ref quality,"Any quality\0NQ only\0HQ only\0")){retrievalQuality=(RetrievalQuality)quality;changed=true;}
             ImGui.SetNextItemWidth(90);if(ImGui.InputInt("Multiplier",ref retrievalMultiplier)){retrievalMultiplier=Math.Clamp(retrievalMultiplier,1,999);changed=true;}
             if(ImGui.Checkbox("Subtract matching items in bags",ref retrievalSubtract))changed=true;
-            var names=retrievalKnownRetainers.GetValueOrDefault(Player.ContentId)??new Dictionary<ulong,string>();
-            ImGui.SetNextItemWidth(200);
-            if(ImGui.BeginCombo("Entrust to",retrievalSendTo==StorageAutoRouting.AllRetainers?"All retainers":names.GetValueOrDefault(retrievalSendTo,"Choose destination"))){
-                if(ImGui.Selectable("All retainers",retrievalSendTo==StorageAutoRouting.AllRetainers)){retrievalSendTo=StorageAutoRouting.AllRetainers;changed=true;}
-                foreach(var row in names)if(ImGui.Selectable(row.Value+"##target"+row.Key,retrievalSendTo==row.Key)){retrievalSendTo=row.Key;changed=true;}
-                ImGui.EndCombo();
-            }
+            ImGui.SetNextItemWidth(200);changed|=DrawEntrustDestination("Entrust to");ImGui.SameLine();DrawAssignmentEditor();
             if(changed){retrievalPreviewDirty=true;if(retrievalEditingPreset!=null)RetrievalTry(SaveRetrievalPreset);}
             DrawRetrievalPicker();ImGui.EndDisabled();
             DrawStorageChatOption();
