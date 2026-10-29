@@ -11,11 +11,13 @@ public sealed partial class Plugin
         ImGui.TextDisabled($"{rows.Length} sales · {totals.Net:N0} gil confirmed net");
         MarketHelp(marketSharedStatus+"\n"+marketHistoryStatus+"\nThe game supplies up to 20 recent entries per retainer; previously recorded sales stay saved. Net is revenue after fees, not profit. Imported/inferred records without confirmed net are excluded from this total.");
         if(rows.Length==0){ImGui.TextDisabled("No sales match these filters.");return;}
+        if(rows.Any(x=>x.Gross.HasValue&&x.Id.StartsWith("inferred:",StringComparison.Ordinal)))ImGui.TextDisabled("Gold gross values: last observed listing price · hover for evidence");
         MarketPaging(rows.Length);
-        if(!BeginMarketRecords("marketSales",4))return;
+        if(!BeginMarketRecords("marketSales",5))return;
         ImGui.TableSetupColumn("Item",ImGuiTableColumnFlags.WidthStretch,2.8f);
         ImGui.TableSetupColumn("Retainer",ImGuiTableColumnFlags.WidthStretch,1.7f);
         ImGui.TableSetupColumn("Qty",ImGuiTableColumnFlags.WidthFixed,ImGui.GetFontSize()*2.5f);
+        ImGui.TableSetupColumn("Gross gil",ImGuiTableColumnFlags.WidthFixed,ImGui.GetFontSize()*6);
         ImGui.TableSetupColumn("Net gil",ImGuiTableColumnFlags.WidthFixed,ImGui.GetFontSize()*6);
         ImGui.TableHeadersRow();
         foreach(var x in rows.Skip(marketPage*80).Take(80)){
@@ -25,6 +27,13 @@ public sealed partial class Plugin
             MarketItemName(x.ItemId,name,x.Hq,details);
             ImGui.TableNextColumn();MarketRetainerCell(x.RetainerId,x.Retainer,x.Character,x.World);
             ImGui.TableNextColumn();ImGui.TextUnformatted(x.Quantity==0?"—":x.Quantity.ToString("N0"));MarketHelp(x.Quantity==0?"Quantity was not observed.":"Units sold in this transaction.");
+            var inferred=x.Id.StartsWith("inferred:",StringComparison.Ordinal);
+            var grossHelp=inferred?"Last observed listing total before fees. Sale inferred from a missing listing and matching gil increase; actual net and sale time are not confirmed.":"Recorded gross total before fees.";
+            if(x.Gross is {} total&&x.Quantity>0&&total%x.Quantity==0)grossHelp+=$"\nRecorded unit price: {total/x.Quantity:N0} gil";
+            ImGui.TableNextColumn();
+            if(inferred)ImGui.PushStyleColor(ImGuiCol.Text,new System.Numerics.Vector4(1,.8f,.45f,1));
+            MarketNumber("gross",x.Gross,grossHelp+"\n"+details);
+            if(inferred)ImGui.PopStyleColor();
             ImGui.TableNextColumn();MarketNumber("net",x.Net,(x.Net.HasValue?"Confirmed gil received after fees.":"Net gil was not confirmed.")+(x.Gross is {} gross?$"\nRecorded gross: {gross:N0} gil":"")+"\n"+details);
             ImGui.PopID();
         }
