@@ -66,8 +66,9 @@ public sealed partial class Plugin
             PrepareTradeItemShortcutLabels();
             if(!gilReceive&&tradeItemLabelsTask?.IsCompletedSuccessfully!=true)throw new InvalidOperationException("Loading item trade actions. Try again in a moment.");
             gilSessionWorld=Player.CurrentWorld.RowId;gilSessionTerritory=Client.TerritoryType;
+            var startFrame=ReadItemTradeFrame();if(!gilReceive)ItemTradePlan.RefreshSelection(itemTradeSelection,startFrame.Bags);
             var selected=itemTradeSelection.Select(x=>new TradeItemAmount(x.Key.Item,x.Key.Hq,x.Value)).ToArray();
-            if(!itemTrade.Start(!gilReceive,selected,ReadItemTradeFrame(),DateTimeOffset.UtcNow)){gilTradeNotice=itemTrade.Status;TraceGilTrade("Items start: "+itemTrade.Status);return;}
+            if(!itemTrade.Start(!gilReceive,selected,startFrame,DateTimeOffset.UtcNow)){gilTradeNotice=itemTrade.Status;TraceGilTrade("Items start: "+itemTrade.Status);return;}
             itemTradePending=null;itemTradeOwned=false;itemTradePoll=default;itemTradeCompletion.Clear();
             TraceGilTrade($"Items: {(gilReceive?"receive":"send")} with {gilPartnerName} @ {WorldName(gilPartnerWorld)}");
         }catch(Exception e){gilTradeNotice=e.Message;}
