@@ -15,7 +15,7 @@ public static class AssignmentRecommendations
         var rows=Copy(assignments).Where(a=>owners.Contains(a.Retainer)).Select(a=>a with{Items=a.Items.Concat(plans.Where(p=>p.PlanId.Length>0&&(a.Plans??[]).Contains(p.PlanId)).SelectMany(p=>p.Items).Select(i=>i.ItemId)).Distinct().ToArray()}).ToArray();
         var stock=owners.ToDictionary(id=>id,id=>inventory[id].Where(s=>s.Container is >=10000 and <=10006&&s.Item>0&&s.Quantity>0).ToList());
         int Free(List<ChestStack> slots)=>175-slots.Count;
-        bool Pack(List<ChestStack> slots,ChestStack source,int reserve){
+        int Pack(List<ChestStack> slots,ChestStack source,int reserve){
             var quantity=source.Quantity;
             for(var i=0;i<slots.Count&&quantity>0;i++)if(slots[i].Item==source.Item&&slots[i].Hq==source.Hq&&slots[i].CanDeposit){
                 var add=Math.Min(quantity,Math.Max(0,slots[i].Limit-slots[i].Quantity));slots[i]=slots[i] with{Quantity=slots[i].Quantity+add};quantity-=add;
@@ -23,20 +23,21 @@ public static class AssignmentRecommendations
             while(quantity>0&&Free(slots)>reserve){
                 var add=Math.Min(quantity,Math.Max(1,source.Limit));slots.Add(source with{Quantity=add});quantity-=add;
             }
-            return quantity==0;
+            return quantity;
         }
         var unplaced=0;var overflow=new List<(ulong Owner,ChestStack Stack)>();
         foreach(var owner in owners)foreach(var item in inventory[owner].Where(s=>s.Container is >=10000 and <=10006&&s.Item>0&&s.Quantity>0)){
             var explicitHomes=rows.Where(a=>a.Items.Contains(item.Item)).ToArray();
             var homes=(explicitHomes.Length>0?explicitHomes:rows.Where(a=>a.Categories.Contains(category(item.Item)))).Select(a=>a.Retainer).Distinct().ToArray();
             if(homes.Length==0||homes.Contains(owner))continue;
-            var fitted=false;
+            var remaining=item.Quantity;
             foreach(var home in homes.OrderByDescending(h=>Free(stock[h]))){
                 var candidate=stock[home].ToList();
-                if(!Pack(candidate,item,0))continue;
-                stock[home]=candidate;fitted=true;break;
+                var left=Pack(candidate,item with{Quantity=remaining},0);
+                if(left==remaining)continue;
+                stock[home]=candidate;remaining=left;if(remaining==0)break;
             }
-            if(!fitted){unplaced++;if(explicitHomes.Length==0)overflow.Add((owner,item));}
+            if(remaining>0){unplaced++;if(explicitHomes.Length==0)overflow.Add((owner,item with{Quantity=remaining}));}
         }
         var coverage=AssignmentCoverage.Check(owners,inventory,assignments,plans,category);
         var suggestions=new List<AssignmentSuggestion>();var needsSpace=new List<uint>();
@@ -51,7 +52,7 @@ public static class AssignmentRecommendations
                 if(relief&&rows.Any(a=>a.Retainer==home&&a.Categories.Contains(group.Key)))continue;
                 var candidate=stock[home].ToList();var before=candidate.Count;var ok=true;var moved=0;
                 foreach(var item in group.Where(x=>x.Owner!=home)){
-                    moved++;if(!Pack(candidate,item.Stack,5)){ok=false;break;}
+                    moved++;if(Pack(candidate,item.Stack,5)>0){ok=false;break;}
                 }
                 if(ok)choices.Add((home,candidate,candidate.Count-before,group.Count(x=>x.Owner==home),moved));
             }
