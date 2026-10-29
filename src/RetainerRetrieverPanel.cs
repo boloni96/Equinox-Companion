@@ -83,7 +83,7 @@ public sealed partial class Plugin
         ImGui.EndDisabled();
         if(retrievalPickItems)TickRetrievalPicker();
         if(ImGui.BeginTabBar("RetrieverTabs")){
-            if(ImGui.BeginTabItem("My inventory")){ImGui.BeginDisabled(craftingWithdrawalPending||retrievalRun.Running||organizeRunning||chestRunning);DrawMyInventory();ImGui.EndDisabled();ImGui.EndTabItem();}
+            if(ImGui.BeginTabItem("My inventory")){DrawMyInventory();ImGui.EndTabItem();}
             if(ImGui.BeginTabItem("Browse inventory")){ImGui.BeginDisabled(craftingWithdrawalPending||retrievalRun.Running||organizeRunning||chestRunning);DrawRetrievalBrowse();ImGui.EndDisabled();ImGui.EndTabItem();}
             if(ImGui.BeginTabItem("Transfer",retrievalShowList?ImGuiTabItemFlags.SetSelected:ImGuiTabItemFlags.None)){retrievalShowList=false;ImGui.BeginDisabled(craftingWithdrawalPending||retrievalRun.Running||organizeRunning||chestRunning);DrawRetrievalList();ImGui.EndDisabled();ImGui.EndTabItem();}
             if(ImGui.BeginTabItem("Organize retainers")){if(!organizerTabWasVisible)InvalidateOrganizePreview();organizerTabWasVisible=true;DrawRetainerOrganizer();ImGui.EndTabItem();}else organizerTabWasVisible=false;

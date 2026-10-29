@@ -25,6 +25,7 @@ public sealed partial class Plugin
         if(!Player.IsLoaded){ImGui.TextDisabled("Log in to see your inventory.");return;}
         if(myInventoryCharacter!=Player.ContentId){myInventoryCharacter=Player.ContentId;myInventorySelected.Clear();myInventoryStock=[];myInventoryRefresh=default;myInventoryDestination=StorageAutoRouting.AllRetainers;}
         if(DateTimeOffset.UtcNow>=myInventoryRefresh){myInventoryStock=ReadMyInventory();myInventoryRefresh=DateTimeOffset.UtcNow.AddSeconds(1);myInventorySelected.Keys.Where(id=>!myInventoryStock.Any(s=>s.Item==id)).ToList().ForEach(id=>myInventorySelected.Remove(id));}
+        ImGui.BeginDisabled(craftingWithdrawalPending||retrievalRun.Running||organizeRunning||chestRunning);
         if(ImGui.BeginTable("MyInventoryFilters",2,ImGuiTableFlags.SizingStretchSame)){
             ImGui.TableNextRow();ImGui.TableNextColumn();ImGui.SetNextItemWidth(-1);ImGui.InputTextWithHint("##MyInventorySearch","Search my bags…",ref myInventorySearch,100);
             ImGui.TableNextColumn();ImGui.SetNextItemWidth(-1);if(DrawStorageCategoryPicker("##MyInventoryCategories",myInventoryCategories,myInventoryAllCategories?"All categories":"None selected"))myInventoryAllCategories=false;
@@ -63,5 +64,8 @@ public sealed partial class Plugin
             }
             if(rows.Length==0)ImGui.TextDisabled("No bag items match these filters.");
         }ImGui.EndChild();
+        ImGui.EndDisabled();
+        if(organizeRunning&&ImGui.Button("Stop entrust"))StopOrganize("Stopped by you; an already-sent move may still complete.");
+        if(organizeMoves.Length>0||organizeRunning)ImGui.TextWrapped(organizeStatus);
     }
 }
