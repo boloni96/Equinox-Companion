@@ -11,6 +11,9 @@ internal static class StorageCategoryGroupTests
   Check("unknown future categories stay available",groups.Single(g=>g.Name=="Other items").Categories.Any(c=>c.Id==777));
   var selected=new HashSet<uint>{58,57};StorageCategoryGroups.Select(selected,housing,true);Check("parent selection includes all children and preserves others",housing.Categories.All(c=>selected.Contains(c.Id))&&selected.Contains(58));
   StorageCategoryGroups.Select(selected,housing,false);Check("clearing parent does not clear another group",selected.SetEquals(new uint[]{58}));
+  Check("full category summary hides child names",StorageCategoryGroups.Summary(groups,housing.Categories.Select(c=>c.Id).ToHashSet()).SequenceEqual(new[]{"Housing"}));
+  Check("partial category summary lists checked children only",StorageCategoryGroups.Summary(groups,new HashSet<uint>{57,58}).SequenceEqual(new[]{"Housing: Furnishing","Materia: Materia"}));
+  Check("empty assignments have no category summary",StorageCategoryGroups.Summary(groups,new HashSet<uint>()).Length==0);
   Check("workshop parts stay separate",groups.Single(g=>g.Name=="Workshop parts").Categories.Single().Id==101);
  }
 }

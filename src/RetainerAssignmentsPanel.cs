@@ -42,7 +42,18 @@ public sealed partial class Plugin
         for(var i=0;i<config.RetrievalPresets.Count;i++)if(string.IsNullOrEmpty(config.RetrievalPresets[i].PlanId)){config.RetrievalPresets[i]=config.RetrievalPresets[i] with{PlanId=Guid.NewGuid().ToString("N")};dirty=true;}
         foreach(var entry in rows.ToArray().Where(x=>names.ContainsKey(x.Retainer))){
             ImGui.PushID(entry.Retainer.ToString());
-            if(ImGui.TreeNode(names[entry.Retainer]+$" · {entry.Categories.Length} categories / {entry.Items.Length} items / {entry.Plans?.Length??0} plans###RetainerAssignment")){
+            var expanded=ImGui.TreeNode(names[entry.Retainer]+$" · {entry.Categories.Length} categories / {entry.Items.Length} items / {entry.Plans?.Length??0} plans###RetainerAssignment");
+            if(ImGui.IsItemHovered()){
+                var summary=StorageCategoryGroups.Summary(StorageGroups(),entry.Categories.ToHashSet()).ToList();
+                foreach(var id in entry.Categories.Where(id=>!StorageGroups().Any(g=>g.Categories.Any(c=>c.Id==id))))summary.Add("Unknown category "+id);
+                var selectedPlans=config.RetrievalPresets.Where(p=>(entry.Plans??[]).Contains(p.PlanId)).Select(p=>p.Name).ToArray();
+                if(selectedPlans.Length>0)summary.Add("Plans: "+string.Join(", ",selectedPlans));
+                var explicitItems=entry.Items.Where(id=>!entry.Categories.Contains(OrganizeCategory(id))).Select(id=>retrievalCatalog?.Names.GetValueOrDefault(id)??id.ToString()).ToArray();
+                if(explicitItems.Length>0)summary.Add("Items: "+string.Join(", ",explicitItems));
+                if(summary.Count==0)summary.Add("No assigned categories, plans or items.");
+                ImGui.BeginTooltip();ImGui.PushTextWrapPos(ImGui.GetFontSize()*32);ImGui.TextUnformatted(names[entry.Retainer]+"\n"+(config.UseRetainerAssignments.Contains(character)?"Assignments enabled":"Assignments currently disabled")+"\n"+string.Join("\n",summary));ImGui.PopTextWrapPos();ImGui.EndTooltip();
+            }
+            if(expanded){
                 var categories=entry.Categories.ToHashSet();var items=entry.Items.ToHashSet();var plans=(entry.Plans??[]).ToHashSet();var changed=false;
                 if(ImGui.SmallButton("Clear selections")){categories.Clear();items.Clear();plans.Clear();changed=true;}
                 changed|=DrawStorageCategoryPicker("Categories",categories,"Optional · plan/items only");

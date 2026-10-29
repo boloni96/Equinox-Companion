@@ -22,6 +22,9 @@ internal static class StorageCategoryGroups
         return new[]{"Housing","Dyes","Crafting materials","Materia","Crystals","Catalysts","Workshop parts","Weapons","Tools","Armour & accessories","Food & medicine","Fishing tackle","Outfits","Collectibles","Other items"}
             .Select(name=>new StorageCategoryGroup(name,rows.Where(c=>Group(c)==name).OrderBy(c=>c.Minor).ThenBy(c=>c.Id).ToArray())).Where(g=>g.Categories.Length>0).ToArray();
     }
+    internal static string[] Summary(IEnumerable<StorageCategoryGroup> groups,IReadOnlySet<uint> selected)=>
+        groups.Select(g=>(Group:g,Checked:g.Categories.Where(c=>selected.Contains(c.Id)).ToArray())).Where(x=>x.Checked.Length>0)
+            .Select(x=>x.Checked.Length==x.Group.Categories.Length?x.Group.Name:x.Group.Name+": "+string.Join(", ",x.Checked.Select(c=>c.Name))).ToArray();
     internal static void Select(HashSet<uint> selection,StorageCategoryGroup group,bool enabled)
     {
         foreach(var category in group.Categories){if(enabled)selection.Add(category.Id);else selection.Remove(category.Id);}

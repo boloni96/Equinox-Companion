@@ -4,6 +4,7 @@ namespace EquinoxCompanion;
 public sealed class Configuration : IPluginConfiguration
 {
     public bool ShowStorageTransfersInChat { get; set; }
+    public bool SortItemsAfterOrganizing { get; set; }
     public int StorageKeepInBags { get; set; }
     public bool WithdrawUntradableOnly { get; set; }
     public bool WithdrawTradableOnly { get; set; }

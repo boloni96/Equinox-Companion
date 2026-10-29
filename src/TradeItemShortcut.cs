@@ -75,6 +75,7 @@ public sealed partial class Plugin
     {
         pendingTradeItemShortcut?.BindMenu(args.Addon.Address);
         CaptureItemTradeMenu(args);
+        CaptureOrganizerSortMenu(args);
     }
 
     private void OnTradeItemShortcutClosed(AddonEvent _, AddonArgs args)

@@ -13,14 +13,16 @@ public sealed partial class Plugin
     private object? organizerLastTransfer;
     private int organizeCarry;
     private string organizeStatus="Preview or organise the selected plan. Assignments choose homes for eligible listed items.";
-    private void OrganizeStage(int stage){organizeStage=stage;organizeStatus=$"{organizeTransferred} delivered · {organizeMoveIndex}/{organizeMoves.Length} transfers · "+(stage switch{0=>"Preparing",1 or 2 or 3=>$"Refreshing missing inventory {organizeSourceIndex+1}/{organizeSources.Length}",4 or 5=>"Opening retainer",6 or 7=>"Moving batch",9=>"Calculating batch space",_=>"Next retainer"});organizeDeadline=DateTimeOffset.UtcNow.AddSeconds(60);}
-    private void StopOrganize(string reason){organizeRunning=false;organizePort?.Release();organizePending=null;organizeStatus=reason+(organizeCarry>0?$" · {organizeCarry} transferred items remain in your bags.":"");SaveOrganizerInventories();InvalidateOrganizePreview();retrievalRefreshPending=true;Log.Information("Retainer organizer: {Status}",organizeStatus);}
+    private void OrganizeStage(int stage){organizeStage=stage;organizeStatus=$"{organizeTransferred} delivered · {organizeMoveIndex}/{organizeMoves.Length} transfers · "+(stage switch{0=>"Preparing",1 or 2 or 3=>$"Refreshing missing inventory {organizeSourceIndex+1}/{organizeSources.Length}",4 or 5=>"Opening retainer",6 or 7=>"Moving batch",9=>"Calculating batch space",10 or 11 or 12 or 13 or 14=>$"Sorting retainer {organizeSortIndex+1}/{organizeSortRetainers.Length}",_=>"Next retainer"});organizeDeadline=DateTimeOffset.UtcNow.AddSeconds(60);}
+    private void StopOrganize(string reason){ClearOrganizerSortMenu();organizeRunning=false;organizePort?.Release();organizePending=null;organizeStatus=reason+(organizeCarry>0?$" · {organizeCarry} transferred items remain in your bags.":"");SaveOrganizerInventories();InvalidateOrganizePreview();retrievalRefreshPending=true;Log.Information("Retainer organizer: {Status}",organizeStatus);}
     private uint OrganizeCategory(uint item)=>DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>().GetRowOrDefault(item)?.ItemUICategory.RowId??0;
     private void DrawRetainerOrganizer()
     {
         ImGui.BeginDisabled(organizeRunning||retrievalRun.Running||chestRunning);
         if(NoOrganizerPlan)ImGui.TextDisabled("No plan · all retainer items, narrowed by movement filters");else DrawPlanCategoryRules();
         DrawRetainerAssignments();
+        var sortAfter=config.SortItemsAfterOrganizing;if(ImGui.Checkbox("Sort items after organizing",ref sortAfter)){config.SortItemsAfterOrganizing=sortAfter;SaveConfiguration();}
+        MarketHelp("After retainer organization finishes, visit every retainer and use the item context menu Sort action with your game settings. Empty item inventories are skipped. Stop also cancels the sorting pass. Does not run after Entrust or a failed/cancelled organization.");
         var names=retrievalKnownRetainers.GetValueOrDefault(Player.ContentId)??new Dictionary<ulong,string>();
         void Choose(string label,ref ulong id,bool all){if(ImGui.BeginCombo(label,id==StorageAutoRouting.AllRetainers?"All retainers":id==0?(all?"All other retainers":"Choose retainer"):names.GetValueOrDefault(id,id.ToString()))){if(!all&&ImGui.Selectable("All retainers · consolidate duplicates",id==StorageAutoRouting.AllRetainers)){id=StorageAutoRouting.AllRetainers;InvalidateOrganizePreview();}if(all&&ImGui.Selectable("All other retainers",id==0)){id=0;InvalidateOrganizePreview();}foreach(var n in names)if(ImGui.Selectable(n.Value+"##"+n.Key,id==n.Key)){id=n.Key;InvalidateOrganizePreview();}ImGui.EndCombo();}}
         if(ImGui.BeginTable("MovementTargets",2,ImGuiTableFlags.SizingStretchSame)){
@@ -78,6 +80,7 @@ public sealed partial class Plugin
             if(config.UseRetainerAssignments.Contains(Player.ContentId)&&rules.Any(r=>r.To==StorageAutoRouting.AllRetainers)&&!StorageAssignments.HasSelections(config.RetainerAssignments.GetValueOrDefault(Player.ContentId)??[],config.RetrievalPresets))throw new InvalidOperationException("Choose retainer assignments, or turn off Use assignments for regular duplicate organisation.");
             EnsureChestMove();if(temporarySelection&&!bagsOnly)throw new InvalidOperationException("Temporary selection is only valid for Entrust.");organizeNoPlan=!bagsOnly&&NoOrganizerPlan;rules=temporarySelection?PlanItemScope.Restrict(rules,rules.SelectMany(r=>r.Items),OrganizeCategory):organizeNoPlan?rules:ScopeOrganizeRules(rules);if(rules.Length==0)throw new InvalidOperationException(OrganizeScopeMessage());organizeActiveRules=rules;organizeBagsOnly=bagsOnly;organizeBagTradeFilter=temporarySelection?Math.Clamp(temporaryTradeFilter,0,2):0;
             organizeSources=owned.Where(id=>rules.Any(r=>r.To==StorageAutoRouting.AllRetainers||r.To==id||!bagsOnly&&(r.From==StorageRouting.AllSources||r.From==id))).ToArray();
+            organizeSortEnabled=config.SortItemsAfterOrganizing&&!bagsOnly;organizeSortRetainers=owned.ToArray();organizeSortItem=null;organizeSortMenu=null;if(organizeSortEnabled)PrepareOrganizerSort();
             organizeOwnerOrder=organizeSources.ToArray();var recorded=RecordedOrganizerInventories(organizeSources);
             organizePort=new(this){Character=Player.ContentId,World=Player.CurrentWorld.RowId,Quality=RetrievalQuality.Any};
             organizeCarry=0;organizeTransferred=0;organizeSourceIndex=0;organizePending=null;organizeMoveIndex=0;organizeMoves=[];organizeRoutingTask=null;organizeInventories.Clear();foreach(var row in recorded)organizeInventories[row.Key]=row.Value;
@@ -100,6 +103,7 @@ public sealed partial class Plugin
             var pause=organizePort.Pause.Check(now);if(!pause.Ready){StopOrganize(pause.Error);return;}
             var manager=InventoryManager.Instance();if(manager==null)return;
             foreach(var op in manager->PendingOperations)if(!op.IsEmpty)return;
+            if(organizeStage is >=10 and <=14){TickOrganizerSort(now);return;}
             switch(organizeStage){
                 case 1:if(organizePort.Select(organizeSources[organizeSourceIndex]))OrganizeStage(2);break;
                 case 2:if(organizePort.OpenInventory(organizeSources[organizeSourceIndex])&&organizePort.Read(organizeSources[organizeSourceIndex]) is not null){RememberOrganizerInventory(organizeSources[organizeSourceIndex],OrganizerInventory(true,false).Concat(OrganizerInventory(true,true)).ToArray());if(organizeSourceIndex==organizeSources.Length-1){organizeActiveRetainer=organizeSources[organizeSourceIndex];BeginStorageCalculation();}else OrganizeStage(3);}break;
@@ -110,7 +114,7 @@ public sealed partial class Plugin
                 case 9:
                     if(organizeRoutingTask?.IsCompleted!=true)break;var plan=organizeRoutingTask.GetAwaiter().GetResult();organizeRoutingTask=null;
                     organizeMoves=plan.Moves;organizeUnmoved=plan.Remaining;
-                    if(organizeMoves.Length==0){StopOrganize(plan.Remaining==0?"Nothing needs moving.":$"No available route for {plan.Remaining} items. Check bag and retainer space.");return;}
+                    if(organizeMoves.Length==0){FinishOrganize(plan.Remaining==0?"Nothing needs moving.":$"No available route for {plan.Remaining} items. Check bag and retainer space.");return;}
                     organizeActiveRetainer=organizeMoves[0].Retainer;OrganizeStage(RetrieverActive(organizeActiveRetainer)?5:4);break;
                 case 4:if(organizePort.Select(organizeActiveRetainer))OrganizeStage(5);break;
                 case 5:if(organizePort.OpenInventory(organizeActiveRetainer)&&organizePort.Read(organizeActiveRetainer) is not null)BindOrganizerVisit();break;
@@ -135,7 +139,7 @@ public sealed partial class Plugin
                     if(organizeMoveIndex<organizeMoves.Length&&organizeMoves[organizeMoveIndex].Retainer==organizeActiveRetainer)OrganizeStage(6);else OrganizeStage(8);break;
                 case 8:
                     if(!organizePort.Close(organizeActiveRetainer))break;
-                    if(organizeMoveIndex==organizeMoves.Length){StopOrganize(organizeUnmoved==0?$"Complete: {organizeTransferred} items delivered.":$"Partial: {organizeTransferred} items delivered · {organizeUnmoved} remain because no space was available.");return;}
+                    if(organizeMoveIndex==organizeMoves.Length){FinishOrganize(organizeUnmoved==0?$"Complete: {organizeTransferred} items delivered.":$"Partial: {organizeTransferred} items delivered · {organizeUnmoved} remain because no space was available.");return;}
                     organizeActiveRetainer=organizeMoves[organizeMoveIndex].Retainer;OrganizeStage(4);break;
             }
         }catch(Exception e){StopOrganize("Stopped: "+e.Message);}
