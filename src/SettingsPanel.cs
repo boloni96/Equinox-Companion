@@ -80,7 +80,7 @@ public sealed partial class Plugin
         if(optionalToolFailures.Count>0&&ImGui.CollapsingHeader("Optional tools need attention")){foreach(var issue in optionalToolFailures)ImGui.TextWrapped(issue.Key+": "+issue.Value);}
         if(config.Seller.Enabled&&ImGui.CollapsingHeader("Market & Seller"))DrawSellerDiagnostics();
         if(config.EnableRetriever&&ImGui.CollapsingHeader("Equinox Organizer")){ImGui.TextWrapped(retrievalRun.Status);ImGui.TextWrapped(retrievalStockNotice);if(ImGui.Button("Open Organizer"))OpenRetriever();}
-        if(config.EnableGilTrader&&ImGui.CollapsingHeader("Gil Trader"))DrawGilTradeDiagnostics();
+        if(config.EnableGilTrader&&ImGui.CollapsingHeader("Gil & Item Trader"))DrawGilTradeDiagnostics();
         if((config.EnableTradeItemShortcut||tradeItemShortcutTrace.Count>0)&&ImGui.CollapsingHeader("Item trade shortcut"))
         {
             ImGui.TextWrapped(tradeItemShortcutStatus);
@@ -115,11 +115,11 @@ public sealed partial class Plugin
     {
         ImGui.TextUnformatted("Tools on this computer");
         MessageToggle("Ctrl + right-click items into trade", config.EnableTradeItemShortcut, SetTradeItemShortcutEnabled);
-        SettingsHelp("With a trade already open, hold Ctrl and right-click an item in your inventory, Armoury Chest or any other container with an enabled Trade action. Stacks keep the game's quantity prompt. The item menu closes after adding the item or dismissing that prompt. You still review and accept the trade. Does nothing outside a trade or while automatic Gil Trader is running. This shortcut is independent of Enable Gil Trader.\n\n" + tradeItemShortcutStatus);
+        SettingsHelp("With a trade already open, hold Ctrl and right-click an item in your inventory, Armoury Chest or any other container with an enabled Trade action. Stacks keep the game's quantity prompt. The item menu closes after adding the item or dismissing that prompt. You still review and accept the trade. Does nothing outside a trade or while automatic Gil & Item Trader is running. This shortcut is independent of Enable Gil & Item Trader.\n\n" + tradeItemShortcutStatus);
         MessageToggle("Enable Equinox Organizer",config.EnableRetriever,value=>{config.EnableRetriever=value;if(!value){retrievalRun.Stop("Retriever disabled.");retrieverWindow.IsOpen=false;ForgetOptionalLauncher("Equinox Organizer");}SaveConfiguration();});
         if(ImGui.IsItemHovered())ImGui.SetTooltip("Optional finished-item and material retrieval. /eqretrieve opens saved lists and crafting/workshop selection.");
-        MessageToggle("Enable Gil Trader", config.EnableGilTrader, SetGilTraderEnabled);
-        SettingsHelp("Shows Gil Trader in the window menu and enables /eqtrade. Send a chosen gil total or receive from a selected nearby player. Disabling closes the window and stops the session; confirmed trades are kept.");
+        MessageToggle("Enable Gil & Item Trader", config.EnableGilTrader, SetGilTraderEnabled);
+        SettingsHelp("Shows Gil & Item Trader in the window menu and enables /eqtrade. Send or receive gil and selected tradable bag items with a nearby player. Disabling closes the window and stops the session; confirmed trades are kept.");
         MessageToggle("Enable Equinox Market & Seller",config.Seller.Enabled,SetMarketEnabled);
         SettingsHelp("Shows Market and Seller in the window menu and enables their commands. Seller opens at a summoning bell only when this and Open Seller at summoning bells are checked. Opening a bell never starts price changes. Disabling stops Seller, closes both windows and removes their icons. Settings and saved market records are kept; paired market sharing has its own setting.");
         SettingsHelp("Choose which tools are available on this computer. Disabled tools stay out of menus and cannot be opened by commands. Core character, house and garden tracking is controlled separately under Tracking.",false);

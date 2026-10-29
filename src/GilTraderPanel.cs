@@ -8,7 +8,7 @@ public sealed partial class Plugin
 {
     private GilTraderWindow gilTraderWindow = null!;
     private bool gilTraderCommand, gilReceive;
-    private int gilTargetSource;
+    private int gilTargetSource = 1;
     private string gilNameSearch = "";
     private int gilTotal = 1_000_000;
     private sealed class GilTraderWindow(Plugin p) : Window("Gil & Item Trader · Equinox###EquinoxGilTrader")
@@ -22,7 +22,7 @@ public sealed partial class Plugin
         public override void Draw() => p.DrawWindowWithLauncher(p.DrawGilTrader);
         public override void OnClose()
         {
-            if (!p.minimizedLaunchers.Contains("Gil Trader")) p.StopGilTrade("Gil Trader closed.");
+            if (!p.minimizedLaunchers.Contains("Gil Trader")) p.StopGilTrade("Gil & Item Trader closed.");
         }
         public override void PostDraw() => HandleNativeCollapse(this, () => p.MinimizeLauncher("Gil Trader"));
     }
@@ -35,7 +35,7 @@ public sealed partial class Plugin
             if (args.Trim().Equals("stop", StringComparison.OrdinalIgnoreCase)) StopGilTrade("Stopped by command.");
             else OpenGilTrader();
         }) { HelpMessage = "Gil & Item Trader: send or receive gil or selected bag items with a nearby player. /eqtrade stop stops the session." });
-        if (!gilTraderCommand) Log.Warning("/eqtrade is already registered. Open Gil Trader from the window launcher.");
+        if (!gilTraderCommand) Log.Warning("/eqtrade is already registered. Open Gil & Item Trader from the window launcher.");
     }
     private void DisposeGilTrader()
     {
@@ -48,7 +48,7 @@ public sealed partial class Plugin
     private void SetGilTraderEnabled(bool enabled)
     {
         config.EnableGilTrader = enabled;
-        if (!enabled) StopGilTrade("Gil Trader disabled.");
+        if (!enabled) StopGilTrade("Gil & Item Trader disabled.");
         HideDisabledOptionalWindows();
         SaveConfiguration();
     }
@@ -58,7 +58,8 @@ public sealed partial class Plugin
         ImGui.BeginDisabled(TraderRunning);
         var mode=gilItemsMode?1:0;ImGui.SetNextItemWidth(-1);if(ImGui.Combo("##TraderMode",ref mode,"Gil\0Items\0")){gilItemsMode=mode==1;gilTradeNotice="";if(gilItemsMode)PrepareTradeItemShortcutLabels();}
         ImGui.SetNextItemWidth(-1);
-        ImGui.Combo("##gil-target-source", ref gilTargetSource, "Party\0Nearby players\0Friends\0Find by name\0");
+        var sourceChoice=gilTargetSource==1?0:gilTargetSource==0?1:gilTargetSource;
+        if(ImGui.Combo("##gil-target-source",ref sourceChoice,"Nearby players\0Party\0Friends\0Find by name\0"))gilTargetSource=sourceChoice==0?1:sourceChoice==1?0:sourceChoice;
         if (gilTargetSource == 3) { ImGui.SetNextItemWidth(-1); ImGui.InputTextWithHint("##gil-name-search", "Player name", ref gilNameSearch, 80); }
         ImGui.SetNextItemWidth(-1);
         if (ImGui.BeginCombo("##gil-partner", gilPartnerName.Length == 0 ? "Choose player" : gilPartnerName + " @ " + WorldName(gilPartnerWorld)))

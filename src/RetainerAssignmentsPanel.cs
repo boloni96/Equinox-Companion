@@ -6,14 +6,10 @@ public sealed partial class Plugin
     private void DrawRetainerAssignments()
     {
         if(!Player.IsLoaded){ImGui.TextDisabled("Log in to edit this character’s assignments.");return;}
-        var eligible=NoOrganizerPlan||ScopeOrganizeRules(WholeOrganizerRules()).Length>0;
-        if(ImGui.Button(NoOrganizerPlan?"Preview all":"Preview plan"))CheckAllOrganize();ImGui.SameLine();
-        ImGui.BeginDisabled(!eligible);if(ImGui.Button(NoOrganizerPlan?"Organise all":"Organise plan"))StartStorageRouting(WholeOrganizerRules(),false);
-        ImGui.EndDisabled();
-        MarketHelp("With a plan: only its filtered items are eligible. With no plan: all retainer items matching the movement category and quality filters are eligible. Regular: consolidate duplicates from the last retainer toward the first in game order; unique items stay put. With assignments enabled: use the selected category/item homes, choosing available space across them. Your existing bag items stay untouched; only empty space is used for staging. No routine inventory tour when recorded stock is complete.");
-        ImGui.SameLine();DrawUseRetainerAssignments();
+        DrawUseRetainerAssignments();SameLineIfFits(ButtonWidth("Assignments…"));
         DrawAssignmentEditor();
     }
+
     private void DrawUseRetainerAssignments()
     {
         var character=Player.ContentId;var use=config.UseRetainerAssignments.Contains(character);

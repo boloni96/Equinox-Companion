@@ -11,7 +11,7 @@ public sealed partial class Plugin
         MarketHelp("All available transfers only the listed items matching plan categories and quality. No recipe expansion. Entrust keeps imported Keep amounts and protected items. This temporary option resets when loading a plan.");
     }
     private bool NoOrganizerPlan=>retrievalEditingPreset==null&&retrievalItems.Length==0&&retrievalEntrust==null;
-    private StorageRoute[] WholeOrganizerRules()=>[new(StorageRouting.AllSources,StorageAutoRouting.AllRetainers,NoOrganizerPlan?organizeCategories.ToArray():[],[],AllItems:!NoOrganizerPlan||organizeCategories.Count==0,Quality:retrievalQuality)];
+    private StorageRoute[] WholeOrganizerRules()=>[new(StorageRouting.AllSources,StorageAutoRouting.AllRetainers,organizeCategories.ToArray(),[],AllItems:organizeCategories.Count==0,Quality:retrievalQuality)];
     private RetrievalEntry[] FilteredPlanItems()=>PlanItemScope.Filter(retrievalItems,retrievalFilterCategories,retrievalSendCategories,OrganizeCategory);
     private RetrievalEntry[] PlanEntrustEntries()=>retrievalTransferAll
         ?FilteredPlanItems().Select(e=>e with{Quantity=Math.Max(0,RetrievalHeld(e.ItemId,retrievalQuality)-chestKeep)}).Where(e=>e.Quantity>0).ToArray()

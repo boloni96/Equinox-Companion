@@ -3,6 +3,7 @@ using Dalamud.Bindings.ImGui;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
+ private static string EquinoxWindowLabel(string name)=>name=="Gil Trader"?"Gil & Item Trader":name=="Planting"?"Gardening":name;
  private Action? windowFooter;
  private string windowStatus="";
  private readonly Dictionary<System.Reflection.MethodInfo,string> windowPerformanceLabels=[];
@@ -52,15 +53,15 @@ public sealed partial class Plugin
    var compact=GoddessAppearance||welcomeWindow.IsOpen;
    var size=ImGui.GetTextLineHeight()*(compact?1.2f:1.65f);var at=ImGui.GetCursorScreenPos();ImGui.Dummy(new Vector2(size));
    GardenImage("assets/category-icons/"+icon+".png",at,new Vector2(size));
-   ImGui.SameLine();if(ImGui.Selectable(name,false,ImGuiSelectableFlags.None,new Vector2(compact?ImGui.GetFontSize()*12:250,size))){open();ImGui.CloseCurrentPopup();}if(ImGui.IsItemHovered())ImGui.SetTooltip(command);
+   ImGui.SameLine();if(ImGui.Selectable(EquinoxWindowLabel(name)+"###"+name,false,ImGuiSelectableFlags.None,new Vector2(compact?ImGui.GetFontSize()*12:250,size))){open();ImGui.CloseCurrentPopup();}if(ImGui.IsItemHovered())ImGui.SetTooltip(command);
   }
   Row("Companion","/equinox","characters",()=>{visible=true;mainWindow.IsOpen=true;},mainWindow.IsOpen);
   Row("Testing checklist","/eqtests · /equinox tests","adventure",OpenTesting,testingWindow.IsOpen);
   Row("Adventure","/adventure","adventure",OpenAdventure,adventureWindow.IsOpen);
   Row("Where is it cheapest?","/whereischeap","market-search",()=>OpenMarketSearch(""),marketWindow.IsOpen);
   Row("Equinox Market","/eqmarket · paired listings, history and earnings","market",OpenEquinoxMarket,equinoxMarketWindow.IsOpen);
-  Row("Equinox Organizer","/eqorganizer · withdraw exact items or crafting materials","retriever",OpenRetriever,retrieverWindow.IsOpen);
-  Row("Gil Trader","/eqtrade · gil transfers with a nearby player","gil-trader",OpenGilTrader,gilTraderWindow.IsOpen);
+  Row("Equinox Organizer","/eqorganizer · inventory, plans, transfers and retainer organization",GoddessAppearance?"retriever-goddess":"retriever",OpenRetriever,retrieverWindow.IsOpen);
+  Row("Gil Trader","/eqtrade · send or receive gil and tradable bag items","gil-trader",OpenGilTrader,gilTraderWindow.IsOpen);
   if(config.Seller.Enabled)Row("Equinox Seller","/eqseller · check and update retainer prices","seller",OpenEquinoxSeller,sellerWindow.IsOpen);
   Row("Do I already have it?","/doihaveit","item-search",()=>OpenItemSearch(""),itemSearchWindow.IsOpen);
   Row("Housing bids","/bid","housing-bids",OpenBidSearch,bidWindow.IsOpen);

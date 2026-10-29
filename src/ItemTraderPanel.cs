@@ -11,10 +11,11 @@ public sealed partial class Plugin
     private readonly HashSet<uint> itemTradeCategories=[];
     private readonly Dictionary<uint,string> itemTradeNames=[];
     private bool itemTradeSelectedOnly;
+    private readonly Dictionary<uint,uint> itemTradeIcons=[];
     private void RefreshItemTradePicker()
     {
-        itemTradeBags=ReadItemTradeBags();ItemTradePlan.RefreshSelection(itemTradeSelection,itemTradeBags);itemTradeNames.Clear();
-        foreach(var id in itemTradeBags.Where(x=>x.Item>0).Select(x=>x.Item).Distinct())itemTradeNames[id]=SearchItemName(id);
+        itemTradeBags=ReadItemTradeBags();ItemTradePlan.RefreshSelection(itemTradeSelection,itemTradeBags);itemTradeNames.Clear();itemTradeIcons.Clear();
+        foreach(var id in itemTradeBags.Where(x=>x.Item>0).Select(x=>x.Item).Distinct()){itemTradeNames[id]=SearchItemName(id);itemTradeIcons[id]=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>().GetRowOrDefault(id)?.Icon??0;}
         itemTradeBagRefresh=DateTimeOffset.UtcNow.AddSeconds(2);
     }
     private void LoadOrganizerTradeItems()
@@ -55,6 +56,9 @@ public sealed partial class Plugin
             ImGui.TableSetupColumn("Item",ImGuiTableColumnFlags.WidthStretch);ImGui.TableSetupColumn("Have",ImGuiTableColumnFlags.WidthFixed,45);ImGui.TableSetupColumn("Send",ImGuiTableColumnFlags.WidthFixed,80);ImGui.TableSetupScrollFreeze(0,1);ImGui.TableHeadersRow();
             foreach(var row in rows){ImGui.PushID(row.Key.Item+":"+row.Key.Hq);ImGui.TableNextRow();ImGui.TableNextColumn();ImGui.BeginGroup();var selected=itemTradeSelection.ContainsKey(row.Key);
                 if(ImGui.Checkbox("##Selected",ref selected)){if(selected)itemTradeSelection[row.Key]=row.Count;else itemTradeSelection.Remove(row.Key);}ImGui.SameLine();
+                var iconSize=ImGui.GetTextLineHeight()+4;var iconId=itemTradeIcons.GetValueOrDefault(row.Key.Item);
+                var icon=iconId>0?Textures.GetFromGameIcon(iconId).GetWrapOrDefault():null;
+                if(icon!=null)ImGui.Image(icon.Handle,new System.Numerics.Vector2(iconSize));else ImGui.Dummy(new System.Numerics.Vector2(iconSize));ImGui.SameLine();
                 ImGui.TextUnformatted(itemTradeNames.GetValueOrDefault(row.Key.Item,row.Key.Item.ToString())+(row.Key.Hq?" HQ":""));ImGui.EndGroup();
                 if(!TraderRunning&&ImGui.IsItemHovered()&&!ImGui.GetIO().WantTextInput){if(ImGui.GetIO().KeyShift&&!ImGui.GetIO().KeyAlt)itemTradeSelection.TryAdd(row.Key,row.Count);else if(ImGui.GetIO().KeyAlt&&!ImGui.GetIO().KeyShift)itemTradeSelection.Remove(row.Key);}
                 selected=itemTradeSelection.ContainsKey(row.Key);

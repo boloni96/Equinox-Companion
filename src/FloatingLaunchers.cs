@@ -64,7 +64,7 @@ public sealed partial class Plugin
         if(sellerWindow.IsOpen)minimizedLaunchers.Remove("Equinox Seller");
         if(gilTraderWindow.IsOpen)minimizedLaunchers.Remove("Gil Trader");
         if(retrieverWindow.IsOpen)minimizedLaunchers.Remove("Equinox Organizer");
-        DrawLauncher("Equinox Organizer",13,"garden-art/assets/category-icons/retriever.png");
+        DrawLauncher("Equinox Organizer",13,GoddessAppearance?"garden-art/assets/category-icons/retriever-goddess.png":"garden-art/assets/category-icons/retriever.png");
         DrawLauncher("Gil Trader",12,"garden-art/assets/category-icons/gil-trader.png");
         DrawLauncher("Equinox Market",10,"garden-art/assets/category-icons/market.png");
         DrawLauncher("Equinox Seller",11,"garden-art/assets/category-icons/seller.png");
@@ -169,14 +169,14 @@ public sealed partial class Plugin
             ImGui.PushStyleVar(ImGuiStyleVar.Alpha,ImGui.GetStyle().Alpha*.75f);
             if (ImGui.SmallButton("...")) ImGui.OpenPopup("Icon settings");
             ImGui.PopStyleVar();
-            if (hovered) ImGui.SetTooltip((name=="Planting"?"Gardening":name) + " · Click to open · Double-click to close · Drag to move"+(name=="Fashion Report"?"\n"+CurrentFashionTooltip():""));
+            if (hovered) ImGui.SetTooltip(EquinoxWindowLabel(name) + " · Click to open · Double-click to close · Drag to move"+(name=="Fashion Report"?"\n"+CurrentFashionTooltip():""));
             if (ImGui.BeginPopup("Icon settings")) { DrawLauncherOptions(name, o); ImGui.EndPopup(); }
         }
         ImGui.End(); ImGui.PopStyleVar();
     }
     private void DrawLauncherOptions(string name, FloatingLauncherOptions o)
     {
-        ImGui.TextUnformatted(name=="Planting"?"Gardening":name);
+        ImGui.TextUnformatted(EquinoxWindowLabel(name));
         var opacity = o.Opacity; var blur = o.Blur; var locked = o.Locked;
         var changed = ImGui.SliderFloat("Opacity", ref opacity, .2f, 1, "%.2f");
         changed |= ImGui.Checkbox("Blur background", ref blur);
@@ -187,8 +187,8 @@ public sealed partial class Plugin
     private void DrawFloatingLauncherSettings()
     {
         SettingsHelp("Use the native title-bar collapse triangle or double-click the title bar to minimize to an icon. Single-click reopens its window; double-click closes both. Esc minimizes the focused window to its icon. X closes without an icon. Commands reopen windows. Drag icons to move them.",false);
-        var names = new[] { "Companion", "Fashion Report", "Planting", "Welcome", "New Character", "Do I already have it?", "Where is it cheapest?", "Adventure", "Housing bids", "Testing", "Equinox Market", "Equinox Seller", "Gil Trader" };
-        for (var i = 0; i < names.Length; i++) { if(!OptionalToolAvailable(names[i]))continue; ImGui.PushID(i); if(ImGui.CollapsingHeader(names[i]=="Planting"?"Gardening":names[i]))DrawLauncherOptions(names[i], LauncherOptions(names[i], i)); ImGui.PopID(); }
+        var names = new[] { "Companion", "Fashion Report", "Planting", "Welcome", "New Character", "Do I already have it?", "Where is it cheapest?", "Adventure", "Housing bids", "Testing", "Equinox Market", "Equinox Seller", "Gil Trader", "Equinox Organizer" };
+        for (var i = 0; i < names.Length; i++) { if(!OptionalToolAvailable(names[i]))continue; ImGui.PushID(i); if(ImGui.CollapsingHeader(EquinoxWindowLabel(names[i])))DrawLauncherOptions(names[i], LauncherOptions(names[i], i)); ImGui.PopID(); }
     }
 }
 

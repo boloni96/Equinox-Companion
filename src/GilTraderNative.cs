@@ -95,7 +95,7 @@ public sealed partial class Plugin
         TraceGilTrade($"{(gilReceive ? "Receive" : "Send")} pressed · requested {gilTotal:N0} gil · {gilPartnerName} @ {WorldName(gilPartnerWorld)} · {(gilPartnerRequiresParty ? "party" : "nearby player")}");
         void Reject(string reason) { gilTradeNotice = reason; TraceGilTrade("Not started · " + reason); }
         if(retainerGilRunning||organizeRunning||retrievalRun.Running||chestRunning){Reject("Finish the retainer/chest transfer first.");return;}
-        if (!config.EnableGilTrader) { Reject("Enable Gil Trader first."); return; }
+        if (!config.EnableGilTrader) { Reject("Enable Gil & Item Trader first."); return; }
         try {
         gilTradePrompt = DataManager.GetExcelSheet<Lumina.Excel.Sheets.Addon>().GetRowOrDefault(102223)?.Text.ExtractText() ?? "";
         if (string.IsNullOrWhiteSpace(gilTradePrompt)) { Reject("The game's trade confirmation text is unavailable."); return; }
@@ -135,8 +135,8 @@ public sealed partial class Plugin
         gilTradePoll = now.AddMilliseconds(150);
         try
         {
-            if (!config.EnableGilTrader) { StopGilTrade("Gil Trader disabled."); return; }
-            if (!gilTraderWindow.IsOpen && !minimizedLaunchers.Contains("Gil Trader")) { StopGilTrade("Gil Trader closed."); return; }
+            if (!config.EnableGilTrader) { StopGilTrade("Gil & Item Trader disabled."); return; }
+            if (!gilTraderWindow.IsOpen && !minimizedLaunchers.Contains("Gil Trader")) { StopGilTrade("Gil & Item Trader closed."); return; }
             var frame = ReadGilTradeFrame(); var before = gilTrade.Stage; var trades = gilTrade.Trades;
             if (frame != gilTradeLastDiagnosticFrame)
             {
@@ -176,7 +176,7 @@ public sealed partial class Plugin
             {
                 gilTradeCompletion.Clear();
                 CancelOwnedGilTrade(); TraceGilTrade(gilTrade.Status);
-                PrintEquinox("Gil Trader · " + gilTrade.Status);
+                PrintEquinox( "Gil & Item Trader · " + gilTrade.Status);
             }
             else if (before != gilTrade.Stage && action == GilTradeAction.None) TraceGilTrade(gilTrade.Status);
         }

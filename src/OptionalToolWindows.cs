@@ -7,8 +7,8 @@ public sealed partial class Plugin
     private bool RequireOptionalTool(string name)
     {
         if (OptionalToolAvailable(name)) return true;
-        var setting = name switch { "Equinox Market" or "Equinox Seller" => "Equinox Market & Seller", "Camera" => "camera tools", "Helper" => "Equinox Helper", _ => name };
-        PrintEquinox($"{name} is disabled. Enable {setting} in Settings → Optional tools.");
+        var setting = name switch { "Equinox Market" or "Equinox Seller" => "Equinox Market & Seller", "Camera" => "camera tools", "Helper" => "Equinox Helper", _ => EquinoxWindowLabel(name) };
+        PrintEquinox($"{EquinoxWindowLabel(name)} is disabled. Enable {setting} in Settings → Optional tools.");
         return false;
     }
 

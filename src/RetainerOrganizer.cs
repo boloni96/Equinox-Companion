@@ -3,6 +3,8 @@ using FFXIVClientStructs.FFXIV.Client.Game;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
+    private bool organizeSelectionMode;
+    private StorageRoute[] VisibleOrganizeRules()=>organizeSelectionMode?OrganizeRules():NoOrganizerPlan?WholeOrganizerRules():ScopeOrganizeRules(WholeOrganizerRules());
     private ulong organizeFrom,organizeTo=StorageAutoRouting.AllRetainers;private int organizePreviewPage;
     private readonly HashSet<uint> organizeCategories=[];
     private StoragePreviewRow[] organizePreview=[];
@@ -20,31 +22,39 @@ public sealed partial class Plugin
     {
         ImGui.BeginDisabled(organizeRunning||retrievalRun.Running||chestRunning);
         if(NoOrganizerPlan)ImGui.TextDisabled("No plan · all retainer items, narrowed by movement filters");else DrawPlanCategoryRules();
+        var scope=organizeSelectionMode?1:0;ImGui.SetNextItemWidth(220);
+        if(ImGui.Combo("Scope",ref scope,"All retainers\0Selected movement\0")){organizeSelectionMode=scope==1;InvalidateOrganizePreview();}
+        MarketHelp("All retainers organizes eligible stock across this character's retainers. Selected movement uses the source/destination below, or your custom movements. Plans and filters always limit eligible items; assignments choose their allowed homes.");
         DrawRetainerAssignments();
-        var sortAfter=config.SortItemsAfterOrganizing;if(ImGui.Checkbox("Sort items after organizing",ref sortAfter)){config.SortItemsAfterOrganizing=sortAfter;SaveConfiguration();}
-        MarketHelp("After retainer organization finishes, visit every retainer and use the item context menu Sort action with your game settings. Empty item inventories are skipped. Stop also cancels the sorting pass. Does not run after Entrust or a failed/cancelled organization.");
         var names=retrievalKnownRetainers.GetValueOrDefault(Player.ContentId)??new Dictionary<ulong,string>();
         void Choose(string label,ref ulong id,bool all){if(ImGui.BeginCombo(label,id==StorageAutoRouting.AllRetainers?"All retainers":id==0?(all?"All other retainers":"Choose retainer"):names.GetValueOrDefault(id,id.ToString()))){if(!all&&ImGui.Selectable("All retainers · consolidate duplicates",id==StorageAutoRouting.AllRetainers)){id=StorageAutoRouting.AllRetainers;InvalidateOrganizePreview();}if(all&&ImGui.Selectable("All other retainers",id==0)){id=0;InvalidateOrganizePreview();}foreach(var n in names)if(ImGui.Selectable(n.Value+"##"+n.Key,id==n.Key)){id=n.Key;InvalidateOrganizePreview();}ImGui.EndCombo();}}
-        if(ImGui.BeginTable("MovementTargets",2,ImGuiTableFlags.SizingStretchSame)){
+        if(organizeSelectionMode&&ImGui.BeginTable("MovementTargets",2,ImGuiTableFlags.SizingStretchSame)){
             ImGui.TableNextRow();ImGui.TableNextColumn();ImGui.SetNextItemWidth(-1);Choose("##From",ref organizeFrom,true);MarketHelp("Source retainer");
-            ImGui.TableNextColumn();ImGui.SetNextItemWidth(-1);Choose("##To",ref organizeTo,false);ImGui.EndTable();
+            ImGui.TableNextColumn();ImGui.SetNextItemWidth(-1);Choose("##To",ref organizeTo,false);MarketHelp("Destination retainer. All retainers uses assignments when enabled, otherwise duplicate consolidation.");ImGui.EndTable();
         }
-        if(ImGui.IsItemHovered())ImGui.SetTooltip("All retainers consolidates duplicates from last to first in game order. Enable assignments to use your chosen category homes instead. Known inventories are planned before travel; relevant slots are verified on arrival.");
         if(ImGui.BeginTable("MovementFilters",2,ImGuiTableFlags.SizingStretchSame)){
             ImGui.TableNextRow();ImGui.TableNextColumn();ImGui.SetNextItemWidth(-1);if(DrawStorageCategoryPicker("##MovementCategories",organizeCategories,"All categories"))InvalidateOrganizePreview();
             ImGui.TableNextColumn();var q=(int)retrievalQuality;ImGui.SetNextItemWidth(-1);if(ImGui.Combo("##MovementQuality",ref q,"Any quality\0NQ only\0HQ only\0")){retrievalQuality=(RetrievalQuality)q;InvalidateOrganizePreview();retrievalPreviewDirty=true;}ImGui.EndTable();
         }
-        if(ImGui.SmallButton($"Movements / options · {organizeRules.Count}"))ImGui.OpenPopup("MovementOptions");
+        if(ImGui.Button("Preview"))RetrievalTry(CheckOrganize);MarketHelp("Preview this scope without summoning retainers or moving items.");
+        ImGui.SameLine();ImGui.BeginDisabled(VisibleOrganizeRules().Length==0||organizeSelectionMode&&organizeTo==0&&organizeRules.Count==0);
+        if(ImGui.Button("Organize"))StartStorageRouting(VisibleOrganizeRules(),false);ImGui.EndDisabled();
+        ImGui.SameLine();if(ImGui.SmallButton(config.SortItemsAfterOrganizing?"Options · sort on":"Options…"))ImGui.OpenPopup("MovementOptions");
         if(ImGui.BeginPopup("MovementOptions")){
+            var sortAfter=config.SortItemsAfterOrganizing;
+            if(ImGui.Checkbox("Sort items after organizing",ref sortAfter)){config.SortItemsAfterOrganizing=sortAfter;SaveConfiguration();}
+            MarketHelp("After organization finishes, visit all retainers and use the normal item-menu Sort action with your game settings. Stop cancels the sorting pass too.");
             ImGui.SetNextItemWidth(100);if(ImGui.SliderInt("Leave bag slots free",ref organizeReserve,0,10))InvalidateOrganizePreview();
             MarketHelp("Reserve free bag slots for staging. One spare may temporarily unblock a full-retainer swap.");
-            ImGui.BeginDisabled(organizeTo==0);if(ImGui.SmallButton("Add movement")){organizeRules.Add(CurrentOrganizeRule());InvalidateOrganizePreview();}ImGui.EndDisabled();ImGui.SameLine();if(ImGui.SmallButton("Clear movements")){organizeRules.Clear();InvalidateOrganizePreview();}
-            ImGui.BeginChild("MovementRules",new(420,180),false);
-            foreach(var rule in organizeRules.ToArray()){ImGui.PushID(organizeRules.IndexOf(rule));if(ImGui.SmallButton("×")){organizeRules.Remove(rule);InvalidateOrganizePreview();}ImGui.SameLine();ImGui.TextWrapped($"{(rule.From==StorageRouting.AllSources?"All retainers":names.GetValueOrDefault(rule.From,"Retainer"))} → {(rule.To==StorageAutoRouting.AllRetainers?"All retainers":names.GetValueOrDefault(rule.To,"Retainer"))} · {(rule.AllItems?"all items":rule.Categories.Length+" categories")}");ImGui.PopID();}
-            ImGui.EndChild();ImGui.EndPopup();
+            if(organizeSelectionMode){
+                ImGui.Separator();ImGui.TextDisabled("Custom movements");
+                ImGui.BeginDisabled(organizeTo==0);if(ImGui.SmallButton("Add movement")){organizeRules.Add(CurrentOrganizeRule());InvalidateOrganizePreview();}ImGui.EndDisabled();ImGui.SameLine();if(ImGui.SmallButton("Clear movements")){organizeRules.Clear();InvalidateOrganizePreview();}
+                ImGui.BeginChild("MovementRules",new(360,140),false);
+                foreach(var rule in organizeRules.ToArray()){ImGui.PushID(organizeRules.IndexOf(rule));if(ImGui.SmallButton("×")){organizeRules.Remove(rule);InvalidateOrganizePreview();}ImGui.SameLine();ImGui.TextWrapped($"{(rule.From==StorageRouting.AllSources?"All retainers":names.GetValueOrDefault(rule.From,"Retainer"))} → {(rule.To==StorageAutoRouting.AllRetainers?"All retainers":names.GetValueOrDefault(rule.To,"Retainer"))} · {(rule.AllItems?"all items":rule.Categories.Length+" categories")}");ImGui.PopID();}
+                ImGui.EndChild();
+            }
+            ImGui.EndPopup();
         }
-        if(ImGui.Button("Preview selection"))RetrievalTry(CheckOrganize);ImGui.SameLine();
-        ImGui.BeginDisabled(organizeTo==0&&organizeRules.Count==0||OrganizeRules().Length==0);if(ImGui.Button("Organise"))StartOrganize();ImGui.EndDisabled();
         ImGui.EndDisabled();
         if(organizeRunning&&ImGui.Button("Stop organizer"))StopOrganize("Stopped by you; an already-sent move may still complete.");
         if(organizeRunning||organizeMoves.Length>0)ImGui.TextWrapped(organizeStatus);

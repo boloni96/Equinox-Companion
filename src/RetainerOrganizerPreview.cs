@@ -5,20 +5,20 @@ public sealed partial class Plugin
     private Task<(int Version,ulong Character,StoragePreviewRow[] Rows,int Remaining)>? organizePreviewTask;
     private int organizePreviewVersion;
     private ulong organizePreviewOwner;
-    private bool organizePreviewDirty=true,organizePreviewAll,organizePreviewBell;
+    private bool organizePreviewDirty=true,organizePreviewBell;
     private DateTimeOffset organizePreviewAfter;
     private string organizePreviewMessage="Open the summoning bell to preview recorded retainer movements.";
     private string organizePreviewCoverage="";
     private Dictionary<ulong,string> organizePreviewNames=[];
-    private void InvalidateOrganizePreview(){organizePreviewVersion++;organizePreviewCoverage="";organizePreview=[];organizePreviewDirty=true;organizePreviewAll=false;organizePreviewAfter=DateTimeOffset.UtcNow.AddMilliseconds(250);organizePreviewMessage="Preview needs updating…";}
+    private void InvalidateOrganizePreview(){organizePreviewVersion++;organizePreviewCoverage="";organizePreview=[];organizePreviewDirty=true;organizePreviewAfter=DateTimeOffset.UtcNow.AddMilliseconds(250);organizePreviewMessage="Preview needs updating…";}
     private string OrganizeScopeMessage()=>NoOrganizerPlan
         ?"No retainer items match the selected movement filters."
         :"No listed items match the plan categories, protection rules or selected movement. Adjust those filters.";
     private void CheckOrganize(){retrievalError="";InvalidateOrganizePreview();organizePreviewAfter=default;}
-    private void CheckAllOrganize(){CheckOrganize();organizePreviewAll=true;}
+    private void CheckAllOrganize(){organizeSelectionMode=false;CheckOrganize();}
     private unsafe void BeginOrganizePreview()
     {
-        var rules=organizePreviewAll?WholeOrganizerRules():OrganizeRules();
+        var rules=VisibleOrganizeRules();
         if(!NoOrganizerPlan)rules=ScopeOrganizeRules(rules);
         if(rules.Length==0){organizePreviewMessage=OrganizeScopeMessage();return;}
         var retainers=ReadSellerRetainers();
