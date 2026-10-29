@@ -4,7 +4,7 @@ public sealed record ChestMove(ChestStack Source,ChestStack Destination,int Quan
 public static class ChestTransferPlanner
 {
     private static bool Same(ChestStack a,ChestStack b)=>a.Item==b.Item&&a.Hq==b.Hq;
-    private static ChestStack? Destination(ChestStack source,IReadOnlyList<ChestStack> targets)=>targets.FirstOrDefault(x=>Same(source,x)&&x.Quantity<x.Limit&&(x.Container!=source.Container||x.Slot!=source.Slot))??targets.FirstOrDefault(x=>x.Item==0);
+    private static ChestStack? Destination(ChestStack source,IReadOnlyList<ChestStack> targets)=>targets.FirstOrDefault(x=>CrystalStorage.CanReceive(source,x)&&Same(source,x)&&x.Quantity<x.Limit&&(x.Container!=source.Container||x.Slot!=source.Slot))??targets.FirstOrDefault(x=>CrystalStorage.CanReceive(source,x)&&x.Item==0);
     private static ChestMove? Move(ChestStack source,ChestStack? target,int wanted)
     {
         if(target==null)return null;

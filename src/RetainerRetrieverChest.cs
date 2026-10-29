@@ -44,7 +44,7 @@ public sealed partial class Plugin
         var c=manager->GetInventoryContainer((InventoryType)type);if(c==null||!c->IsLoaded||c->Items==null||c->Size is <=0 or >200)throw new InvalidOperationException("Waiting for chest inventory. Open the selected tab and try again.");
         var rows=new List<ChestStack>();for(var i=0;i<c->Size;i++){
             var s=c->Items[i];var item=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>().GetRowOrDefault(s.ItemId);
-            rows.Add(new(type,i,s.ItemId,s.Quantity,(s.Flags&InventoryItem.ItemFlags.HighQuality)!=0,item.HasValue?(int)item.Value.StackSize:0,item.HasValue&&!item.Value.IsUntradable&&s.SpiritbondOrCollectability==0));
+            rows.Add(CrystalStorage.Normalize(new(type,i,s.ItemId,s.Quantity,(s.Flags&InventoryItem.ItemFlags.HighQuality)!=0,item.HasValue?(int)item.Value.StackSize:0,item.HasValue&&!item.Value.IsUntradable&&s.SpiritbondOrCollectability==0)));
         }return rows.ToArray();
     }
     private unsafe void BeginChestPage(DateTimeOffset now)
@@ -72,8 +72,9 @@ public sealed partial class Plugin
             if(!Player.IsLoaded||Player.CurrentWorld.RowId!=Player.HomeWorld.RowId||SellerAddon("FreeCompanyChest")==null||agent==null||!agent->IsAgentActive()||fc==null||fc->Id==0)throw new InvalidOperationException("Open your FC chest on your home world first.");
             EnsureChestMove();
             chestMode=mode;chestQuality=retrievalQuality;chestGoals=[];
-            if(mode==0||mode==3||mode==4){PreviewRetrieval(selected,false);if(retrievalPlan.Length==0&&(mode!=4||retrievalSendCategories.Count==0))throw new InvalidOperationException("Choose items in Organizer first.");chestGoals=retrievalPlan.ToDictionary(x=>x.ItemId,x=>checked(x.Quantity+(mode!=0||retrievalSubtract?0:RetrievalHeld(x.ItemId,chestQuality))));}
-            if(mode==4&&retrievalSendCategories.Count>0)foreach(var group in new uint[]{0,1,2,3,2001}.SelectMany(ReadChestContainer).Where(x=>retrievalSendCategories.Contains(OrganizeCategory(x.Item))&&RetainerRetrieval.AllowsQuality(x.Hq,chestQuality)).GroupBy(x=>x.Item))chestGoals.TryAdd(group.Key,group.Sum(x=>x.Quantity));
+            if(mode==4&&retrievalEntrust!=null){chestGoals=retrievalEntrust.Amounts(retrievalItems.Select(x=>x.ItemId),new uint[]{0,1,2,3,2001}.SelectMany(ReadChestContainer),chestQuality,OrganizeCategory,retrievalSendCategories);if(chestGoals.Count==0)throw new InvalidOperationException("No matching inventory items or crystals to entrust after keep amounts and protection.");}
+            else if(mode==0||mode==3||mode==4){PreviewRetrieval(selected,false);if(retrievalPlan.Length==0&&(mode!=4||retrievalSendCategories.Count==0))throw new InvalidOperationException("Choose items in Organizer first.");chestGoals=retrievalPlan.ToDictionary(x=>x.ItemId,x=>checked(x.Quantity+(mode!=0||retrievalSubtract?0:RetrievalHeld(x.ItemId,chestQuality))));}
+            if(mode==4&&retrievalEntrust==null&&retrievalSendCategories.Count>0)foreach(var group in new uint[]{0,1,2,3,2001}.SelectMany(ReadChestContainer).Where(x=>retrievalSendCategories.Contains(OrganizeCategory(x.Item))&&RetainerRetrieval.AllowsQuality(x.Hq,chestQuality)).GroupBy(x=>x.Item))chestGoals.TryAdd(group.Key,group.Sum(x=>x.Quantity));
             var candidates=chestTab==0?new uint[]{20000,20001,20002,20003,20004,22001}:new[]{chestTab==6?22001u:19999u+(uint)chestTab};
             chestPages=candidates.Where(p=>(ChestAccess(p)==3||(mode==1||mode==4)&&ChestAccess(p)==2)&&(mode!=3||p!=22001&&p!=19999+chestDestination)).ToArray();
             if(mode==3&&ChestAccess((uint)(19999+chestDestination))<2)throw new InvalidOperationException("Destination tab does not allow deposits.");
