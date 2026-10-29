@@ -173,14 +173,14 @@ internal sealed class RetrievalRun(IRetrievalPort port)
     internal Phase State{get;private set;}
     internal bool Running=>State!=Phase.Idle;
     internal string Status{get;private set;}="Ready";
-    private ulong[] retainers=[];private int index,before,quantity;private RetrievalSlot? slot;private Dictionary<uint,int> targets=[];private DateTimeOffset deadline;
-    internal void Start(ulong[] ids,RetrievalEntry[] plan,bool subtractHeld,DateTimeOffset now){if(Running)throw new InvalidOperationException("Retrieval already running.");if(ids.Length==0||plan.Length==0)throw new ArgumentException("Select items and open the retainer list first.");retainers=ids;index=0;targets=plan.ToDictionary(e=>e.ItemId,e=>checked((subtractHeld?0:port.Held(e.ItemId))+e.Quantity));Transition(Phase.Prepare,now);}
+    private ulong[] retainers=[];private int index,before,quantity,knownHolders;private RetrievalSlot? slot;private Dictionary<uint,int> targets=[];private DateTimeOffset deadline;
+    internal void Start(ulong[] ids,RetrievalEntry[] plan,bool subtractHeld,DateTimeOffset now,int preferredCount=-1){if(Running)throw new InvalidOperationException("Retrieval already running.");if(ids.Length==0||plan.Length==0)throw new ArgumentException("Select items and open the retainer list first.");retainers=ids;knownHolders=preferredCount<0?ids.Length:Math.Clamp(preferredCount,0,ids.Length);index=0;targets=plan.ToDictionary(e=>e.ItemId,e=>checked((subtractHeld?0:port.Held(e.ItemId))+e.Quantity));Transition(Phase.Prepare,now);}
     internal void Stop(string reason){State=Phase.Idle;Status=reason;port.Release();}
-    private void Transition(Phase phase,DateTimeOffset now){State=phase;deadline=now.AddSeconds(20);Status=phase+" · retainer "+(index+1)+"/"+retainers.Length;}
+    private void Transition(Phase phase,DateTimeOffset now){State=phase;deadline=now.AddSeconds(20);Status=index<knownHolders?phase+" · known holder "+(index+1)+"/"+knownHolders:phase+" · checking missing stock "+(index-knownHolders+1)+"/"+(retainers.Length-knownHolders);}
     internal void Tick(DateTimeOffset now){if(!Running)return;try{
         if(!port.ContextMatches){Stop("Stopped: character, world or bell changed.");return;}if(now>deadline){Stop("Stopped: "+State+" was not confirmed. Check the game window.");return;}
         var id=retainers[index];switch(State){
-        case Phase.Prepare:if(port.Prepare())Transition(Phase.Select,now);break;
+        case Phase.Prepare:if(targets.All(x=>port.Held(x.Key)>=x.Value)){Stop("Complete · requested quantities are already in your bags.");return;}if(port.Prepare())Transition(Phase.Select,now);break;
         case Phase.Select:if(port.Select(id))Transition(Phase.Open,now);break;
         case Phase.Open:if(port.OpenInventory(id))Transition(Phase.Read,now);break;
         case Phase.Read:
