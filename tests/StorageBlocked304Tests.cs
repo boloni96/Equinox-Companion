@@ -23,6 +23,13 @@ internal static class StorageBlocked304Tests
     Check("input snapshot is not mutated",stock[1][0].Item==100&&stock[2][0].Item==0);
     var tools=all.Moves.Where(x=>x.Move.Source.Item==100).ToArray();
     Check("cargo is fully delivered",tools.Where(x=>x.Withdraw).Sum(x=>x.Move.Quantity)==tools.Where(x=>!x.Withdraw&&!x.Internal).Sum(x=>x.Move.Quantity));
+    var partial=new Dictionary<ulong,ChestStack[]>{
+        [1]=[S(100),S(100,1)],[2]=[S(300),S(0,1)],[3]=[S(400)],
+        [0]=[new(0,0,0,0,false,0),new(0,1,0,0,false,0)]
+    };
+    var partialRules=new[]{new StorageRoute(1,2,[],[100]),new StorageRoute(2,3,[],[300])};
+    var partialResult=StorageRouting.Build(new("Partial",1,partialRules,1),partial,id=>1,includeExistingBags:false);
+    Check("retry preserves an already delivered prefix of a subsequently blocked item",partialResult.Moves.Count(x=>!x.Withdraw&&!x.Internal&&x.Move.Source.Item==100)==1&&partialResult.Remaining==2);
     var blockedOnly=StorageAssignments.Apply([new(StorageRouting.AllSources,StorageAutoRouting.AllRetainers,[],[200,300])],homes,stock,id=>1);
     var none=StorageRouting.Build(new("Blocked",1,blockedOnly,1),stock,id=>1,includeExistingBags:false);
     Check("fully blocked plans remain safely empty",none.Moves.Length==0&&none.Remaining==2);

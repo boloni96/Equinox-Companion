@@ -152,7 +152,12 @@ public static class StorageRouting
             var added=false;
             foreach(var move in moves.Skip(safeMoveCount).Where(x=>x.Withdraw&&stranded.Contains((x.Move.Source.Item,x.Move.Source.Hq))))
                 added|=blocked.Add((move.Retainer,move.Move.Source.Item,move.Move.Source.Hq));
-            if(added&&retries<16)return BuildCore(originalPlan,inventories,category,bagsOnly,includeExistingBags,blocked,retries+1);
+            if(added&&retries<16){
+                var safe=moves.Take(safeMoveCount).ToArray();
+                var resumed=ReplaySafePrefix(inventories,safe);
+                var retry=BuildCore(originalPlan,resumed,category,bagsOnly,includeExistingBags,blocked,retries+1);
+                return new(safe.Concat(retry.Moves).ToArray(),retry.Remaining);
+            }
             return new(moves.Take(safeMoveCount).ToArray(),safeRemaining);
         }
         MergeAssigned();
@@ -160,4 +165,20 @@ public static class StorageRouting
         remaining+=outgoing.Values.Sum();
         return new(moves.ToArray(),remaining);
     }
+    private static Dictionary<ulong,ChestStack[]> ReplaySafePrefix(IReadOnlyDictionary<ulong,ChestStack[]> inventory,IEnumerable<RoutedMove> moves)
+    {
+        var state=inventory.ToDictionary(x=>x.Key,x=>x.Value.ToArray());
+        foreach(var action in moves){
+            var move=action.Move;
+            var from=action.Internal||action.Withdraw?action.Retainer:Bags;
+            var to=action.Internal||!action.Withdraw?action.Retainer:Bags;
+            var si=Array.FindIndex(state[from],s=>s.Container==move.Source.Container&&s.Slot==move.Source.Slot);
+            var di=Array.FindIndex(state[to],s=>s.Container==move.Destination.Container&&s.Slot==move.Destination.Slot);
+            var left=move.Source.Quantity-move.Quantity;
+            state[from][si]=left==0&&!Crystal(move.Source.Item)?move.Source with{Item=0,Quantity=0,Hq=false,Limit=0}:move.Source with{Quantity=left};
+            state[to][di]=move.Destination with{Item=move.Source.Item,Hq=move.Source.Hq,Quantity=move.Destination.Quantity+move.Quantity,Limit=move.Source.Limit};
+        }
+        return state;
+    }
+
 }
