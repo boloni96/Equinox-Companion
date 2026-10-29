@@ -8,6 +8,7 @@ public sealed partial class Plugin
     private int assignmentRecommendationRevision;
     private AssignmentRecommendation[] assignmentRecommendationOptions=[];
     private int assignmentRecommendationChoice;
+    private bool assignmentRelieveFullHomes;
     private void BackupAssignmentSetup(ulong character,string name)
     {
         if(!config.RetainerAssignmentSetups.TryGetValue(character,out var saved))config.RetainerAssignmentSetups[character]=saved=[];
@@ -23,16 +24,20 @@ public sealed partial class Plugin
             assignmentRecommendationTask=null;
         }
         var busy=organizeRunning||retrievalRun.Running||chestRunning;
+        ImGui.BeginDisabled(busy||assignmentRecommendationTask!=null);
+        if(ImGui.Checkbox("Relieve full homes",ref assignmentRelieveFullHomes))assignmentRecommendation=null;
+        ImGui.EndDisabled();
+        MarketHelp("Off: fill missing assignments only. On: also suggest extra category homes for recorded stock that cannot fit its currently assigned homes. Existing rules stay; specific-item and saved-plan homes are not overridden. Review each proposed category before applying.");
         ImGui.BeginDisabled(busy||assignmentRecommendationTask!=null||assignmentCoverage?.CheckedRetainers!=owners.Length||owners.Length==0);
         if(ImGui.SmallButton("Recommended assignments")){
             var inventory=assignmentCoverageStock.ToDictionary(x=>x.Key,x=>x.Value.ToArray());
             var snapshot=AssignmentRecommendations.Copy(rows);var plans=config.RetrievalPresets.ToArray();
             var categories=inventory.Values.SelectMany(x=>x).Where(x=>x.Item>0).Select(x=>x.Item).Distinct().ToDictionary(x=>x,OrganizeCategory);
-            assignmentRecommendationRevision=assignmentCoverageRevision;assignmentRecommendation=null;
-            assignmentRecommendationTask=Task.Run(()=>Enum.GetValues<AssignmentRecommendationStyle>().Select(style=>AssignmentRecommendations.Build(owners,inventory,snapshot,plans,id=>categories.GetValueOrDefault(id),style)).ToArray());
+            assignmentRecommendationRevision=assignmentCoverageRevision;assignmentRecommendation=null;var relieve=assignmentRelieveFullHomes;
+            assignmentRecommendationTask=Task.Run(()=>Enum.GetValues<AssignmentRecommendationStyle>().Select(style=>AssignmentRecommendations.Build(owners,inventory,snapshot,plans,id=>categories.GetValueOrDefault(id),style,relieve)).ToArray());
         }
         ImGui.EndDisabled();
-        MarketHelp("Suggest homes for currently unassigned categories, preserving existing assignments. Uses recorded quantities, stack limits, HQ/NQ and capacity; reserves room for existing incoming assignments and aims to leave five spare slots. Review before applying. Does not decide item value or move items.");
+        MarketHelp("Compare all recorded retainers. Fill missing category homes, optionally relieving full assigned homes, while preserving existing rules. Uses recorded quantities, stack limits, HQ/NQ and capacity; reserves room for existing incoming assignments and aims to leave five spare slots. Review before applying. Does not decide item value or move items.");
         if(assignmentRecommendationTask!=null)ImGui.TextDisabled("Calculating suggested homes…");
         if(assignmentRecommendation!=null&&assignmentRecommendationOptions.Length>0){
             ImGui.SetNextItemWidth(220);
@@ -41,8 +46,8 @@ public sealed partial class Plugin
         if(assignmentRecommendation is {} proposal){
             string Category(uint id)=>StorageGroups().SelectMany(g=>g.Categories).FirstOrDefault(c=>c.Id==id)?.Name??("Category "+id);
             ImGui.TextWrapped("Suggested additions · current assignments stay in place");
-            foreach(var suggestion in proposal.Suggestions)ImGui.TextWrapped(Category(suggestion.Category)+" → "+names.GetValueOrDefault(suggestion.Retainer,suggestion.Retainer.ToString())+$" · {suggestion.MovedStacks} stacks to relocate · +{suggestion.AdditionalSlots} slots · {suggestion.FreeAfter} free after this addition");
-            if(proposal.ExistingUnplacedSlots>0)ImGui.TextWrapped($"{proposal.ExistingUnplacedSlots} existing assigned stacks could not be reserved in the conservative capacity estimate. Review space before organizing.");
+            foreach(var suggestion in proposal.Suggestions)ImGui.TextWrapped((suggestion.CapacityRelief?"Extra home · ":"Missing home · ")+Category(suggestion.Category)+" → "+names.GetValueOrDefault(suggestion.Retainer,suggestion.Retainer.ToString())+$" · {suggestion.MovedStacks} stacks to relocate · +{suggestion.AdditionalSlots} slots · {suggestion.FreeAfter} free after this addition");
+            if(proposal.ExistingUnplacedSlots>0)ImGui.TextWrapped($"{proposal.ExistingUnplacedSlots} assigned stacks did not fit their existing homes in the initial conservative estimate. Extra-home suggestions address category overflow; explicit item/plan homes need manual review.");
             if(proposal.NeedsSpace.Length>0)ImGui.TextWrapped("Needs manual review / split homes: "+string.Join(", ",proposal.NeedsSpace.Select(Category)));
             ImGui.TextDisabled("Estimates use recorded stock; actual transfers recheck space.");
             ImGui.BeginDisabled(busy||proposal.Suggestions.Length==0);
