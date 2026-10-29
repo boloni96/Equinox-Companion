@@ -9,10 +9,24 @@ public static class StorageRouting
     private static bool Same(ChestStack a,ChestStack b)=>a.Item==b.Item&&a.Hq==b.Hq;
     private static bool Crystal(uint item)=>item is >=2 and <=19;
     public static RoutingResult Build(StorageRoutingPlan plan,IReadOnlyDictionary<ulong,ChestStack[]> inventories,Func<uint,uint> category,bool bagsOnly=false,bool includeExistingBags=true)
-        =>BuildCore(plan,inventories,category,bagsOnly,includeExistingBags,[],0);
-    private static RoutingResult BuildCore(StorageRoutingPlan plan,IReadOnlyDictionary<ulong,ChestStack[]> inventories,Func<uint,uint> category,bool bagsOnly,bool includeExistingBags,HashSet<(ulong Owner,uint Item,bool Hq)> blocked,int retries)
     {
-        var originalPlan=plan;
+        var blocked=new HashSet<(ulong Owner,uint Item,bool Hq)>();
+        var completed=new List<RoutedMove>();var snapshot=inventories;var progressed=false;
+        while(true){
+            var result=BuildCore(plan,snapshot,category,bagsOnly,includeExistingBags,blocked,out var resume);
+            completed.AddRange(result.Moves);progressed|=result.Moves.Length>0;
+            if(resume!=null){snapshot=resume;continue;}
+            // Independent deliveries/merges may have freed the blocked homes.
+            // Retry those groups only after real, cargo-free progress.
+            if(blocked.Count>0&&progressed){
+                snapshot=ReplaySafePrefix(snapshot,result.Moves);blocked.Clear();progressed=false;continue;
+            }
+            return new(completed.ToArray(),result.Remaining);
+        }
+    }
+    private static RoutingResult BuildCore(StorageRoutingPlan plan,IReadOnlyDictionary<ulong,ChestStack[]> inventories,Func<uint,uint> category,bool bagsOnly,bool includeExistingBags,HashSet<(ulong Owner,uint Item,bool Hq)> blocked,out Dictionary<ulong,ChestStack[]>? resume)
+    {
+        resume=null;
         var lastFirst=plan.Rules.Any(r=>r.To==StorageAutoRouting.AllRetainers);
         if(lastFirst){if(bagsOnly)return StorageAutoRouting.Entrust(plan,inventories,category);plan=StorageAutoRouting.Resolve(plan,inventories,category);}
         var state=(lastFirst?inventories.Reverse():inventories).ToDictionary(x=>x.Key,x=>x.Value.ToList());
@@ -152,11 +166,10 @@ public static class StorageRouting
             var added=false;
             foreach(var move in moves.Skip(safeMoveCount).Where(x=>x.Withdraw&&stranded.Contains((x.Move.Source.Item,x.Move.Source.Hq))))
                 added|=blocked.Add((move.Retainer,move.Move.Source.Item,move.Move.Source.Hq));
-            if(added&&retries<16){
+            if(added){
                 var safe=moves.Take(safeMoveCount).ToArray();
-                var resumed=ReplaySafePrefix(inventories,safe);
-                var retry=BuildCore(originalPlan,resumed,category,bagsOnly,includeExistingBags,blocked,retries+1);
-                return new(safe.Concat(retry.Moves).ToArray(),retry.Remaining);
+                resume=ReplaySafePrefix(inventories,safe);
+                return new(safe,safeRemaining);
             }
             return new(moves.Take(safeMoveCount).ToArray(),safeRemaining);
         }
