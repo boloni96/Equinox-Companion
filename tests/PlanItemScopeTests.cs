@@ -42,7 +42,7 @@ internal static class PlanItemScopeTests
         var nq=rules.Select(r=>r with{Quality=RetrievalQuality.NqOnly}).ToArray();
         Check(!PlanItemScope.Allows(move with{Move=move.Move with{Source=bags[1]}},nq,true,new Dictionary<uint,int>()),"quality checked at final submit");
         var organize=PlanItemScope.Restrict([new(StorageRouting.AllSources,StorageAutoRouting.AllRetainers,[],[],AllItems:true)],filtered.Select(e=>e.ItemId),Category);
-        Check(organize.All(r=>!r.AllItems&&r.Categories.Length==0&&!r.Items.Contains(200)&&!r.Items.Contains(999)),"Organise all bounded by selected plan");
+        Check(organize.All(r=>!r.AllItems&&r.Categories.Length==0&&!r.Items.Contains(200u)&&!r.Items.Contains(999u)),"Organise all bounded by selected plan");
         var retainerStock=new Dictionary<ulong,ChestStack[]>{
             {0,[new(0,0,999,10,false,999),new(0,1,100,12,false,999),new(0,2,0,0,false,999),new(0,3,0,0,false,999)]},
             {1,[new(10000,0,100,10,false,999),new(10000,1,200,10,false,999),new(10000,2,999,10,false,999)]},
