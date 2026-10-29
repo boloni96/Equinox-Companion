@@ -7,7 +7,7 @@ namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
     private static bool RetrievalTradableItem(uint item)=>DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>().GetRowOrDefault(item) is {} row&&!row.IsUntradable;
-    private static bool RetrievalTradableStack(InventoryItem slot){var row=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>().GetRowOrDefault(slot.ItemId);return WithdrawalTradePolicy.Allows(true,row.HasValue,row?.IsUntradable??true,slot.SpiritbondOrCollectability,((int)slot.Flags&2)!=0);}
+    private static bool RetrievalTradableStack(InventoryItem slot){var row=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>().GetRowOrDefault(slot.ItemId);return WithdrawalTradePolicy.Allows(true,row.HasValue,row?.IsUntradable??true,slot.SpiritbondOrCollectability,(slot.Flags&InventoryItem.ItemFlags.Collectable)!=0);}
     private RetrievalRun retrievalRun=null!;
     private RetrieverPort retrievalPort=null!;
     private DateTimeOffset retrievalTick;private string retrievalLastStatus="";
