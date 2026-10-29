@@ -87,9 +87,9 @@ public sealed partial class Plugin
             if(!RetrieverActive(id))throw new InvalidOperationException("Selected retainer changed.");
             if(slot.Container==12001){
                 var source=p.ReadChestContainer(12001).First(s=>s.Slot==slot.Slot);
-                var target=p.ReadChestContainer(2001).FirstOrDefault(s=>CrystalStorage.CanReceive(source,s));
-                if(source.Item!=slot.ItemId||target==null)throw new InvalidOperationException("Crystal inventory changed; rebuild the preview.");
-                return TransferCrystals(id,new(source,target,amount));
+                var crystalTarget=p.ReadChestContainer(2001).FirstOrDefault(s=>CrystalStorage.CanReceive(source,s));
+                if(source.Item!=slot.ItemId||crystalTarget==null)throw new InvalidOperationException("Crystal inventory changed; rebuild the preview.");
+                return TransferCrystals(id,new(source,crystalTarget,amount));
             }
             if(pending is null){
                 if(SellerAddon("ContextMenu")!=null||SellerAddon("InputNumeric")!=null)throw new InvalidOperationException("Close the existing item menu before withdrawing.");
