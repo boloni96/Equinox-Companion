@@ -6,8 +6,10 @@ public sealed partial class Plugin
     private void DrawRetainerAssignments()
     {
         if(!Player.IsLoaded){ImGui.TextDisabled("Log in to edit this character’s assignments.");return;}
+        var eligible=ScopeOrganizeRules([new(StorageRouting.AllSources,StorageAutoRouting.AllRetainers,[],[],AllItems:true,Quality:retrievalQuality)]).Length>0;
         if(ImGui.Button("Preview plan"))CheckAllOrganize();ImGui.SameLine();
-        if(ImGui.Button("Organise plan"))StartStorageRouting([new(StorageRouting.AllSources,StorageAutoRouting.AllRetainers,[],[],AllItems:true,Quality:retrievalQuality)],false);
+        ImGui.BeginDisabled(!eligible);if(ImGui.Button("Organise plan"))StartStorageRouting([new(StorageRouting.AllSources,StorageAutoRouting.AllRetainers,[],[],AllItems:true,Quality:retrievalQuality)],false);
+        ImGui.EndDisabled();
         MarketHelp("Only the selected plan’s filtered items are eligible. Regular: consolidate duplicates from the last retainer toward the first in game order; unique items stay put. With assignments enabled: use the selected category/item homes, choosing available space across them. Your existing bag items stay untouched; only empty space is used for staging. No routine inventory tour when recorded stock is complete.");
         ImGui.SameLine();DrawUseRetainerAssignments();
         DrawAssignmentEditor();

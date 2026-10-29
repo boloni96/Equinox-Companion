@@ -42,11 +42,13 @@ public sealed partial class Plugin
             ImGui.EndChild();ImGui.EndPopup();
         }
         if(ImGui.Button("Preview selection"))RetrievalTry(CheckOrganize);ImGui.SameLine();
-        ImGui.BeginDisabled(organizeRules.Count==0&&(organizeTo==0));if(ImGui.Button("Organise"))StartOrganize();ImGui.EndDisabled();
+        ImGui.BeginDisabled(organizeTo==0&&organizeRules.Count==0||OrganizeRules().Length==0);if(ImGui.Button("Organise"))StartOrganize();ImGui.EndDisabled();
         ImGui.EndDisabled();
         if(organizeRunning&&ImGui.Button("Stop organizer"))StopOrganize("Stopped by you; an already-sent move may still complete.");
         if(organizeRunning||organizeMoves.Length>0)ImGui.TextWrapped(organizeStatus);
+        if(retrievalError.Length>0)ImGui.TextWrapped(retrievalError);
         DrawOrganizePreview();
+        windowStatus=organizeRunning?organizeStatus:retrievalError.Length>0?retrievalError:organizePreviewMessage;
     }
     private StorageRoute[] OrganizeRules()=>ScopeOrganizeRules(organizeRules.Count>0?organizeRules.ToArray():[CurrentOrganizeRule()]);
     private StorageRoute CurrentOrganizeRule()=>new(organizeFrom==0?StorageRouting.AllSources:organizeFrom,organizeTo,organizeCategories.ToArray(),[],AllItems:organizeCategories.Count==0,Quality:retrievalQuality);
@@ -74,7 +76,7 @@ public sealed partial class Plugin
             var owned=ReadSellerRetainers().Select(x=>x.Id).ToArray();
             if(rules.Any(r=>r.To==0||r.To!=StorageAutoRouting.AllRetainers&&!owned.Contains(r.To)||r.From!=0&&r.From!=StorageRouting.AllSources&&!owned.Contains(r.From)))throw new InvalidOperationException("Choose this character's retainers for every movement.");
             if(config.UseRetainerAssignments.Contains(Player.ContentId)&&rules.Any(r=>r.To==StorageAutoRouting.AllRetainers)&&!StorageAssignments.HasSelections(config.RetainerAssignments.GetValueOrDefault(Player.ContentId)??[],config.RetrievalPresets))throw new InvalidOperationException("Choose retainer assignments, or turn off Use assignments for regular duplicate organisation.");
-            EnsureChestMove();if(temporarySelection&&!bagsOnly)throw new InvalidOperationException("Temporary selection is only valid for Entrust.");rules=temporarySelection?PlanItemScope.Restrict(rules,rules.SelectMany(r=>r.Items),OrganizeCategory):ScopeOrganizeRules(rules);if(rules.Length==0)throw new InvalidOperationException("No listed plan items match these filters.");organizeActiveRules=rules;organizeBagsOnly=bagsOnly;organizeBagTradeFilter=temporarySelection?Math.Clamp(temporaryTradeFilter,0,2):0;
+            EnsureChestMove();if(temporarySelection&&!bagsOnly)throw new InvalidOperationException("Temporary selection is only valid for Entrust.");rules=temporarySelection?PlanItemScope.Restrict(rules,rules.SelectMany(r=>r.Items),OrganizeCategory):ScopeOrganizeRules(rules);if(rules.Length==0)throw new InvalidOperationException(OrganizeScopeMessage());organizeActiveRules=rules;organizeBagsOnly=bagsOnly;organizeBagTradeFilter=temporarySelection?Math.Clamp(temporaryTradeFilter,0,2):0;
             organizeSources=owned.Where(id=>rules.Any(r=>r.To==StorageAutoRouting.AllRetainers||r.To==id||!bagsOnly&&(r.From==StorageRouting.AllSources||r.From==id))).ToArray();
             organizeOwnerOrder=organizeSources.ToArray();var recorded=RecordedOrganizerInventories(organizeSources);
             organizePort=new(this){Character=Player.ContentId,World=Player.CurrentWorld.RowId,Quality=RetrievalQuality.Any};
