@@ -56,7 +56,7 @@ internal static class GardenCare312Tests
             Check(GardenCarePolicy.RouteTendingNeeded(rule,growing,true,now),"Existing due crops receive route care during "+phase);
             Check(!GardenCarePolicy.RouteTendingNeeded(rule,growing,false,now),"Disabled tending stays disabled during "+phase);
             Check(!GardenCarePolicy.RouteTendingNeeded(rule,mature,true,now),"Mature crops do not create tending work during "+phase);
-            Check(!GardenCarePolicy.RouteTendingNeeded(rule,growing with{HouseId:"unselected"},true,now),"Route care stays on selected house during "+phase);
+            Check(!GardenCarePolicy.RouteTendingNeeded(rule,growing with{HouseId="unselected"},true,now),"Route care stays on selected house during "+phase);
             Check(!GardenCarePolicy.RouteTendingNeeded(rule,growing with{Batch=3},true,now),"Route care stays on selected batch during "+phase);
             Check(!GardenCarePolicy.RouteTendingNeeded(rule,growing with{Beds=[growing.Beds[0] with{NextTend=now.AddHours(12)}]},true,now),"Recently tended batch does not create repeat work during "+phase);
         }
