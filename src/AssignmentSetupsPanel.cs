@@ -47,7 +47,7 @@ public sealed partial class Plugin
             string Category(uint id)=>StorageGroups().SelectMany(g=>g.Categories).FirstOrDefault(c=>c.Id==id)?.Name??("Category "+id);
             string Label(AssignmentSuggestion suggestion)=>suggestion.Item>0?
                 (retrievalCatalog?.Names.GetValueOrDefault(suggestion.Item)??($"Item {suggestion.Item}")):Category(suggestion.Category);
-            ImGui.TextUnformatted($"{proposal.Suggestions.Length} additions · {proposal.Suggestions.Select(x=>x.Retainer).Distinct().Count()} retainers · {proposal.Remaining.Length} item types without a home after applying");
+            ImGui.TextWrapped($"After apply: {proposal.Remaining.Length} unassigned item types · {proposal.Suggestions.Length} additions · {proposal.Suggestions.Select(x=>x.Retainer).Distinct().Count()} retainers");
             MarketHelp("All recorded retainer storage is checked, including crystals, independently of the current transfer plan or filters. Shared categories have several allowed homes. Having a home does not guarantee every transfer can run immediately; Preview checks the movement plan and available staging space.");
             if(ImGui.TreeNode("Proposed homes")){
                 ImGui.BeginChild("assignmentProposedHomes",new System.Numerics.Vector2(0,ImGui.GetTextLineHeightWithSpacing()*9),true);
