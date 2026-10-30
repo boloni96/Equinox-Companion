@@ -132,8 +132,8 @@ public static class GardenPlotApproachPolicy
     private static bool Finite(Vector3 p)=>float.IsFinite(p.X)&&float.IsFinite(p.Y)&&float.IsFinite(p.Z);
     public static Vector3[] Path(Vector3 position,Vector3 entrance,Vector3? garden,float rotation)
     {
-        if(!Finite(position)||!Finite(entrance)||!float.IsFinite(rotation)||Vector3.Distance(position,entrance)>1.5f)
-            throw new InvalidOperationException("Not at the plot entrance. Move to the gate, face into the plot and restart.");
+        if(!Finite(position)||!Finite(entrance)||!float.IsFinite(rotation)||Vector3.Distance(position,entrance)>15f)
+            throw new InvalidOperationException("Too far from the destination plot entrance. Move near the gate, face into the plot and restart.");
         // Bed coordinates do not describe a clear route through the gate.
         var inward=new Vector3(MathF.Sin(rotation),0,MathF.Cos(rotation));
         inward.Y=0;
