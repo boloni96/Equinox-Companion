@@ -117,7 +117,12 @@ public sealed partial class Plugin
                     if(rule.Kind=="growingcycle"&&rule.Phase=="plan"&&gardenAdventurePlant||GardenAdventureAction(live,rule,now)!=null)
                         gardenTendRoute.Enqueue(new(task.Id,cid,rule.HouseId,rule.Batch,rule));
                 }
-                if(gardenTendRoute.Count==0){StopTendAdventure("Paused · no garden work is ready for this account. Resume automatic gardening later; saved progress is kept.");return;}
+                if(gardenTendRoute.Count==0){
+                    var assigned=tasks.Where(t=>gardenAdventureCharacters.Contains(AdventurePolicy.TaskCharacterId(t,chars))).ToArray();
+                    var reasons=assigned.Select(t=>t.Status).Where(s=>!string.IsNullOrWhiteSpace(s)).Distinct().Take(3).ToArray();
+                    var detail=!config.SyncCollections?"Inventory tracking is disabled; enable collection/inventory tracking for supplies.":assigned.Length==0?"No unfinished tasks are assigned to the current character's account.":reasons.Length>0?string.Join(" · ",reasons):"Assigned tasks have no eligible recorded garden action; inspect the selected batches.";
+                    StopTendAdventure("Paused · "+detail+" Saved progress is kept.");return;
+                }
                 gardenTendDeadline=now.AddMinutes(10);gardenTendPreparing=false;gardenTendTravelSent=gardenTendStarted=gardenAdventureSwitchSent=false;gardenPlotApproaching=gardenPlotApproachAttempted=false;
             }
             if(now>=gardenTendDeadline)throw new InvalidOperationException("Travel or garden action timed out. Review before restarting.");

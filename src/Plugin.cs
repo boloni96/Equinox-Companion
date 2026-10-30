@@ -1054,6 +1054,7 @@ public sealed partial class Plugin : IDalamudPlugin
                 lotteryDiagnostics = lotteryDiagnostic,
                 lotteryRefundDiagnostics = lotteryRefundDiagnostic,
                 companyProfileDiagnostics = new { latest = companyProfileDiagnostic, history = companyProfileHistory.ToArray(), status = discoveryStatus },
+                growingAdventure = new { selected=adventureSelected, automaticBoard=gardenTendBoard, currentCharacter=CurrentSharedCharacter()?.Id, eligibleCharacters=gardenAdventureCharacters.ToArray(), status=gardenTendStatus, fresh=adventureFresh, fetched=adventureFetched, boards=adventureBoards.ToArray() },
                 mode = "local-diagnostics", gardeningConfirmed = false, performance = new { maxDrawMs,maxUpdateMs,maxSnapshotMs, configurationError, stages=performanceStages.ToDictionary(x=>x.Key,x=>x.Value), recent=rollingPerformance.Snapshot(PerformanceClock), optionalTools=optionalToolFailures.ToDictionary(x=>x.Key,x=>x.Value) },
                 houseObservations = config.Houses.ToArray(), confirmedTending = config.Tending.ToArray(), confirmedPlanting = config.Planting.ToArray(), observedDetails = config.Discoveries.ToArray(), diagnostics=diagnostics.ToArray()
             };

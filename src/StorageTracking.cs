@@ -31,9 +31,10 @@ public sealed partial class Plugin
             var ids = items.Where(i=>i>0 && i<1000000).Distinct().Order().ToArray();
             var last=DiscoveryReads().Last("storage.observed",actor.ContentId,storage:key);
             var details = new StorageDetails(key, name, ids, stacks);
+            var freshBagSnapshot=Player.ContentId==storageRefreshCharacter&&StorageCaptureGate.FreshSnapshotRequested(key,last?.At??default,storageRefreshRequestedAt);
             // Compare unchanged containers without allocating two JSON documents.
-            if(last?.Storage is {} previous && last.Actor == actor && now-last.At < TimeSpan.FromMinutes(30) && StorageObservationEquality.Same(previous, details)) return;
-            KeepDiscovery(new(Guid.NewGuid().ToString("N"), "storage.observed", now, actor, null, Storage:details),last is not null&&now-last.At>=TimeSpan.FromMinutes(30));
+            if(!freshBagSnapshot && last?.Storage is {} previous && last.Actor == actor && now-last.At < StorageCaptureGate.RefreshInterval(key) && StorageObservationEquality.Same(previous, details)) return;
+            KeepDiscovery(new(Guid.NewGuid().ToString("N"), "storage.observed", now, actor, null, Storage:details),freshBagSnapshot||last is not null&&now-last.At>=StorageCaptureGate.RefreshInterval(key));
         }
         StorageStack[] ReadStacks(InventoryContainer* container)
         {
