@@ -189,11 +189,11 @@ public sealed partial class Plugin
     }
     private sealed unsafe class GardenCarePort : IGardenCarePort
     {
-        private readonly bool postPlantTend,tendAll,visitorTend;private readonly Plugin p;private readonly SharedGardenPlan original;private readonly ulong owner;private readonly uint world;private Vector3 origin;private bool walking;private int walkedBed;
+        private readonly bool postPlantTend,tendAll,visitorTend,mappedInspection;private readonly Plugin p;private readonly SharedGardenPlan original;private readonly ulong owner;private readonly uint world;private Vector3 origin;private bool walking;private int walkedBed;
         private readonly GardenWalkProgress walkProgress=new();
         private readonly GardenWalkRecovery walkRecovery=new();
         private ulong targetId;private int openedBed;private DateTimeOffset opened,actionAt,next;private bool menuSent,itemOpened,itemSent;private InventoryType fertilizerBag;private int fertilizerSlot;private uint fertilizerId;private bool confirmationSent;private uint plantSeed,plantSoil;private GardenCareAction? issuedAction;
-        public GardenCarePort(Plugin plugin,SharedGardenPlan plan,bool postPlantTend=false,bool tendAll=false,bool visitorTend=false){this.visitorTend=visitorTend;this.postPlantTend=postPlantTend;this.tendAll=tendAll;p=plugin;original=plan;owner=Player.ContentId;world=Player.CurrentWorld.RowId;origin=Objects.LocalPlayer?.Position??default;}
+        public GardenCarePort(Plugin plugin,SharedGardenPlan plan,bool postPlantTend=false,bool tendAll=false,bool visitorTend=false,bool mappedInspection=false){this.mappedInspection=mappedInspection;this.visitorTend=visitorTend;this.postPlantTend=postPlantTend;this.tendAll=tendAll;p=plugin;original=plan;owner=Player.ContentId;world=Player.CurrentWorld.RowId;origin=Objects.LocalPlayer?.Position??default;}
         private SharedGardenPlan Current(){var source=p.GardenPlanSources().FirstOrDefault(x=>x.HouseId==original.HouseId&&x.Batch==original.Batch)??throw new InvalidOperationException("Garden plan is no longer available.");if(source.At!=original.At)throw new InvalidOperationException("Garden plan changed during the run.");return p.EffectiveGardenPlan(source);}
         public DateTimeOffset? MovementRecoveryUntil=>walking?walkRecovery.Deadline:null;
         public void Validate()
@@ -233,15 +233,17 @@ public sealed partial class Plugin
                 Targets.Target=found[0];TargetSystem.Instance()->InteractWithObject((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)found[0].Address,false);return false;
             }
             if(now>=next&&SellerAddon("Talk")!=null){p.ClickVisibleTalk();next=now.AddMilliseconds(800);}
-            return Menu(bed)!=null;
+            return Menu(bed)!=null||mappedInspection&&InspectionObserved(bed);
         }
+        private bool InspectionObserved(int bed)=>p.LocalGardenActions().Select(p.GardenResolver()).Any(e=>e.At>=opened&&e.Patch==(original.PhysicalPatch>0?original.PhysicalPatch:original.Batch)&&e.Bed==bed&&SharedGardenLocation.Match(e.Address,[original])==original.HouseId&&e.Kind is "garden.empty" or "garden.status" or "garden.dead" or "garden.ready" or "garden.observed");
         private GardenMenu? Menu(int bed)
         {
             var m=p.activeGardenMenu;var patch=original.PhysicalPatch>0?original.PhysicalPatch:original.Batch;
-            return m!=null&&m.OpenedAt>=opened&&m.ClosedAt==null&&m.Target.TargetId==targetId.ToString("X16")&&(m.NumberedLocation()==(patch,bed)||visitorTend&&m.NumberedLocation()==null&&m.Options.Contains("Tend Crop")&&GardenTargetMap.SelectedBatch(m.Target,p.GardenResolver(),[original])==(original.HouseId,original.Batch,bed))&&SellerAddon("SelectString")== (AtkUnitBase*)m.AddonAddress?m:null;
+            return m!=null&&m.OpenedAt>=opened&&m.ClosedAt==null&&m.Target.TargetId==targetId.ToString("X16")&&(m.NumberedLocation()==(patch,bed)||(visitorTend||mappedInspection)&&m.NumberedLocation()==null&&(mappedInspection||m.Options.Contains("Tend Crop"))&&GardenTargetMap.SelectedBatch(m.Target,p.GardenResolver(),[original])==(original.HouseId,original.Batch,bed))&&SellerAddon("SelectString")== (AtkUnitBase*)m.AddonAddress?m:null;
         }
         public bool Act(int bed,GardenCareAction action)
         {
+            if(mappedInspection&&action!=GardenCareAction.Inspect)throw new InvalidOperationException("Inspection only permits reading bed state.");
             if(visitorTend&&action!=GardenCareAction.Tend)throw new InvalidOperationException("Visitor care only permits tending.");
             if(action==GardenCareAction.Inspect){actionAt=opened;return Menu(bed)!=null;}
             if(!menuSent){
@@ -307,7 +309,7 @@ public sealed partial class Plugin
         {
             // Opening this exact numbered menu is the inspection receipt. Identical
             // observations may be deduplicated; do not require a rewritten timestamp.
-            if(action==GardenCareAction.Inspect)return Menu(bed)!=null&&DateTimeOffset.UtcNow-opened>=TimeSpan.FromSeconds(1);
+            if(action==GardenCareAction.Inspect)return (Menu(bed)!=null||mappedInspection&&InspectionObserved(bed))&&DateTimeOffset.UtcNow-opened>=TimeSpan.FromSeconds(1);
             var dialog=(AddonSelectYesno*)SellerAddon("SelectYesno");
             if(dialog!=null){
                 if(confirmationSent)return false;

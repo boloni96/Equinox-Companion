@@ -238,6 +238,7 @@ public sealed partial class Plugin
                 return;
             }
             if(LifestreamBusy()||goSeeHomeTrip!=null)return;
+            DiscoverGardenBedMappings(sourcePlan,now);
             var plan=EffectiveGardenPlan(sourcePlan);
             if(work.Rule.PhysicalPatch>0&&(plan.PhysicalPatch>0?plan.PhysicalPatch:plan.Batch)!=work.Rule.PhysicalPatch)throw new InvalidOperationException("Batch labels changed. Refresh the route before restarting.");
             if(!work.TendOnly&&work.Rule.Kind=="growingcycle"){
@@ -251,7 +252,7 @@ public sealed partial class Plugin
                             gardenTendStatus=preparation.Reason+" · "+plan.HouseName+" · Batch "+plan.Batch;
                             var key=plan.HouseId+":"+plan.Batch;
                             if(preparation.Action is {} prepareAction&&!(prepareAction==GardenCareAction.Inspect&&gardenAdventureInspected.TryGetValue(key,out var checkedAt)&&now-checkedAt<TimeSpan.FromMinutes(10))){
-                                var port=new GardenCarePort(this,plan);port.Validate();gardenCareRun=new(port);
+                                var port=new GardenCarePort(this,plan,mappedInspection:prepareAction==GardenCareAction.Inspect);port.Validate();gardenCareRun=new(port);
                                 gardenCareRun.Start(preparation.Beds,prepareAction,now);gardenTendStarted=true;gardenTendPreparing=true;
                                 if(prepareAction==GardenCareAction.Inspect)gardenAdventureInspected[key]=now;
                             }else{gardenTendRoute.Dequeue();gardenTendTravelSent=false;gardenPlotApproaching=gardenPlotApproachAttempted=false;gardenAdventureNext=now.AddSeconds(10);}
@@ -262,12 +263,12 @@ public sealed partial class Plugin
                     gardenTendStatus="Waiting here for the stage plan to sync.";gardenAdventureNext=now.AddSeconds(5);return;
                 }
             }
-            var action=work.TendOnly?(gardenAdventureTend&&GardenAdventureJobs.AllowsTending(work.Rule)&&plan.Beds.Any(b=>GardenCarePolicy.Eligible(plan,b,GardenCareAction.Tend,now))?(GardenCareAction?)GardenCareAction.Tend:null):GardenAdventureAction(plan,work.Rule,now);
+            var action=work.TendOnly&&config.GardenAdventureInspect&&plan.Beds.Any(b=>!b.ObservedAt.HasValue)?GardenCareAction.Inspect:work.TendOnly?(gardenAdventureTend&&GardenAdventureJobs.AllowsTending(work.Rule)&&plan.Beds.Any(b=>GardenCarePolicy.Eligible(plan,b,GardenCareAction.Tend,now))?(GardenCareAction?)GardenCareAction.Tend:null):GardenAdventureAction(plan,work.Rule,now);
             if(action==null){gardenTendRoute.Dequeue();return;}
             if(action!=GardenCareAction.Inspect&&plan.Beds.Any(b=>!b.ObservedAt.HasValue))throw new InvalidOperationException("Inspect / sync the batch before automatic gardening.");
             if(action==GardenCareAction.Plant){gardenAutoPlantPlan=plan;gardenCareRun=null;ContinueAutoPlant(plan);if(gardenCareRun==null)throw new InvalidOperationException("Planting needs its exact seeds and soil in bags.");}
             else{
-                var port=new GardenCarePort(this,plan,visitorTend:work.TendOnly);port.Validate();gardenCareRun=new(port);
+                var port=new GardenCarePort(this,plan,visitorTend:work.TendOnly&&action==GardenCareAction.Tend,mappedInspection:action==GardenCareAction.Inspect);port.Validate();gardenCareRun=new(port);
                 var beds=plan.Beds.Where(b=>action==GardenCareAction.Inspect||GardenCarePolicy.Eligible(plan,b,action.Value,now));
                 if(work.Rule.PlanTemplate!=null&&action==GardenCareAction.Harvest)beds=beds.Where(b=>work.Rule.PlanTemplate.Steps.Any(s=>s.Bed==b.Bed));
                 gardenCareRun.Start(beds.Select(b=>b.Bed),action.Value,now);
