@@ -88,6 +88,14 @@ internal static class GardenCare312Tests
         Check(GardenAutoPlant.PrepareRouteBeds(matureBatch,definition,now,false,false).Action==null,"Harvest option remains required");
         var mixed=matureBatch with{Beds=[Bed(1),Bed(2) with{Ready=false,HarvestAt=now.AddDays(1)}]};
         Check(GardenAutoPlant.PrepareRouteBeds(mixed,definition,now,true,true).Action==GardenCareAction.Tend,"Mixed maturity tends growing crops instead of harvesting half a batch");
+        var waiting=mixed with{Beds=mixed.Beds.Select(b=>b with{NextTend=now.AddHours(12),HarvestAt=now.AddDays(1)}).ToArray()};
+        Check(!GardenAutoPlant.PrepareRouteBeds(waiting,definition,now,true,true).Empty&&GardenAutoPlant.PrepareRouteBeds(waiting,definition,now,true,true).Action==null,"Growing watered batch has no work and must not trigger travel");
+        Check(GardenAutoPlant.PrepareRouteBeds(waiting,definition,now.AddHours(13),true,true).Action==GardenCareAction.Tend,"Growing batch becomes tendable next day without waiting for maturity");
+        var estimated=waiting with{Beds=waiting.Beds.Select(b=>b with{HarvestAt=now.AddMinutes(-1)}).ToArray()};
+        Check(GardenAutoPlant.PrepareRouteBeds(estimated,definition,now,true,true).Action==GardenCareAction.Inspect,"Estimated maturity can request a real inspection");
+        Check(GardenAutoPlant.PrepareRouteBeds(estimated,definition,now,true,true,false).Action==null,"Recent not-ready inspection does not trigger another trip");
+        Check(GardenAutoPlant.PrepareRouteBeds(estimated,definition,now.AddHours(13),true,true,false).Action==GardenCareAction.Tend,"Inspection cooldown cannot suppress due tending");
+
         Check(GardenAutoPlant.PrepareRouteBeds(matureBatch with{Beds=[Bed(1) with{KeepMature=true},Bed(2)]},definition,now,true,false).Action==null,"Explicit protected neighbour blocks preparation harvest");
         Check(GardenAutoPlant.PrepareRouteBeds(plan,definition,now,true,false).Action==null,"Unfinished outgoing cross is preserved");
         var cleared=matureBatch with{Beds=matureBatch.Beds.Select(b=>b with{ActualCrop="Empty",Planted=null}).ToArray()};
