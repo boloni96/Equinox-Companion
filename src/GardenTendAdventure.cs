@@ -17,18 +17,24 @@ public sealed partial class Plugin
     private readonly GardenWalkRecovery gardenPlotRecovery=new();
     private readonly GardenArrivalGate gardenArrival=new();
     private bool gardenTendTravelSent,gardenTendStarted,gardenAdventureSwitchSent,gardenTendPreparing;
-    private bool gardenAdventureTend=true,gardenAdventurePlant,gardenAdventureHarvest,gardenAdventureSwitch;
+    private bool gardenAdventureTend => config.GardenAdventureTend;
+    private bool gardenAdventurePlant => config.GardenAdventurePlant;
+    private bool gardenAdventureHarvest => config.GardenAdventureHarvest;
+    private bool gardenAdventureSwitch => config.GardenAdventureSwitch;
     private readonly Dictionary<string,DateTimeOffset> gardenAdventureInspected=[];
     private void DrawTendAdventure(AdventureBoard board)
     {
         if(!board.Stops.Any(s=>s.Tasks.Any(AdventurePolicy.IsGardenTask)))return;
         if(ImGui.CollapsingHeader("Automatic gardening")){
             ImGui.BeginDisabled(gardenTendRoute!=null);
+            var tend=gardenAdventureTend;var plant=gardenAdventurePlant;var harvest=gardenAdventureHarvest;var switchCharacters=gardenAdventureSwitch;
+            var optionsChanged=false;
             if(ImGui.BeginTable("AutomaticGardenOptions",2,ImGuiTableFlags.SizingStretchSame)){
-                ImGui.TableNextRow();ImGui.TableNextColumn();ImGui.Checkbox("Tend due",ref gardenAdventureTend);ImGui.TableNextColumn();ImGui.Checkbox("Plant saved plans",ref gardenAdventurePlant);
-                ImGui.TableNextRow();ImGui.TableNextColumn();ImGui.Checkbox("Harvest full batches",ref gardenAdventureHarvest);ImGui.EndTable();
+                ImGui.TableNextRow();ImGui.TableNextColumn();optionsChanged|=ImGui.Checkbox("Tend due",ref tend);ImGui.TableNextColumn();optionsChanged|=ImGui.Checkbox("Plant saved plans",ref plant);
+                ImGui.TableNextRow();ImGui.TableNextColumn();optionsChanged|=ImGui.Checkbox("Harvest full batches",ref harvest);ImGui.EndTable();
             }
-            ImGui.Checkbox("Switch assigned characters on this account",ref gardenAdventureSwitch);
+            optionsChanged|=ImGui.Checkbox("Switch assigned characters on this account",ref switchCharacters);
+            if(optionsChanged){config.GardenAdventureTend=tend;config.GardenAdventurePlant=plant;config.GardenAdventureHarvest=harvest;config.GardenAdventureSwitch=switchCharacters;SaveConfiguration();}
             var walk=config.GardenCareWalk;if(ImGui.Checkbox("Walk to mapped beds (Lifestream)",ref walk)){config.GardenCareWalk=walk;SaveConfiguration();}
             ImGui.TextWrapped("Uses the assigned gardeners on this character's Journal account. The growing adventure pauses when no work is ready; resume it later. Planting uses its exact saved seed, soil and bed order; with Harvest full batches enabled, ready crops are harvested before the next route layout is applied. Mixed maturity and protected neighbours wait. After teleporting, Walk to mapped beds also makes a short approach through the plot entrance. Stop remains available during active work.");
             ImGui.BeginDisabled(!adventureFresh||gardenCareRun?.Running==true||!Player.IsLoaded||!(gardenAdventureTend||gardenAdventurePlant||gardenAdventureHarvest));

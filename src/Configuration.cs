@@ -54,6 +54,10 @@ public sealed class Configuration : IPluginConfiguration
     public int SubmarineFuelReserve { get; set; } = 50;
     public int SubmarineRepairReserve { get; set; } = 10;
     public int SubmarineSpaceReserve { get; set; } = 20;
+    public bool GardenAdventureTend { get; set; } = true;
+    public bool GardenAdventurePlant { get; set; }
+    public bool GardenAdventureHarvest { get; set; }
+    public bool GardenAdventureSwitch { get; set; }
     public bool GardenCareWalk { get; set; }
     public HashSet<string> GardenResyncBatches { get; set; } = [];
     public bool EnableCofferMarkers { get; set; }
