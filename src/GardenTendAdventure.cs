@@ -124,6 +124,7 @@ public sealed partial class Plugin
                 var liveTask=board.Stops.SelectMany(s=>s.Tasks).FirstOrDefault(t=>t.Id==work.TaskId)??throw new InvalidOperationException("The active garden task was removed.");
                 if(liveTask.Done){gardenTendRoute.Dequeue();gardenTendTravelSent=false;gardenPlotApproaching=gardenPlotApproachAttempted=false;return;}
                 if(liveTask.Rule==null)throw new InvalidOperationException("The active garden task has no rule.");
+                if(liveTask.Rule.HouseId!=work.House||liveTask.Rule.Batch!=work.Batch||liveTask.Rule.Cid!=work.Character)throw new InvalidOperationException("Garden batch assignments changed. Resume automatic gardening to use the updated route.");
                 work=work with{Rule=liveTask.Rule};
             }
             if(!Player.IsLoaded){gardenArrival.Reset();return;}
