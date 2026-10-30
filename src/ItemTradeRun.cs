@@ -19,19 +19,19 @@ internal sealed class ItemTradeRun
     private Dictionary<TradeItemKey,int> before=[];
     private uint wallet;
     private int submitted;
-    private bool completion,confirmed;
+    private bool completion,confirmed,restrictedReceive;
     private DateTimeOffset started,stageAt,offerAt;
-    internal bool Start(bool send,TradeItemAmount[] items,ItemTradeFrame frame,DateTimeOffset now)
+    internal bool Start(bool send,TradeItemAmount[] items,ItemTradeFrame frame,DateTimeOffset now,bool exactReceive=false)
     {
         if(Running)return false;var f=frame.Context;
         if(f.Character==0||!f.Ready||!f.PartnerNearby||f.PartnerEntity==0){Status="Stand beside the selected player before starting.";return false;}
         if(f.TradeOpen||f.OtherDialog||f.Confirmation){Status="Close the existing trade or dialog first.";return false;}
         try{
             Remaining=ItemTradePlan.Counts(items).Select(x=>new TradeItemAmount(x.Key.Item,x.Key.Hq,x.Value)).ToArray();
-            if(send&&(Remaining.Length==0||Remaining.Any(x=>x.Quantity<=0)))throw new InvalidOperationException("Select items and quantities first.");
+            if((send||exactReceive)&&(Remaining.Length==0||Remaining.Any(x=>x.Quantity<=0)))throw new InvalidOperationException("Select items and quantities first.");
             if(send)ItemTradePlan.Next(Remaining,frame.Bags);
         }catch(Exception e){Status=e.Message;return false;}
-        Sending=send;Character=f.Character;Partner=f.PartnerEntity;wallet=f.Wallet;before=ItemTradePlan.BagCounts(frame.Bags);
+        restrictedReceive=!send&&exactReceive;Sending=send;Character=f.Character;Partner=f.PartnerEntity;wallet=f.Wallet;before=ItemTradePlan.BagCounts(frame.Bags);
         started=now;Done=Trades=0;Offer=[];batch=[];NextItem=null;submitted=0;completion=confirmed=false;
         Move(ItemTradeStage.Waiting,now,send?"Ready to send items.":"Waiting for items from your selected player…");return true;
     }
@@ -56,9 +56,9 @@ internal sealed class ItemTradeRun
             if(f.Wallet!=wallet)return Halt("Stopped: unexpected gil change.");
             if(completion&&!f.TradeOpen&&!f.Confirmation&&DeltaMatches(frame.Bags,true)){
                 Done+=Offer.Sum(x=>x.Quantity);Trades++;confirmed=completion=false;
-                if(Sending){var sent=ItemTradePlan.Counts(Offer);Remaining=Remaining.Select(x=>x with{Quantity=x.Quantity-sent.GetValueOrDefault(x.Key)}).Where(x=>x.Quantity>0).ToArray();}
+                if(Sending||restrictedReceive){var sent=ItemTradePlan.Counts(Offer);Remaining=Remaining.Select(x=>x with{Quantity=x.Quantity-sent.GetValueOrDefault(x.Key)}).Where(x=>x.Quantity>0).ToArray();}
                 before=ItemTradePlan.BagCounts(frame.Bags);Offer=[];batch=[];submitted=0;NextItem=null;
-                if(Sending&&Remaining.Length==0)Move(ItemTradeStage.Complete,now,$"Sent {Done:N0} items · {Trades} completed trades.");
+                if((Sending||restrictedReceive)&&Remaining.Length==0)Move(ItemTradeStage.Complete,now,$"{(Sending?"Sent":"Received")} {Done:N0} items · {Trades} completed trades.");
                 else Move(ItemTradeStage.Between,now,$"{Done:N0} items transferred · preparing next trade…");
             }else if(now-stageAt>TimeSpan.FromSeconds(12))return Halt("Stopped: item transfer was not confirmed. Check your bags.");
             return ItemTradeAction.None;
@@ -90,6 +90,7 @@ internal sealed class ItemTradeRun
                 if(now-offerAt<TimeSpan.FromMilliseconds(800))return ItemTradeAction.None;
             }else{
                 if(frame.Remote.Length==0)return ItemTradeAction.None;
+                if(restrictedReceive){var wanted=ItemTradePlan.Counts(Remaining);if(ItemTradePlan.Counts(frame.Remote).Any(x=>x.Value>wanted.GetValueOrDefault(x.Key)))return Halt("Stopped: offered items exceed or differ from this delivery manifest.");}
                 if(!frame.CanReceive)return Halt("Stopped: not enough room for these items.");
                 if(!ItemTradePlan.Same(Offer,frame.Remote)){Offer=frame.Remote.ToArray();offerAt=now;}
                 if(now-offerAt<TimeSpan.FromMilliseconds(800)||f.RemoteState<4)return ItemTradeAction.None;
@@ -106,3 +107,4 @@ internal sealed class ItemTradeRun
         return ItemTradeAction.None;
     }
 }
+

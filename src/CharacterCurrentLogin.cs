@@ -19,20 +19,19 @@ public sealed partial class Plugin
         if (target is null || !titleLoginProbe.Begin(target, config.PairingKey, now))
         { characterTravelStatus = "A paired account and complete character identity are needed."; return; }
         titleLoginOwnsLifestream = false;
-        currentLoginIdentification = new();
+        currentLoginIdentification = new();identificationDcSent=false;loginWorldChecked.Clear();loginWorldNext=default;loginWorldPending=loginWorldSample=0;
         queuedLoginConfirmation = "";
         characterSwitchFrom = 0; characterSwitchTarget = character;
         characterSwitchUntil = titleLoginProbe.Deadline; nextTitleLoginCheck = default;
         characterTravelStatusOwner = character.Id;
         try
         {
-            // Open the current login's normal START path. Do not send the clicked
-            // character, world, Person or account to Lifestream for identification.
-            if (VisibleFollowAddon("TitleDCWorldMap") || VisibleFollowAddon("TitleConnect") || !ClickLoginMenuButton("_TitleMenu", 4))
+            // Open Data Center explicitly. The user selects the service account; no fallback to account zero.
+            if (VisibleFollowAddon("TitleDCWorldMap") || VisibleFollowAddon("TitleConnect") || !ClickLoginMenuButton("_TitleMenu", 5))
             { StopTitleLoginCheck("Wait for the main title menu, then choose Log in as this character again."); return; }
             characterTravelStatus = "Identifying this game's login…";
         }
-        catch { StopTitleLoginCheck("Could not open the current character list. Use START in game, then choose your character in Companion."); }
+        catch { StopTitleLoginCheck("Could not open the current character list. Choose Data Center and your service account in game, then choose your character in Companion."); }
     }
 
     // Dispatch the button's own registered event, as the game's normal button
@@ -49,21 +48,6 @@ public sealed partial class Plugin
         var click = *evt;
         var data = new AtkEventData();
         addon->ReceiveEvent(evt->State.EventType, (int)evt->Param, &click, &data);
-        return true;
-    }
-
-    private unsafe bool SelectFirstLoginServiceAccount()
-    {
-        // Inspect one service account actually offered by this authenticated
-        // game. Index zero is only a menu choice, never account identity proof.
-        var menu = (AddonSelectString*)GardenGui.GetAddonByName("SelectString").Address;
-        if (menu == null || !menu->IsVisible || !menu->IsReady) return false;
-        var text = menu->GetTextNodeById(2);
-        var expected = DataManager.GetExcelSheet<Lumina.Excel.Sheets.Lobby>().GetRowOrDefault(11)?.Text.ToString();
-        if (text == null || string.IsNullOrWhiteSpace(expected) || TravelMenuText(text->NodeText.StringPtr) != expected.Trim()) return false;
-        var list = menu->PopupMenu.PopupMenu.List;
-        if (list == null || list->ListLength is < 1 or > 16 || !list->IsItemInteractionEnabled || list->GetItemDisabledState(0)) return false;
-        list->DispatchItemEvent(0, AtkEventType.ListItemClick);
         return true;
     }
 
@@ -89,7 +73,7 @@ public sealed partial class Plugin
             if (entry != null && entry->ContentId != 0 && (entry->LoginFlags & CharaSelectCharacterEntryLoginFlags.Locked) == 0) found.Add(entry->ContentId);
         }
         ids = found.Order().ToArray();
-        return ids.Length > 0;
+        return true;
     }
 
     private void UpdateCurrentLoginIdentification(LoginProbeTarget target, DateTimeOffset now)
@@ -115,9 +99,10 @@ public sealed partial class Plugin
                 probe.ReturnRequested = ClickLoginMenuButton("_CharaSelectReturn", 4);
             return;
         }
-        if (!probe.ServiceAccountSelected && SelectFirstLoginServiceAccount())
-        { probe.ServiceAccountSelected = true; return; }
+        if(SelectLoginDataCenter(target.World,ref identificationDcSent))return;
+        if(VisibleFollowAddon("SelectString")){characterTravelStatus="Select the service account for this client in the game menu. No account is chosen automatically.";return;}
         var ready = TryReadCurrentLoginCharacters(out var ids);
+        if(ready&&ids.Length==0){if(!SelectNextKnownLoginWorld(target.ContentId,target.World,now))StopTitleLoginCheck("No known characters were found on this selected account and data center.");return;}
         if (!probe.Observe(CurrentLoginServiceAccount(), ids.Select(id => id.ToString(CultureInfo.InvariantCulture)), ready, now)) return;
         ObserveLoginAccountList(ids);
         characterLoginAccount.Resolve(config.SharedRoster!, config.PairingKey, CurrentLoginServiceAccount(), ids);
@@ -141,8 +126,8 @@ public sealed partial class Plugin
             // The current native account identifies the selected character's
             // whole account or a learned service-account link. Only now may
             // Lifestream navigate to that verified target from the title screen.
-            probe.ReturnToTitle();
-            characterTravelStatus = "Login identified · opening the selected character…";
+            if(!SelectNextKnownLoginWorld(target.ContentId,target.World,now))StopTitleLoginCheck("Account identified, but the target character was not found on this data center. Check its visiting world.");
         }
     }
 }
+

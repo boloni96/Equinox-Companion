@@ -39,6 +39,11 @@ internal static class ItemTradePlan
     internal static bool CanReceive(TradeItemAmount[] incoming,TradeBagSlot[] bags,Func<uint,int> limit)
     {
         if(incoming.Length is <1 or >5||incoming.Any(x=>x.Item<=1||x.Quantity<=0||limit(x.Item)<=0||x.Quantity>limit(x.Item)))return false;
+        return CanReceiveManifest(incoming,bags,limit);
+    }
+    internal static bool CanReceiveManifest(TradeItemAmount[] incoming,TradeBagSlot[] bags,Func<uint,int> limit)
+    {
+        if(incoming.Length is <1 or >100||incoming.Any(x=>x.Item<=1||x.Quantity<=0||limit(x.Item)<=0))return false;
         var empty=bags.Count(x=>x.Container<=3&&x.Item==0);
         foreach(var (key,qty) in Counts(incoming)){
             var size=limit(key.Item);var crystal=CrystalStorage.IsItem(key.Item);
@@ -48,4 +53,5 @@ internal static class ItemTradePlan
         return empty>=0;
     }
 }
+
 

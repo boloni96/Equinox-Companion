@@ -41,12 +41,9 @@ public sealed partial class Plugin
             { characterTravelStatus = "Wait for the title screen and the current trip to finish."; return; }
             if (!titleLoginProbe.Begin(target, config.PairingKey, DateTimeOffset.UtcNow))
             { characterTravelStatus = "A paired account and complete in-game character name and home world are needed."; return; }
-            currentLoginIdentification = null;
-            titleLoginOwnsLifestream = true;
-            // This IPC only connects and opens the list. It does not select a
-            // character for login, accept a login dialog, or change launcher login.
-            if (!Pi.GetIpcSubscriber<string, string, bool>("Lifestream.ConnectAndOpenCharaSelect").InvokeFunc(target.Name, target.World))
-            { titleLoginProbe.Cancel(); titleLoginOwnsLifestream = false; characterTravelStatus = "Lifestream could not open the character list. Wait and try again."; return; }
+            currentLoginIdentification = new();identificationDcSent=false;loginWorldChecked.Clear();loginWorldNext=default;loginWorldPending=loginWorldSample=0;
+            titleLoginOwnsLifestream = false;
+            if(!ClickLoginMenuButton("_TitleMenu",5)){StopTitleLoginCheck("Open Data Center in game, choose this client's service account, then retry.");return;}
             characterSwitchFrom = 0; characterSwitchTarget = character;
             nextTitleLoginCheck = default;
             characterSwitchUntil = titleLoginProbe.Deadline;
@@ -148,4 +145,5 @@ public sealed partial class Plugin
         }
     }
 }
+
 

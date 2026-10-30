@@ -54,7 +54,7 @@ public sealed partial class Plugin
         context=context with{CompletionObserved=itemTradeCompletion.Completed(context.Character,itemTrade.Partner,1,DateTimeOffset.UtcNow)};
         return new(context,bags,local,remote,ItemTradePlan.CanReceive(remote,bags,id=>CrystalStorage.IsItem(id)?9999:OrganizerStackLimit(id)));
     }
-    private unsafe void StartItemTrade()
+    private unsafe void StartItemTrade(bool exactReceive=false)
     {
         gilTradeNotice="";
         try{
@@ -68,7 +68,7 @@ public sealed partial class Plugin
             gilSessionWorld=Player.CurrentWorld.RowId;gilSessionTerritory=Client.TerritoryType;
             var startFrame=ReadItemTradeFrame();if(!gilReceive)ItemTradePlan.RefreshSelection(itemTradeSelection,startFrame.Bags);
             var selected=itemTradeSelection.Select(x=>new TradeItemAmount(x.Key.Item,x.Key.Hq,x.Value)).ToArray();
-            if(!itemTrade.Start(!gilReceive,selected,startFrame,DateTimeOffset.UtcNow)){gilTradeNotice=itemTrade.Status;TraceGilTrade("Items start: "+itemTrade.Status);return;}
+            if(!itemTrade.Start(!gilReceive,selected,startFrame,DateTimeOffset.UtcNow,exactReceive)){gilTradeNotice=itemTrade.Status;TraceGilTrade("Items start: "+itemTrade.Status);return;}
             itemTradePending=null;itemTradeOwned=false;itemTradePoll=default;itemTradeCompletion.Clear();
             TraceGilTrade($"Items: {(gilReceive?"receive":"send")} with {gilPartnerName} @ {WorldName(gilPartnerWorld)}");
         }catch(Exception e){gilTradeNotice=e.Message;}
@@ -185,5 +185,6 @@ public sealed partial class Plugin
         }catch(Exception e){StopItemTrade("Stopped: "+e.Message);Log.Warning(e,"Item Trader stopped");}
     }
 }
+
 
 

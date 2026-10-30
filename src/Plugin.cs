@@ -321,7 +321,7 @@ public sealed partial class Plugin : IDalamudPlugin
     private unsafe void UpdateCore(IFramework framework)
     {
         var now = DateTimeOffset.UtcNow;
-        UpdateGardenCare(now);
+        UpdateAssignedLogin(now);UpdateGardenCare(now);UpdateItemDelivery(now);
         // The login cancellation/deadline runs before account observations and
         // all other optional work, including while logged out or windows closed.
         UpdateCancelledLoginReturn(now);
@@ -1254,6 +1254,7 @@ public sealed partial class Plugin : IDalamudPlugin
 
     public void Dispose()
     {
+        itemDeliveryClient.Dispose();
         DisposeEquinoxMarket();
         if (titleLoginProbe.Active) StopTitleLoginCheck("Login check stopped because Companion is unloading.");
         DisposeMaintenanceNotices();

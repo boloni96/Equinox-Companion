@@ -184,6 +184,7 @@ public sealed partial class Plugin
  private void DrawAdventure()
  {
   if(!config.SyncEnabled||config.PairingKey.Length!=64){ImGui.TextWrapped("Pair Companion with your Journal in Settings to open the same saved adventures here.");if(ImGui.Button("Open Companion settings"))visible=true;return;}
+  if(ImGui.Button("Item delivery…"))OpenItemDelivery();ImGui.SameLine();
   if(ImGui.Button("Adventure home")){adventureSelected="";adventurePrompt=null;}
   SameLineIfFits(ButtonWidth("Open Journal"));if(ImGui.Button("Open Journal"))Dalamud.Utility.Util.OpenLink("https://equinoxjournal.pages.dev/#adventure");
   if(!adventureFresh)ImGui.TextWrapped(adventureMessage);

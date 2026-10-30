@@ -40,7 +40,7 @@ public sealed partial class Plugin
     private void StopTendAdventure(string reason)
     {
         if(gardenTendRoute==null)return;
-        gardenTendRoute=null;gardenAutoPlantPlan=null;gardenCareRun?.Stop(reason);gardenTendStatus=reason;
+        CancelAssignedLogin(reason);gardenTendRoute=null;gardenAutoPlantPlan=null;gardenCareRun?.Stop(reason);gardenTendStatus=reason;
         goSeeHomeTrip=null;
         if(gardenAdventureSwitchSent){characterSwitchUntil=default;characterSwitchTarget=null;gardenAdventureSwitchSent=false;}
         try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}
@@ -52,7 +52,7 @@ public sealed partial class Plugin
         var scope=rule.Jobs??new[]{rule.Kind};var cycle=rule.Kind=="growingcycle";
         if(cycle&&rule.Phase is "waiting" or "review")return null;
         if(gardenAdventurePlant&&(cycle||scope.Contains("planplant")||scope.Contains("plant")||rule.Kind=="garden"&&rule.Jobs==null)&&GardenGuidance.Next(plan)!=null)return GardenCareAction.Plant;
-        var active=plan.Beds.Where(GardenVisualState.HasActualCrop).ToArray();
+        var active=plan.Beds.Where(EquinoxCompanion.GardenVisualState.HasActualCrop).ToArray();
         if(gardenAdventureHarvest&&(cycle||scope.Contains("harvest")||rule.Kind=="garden"&&rule.Jobs==null)&&active.Length>0){
             if(active.All(b=>b.Ready)&&active.Any(b=>GardenCarePolicy.Eligible(plan,b,GardenCareAction.Harvest,now)))return GardenCareAction.Harvest;
             var key=plan.HouseId+":"+plan.Batch;
@@ -89,11 +89,11 @@ public sealed partial class Plugin
             if(!Player.IsLoaded)return;
             if(Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]||HelperInCutscene())return;
             if(CurrentSharedCharacter()?.Id!=work.Character){
-                if(gardenAdventureSwitchSent)return;
+                if(gardenAdventureSwitchSent){if(assignedLogin==null&&assignedLoginError.Length>0)throw new InvalidOperationException(assignedLoginError);return;}
                 if(Player.ContentId!=gardenTendOwner)throw new InvalidOperationException("An unexpected character logged in.");
                 if(!gardenAdventureSwitch)throw new InvalidOperationException("Switch to the assigned gardener first.");
                 var target=config.SharedRoster!.People.SelectMany(p=>p.Characters).Single(c=>c.Id==work.Character);
-                SwitchSharedCharacter(target);
+                if(!StartAssignedCharacterSwitch(target))throw new InvalidOperationException(characterTravelStatus);
                 if(characterSwitchTarget?.Id!=target.Id)throw new InvalidOperationException(characterTravelStatus);
                 gardenAdventureSwitchSent=true;gardenTendStatus="Switching to "+target.Name;return;
             }
