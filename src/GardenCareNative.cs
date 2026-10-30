@@ -206,7 +206,7 @@ public sealed partial class Plugin
             var now=DateTimeOffset.UtcNow;
             if(walking){if(walkProgress.Blocked(Objects.LocalPlayer!.Position,now)){
                 var recovery=walkRecovery.Next(Objects.LocalPlayer.Position);
-                if(recovery==null)throw new InvalidOperationException("Garden walk is blocked after two sidesteps. Clear the path or move closer, then restart.");
+                if(recovery==null)throw new InvalidOperationException("Garden walk is blocked after four sidesteps. Clear the path or move closer, then restart.");
                 Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();
                 Pi.GetIpcSubscriber<List<Vector3>,bool?,float?,float?,object>("Lifestream.MoveEx").InvokeAction(recovery.ToList(),true,.3f,.3f);
                 walkProgress.Reset(Objects.LocalPlayer.Position,now);return false;

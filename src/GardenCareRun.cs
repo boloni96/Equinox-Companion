@@ -168,8 +168,8 @@ public sealed class GardenWalkRecovery
     }
     public Vector3[]? Next(Vector3 current)
     {
-        if(attempts>=2||side==Vector3.Zero||!float.IsFinite(current.X)||!float.IsFinite(current.Y)||!float.IsFinite(current.Z)||Vector3.Distance(current,destination)>35)return null;
-        var offset=side*(attempts++==0?.8f:-1.6f);
+        if(attempts>=4||side==Vector3.Zero||!float.IsFinite(current.X)||!float.IsFinite(current.Y)||!float.IsFinite(current.Z)||Vector3.Distance(current,destination)>35)return null;
+        var offset=side*(attempts==0?.8f:attempts%2==1?-1.6f:1.6f);attempts++;
         return [current+offset,destination];
     }
 }

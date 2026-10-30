@@ -113,7 +113,9 @@ internal static class GardenCare312Tests
         Check(left.Length==2&&left[0]==new System.Numerics.Vector3(-.8f,0,1)&&left[1]==new System.Numerics.Vector3(0,0,3),"First recovery steps left and retains destination");
         var right=recovery.Next(left[0])!;
         Check(Math.Abs(right[0].X-.8f)<.001f&&right[1]==left[1],"Second recovery tries other side without changing destination");
-        Check(recovery.Next(right[0])==null,"Recovery stops after two attempts");
+        var leftAgain=recovery.Next(right[0])!;var rightAgain=recovery.Next(leftAgain[0])!;
+        Check(leftAgain[0].X<0&&rightAgain[0].X>0,"Recovery alternates left right left right");
+        Check(recovery.Next(rightAgain[0])==null,"Recovery stops after four attempts");
         recovery.Reset(new(0,0,0),new(0,0,3));
         Check(recovery.Next(new(float.NaN,0,0))==null,"Invalid recovery position rejected");
         var planting=new HarvestPort(GardenCareAction.Plant);var plantingRun=new GardenCareRun(planting);plantingRun.Start([1,2,3],GardenCareAction.Plant,now);
