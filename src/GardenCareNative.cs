@@ -214,13 +214,13 @@ public sealed partial class Plugin
             }if(p.LifestreamBusy())return false;walking=false;origin=Objects.LocalPlayer!.Position;}
             if(openedBed!=bed){
                 if(SellerAddonPresentForGarden())return false;
-                var plan=Current();var resolver=p.GardenResolver();var found=Objects.Where(o=>o.IsTargetable&&o.BaseId==2003757&&o.ObjectKind==ObjectKind.EventObj&&o.Address!=0&&Vector3.Distance(o.Position,Objects.LocalPlayer!.Position)<=(p.config.GardenCareWalk?30f:4.5f)).Where(o=>{
+                var plan=Current();var resolver=p.GardenResolver();var found=Objects.Where(o=>o.IsTargetable&&o.BaseId==2003757&&o.ObjectKind==ObjectKind.EventObj&&o.Address!=0&&(p.config.GardenCareWalk||Vector3.Distance(o.Position,Objects.LocalPlayer!.Position)<=4.5f)).Where(o=>{
                     var arg=((FFXIVClientStructs.FFXIV.Client.Game.Object.EventObject*)o.Address)->Arg;
                     var context=p.snapshot;if(context==null)return false;
-                    var candidate=context with{ObservedAt=now,TargetId=o.GameObjectId.ToString("X16"),TargetDetails=new(o.BaseId,o.EntityId,o.ObjectKind.ToString(),o.Position.X,o.Position.Y,o.Position.Z,arg)};
+                    var candidate=context with{ObservedAt=now,Address=p.currentAddress,TargetId=o.GameObjectId.ToString("X16"),TargetDetails=new(o.BaseId,o.EntityId,o.ObjectKind.ToString(),o.Position.X,o.Position.Y,o.Position.Z,arg)};
                     return GardenTargetMap.SelectedBatch(candidate,resolver,[plan]) is {} hit&&hit.Bed==bed;
                 }).Take(2).ToArray();
-                if(found.Length!=1)throw new InvalidOperationException($"Bed {bed} is out of reach or its identity needs syncing.");
+                if(found.Length!=1)throw new InvalidOperationException(p.config.GardenCareWalk?$"Bed {bed} is not uniquely mapped among loaded garden objects. Inspect / sync this batch, then resume.":$"Bed {bed} is out of reach. Enable Walk to mapped beds or move closer.");
                 if(Vector3.Distance(found[0].Position,Objects.LocalPlayer!.Position)>3f){
                     if(walkedBed==bed)throw new InvalidOperationException("Could not reach the bed. Clear the approach or move closer, then retry.");
                     if(!p.config.GardenCareWalk)throw new InvalidOperationException("Move closer to the garden or enable Walk to mapped beds.");
