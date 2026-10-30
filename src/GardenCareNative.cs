@@ -293,6 +293,7 @@ public sealed partial class Plugin
             if(dialog!=null){
                 if(confirmationSent)return false;
                 if(dialog->PromptText==null||dialog->YesButton==null||!dialog->YesButton->IsEnabled||!MatchesPrompt(action,dialog->PromptText->NodeText.ToString()))throw new InvalidOperationException("Unrecognized garden confirmation; review it manually.");
+                if(action==GardenCareAction.Plant&&GardenAutoPlant.Next(Current())!=(bed,action))throw new InvalidOperationException("Saved planting step changed before confirmation.");
                 if(action==GardenCareAction.RemoveStarter&&GardenAutoPlant.Next(Current())!=(bed,action))throw new InvalidOperationException("Starter replacement changed.");
                 dialog->FireCallbackInt(0);confirmationSent=true;return false;
             }
