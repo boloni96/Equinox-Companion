@@ -136,6 +136,7 @@ public sealed partial class Plugin
         finally
         {
             drawingGardenGuide=false;gardenGuideActions=null;
+            RecordPerformanceElapsed("garden guide draw",started);
             gardenDrawLastMs=System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;
             gardenDrawPeakMs=Math.Max(gardenDrawPeakMs,gardenDrawLastMs);
         }

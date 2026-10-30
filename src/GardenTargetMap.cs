@@ -52,11 +52,13 @@ public static class GardenTargetMap
     public static SyncEvent Resolve(SyncEvent e,IEnumerable<SharedGardenTarget> mappings) => CreateResolver(mappings)(e);
 
     public static (string House,int Batch,int Bed)? SelectedBatch(GardenSnapshot target,IEnumerable<SharedGardenTarget> mappings,IEnumerable<SharedGardenPlan> plans)
+        =>SelectedBatch(target,CreateResolver(mappings),plans);
+    public static (string House,int Batch,int Bed)? SelectedBatch(GardenSnapshot target,Func<SyncEvent,SyncEvent> resolver,IEnumerable<SharedGardenPlan> plans)
     {
         if(target.Address is not {Apartment:false,Workshop:false,Room:0,Plot:>0} address || target.TargetId is null ||
             target.TargetDetails is not {DataId:2003757,EventArgument:{} argument} t)return null;
-        var resolved=Resolve(new("selection","garden.unmapped",target.ObservedAt,target.Actor,address,
-            GardenTarget:new(argument,t.X,t.Y,t.Z)),mappings);
+        var resolved=resolver(new("selection","garden.unmapped",target.ObservedAt,target.Actor,address,
+            GardenTarget:new(argument,t.X,t.Y,t.Z)));
         if(resolved.Patch is null || resolved.Bed is null)return null;
         var matches=plans.Where(p=>(p.PhysicalPatch>0?p.PhysicalPatch:p.Batch)==resolved.Patch &&
             SharedGardenLocation.Match(address,[p])==p.HouseId).Take(2).ToArray();
@@ -82,3 +84,4 @@ public sealed class GardenSelectionFollow
         return selection;
     }
 }
+

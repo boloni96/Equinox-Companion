@@ -321,7 +321,9 @@ public sealed partial class Plugin : IDalamudPlugin
     private unsafe void UpdateCore(IFramework framework)
     {
         var now = DateTimeOffset.UtcNow;
-        UpdateAssignedLogin(now);UpdateGardenCare(now);UpdateItemDelivery(now);
+        UpdateAssignedLogin(now);
+        var gardenStarted=System.Diagnostics.Stopwatch.GetTimestamp();UpdateGardenCare(now);RecordPerformanceElapsed("garden automation",gardenStarted);
+        UpdateItemDelivery(now);
         // The login cancellation/deadline runs before account observations and
         // all other optional work, including while logged out or windows closed.
         UpdateCancelledLoginReturn(now);

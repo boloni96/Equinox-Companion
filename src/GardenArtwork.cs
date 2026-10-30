@@ -139,12 +139,17 @@ public sealed partial class Plugin
         Environment.TickCount64,()=>BuildLocalGardenActions().ToArray());
     private IEnumerable<SyncEvent> BuildLocalGardenActions()
     {
-        var resolve=GardenTargetMap.CreateResolver(GardenMappings());
+        var resolve=GardenResolver();
         return config.Planting.Select(p=>new SyncEvent(p.EventId,"garden.planted",p.ConfirmedAt,WithWorldNames(p.Actor),WithAddressNames(p.Address),p.Patch,p.Bed,p.Plant))
         .Concat(config.Tending.Select(t=>new SyncEvent(t.EventId,"garden.tended",t.ConfirmedAt,WithWorldNames(t.Actor),WithAddressNames(t.Address),t.Patch,t.Bed)))
         .Concat(config.Discoveries.Where(e=>e.Kind is "garden.empty" or "garden.empty.unmapped" or "garden.unmapped" or "garden.dead" or "garden.ready" or "garden.observed" or "garden.fertilized" or "garden.status" or "garden.status.unmapped")).Select(resolve);
     }
-    private IEnumerable<SharedGardenTarget> GardenMappings() => (config.SharedRoster?.GardenTargets??[])
+    private readonly UiProjectionCache<SharedGardenTarget[]> gardenMappingsCache=new(maxAgeMs:0);
+    private readonly UiProjectionCache<Func<SyncEvent,SyncEvent>> gardenResolverCache=new(maxAgeMs:0);
+    private string GardenMappingVersion=>$"{config.Discoveries.Count}:{config.Discoveries.LastOrDefault()?.Id}:{gardenBedSync?.Mappings.Count()}:{gardenBedSync?.Mappings.LastOrDefault()?.Id}";
+    private SharedGardenTarget[] GardenMappings()=>gardenMappingsCache.Get(config.SharedRoster,GardenMappingVersion,Environment.TickCount64,()=>BuildGardenMappings().ToArray());
+    private Func<SyncEvent,SyncEvent> GardenResolver(){var mappings=GardenMappings();return gardenResolverCache.Get(mappings,"",Environment.TickCount64,()=>GardenTargetMap.CreateResolver(mappings));}
+    private IEnumerable<SharedGardenTarget> BuildGardenMappings() => (config.SharedRoster?.GardenTargets??[])
         .Concat(config.Discoveries.Select(GardenTargetMap.FromNumbered).OfType<SharedGardenTarget>())
         .Concat((gardenBedSync?.Mappings??[]).Select(e=>GardenTargetMap.FromNumbered(e with {Address=WithAddressNames(e.Address!)})).OfType<SharedGardenTarget>());
     private void GardenActionRecorded()=>WakeObservationSync();
@@ -162,3 +167,4 @@ public sealed partial class Plugin
         localGardenCache[key]=result;return result;
     }
 }
+

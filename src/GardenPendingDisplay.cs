@@ -3,7 +3,7 @@ namespace EquinoxCompanion;
 // UI projection only. Observations and uploads never read this cache.
 public sealed class GardenPendingDisplay
 {
- private readonly UiProjectionCache<SyncEvent[]> pendingCache=new();
+ private readonly UiProjectionCache<SyncEvent[]> pendingCache=new(maxAgeMs:0);
  private SyncEvent[]? previousPending;
  private readonly Dictionary<SharedGardenPlan,SharedGardenPlan> plans=new(ReferenceEqualityComparer.Instance);
  public SharedGardenPlan Get(SharedGardenPlan plan,object? roster,string version,long now,Func<IEnumerable<SyncEvent>> actions,Func<IEnumerable<string>> sent)
@@ -16,3 +16,4 @@ public sealed class GardenPendingDisplay
   if(plans.Count>=128)plans.Clear();plans[plan]=result;return result;
  }
 }
+
