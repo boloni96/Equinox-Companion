@@ -1,3 +1,4 @@
+using System.Numerics;
 namespace EquinoxCompanion;
 
 public enum GardenCareAction { Tend, Fertilize, Harvest, Plant, RemoveStarter, Inspect }
@@ -123,4 +124,20 @@ public static class GardenAutoPlant
         GardenVisualState.HasActualCrop(bed)&&GardenCropIdentity.Same(bed.ActualCrop,bed.Crop)&&
         !GardenPlantRequirement.SuppressTending(bed);
     public static bool PartialHarvest(SharedGardenPlan plan)=>plan.Beds.Any(b=>GardenVisualState.HasActualCrop(b)&&!b.Ready&&b.DeadConfirmedAt==null);
+}
+
+// A bounded entrance approach after verified arrival in the destination ward.
+public static class GardenPlotApproachPolicy
+{
+    private static bool Finite(Vector3 p)=>float.IsFinite(p.X)&&float.IsFinite(p.Y)&&float.IsFinite(p.Z);
+    public static Vector3[] Path(Vector3 position,Vector3 entrance,Vector3? garden,float rotation)
+    {
+        if(!Finite(position)||!Finite(entrance)||!float.IsFinite(rotation)||Vector3.Distance(position,entrance)>15f)
+            throw new InvalidOperationException("Plot entrance is too far away or unavailable. Move near the destination gate and restart.");
+        var inward=garden is {} bed&&Finite(bed)&&Vector3.Distance(bed,entrance)<=40f?bed-entrance:new Vector3(MathF.Sin(rotation),0,MathF.Cos(rotation));
+        inward.Y=0;
+        if(inward.LengthSquared()<.01f)throw new InvalidOperationException("Cannot identify a short approach into this plot.");
+        var step=entrance+Vector3.Normalize(inward)*3f;
+        return Vector3.Distance(position,entrance)>1f?[entrance,step]:[step];
+    }
 }

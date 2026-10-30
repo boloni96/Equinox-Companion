@@ -1,3 +1,5 @@
+using System.Numerics;
+using FFXIVClientStructs.FFXIV.Client.Game;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Game.ClientState.Conditions;
 namespace EquinoxCompanion;
@@ -9,6 +11,9 @@ public sealed partial class Plugin
     private string gardenTendBoard="",gardenTendGeneration="",gardenTendStatus="";
     private HashSet<string> gardenAdventureCharacters=[];
     private DateTimeOffset gardenTendDeadline,gardenAdventureNext;
+    private bool gardenPlotApproaching,gardenPlotApproachAttempted;
+    private DateTimeOffset gardenPlotApproachAt;
+    private Vector3 gardenPlotApproachOrigin;
     private bool gardenTendTravelSent,gardenTendStarted,gardenAdventureSwitchSent;
     private bool gardenAdventureTend=true,gardenAdventurePlant,gardenAdventureHarvest,gardenAdventureSwitch;
     private readonly Dictionary<string,DateTimeOffset> gardenAdventureInspected=[];
@@ -23,7 +28,7 @@ public sealed partial class Plugin
             }
             ImGui.Checkbox("Switch assigned characters on this account",ref gardenAdventureSwitch);
             var walk=config.GardenCareWalk;if(ImGui.Checkbox("Walk to mapped beds (Lifestream)",ref walk)){config.GardenCareWalk=walk;SaveConfiguration();}
-            ImGui.TextWrapped("Uses the assigned gardeners on this character's Journal account. The growing adventure waits between stages. Planting uses its exact saved seed, soil and bed order; with Harvest full batches enabled, ready crops are harvested before the next route layout is applied. Mixed maturity and protected neighbours wait. Stop remains available while waiting.");
+            ImGui.TextWrapped("Uses the assigned gardeners on this character's Journal account. The growing adventure waits between stages. Planting uses its exact saved seed, soil and bed order; with Harvest full batches enabled, ready crops are harvested before the next route layout is applied. Mixed maturity and protected neighbours wait. After teleporting, Walk to mapped beds also makes a short approach through the plot entrance. Stop remains available while waiting.");
             ImGui.BeginDisabled(!adventureFresh||gardenCareRun?.Running==true||!Player.IsLoaded||!(gardenAdventureTend||gardenAdventurePlant||gardenAdventureHarvest));
             if(ImGui.Button("Start automatic gardening"))StartTendAdventure(board);ImGui.EndDisabled();ImGui.EndDisabled();
         }
@@ -37,16 +42,35 @@ public sealed partial class Plugin
         var person=config.SharedRoster?.People.FirstOrDefault(p=>p.Characters.Any(c=>c.Id==current.Id));
         gardenAdventureCharacters=(person?.Characters??[]).Where(c=>c.AccountId==current.AccountId&&(gardenAdventureSwitch||c.Id==current.Id)).Select(c=>c.Id).ToHashSet();
         gardenTendRoute=new();gardenTendOwner=Player.ContentId;gardenTendBoard=board.Id;gardenTendGeneration=board.Generation;
-        gardenTendTravelSent=gardenTendStarted=gardenAdventureSwitchSent=false;gardenCareRun=null;gardenAdventureNext=default;
+        gardenTendTravelSent=gardenTendStarted=gardenAdventureSwitchSent=false;gardenPlotApproaching=gardenPlotApproachAttempted=false;gardenCareRun=null;gardenAdventureNext=default;
         gardenTendStatus="Checking this account's assigned garden work…";
     }
     private void StopTendAdventure(string reason)
     {
         if(gardenTendRoute==null)return;
-        CancelAssignedLogin(reason);gardenTendRoute=null;gardenAutoPlantPlan=null;gardenCareRun?.Stop(reason);gardenTendStatus=reason;
+        CancelAssignedLogin(reason);gardenPlotApproaching=false;gardenTendRoute=null;gardenAutoPlantPlan=null;gardenCareRun?.Stop(reason);gardenTendStatus=reason;
         goSeeHomeTrip=null;
         if(gardenAdventureSwitchSent){characterSwitchUntil=default;characterSwitchTarget=null;gardenAdventureSwitchSent=false;}
         try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}
+    }
+    private unsafe void TryApproachGardenPlot(SharedGardenPlan plan,DateTimeOffset now)
+    {
+        var manager=HousingManager.Instance();var player=Objects.LocalPlayer;
+        static string Norm(string? text)=>(text??"").Trim().Replace("The ","",StringComparison.OrdinalIgnoreCase).ToLowerInvariant();
+        if(manager==null||manager->GetCurrentHousingTerritoryType()!=HousingTerritoryType.Outdoor||player==null||
+            Norm(WorldName(Player.CurrentWorld.RowId))!=Norm(plan.World)||Norm(DistrictName(Client.TerritoryType))!=Norm(plan.District)||manager->GetCurrentWard()!=plan.Ward-1||manager->GetCurrentDivision()!=(plan.Plot>30?2:1)||atOutdoorEstate||Conditions[ConditionFlag.Casting])return;
+        if(!config.GardenCareWalk)throw new InvalidOperationException("Enable Walk to mapped beds to approach the plot after teleporting, or move onto the plot first.");
+        if(gardenPlotApproachAttempted)throw new InvalidOperationException("Plot entrance approach already attempted. Move inside the destination plot and restart.");
+        if(Conditions[ConditionFlag.Unconscious]||Conditions[ConditionFlag.TradeOpen]||SellerAddonPresentForGarden())return;
+        var entrance=Pi.GetIpcSubscriber<uint,int,Vector3?>("Lifestream.GetPlotEntrance").InvokeFunc(Client.TerritoryType,plan.Plot-1)
+            ??throw new InvalidOperationException("Lifestream has no entrance position for this plot. Move onto the plot first.");
+        var mapping=GardenMappings().Where(m=>Norm(m.World)==Norm(plan.World)&&Norm(m.District)==Norm(plan.District)&&m.Ward==plan.Ward&&m.Plot==plan.Plot&&m.Patch==(plan.PhysicalPatch>0?plan.PhysicalPatch:plan.Batch)&&now-m.At<TimeSpan.FromDays(60))
+            .OrderByDescending(m=>m.At).FirstOrDefault();
+        Vector3? garden=mapping is null?null:new(mapping.X,mapping.Y,mapping.Z);
+        var path=GardenPlotApproachPolicy.Path(player.Position,entrance,garden,player.Rotation);
+        Pi.GetIpcSubscriber<List<Vector3>,bool?,float?,float?,object>("Lifestream.MoveEx").InvokeAction(path.ToList(),true,.3f,.3f);
+        gardenPlotApproaching=gardenPlotApproachAttempted=true;gardenPlotApproachAt=now;gardenPlotApproachOrigin=player.Position;
+        gardenTendStatus="Walking through the plot entrance · "+plan.HouseName;
     }
     private static bool SameGardenDefinition(GardenPlanDefinition? a,GardenPlanDefinition? b)=>a!=null&&b!=null&&a.Draft.Target==b.Draft.Target&&
         a.Steps.OrderBy(s=>s.Bed).Select(s=>(s.Bed,s.Order,s.Crop,s.Soil,s.ReplantOrder,s.StarterSoil,s.Neighbour)).SequenceEqual(b.Steps.OrderBy(s=>s.Bed).Select(s=>(s.Bed,s.Order,s.Crop,s.Soil,s.ReplantOrder,s.StarterSoil,s.Neighbour)));
@@ -85,7 +109,7 @@ public sealed partial class Plugin
                         gardenTendRoute.Enqueue(new(cid,rule.HouseId,rule.Batch,rule));
                 }
                 if(gardenTendRoute.Count==0){gardenTendStatus="Waiting for growth, supplies, another assigned account, or a garden inspection · route stays active.";gardenAdventureNext=now.AddSeconds(10);return;}
-                gardenTendDeadline=now.AddMinutes(10);gardenTendTravelSent=gardenTendStarted=gardenAdventureSwitchSent=false;
+                gardenTendDeadline=now.AddMinutes(10);gardenTendTravelSent=gardenTendStarted=gardenAdventureSwitchSent=false;gardenPlotApproaching=gardenPlotApproachAttempted=false;
             }
             if(now>=gardenTendDeadline)throw new InvalidOperationException("Travel or garden action timed out. Review before restarting.");
             var work=gardenTendRoute.Peek();
@@ -105,10 +129,22 @@ public sealed partial class Plugin
             if(gardenTendStarted){
                 if(gardenCareRun?.Running==true||gardenAutoPlantPlan!=null)return;
                 if(gardenCareRun?.Status.StartsWith("Stopped")==true)throw new InvalidOperationException(gardenCareRun.Status);
-                gardenTendRoute.Dequeue();gardenTendStarted=gardenTendTravelSent=false;gardenTendDeadline=now.AddMinutes(10);gardenAdventureNext=now.AddSeconds(3);return;
+                gardenTendRoute.Dequeue();gardenPlotApproaching=gardenPlotApproachAttempted=false;gardenTendStarted=gardenTendTravelSent=false;gardenTendDeadline=now.AddMinutes(10);gardenAdventureNext=now.AddSeconds(3);return;
             }
-            if(!atOutdoorEstate||SharedGardenLocation.Match(currentAddress,[sourcePlan])!=sourcePlan.HouseId){
+            var atDestination=atOutdoorEstate&&SharedGardenLocation.Match(currentAddress,[sourcePlan])==sourcePlan.HouseId;
+            if(gardenPlotApproaching){
+                if(atDestination){Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();gardenPlotApproaching=false;gardenTendStatus="On the destination plot · approaching garden";}
+                else{
+                    if(atOutdoorEstate)throw new InvalidOperationException("Plot approach reached a different estate. Review the entrance before restarting.");
+                    if(now-gardenPlotApproachAt>TimeSpan.FromSeconds(20)||now-gardenPlotApproachAt>TimeSpan.FromSeconds(6)&&Objects.LocalPlayer is {} stalled&&Vector3.Distance(stalled.Position,gardenPlotApproachOrigin)<.3f)
+                        throw new InvalidOperationException("Plot entrance approach is blocked. Move inside the destination plot and restart.");
+                    if(now-gardenPlotApproachAt>TimeSpan.FromSeconds(3)&&!LifestreamBusy())throw new InvalidOperationException("The short approach did not enter the destination plot. Move inside and restart.");
+                    return;
+                }
+            }
+            if(!atDestination){
                 if(!gardenTendTravelSent){if(LifestreamBusy())throw new InvalidOperationException("Another Lifestream journey is active.");EnsureBidWorlds();var world=bidWorlds!.FirstOrDefault(w=>w.Name==sourcePlan.World);if(world.Id==0)throw new InvalidOperationException("Destination world unavailable.");GoSeeBid(world.Id,sourcePlan.District,sourcePlan.Ward,sourcePlan.Plot);gardenTendTravelSent=true;gardenTendStatus="Travelling to "+sourcePlan.HouseName;}
+                else if(!LifestreamBusy()&&goSeeHomeTrip==null&&goSeeFriendTrip==null)TryApproachGardenPlot(sourcePlan,now);
                 return;
             }
             if(LifestreamBusy()||goSeeHomeTrip!=null)return;
@@ -128,7 +164,7 @@ public sealed partial class Plugin
                                 var port=new GardenCarePort(this,plan);port.Validate();gardenCareRun=new(port);
                                 gardenCareRun.Start(preparation.Beds,prepareAction,now);gardenTendStarted=true;
                                 if(prepareAction==GardenCareAction.Inspect)gardenAdventureInspected[key]=now;
-                            }else{gardenTendRoute.Dequeue();gardenTendTravelSent=false;gardenAdventureNext=now.AddSeconds(10);}
+                            }else{gardenTendRoute.Dequeue();gardenTendTravelSent=false;gardenPlotApproaching=gardenPlotApproachAttempted=false;gardenAdventureNext=now.AddSeconds(10);}
                             return;
                         }
                         ChangeGardenPlan(plan,work.Rule.PlanTemplate);
