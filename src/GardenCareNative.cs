@@ -195,7 +195,9 @@ public sealed partial class Plugin
         }
         public bool Confirmed(int bed,GardenCareAction action,DateTimeOffset sent)
         {
-            if(action==GardenCareAction.Inspect)return Menu(bed)!=null&&Current().Beds.First(b=>b.Bed==bed).ObservedAt>=opened;
+            // Opening this exact numbered menu is the inspection receipt. Identical
+            // observations may be deduplicated; do not require a rewritten timestamp.
+            if(action==GardenCareAction.Inspect)return Menu(bed)!=null&&DateTimeOffset.UtcNow-opened>=TimeSpan.FromSeconds(1);
             var dialog=(AddonSelectYesno*)SellerAddon("SelectYesno");
             if(dialog!=null){
                 if(confirmationSent)return false;

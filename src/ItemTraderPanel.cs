@@ -42,6 +42,7 @@ public sealed partial class Plugin
         }
         if(ImGui.SmallButton("Organizer list")){try{LoadOrganizerTradeItems();}catch(Exception e){gilTradeNotice=e.Message;}}
         MarketHelp("Load the current Organizer's listed items and quantities from your bags. No crafting expansion or retainer withdrawal. HQ/NQ choice applies; unavailable or untradable copies are reported. Review before sending.");
+        ImGui.SameLine();if(ImGui.SmallButton("Item delivery…"))OpenItemDelivery();
         ImGui.SameLine();ImGui.Checkbox("Selected only",ref itemTradeSelectedOnly);
         var rows=itemTradeBags.Where(x=>x.Item>1&&x.Quantity>0&&x.Tradable).GroupBy(x=>x.Key).Select(g=>(Key:g.Key,Count:g.Sum(x=>x.Quantity)))
             .Where(x=>(!itemTradeSelectedOnly||itemTradeSelection.ContainsKey(x.Key))&&(itemTradeCategories.Count==0||itemTradeCategories.Contains(OrganizeCategory(x.Key.Item)))&&itemTradeNames.GetValueOrDefault(x.Key.Item,"").Contains(itemTradeSearch,StringComparison.OrdinalIgnoreCase))
@@ -68,5 +69,6 @@ public sealed partial class Plugin
         }
     }
 }
+
 
 

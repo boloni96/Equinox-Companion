@@ -28,7 +28,7 @@ public sealed partial class Plugin
     private DeliverySession[] deliverySessions=[];
     private string deliverySelected="",deliverySource="",deliveryRecipient="",deliveryIntermediary="",deliveryPreferred="",deliveryMateria="",deliveryItemsText="",deliveryNotice="",deliveryAccount="",deliveryRun="",deliveryPairing="",deliveryTrip="",deliveryTrade="",deliveryResumeGarden="";
     private DateTimeOffset deliveryPoll,deliveryHeartbeat,deliveryActionDeadline,deliveryLastContact,deliveryTick;
-    private bool deliverySwitchRequested,deliveryMustReconcile,deliveryOpenCreate;
+    private bool deliverySwitchRequested,deliveryMustReconcile,deliveryOpenCreate,deliveryReturning;
     private void OpenItemDelivery(){if(deliveryWindow==null){deliveryWindow=new(this);windows.AddWindow(deliveryWindow);}deliveryWindow.IsOpen=true;deliveryPoll=default;}
     private (SharedPerson Person,SharedCharacter Character)[] DeliveryCharacters()=>(config.SharedRoster?.People??[]).SelectMany(p=>p.Characters.Select(c=>(p,c))).ToArray();
     private SharedCharacter? DeliveryCharacter(string id)=>DeliveryCharacters().FirstOrDefault(x=>x.Character.Id==id).Character;
@@ -78,13 +78,18 @@ public sealed partial class Plugin
                 var c=CurrentSharedCharacter();if(c==null||CurrentDeliveryAccount()!=deliveryAccount)deliveryNotice="Log in on the selected account first; no account number is guessed.";
                 else if(!config.EnableGilTrader)deliveryNotice="Enable Gil & Item Trader before starting delivery.";
                 else if(TraderRunning||retrievalRun.Running||organizeRunning||chestRunning||followSession.Armed)deliveryNotice="Finish or stop other trading, storage and follow actions first.";
-                else {deliveryRun=session.Id;deliveryPairing=config.PairingKey;deliveryTrip=deliveryTrade="";deliverySwitchRequested=false;deliveryMustReconcile=false;deliveryActionDeadline=DateTimeOffset.UtcNow.AddMinutes(15);if(gardenTendRoute!=null){deliveryResumeGarden=gardenTendBoard;StopTendAdventure("Paused for item delivery.");}DeliveryPost(new{type="join",id=session.Id,revision=session.Revision,clientId=deliveryClientId,accountKey=deliveryAccount,fingerprint=RememberLoadedLoginAccount(),characterId=c.Id,contentId=c.ContentId});}
+                else {deliveryRun=session.Id;deliveryPairing=config.PairingKey;deliveryTrip=deliveryTrade="";deliverySwitchRequested=false;deliveryMustReconcile=deliveryReturning=false;deliveryActionDeadline=DateTimeOffset.UtcNow.AddMinutes(15);if(gardenTendRoute!=null){deliveryResumeGarden=gardenTendBoard;StopTendAdventure("Paused for item delivery.");}DeliveryPost(new{type="join",id=session.Id,revision=session.Revision,clientId=deliveryClientId,accountKey=deliveryAccount,fingerprint=RememberLoadedLoginAccount(),characterId=c.Id,contentId=c.ContentId});}
             }
             ImGui.SameLine();if(ImGui.Button("Stop both clients"))DeliveryPost(new{type="stop",id=session.Id,revision=session.Revision,clientId=deliveryClientId});
             if(session.Paused&&ImGui.Button("Reconcile bags & resume")){try{deliverySwitchRequested=false;deliveryActionDeadline=DateTimeOffset.UtcNow.AddMinutes(15);DeliveryPost(new{type="reconcile",id=session.Id,revision=session.Revision,clientId=deliveryClientId,legId=session.Plan.Legs[session.Index].Id,counts=DeliveryCounts(session.Plan.Legs[session.Index])});}catch(Exception e){deliveryNotice=e.Message;}}
             ImGui.EndDisabled();
             if(session.Index<session.Plan.Legs.Length){var leg=session.Plan.Legs[session.Index];ImGui.Separator();ImGui.TextWrapped($"Handoff {session.Index+1}/{session.Plan.Legs.Length}: {DeliveryCharacter(leg.From)?.Name} → {DeliveryCharacter(leg.To)?.Name}\nMeet: {leg.Meeting.Name} · {leg.Meeting.World} · {leg.Meeting.District} W{leg.Meeting.Ward} P{leg.Meeting.Plot}");
                 foreach(var item in leg.Items)ImGui.TextUnformatted($"{item.Quantity} × {SearchItemName(item.ItemId)}");}
+        }
+        if(deliveryRun.Length>0&&ImGui.Button("Stop local delivery / return journey")){
+            CancelAssignedLogin("Stopped by you.");if(itemTrade.Running)StopItemTrade("Stopped by you.");
+            if(deliveryTrip.Length>0||deliveryReturning){try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}goSeeHomeTrip=null;}
+            deliveryRun=deliveryTrip=deliveryTrade=deliveryResumeGarden="";deliveryReturning=false;deliveryNotice="Local delivery stopped. The partner will pause when this client stops reporting.";
         }
         if(deliveryNotice.Length>0)ImGui.TextWrapped(deliveryNotice);
         ImGui.TextWrapped("Both clients must activate. Lost contact pauses the handoff; reconciliation checks both inventories before any resend. Housing travel uses existing GO SEE routes; inaccessible or blocked movement stops for review.");
@@ -105,7 +110,7 @@ public sealed partial class Plugin
         if(deliveryRequest?.IsCompleted==true){var reply=deliveryRequest.IsCompletedSuccessfully?deliveryRequest.Result:new DeliveryReply(null,null,"Delivery request failed.");deliveryRequest=null;
             if(reply.Error.Length==0)deliveryLastContact=now;if(reply.Sessions!=null)deliverySessions=reply.Sessions;if(reply.Session!=null){deliverySessions=deliverySessions.Where(s=>s.Id!=reply.Session.Id).Append(reply.Session).ToArray();deliverySelected=reply.Session.Id;}if(reply.Error.Length>0)deliveryNotice=reply.Error;}
         if(deliveryRun.Length>0&&config.PairingKey!=deliveryPairing){if(itemTrade.Running)StopItemTrade("Pairing changed.");deliveryRun="";deliveryNotice="Delivery stopped: pairing changed.";return;}
-        if(deliveryRun.Length>0&&deliveryLastContact!=default&&now-deliveryLastContact>TimeSpan.FromSeconds(15)){deliveryMustReconcile=true;CancelAssignedLogin("Delivery connection lost.");if(itemTrade.Running)StopItemTrade("Delivery connection lost.");if(deliveryTrip.Length>0){try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}goSeeHomeTrip=null;deliveryTrip="";}deliveryNotice="Connection lost · delivery paused until both clients reconcile.";}
+        if(deliveryRun.Length>0&&!deliveryReturning&&deliveryLastContact!=default&&now-deliveryLastContact>TimeSpan.FromSeconds(15)){deliveryMustReconcile=true;CancelAssignedLogin("Delivery connection lost.");if(itemTrade.Running)StopItemTrade("Delivery connection lost.");if(deliveryTrip.Length>0){try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}goSeeHomeTrip=null;deliveryTrip="";}deliveryNotice="Connection lost · delivery paused until both clients reconcile.";}
         if(deliveryRequest!=null||config.PairingKey.Length!=64)return;
         var session=deliverySessions.FirstOrDefault(s=>s.Id==deliveryRun);
         if(session!=null&&!session.Members.ContainsKey(deliveryClientId)){
@@ -115,7 +120,18 @@ public sealed partial class Plugin
         }
         if(session!=null&&session.Members.TryGetValue(deliveryClientId,out var member)){
             if(session.Status is "stopped" or "complete"){CancelAssignedLogin("Delivery ended.");
-                if(itemTrade.Running)StopItemTrade("Delivery ended.");RequestStorageRefresh();deliveryRun=deliveryTrip=deliveryTrade="";
+                if(itemTrade.Running)StopItemTrade("Delivery ended.");
+                if(session.Status=="complete"&&(!Player.IsLoaded||Player.CurrentWorld.RowId!=Player.HomeWorld.RowId)){
+                    if(!deliveryReturning){
+                        if(!Player.IsLoaded||LifestreamBusy())return;
+                        try{if(!Pi.GetIpcSubscriber<uint,bool>("Lifestream.ChangeWorldById").InvokeFunc(Player.HomeWorld.RowId))throw new InvalidOperationException("Home-world return was refused.");deliveryReturning=true;deliveryActionDeadline=now.AddMinutes(15);deliveryNotice="Delivery confirmed · returning to this character's home world.";}
+                        catch(Exception e){deliveryNotice="Delivery confirmed. Return home manually: "+e.Message;deliveryRun=deliveryTrip=deliveryTrade=deliveryResumeGarden="";}return;
+                    }
+                    if(now<deliveryActionDeadline)return;
+                    try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}deliveryNotice="Delivery confirmed; return journey timed out. Return home manually.";deliveryRun=deliveryTrip=deliveryTrade=deliveryResumeGarden="";deliveryReturning=false;return;
+                }
+                if(deliveryReturning&&LifestreamBusy())return;
+                deliveryReturning=false;RequestStorageRefresh();deliveryRun=deliveryTrip=deliveryTrade="";
                 if(session.Status=="complete"&&deliveryResumeGarden.Length>0){var board=adventureBoards.FirstOrDefault(b=>b.Id==deliveryResumeGarden);deliveryResumeGarden="";if(board!=null)StartTendAdventure(board);}return;
             }
             if(deliveryMustReconcile){if(session.Status=="paused")deliveryMustReconcile=false;else{PauseItemDelivery(session,"Connection was lost. Reconcile both inventories before resuming.");return;}}
@@ -164,11 +180,19 @@ public sealed partial class Plugin
     }
     private int GardenDeliveryReserve(uint item)
     {
-        var c=CurrentSharedCharacter();if(c==null)return 0;var sheet=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>(Dalamud.Game.ClientLanguage.English);var total=0;
+        var c=CurrentSharedCharacter();if(c==null)return 0;
+        var name=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>(Dalamud.Game.ClientLanguage.English).GetRowOrDefault(item)?.Name.ToString();if(string.IsNullOrEmpty(name))return 0;
+        var total=0;void Add(string required){if(required==name)total++;}
         var owned=c.Houses.Where(h=>h.World==c.World&&h.OwnerName.Equals(c.Name,StringComparison.OrdinalIgnoreCase)).Select(h=>h.Id).ToHashSet();
-        foreach(var source in GardenPlanSources().Where(p=>owned.Contains(p.HouseId))){var plan=EffectiveGardenPlan(source);foreach(var b in plan.Beds.Where(b=>b.Crop.Length>0&&b.Status!="confirmed")){
-            void Add(string name){if(sheet.FirstOrDefault(i=>i.Name.ToString()==name).RowId==item)total++;}
-            Add(GardenSeedItemName(b.Crop));Add(b.Soil);if(b.ReplantOrder>0&&b.Status is not ("starter" or "replant")){Add(GardenSeedItemName(b.Crop));Add(b.StarterSoil);}
-        }}return total;
+        var tasks=adventureBoards.SelectMany(b=>b.Stops).SelectMany(s=>s.Tasks).Where(t=>!t.Done&&t.Rule!=null&&AdventurePolicy.IsGardenTask(t)).Select(t=>t.Rule!).ToArray();
+        foreach(var source in GardenPlanSources().Where(p=>tasks.Any(t=>t.Cid==c.Id&&t.HouseId==p.HouseId&&t.Batch==p.Batch)||owned.Contains(p.HouseId)&&!tasks.Any(t=>t.Cid.Length>0&&t.Cid!=c.Id&&t.HouseId==p.HouseId&&t.Batch==p.Batch))){
+            var plan=EffectiveGardenPlan(source);foreach(var b in plan.Beds.Where(b=>b.Crop.Length>0&&b.Status!="confirmed")){
+                Add(GardenSeedItemName(b.Crop));Add(b.Soil);if(b.ReplantOrder>0&&b.Status is not ("starter" or "replant")){Add(GardenSeedItemName(b.Crop));Add(b.StarterSoil);}
+            }
+        }
+        foreach(var task in tasks.Where(t=>t.Cid==c.Id&&t.Kind=="growingcycle"&&t.Phase=="waiting"&&t.PlanTemplate!=null))foreach(var bed in task.PlanTemplate!.Steps){
+            Add(GardenSeedItemName(bed.Crop));Add(bed.Soil);if(bed.ReplantOrder>0){Add(GardenSeedItemName(bed.Crop));Add(bed.StarterSoil);}
+        }
+        return total;
     }
 }
