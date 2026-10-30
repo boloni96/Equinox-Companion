@@ -171,7 +171,7 @@ public sealed partial class Plugin
         var dst=ReadChestContainer(move.Destination.Container).First(s=>s.Slot==move.Destination.Slot);
         var confirmed=ChestTransferPlanner.Confirmed(move,src,dst);
         organizerLastTransfer=new {retainer=organizeActiveRetainer,move,sourceNow=src,destinationNow=dst,confirmed,at=DateTimeOffset.UtcNow};
-        if(confirmed){retainerCaptureStability.ConfirmTransfer(Player.ContentId,organizeActiveRetainer);RequestStorageRefresh();}
+        if(confirmed){retainerCaptureStability.ConfirmTransfer(Player.ContentId,organizeActiveRetainer);}
         return confirmed;
     }
 }

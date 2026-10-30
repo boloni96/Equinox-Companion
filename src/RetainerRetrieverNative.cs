@@ -107,7 +107,7 @@ public sealed partial class Plugin
             }
             return list.ToArray();
         }
-        public void Confirmed(ulong id,RetrievalSlot slot,int amount){captureAfterTransfer=true;p.retainerCaptureStability.ConfirmTransfer(Character,id);p.RequestStorageRefresh();p.ReportStorageTransfer("Withdrew",slot.ItemId,slot.Hq,amount,p.StorageRetainerName(id));}
+        public void Confirmed(ulong id,RetrievalSlot slot,int amount){captureAfterTransfer=true;p.retainerCaptureStability.ConfirmTransfer(Character,id);p.ReportStorageTransfer("Withdrew",slot.ItemId,slot.Hq,amount,p.StorageRetainerName(id));}
         public int Held(uint item)=>armouryReceipt.Held(item,p.RetrievalHeld(item,Quality,TradeFilter),armouryReceipt.Tracks(item)?ArmouryHeld(item):0);
         public bool Withdraw(ulong id,RetrievalSlot slot,int amount)
         {
