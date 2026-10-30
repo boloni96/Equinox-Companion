@@ -5,6 +5,7 @@ This is an implementation audit, not a claim that every path has been tested in 
 - With complete recorded stock, withdrawals visit only recorded holders; missing items no longer trigger visits to every other retainer. Incomplete records retain the fallback scan.
 - A verified open retainer session can record stable complete slot changes even while the summary ItemCount lags. Confirmation can establish that session; identity changes, incomplete containers and closed windows revoke it.
 - Withdrawals wait for stable capture before closing a changed retainer. Completion/Stop request inventory and UI refreshes, with a short settling window for already-sent operations.
+- The same post-operation refresh runs on item/gil trade receipts, completion and Stop. It observes loaded local storage, invalidates My inventory/Trader picker timers and rebuilds recorded stock and assignment coverage. Exports also request current loaded-storage observations before taking their snapshot. Unopened remote storage is not invented or silently scanned.
 - Recorded-storage browsing prefers complete dated Companion snapshots/observations over undated Allagan cache, including empty snapshots. Assignment coverage and browsing caches are invalidated after capture.
 
 ## Armoury withdrawal acknowledgement — 0.5.1.310

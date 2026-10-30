@@ -26,6 +26,7 @@ public sealed partial class Plugin
     {
         if(inventoryReviewTask!=null)return;
         if(retrievalCatalog==null)throw new InvalidOperationException("Wait for the item catalogue to load.");
+        if(Player.IsLoaded)ObserveStorage(DateTimeOffset.UtcNow);
         var observations=config.Discoveries.ToList();
         var now=DateTimeOffset.UtcNow;var current=Player.IsLoaded?ReadActor():null;
         var live=Player.IsLoaded?ReadItemTradeBags():[];
@@ -64,7 +65,7 @@ public sealed partial class Plugin
                         Categories=storage.SelectMany(c=>c.Items).GroupBy(i=>new{i.CategoryId,i.Category}).Select(g=>new{g.Key.CategoryId,g.Key.Category,DistinctItems=g.Select(i=>i.ItemId).Distinct().Count(),Quantity=g.All(i=>i.Quantity.HasValue)?(long?)g.Sum(i=>(long)i.Quantity!.Value):null}).ToArray()};
                 }).ToArray();
                 var report=new {SchemaVersion=1,ExportedAt=now,PluginVersion=version,CurrentCharacter=current,
-                    Notes=new[]{"Latest recorded snapshots from this Companion installation; not a live scan of every character or storage.","Current character bags/crystals refreshed at export. Open other storage in game to update its records.","Missing containers are unknown, not empty. Armoire/dresser presence-only records have null quantities and quality.","FC and housing storage are shared locations: only the latest observation per location is included; Character identifies its last observer.","Retainer summary covers seven item pages plus crystals. Equipped gear and market listings remain separate containers.","LiveBagCopies reports actual copy tradability; historical storage does not reliably record binding."},
+                    Notes=new[]{"Latest recorded snapshots from this Companion installation; not a live scan of every character or storage.","Current bags/crystals refreshed at export; loaded storage observations refreshed when collection tracking is enabled. Open other storage in game to update its records.","Missing containers are unknown, not empty. Armoire/dresser presence-only records have null quantities and quality.","FC and housing storage are shared locations: only the latest observation per location is included; Character identifies its last observer.","Retainer summary covers seven item pages plus crystals. Equipped gear and market listings remain separate containers.","LiveBagCopies reports actual copy tradability; historical storage does not reliably record binding."},
                     Retainers=retainerSummary,Containers=containers,Assignments=assignments,CharactersUsingAssignments=useAssignments,SavedPlanGroups=plans,
                     LiveBagCopies=live.Where(s=>s.Item>0&&s.Quantity>0).ToArray()};
                 Directory.CreateDirectory(Path.GetDirectoryName(path)!);

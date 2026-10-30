@@ -123,7 +123,7 @@ public sealed partial class Plugin
     {
         StopItemTrade(reason);
         if (!gilTrade.Running) return;
-        gilTrade.Stop(reason);
+        gilTrade.Stop(reason);RequestStorageRefresh();
         gilTradeCompletion.Clear();
         try { CancelOwnedGilTrade(); } catch (Exception ex) { Log.Warning(ex, "Gil Trader cancellation could not be confirmed"); }
         TraceGilTrade(gilTrade.Status);
@@ -145,7 +145,7 @@ public sealed partial class Plugin
             }
             if (frame.TradeOpen && frame.TradePartner == gilTrade.PartnerEntity && frame.Character == gilTrade.Character) gilTradeOwned = true;
             var action = gilTrade.Step(frame, now);
-            if (trades != gilTrade.Trades) { gilTradeCompletion.Clear(); TraceGilTrade($"Completed trade {gilTrade.Trades} · total {gilTrade.Done:N0} gil"); }
+            if (trades != gilTrade.Trades) { RequestStorageRefresh(); gilTradeCompletion.Clear(); TraceGilTrade($"Completed trade {gilTrade.Trades} · total {gilTrade.Done:N0} gil"); }
             if (action != GilTradeAction.None)
             {
                 var inv = InventoryManager.Instance();
@@ -174,6 +174,7 @@ public sealed partial class Plugin
             }
             if (!gilTrade.Running)
             {
+                RequestStorageRefresh();
                 gilTradeCompletion.Clear();
                 CancelOwnedGilTrade(); TraceGilTrade(gilTrade.Status);
                 PrintEquinox( "Gil & Item Trader · " + gilTrade.Status);

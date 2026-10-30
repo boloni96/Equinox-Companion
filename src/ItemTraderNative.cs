@@ -82,7 +82,7 @@ public sealed partial class Plugin
     }
     private void StopItemTrade(string reason)
     {
-        if(!itemTrade.Running)return;itemTrade.Stop(reason);itemTradeCompletion.Clear();
+        if(!itemTrade.Running)return;itemTrade.Stop(reason);RequestStorageRefresh();itemTradeCompletion.Clear();
         try{CancelOwnedItemTrade();}catch(Exception e){Log.Warning(e,"Item trade cancellation");}TraceGilTrade(itemTrade.Status);
     }
     private unsafe void BeginItemOffer(TradeBatchSlot slot,DateTimeOffset now)
@@ -167,7 +167,7 @@ public sealed partial class Plugin
             if(f.TradeOpen&&f.Character==itemTrade.Character&&f.TradePartner==itemTrade.Partner)itemTradeOwned=true;
             if(itemTradePending!=null){TickItemOffer(frame,now);return;}
             var trades=itemTrade.Trades;var action=itemTrade.Step(frame,now);
-            if(trades!=itemTrade.Trades){if(itemTrade.Sending){itemTradeSelection.Clear();foreach(var remaining in itemTrade.Remaining)itemTradeSelection[remaining.Key]=remaining.Quantity;}itemTradeCompletion.Clear();TraceGilTrade($"Items: {itemTrade.Done} confirmed in {itemTrade.Trades} trades");itemTradeBagRefresh=default;}
+            if(trades!=itemTrade.Trades){RequestStorageRefresh();if(itemTrade.Sending){itemTradeSelection.Clear();foreach(var remaining in itemTrade.Remaining)itemTradeSelection[remaining.Key]=remaining.Quantity;}itemTradeCompletion.Clear();TraceGilTrade($"Items: {itemTrade.Done} confirmed in {itemTrade.Trades} trades");itemTradeBagRefresh=default;}
             var inv=InventoryManager.Instance();if(action!=ItemTradeAction.None&&inv==null)throw new InvalidOperationException("Trade manager unavailable.");
             switch(action){
                 case ItemTradeAction.Request:
@@ -181,7 +181,7 @@ public sealed partial class Plugin
                     if(dialog==null||dialog->PromptText==null||dialog->YesButton==null||!dialog->YesButton->IsEnabled||!GilTradeNative.PromptMatches(dialog->PromptText->NodeText.ToString(),gilTradePrompt))throw new InvalidOperationException("Trade confirmation changed.");
                     dialog->FireCallbackInt(0);break;
             }
-            if(!itemTrade.Running){TraceGilTrade("Items: "+itemTrade.Status);itemTradeCompletion.Clear();CancelOwnedItemTrade();PrintEquinox("Item Trader · "+itemTrade.Status);}
+            if(!itemTrade.Running){RequestStorageRefresh();TraceGilTrade("Items: "+itemTrade.Status);itemTradeCompletion.Clear();CancelOwnedItemTrade();PrintEquinox("Item Trader · "+itemTrade.Status);}
         }catch(Exception e){StopItemTrade("Stopped: "+e.Message);Log.Warning(e,"Item Trader stopped");}
     }
 }

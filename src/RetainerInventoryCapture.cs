@@ -12,13 +12,13 @@ public sealed partial class Plugin
     private ulong storageRefreshCharacter;
     private void RequestStorageRefresh(){
         storageRefreshCharacter=Player.ContentId;storageRefreshUntil=DateTimeOffset.UtcNow.AddSeconds(3);
-        storageRefreshNext=default;nextRetainerCapture=default;
+        storageRefreshNext=default;nextRetainerCapture=default;myInventoryRefresh=default;itemTradeBagRefresh=default;InvalidateOrganizePreview();
         retrievalRefreshPending=true;retrievalPreviewDirty=true;assignmentCoverageDirty=true;browseDirty=true;
     }
     private void TickStorageRefresh(DateTimeOffset now){
         if(now>storageRefreshUntil||now<storageRefreshNext||!Player.IsLoaded||Player.ContentId!=storageRefreshCharacter)return;
         storageRefreshNext=now.AddMilliseconds(500);
-        try{ObserveStorage(now);retrievalRefreshPending=true;retrievalPreviewDirty=true;assignmentCoverageDirty=true;browseDirty=true;}
+        try{ObserveStorage(now);myInventoryRefresh=default;itemTradeBagRefresh=default;retrievalRefreshPending=true;retrievalPreviewDirty=true;assignmentCoverageDirty=true;browseDirty=true;}
         catch(Exception e){Log.Warning(e,"Post-transfer storage refresh failed");}
     }
     private bool CaptureRetainerBeforeClose(){
