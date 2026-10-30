@@ -5,7 +5,7 @@ using Dalamud.Game.ClientState.Conditions;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
-    private sealed record GardenAdventureWork(string Character,string House,int Batch,AdventureTaskRule Rule);
+    private sealed record GardenAdventureWork(string TaskId,string Character,string House,int Batch,AdventureTaskRule Rule);
     private Queue<GardenAdventureWork>? gardenTendRoute;
     private ulong gardenTendOwner;
     private string gardenTendBoard="",gardenTendGeneration="",gardenTendStatus="";
@@ -106,13 +106,19 @@ public sealed partial class Plugin
                     var source=GardenPlanSources().FirstOrDefault(p=>p.HouseId==rule.HouseId&&(rule.Kind!="growingcycle"||p.Batch==rule.Batch)&&p.Batch==rule.Batch);if(source==null)continue;
                     var live=EffectiveGardenPlan(source);
                     if(rule.Kind=="growingcycle"&&rule.Phase=="plan"&&gardenAdventurePlant||GardenAdventureAction(live,rule,now)!=null)
-                        gardenTendRoute.Enqueue(new(cid,rule.HouseId,rule.Batch,rule));
+                        gardenTendRoute.Enqueue(new(task.Id,cid,rule.HouseId,rule.Batch,rule));
                 }
                 if(gardenTendRoute.Count==0){gardenTendStatus="Waiting for growth, supplies, another assigned account, or a garden inspection · route stays active.";gardenAdventureNext=now.AddSeconds(10);return;}
                 gardenTendDeadline=now.AddMinutes(10);gardenTendPreparing=false;gardenTendTravelSent=gardenTendStarted=gardenAdventureSwitchSent=false;gardenPlotApproaching=gardenPlotApproachAttempted=false;
             }
             if(now>=gardenTendDeadline)throw new InvalidOperationException("Travel or garden action timed out. Review before restarting.");
             var work=gardenTendRoute.Peek();
+            if(!gardenTendStarted){
+                var liveTask=board.Stops.SelectMany(s=>s.Tasks).FirstOrDefault(t=>t.Id==work.TaskId)??throw new InvalidOperationException("The active garden task was removed.");
+                if(liveTask.Done){gardenTendRoute.Dequeue();gardenTendTravelSent=false;gardenPlotApproaching=gardenPlotApproachAttempted=false;return;}
+                if(liveTask.Rule==null)throw new InvalidOperationException("The active garden task has no rule.");
+                work=work with{Rule=liveTask.Rule};
+            }
             if(!Player.IsLoaded)return;
             if(Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]||HelperInCutscene())return;
             if(CurrentSharedCharacter()?.Id!=work.Character){
@@ -170,7 +176,7 @@ public sealed partial class Plugin
                         }
                         ChangeGardenPlan(plan,work.Rule.PlanTemplate);
                     }
-                    gardenTendRoute.Clear();gardenTendStatus="Waiting for the stage plan to sync.";gardenAdventureNext=now.AddSeconds(5);return;
+                    gardenTendStatus="Waiting here for the stage plan to sync.";gardenAdventureNext=now.AddSeconds(5);return;
                 }
             }
             if(plan.Beds.Any(b=>!b.ObservedAt.HasValue))throw new InvalidOperationException("Inspect / sync the batch before automatic gardening.");
