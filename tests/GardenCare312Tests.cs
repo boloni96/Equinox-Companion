@@ -39,10 +39,11 @@ internal static class GardenCare312Tests
         Check(!GardenCarePolicy.TargetAllowed(10,0,true,GardenCareAction.Tend),"Tending does not exempt target changes");
         var house=GardenCarePolicy.HouseHarvest([done with{Batch=2},done with{HouseId="other"},done,done with{Batch=3,Beds=[beds[0] with{KeepMature=true}]}],"house",now);
         Check(house.Select(p=>p.Batch).SequenceEqual([1,2]),"House harvest queues eligible batches in order and excludes protected beds and other houses");
+        var mature=done with {Beds=[Bed(1)]};
         var growing=done with {Beds=[Bed(1,"confirmed",false) with {NextTend=now.AddMinutes(-1)}]};
         var watered=growing with {Batch=2,Beds=[growing.Beds[0] with {NextTend=now.AddHours(12),LastFertilized=now}]};
-        Check(GardenCarePolicy.HouseCare([done,growing,watered,growing with{HouseId="other"}],"house",GardenCareAction.Tend,now).Length==1,"House tending skips mature, recently tended and other houses");
-        Check(GardenCarePolicy.HouseCare([done,growing,watered],"house",GardenCareAction.Fertilize,now).Length==1,"House fertilizing respects maturity and cooldown");
+        Check(GardenCarePolicy.HouseCare([mature,growing,watered,growing with{HouseId="other"}],"house",GardenCareAction.Tend,now).Length==1,"House tending skips mature, recently tended and other houses");
+        Check(GardenCarePolicy.HouseCare([mature,growing,watered],"house",GardenCareAction.Fertilize,now).Length==1,"House fertilizing respects maturity and cooldown");
         var pending=new GardenPendingDisplay();var builds=0;var sent=new List<string>();
         IEnumerable<SyncEvent> Read(){builds++;return [];}
         var roster=new object();for(var i=0;i<600;i++)pending.Get(growing,roster,"same",i*16,Read,()=>sent);
