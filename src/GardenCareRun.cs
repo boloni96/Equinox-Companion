@@ -3,6 +3,8 @@ namespace EquinoxCompanion;
 public enum GardenCareAction { Tend, Fertilize, Harvest, Plant, RemoveStarter, Inspect }
 public static class GardenCarePolicy
 {
+    public static bool TargetAllowed(ulong expected,ulong current,bool sent,GardenCareAction? action)=>expected==0||expected==current||current==0&&sent&&action is GardenCareAction.Harvest or GardenCareAction.RemoveStarter;
+    public static SharedGardenPlan[] HouseHarvest(IEnumerable<SharedGardenPlan> plans,string house,DateTimeOffset now)=>plans.Where(p=>p.HouseId==house&&p.Beds.Any(b=>Eligible(p,b,GardenCareAction.Harvest,now))).OrderBy(p=>p.Batch).ToArray();
     public const string KeepGuide = "A cross is determined when the new seed is planted beside a compatible crop. Harvesting later collects that bed's possible crossbred seeds. Keep a standing neighbour only until all planting steps that need it are confirmed. Keep for repeated crosses is optional; release it when you no longer need that standing plant. Needing seeds for a later stage does not mean its parent must stay planted.";
     public static string Protection(SharedGardenPlan plan, SharedGardenBed bed)
     {

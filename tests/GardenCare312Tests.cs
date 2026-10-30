@@ -32,6 +32,16 @@ internal static class GardenCare312Tests
         Check(saved.Steps.Length==8&&saved.Steps[0].ReplantOrder==9&&saved.Steps[0].StarterSoil=="Potting Soil","Existing favourite preserves the temporary starter and replacement");
         Check(saved.Steps.All(b=>b.Soil=="Grade 3 Thanalan Topsoil")&&saved.Steps[1].Crop=="Krakka Root","Favourite retains exact cross soil and alternating seeds");
         Check(GardenAutoPlant.Next(applied)==(1,GardenCareAction.Plant),"Auto plant accepts an existing favourite applied to an empty batch");
+        Check(GardenCarePolicy.TargetAllowed(10,0,true,GardenCareAction.Harvest),"Game-cleared target is allowed after harvest was sent");
+        Check(GardenCarePolicy.TargetAllowed(10,0,true,GardenCareAction.RemoveStarter),"Starter removal can clear target");
+        Check(!GardenCarePolicy.TargetAllowed(10,11,true,GardenCareAction.Harvest),"Different selected target still stops");
+        Check(!GardenCarePolicy.TargetAllowed(10,0,false,GardenCareAction.Harvest),"Cleared target before sending still stops");
+        Check(!GardenCarePolicy.TargetAllowed(10,0,true,GardenCareAction.Tend),"Tending does not exempt target changes");
+        var house=GardenCarePolicy.HouseHarvest([done with{Batch=2},done with{HouseId="other"},done,done with{Batch=3,Beds=[beds[0] with{KeepMature=true}]}],"house",now);
+        Check(house.Select(p=>p.Batch).SequenceEqual([1,2]),"House harvest queues eligible batches in order and excludes protected beds and other houses");
+        var harvesting=new HarvestPort();var harvestingRun=new GardenCareRun(harvesting);harvestingRun.Start([1,2,3],GardenCareAction.Harvest,now);
+        for(int i=0;i<12;i++)harvestingRun.Tick(now.AddSeconds(i));
+        Check(harvestingRun.Completed==3&&!harvestingRun.Running&&harvesting.Actions==3,"Target clears after each harvest without stopping or duplicating the next bed");
         var port=new Port();var run=new GardenCareRun(port);run.Start([1,2],GardenCareAction.Tend,now);
         run.Tick(now);run.Tick(now.AddSeconds(1));run.Tick(now.AddSeconds(2));
         Check(run.Completed==0&&port.Acts==1,"Sending does not imply success");
@@ -39,6 +49,15 @@ internal static class GardenCare312Tests
         port.Receipt=true;run.Start([2],GardenCareAction.Tend,now.AddMinutes(1));for(int i=0;i<4;i++)run.Tick(now.AddMinutes(1).AddSeconds(i));
         Check(run.Completed==1&&!run.Running,"Restart has no stale queue");
         run.Start([1,2],GardenCareAction.Tend,now.AddMinutes(2));run.Stop("Stopped");var calls=port.Acts;run.Tick(now.AddMinutes(2));Check(port.Acts==calls,"Stop sends no further actions");
+    }
+    private sealed class HarvestPort:IGardenCarePort
+    {
+        private ulong expected,current;private bool sent;public int Actions;
+        public void Validate(){if(!GardenCarePolicy.TargetAllowed(expected,current,sent,GardenCareAction.Harvest))throw new InvalidOperationException("Selected garden target changed.");}
+        public bool Open(int bed){expected=current=(ulong)bed;sent=false;return true;}
+        public bool Act(int bed,GardenCareAction action){Actions++;sent=true;current=0;return true;}
+        public bool Confirmed(int bed,GardenCareAction action,DateTimeOffset at)=>sent;
+        public bool Close(int bed){expected=current=0;sent=false;return true;}public void Release(){}
     }
     private sealed class Port:IGardenCarePort
     {
