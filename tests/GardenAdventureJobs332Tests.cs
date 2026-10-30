@@ -8,7 +8,7 @@ internal static class GardenAdventureJobs332Tests
   Check(GardenAdventureJobs.Tender("main","owner",2,account)=="main","Tending keeps starting main for same-region houses");
   Check(GardenAdventureJobs.Tender("main","owner",3,account)=="eu","EU care chooses this account's EU character");
   Check(GardenAdventureJobs.Tender("main","owner",1,account)=="jp","Japan care chooses this account's Japan character");
-  Check(GardenAdventureJobs.Tender("main","outside-account",4,account)=="","No eligible region cannot leave account");
+  Check(GardenAdventureJobs.Tender("main","outside-account",4,account)=="main","Materia visit keeps eligible starting character");
   Check(GardenAdventureJobs.Tender("main","eu",3,[account[0]])=="","Switch disabled cannot select another character");
   Check(GardenAdventureJobs.Tender("main","owner",0,account)=="","Unknown world cannot guess travel");
   Check(GardenAdventureJobs.AllowsTending(new(Kind:"care")),"Legacy care task");

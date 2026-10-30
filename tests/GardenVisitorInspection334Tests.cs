@@ -12,7 +12,7 @@ internal static class GardenVisitorInspection334Tests
   Check(GardenAdventureJobs.InspectionDue(new(Kind:"garden",Jobs:["inspect"]),true,false,default,now),"Explicit inspection works with known beds");
   Check(!GardenAdventureJobs.InspectionDue(new(Kind:"harvest"),true,false,default,now),"Known harvest-only work is not changed to inspection");
   Check(GardenAdventureJobs.Tender("visitor","owner",4,[new("visitor",4)])=="visitor","Visitor already on destination region can inspect with switching off");
-  Check(GardenAdventureJobs.Tender("visitor","owner",4,[new("visitor",2)])=="","Unreachable visitor does not guess travel");
+  Check(GardenAdventureJobs.Tender("visitor","owner",4,[new("visitor",2)])=="visitor","Dynamis visitor can reach Materia with switching disabled");
   Console.WriteLine("PASS visitor inspection scheduling and cooldown");
  }
 }

@@ -95,7 +95,7 @@ public sealed partial class Plugin
     {
         EnsureBidWorlds();
         int Region(string world)=>bidWorlds!.FirstOrDefault(w=>string.Equals(w.Name,world,StringComparison.OrdinalIgnoreCase)).Region;
-        var candidates=characters.Where(c=>gardenAdventureCharacters.Contains(c.Id)).Select(c=>new GardenTender(c.Id,Region(c.Id==CurrentSharedCharacter()?.Id?WorldName(Player.CurrentWorld.RowId):c.World))).ToArray();
+        var candidates=characters.Where(c=>gardenAdventureCharacters.Contains(c.Id)).Select(c=>new GardenTender(c.Id,Region(c.Id==CurrentSharedCharacter()?.Id?WorldName(Player.HomeWorld.RowId):c.World))).ToArray();
         return GardenAdventureJobs.Tender(gardenAdventureMain,assigned,Region(plan.World),candidates);
     }
     private bool GardenInspectionDue(SharedGardenPlan plan,AdventureTaskRule rule,DateTimeOffset now)
