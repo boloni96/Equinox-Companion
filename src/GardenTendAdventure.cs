@@ -15,6 +15,7 @@ public sealed partial class Plugin
     private DateTimeOffset gardenPlotApproachAt;
     private readonly GardenWalkProgress gardenPlotProgress=new();
     private readonly GardenWalkRecovery gardenPlotRecovery=new();
+    private readonly GardenArrivalGate gardenArrival=new();
     private bool gardenTendTravelSent,gardenTendStarted,gardenAdventureSwitchSent,gardenTendPreparing;
     private bool gardenAdventureTend=true,gardenAdventurePlant,gardenAdventureHarvest,gardenAdventureSwitch;
     private readonly Dictionary<string,DateTimeOffset> gardenAdventureInspected=[];
@@ -65,10 +66,12 @@ public sealed partial class Plugin
         if(Conditions[ConditionFlag.Unconscious]||Conditions[ConditionFlag.TradeOpen]||SellerAddonPresentForGarden())return;
         var entrance=Pi.GetIpcSubscriber<uint,int,Vector3?>("Lifestream.GetPlotEntrance").InvokeFunc(Client.TerritoryType,plan.Plot-1)
             ??throw new InvalidOperationException("Lifestream has no entrance position for this plot. Move onto the plot first.");
-        var mapping=GardenMappings().Where(m=>Norm(m.World)==Norm(plan.World)&&Norm(m.District)==Norm(plan.District)&&m.Ward==plan.Ward&&m.Plot==plan.Plot&&m.Patch==(plan.PhysicalPatch>0?plan.PhysicalPatch:plan.Batch)&&now-m.At<TimeSpan.FromDays(60))
-            .OrderByDescending(m=>m.At).FirstOrDefault();
-        Vector3? garden=mapping is null?null:new(mapping.X,mapping.Y,mapping.Z);
-        var path=GardenPlotApproachPolicy.Path(player.Position,entrance,garden,player.Rotation);
+        var names=new[]{DataManager.GetExcelSheet<Lumina.Excel.Sheets.EObjName>().GetRow(2002737).Singular.ToString(),DataManager.GetExcelSheet<Lumina.Excel.Sheets.EObjName>().GetRow(2002739).Singular.ToString()};
+        var doors=Objects.Where(o=>o.IsTargetable&&names.Contains(o.Name.ToString())&&Vector3.Distance(o.Position,entrance)<30f)
+            .OrderBy(o=>Vector3.Distance(o.Position,entrance)).Take(2).ToArray();
+        if(doors.Length==0||doors.Length>1&&Vector3.Distance(doors[1].Position,entrance)-Vector3.Distance(doors[0].Position,entrance)<2f)
+            throw new InvalidOperationException("Cannot identify this plot's house entrance reliably. Move inside the yard and restart.");
+        var path=GardenPlotApproachPolicy.Path(player.Position,entrance,doors[0].Position);
         Pi.GetIpcSubscriber<List<Vector3>,bool?,float?,float?,object>("Lifestream.MoveEx").InvokeAction(path.ToList(),true,.3f,.3f);
         gardenPlotApproaching=gardenPlotApproachAttempted=true;gardenPlotApproachAt=now;gardenPlotProgress.Reset(player.Position,now);gardenPlotRecovery.Reset(player.Position,path[^1]);
         gardenTendStatus="Walking through the plot entrance · "+plan.HouseName;
@@ -127,8 +130,8 @@ public sealed partial class Plugin
                 if(liveTask.Rule==null)throw new InvalidOperationException("The active garden task has no rule.");
                 work=work with{Rule=liveTask.Rule};
             }
-            if(!Player.IsLoaded)return;
-            if(Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]||HelperInCutscene())return;
+            if(!Player.IsLoaded){gardenArrival.Reset();return;}
+            if(Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]||Conditions[ConditionFlag.Casting]||HelperInCutscene()){gardenArrival.Reset();return;}
             if(CurrentSharedCharacter()?.Id!=work.Character){
                 if(gardenAdventureSwitchSent){if(assignedLogin==null&&assignedLoginError.Length>0)throw new InvalidOperationException(assignedLoginError);return;}
                 if(Player.ContentId!=gardenTendOwner)throw new InvalidOperationException("An unexpected character logged in.");
@@ -145,6 +148,10 @@ public sealed partial class Plugin
                 if(gardenCareRun?.Status.StartsWith("Stopped")==true)throw new InvalidOperationException(gardenCareRun.Status);
                 if(gardenTendPreparing){gardenTendPreparing=false;gardenTendStarted=false;gardenTendStatus="Preparation confirmed · continuing this batch";gardenAdventureNext=now.AddSeconds(1);return;}
                 gardenTendRoute.Dequeue();gardenPlotApproaching=gardenPlotApproachAttempted=false;gardenTendStarted=gardenTendTravelSent=false;gardenTendDeadline=now.AddMinutes(10);gardenAdventureNext=now.AddSeconds(3);return;
+            }
+            if(gardenTendTravelSent&&!gardenPlotApproaching){
+                var pending=now<goSeeNativeUntil||LifestreamBusy()||goSeeHomeTrip!=null||goSeeFriendTrip!=null||VisibleFollowAddon("SelectYesno")||VisibleFollowAddon("TeleportHousingFriend");
+                if(!gardenArrival.Ready(pending,Objects.LocalPlayer!.Position,now)){gardenTendStatus="Waiting for teleport and travel to finish · "+sourcePlan.HouseName;return;}
             }
             var atDestination=atOutdoorEstate&&SharedGardenLocation.Match(currentAddress,[sourcePlan])==sourcePlan.HouseId;
             if(gardenPlotApproaching){
@@ -169,7 +176,7 @@ public sealed partial class Plugin
                 }
             }
             if(!atDestination){
-                if(!gardenTendTravelSent){if(LifestreamBusy())throw new InvalidOperationException("Another Lifestream journey is active.");EnsureBidWorlds();var world=bidWorlds!.FirstOrDefault(w=>w.Name==sourcePlan.World);if(world.Id==0)throw new InvalidOperationException("Destination world unavailable.");GoSeeBid(world.Id,sourcePlan.District,sourcePlan.Ward,sourcePlan.Plot);gardenTendTravelSent=true;gardenTendStatus="Travelling to "+sourcePlan.HouseName;}
+                if(!gardenTendTravelSent){if(LifestreamBusy())throw new InvalidOperationException("Another Lifestream journey is active.");EnsureBidWorlds();var world=bidWorlds!.FirstOrDefault(w=>w.Name==sourcePlan.World);if(world.Id==0)throw new InvalidOperationException("Destination world unavailable.");gardenArrival.Reset();GoSeeBid(world.Id,sourcePlan.District,sourcePlan.Ward,sourcePlan.Plot);gardenTendTravelSent=true;gardenTendStatus="Travelling to "+sourcePlan.HouseName;}
                 else if(!LifestreamBusy()&&goSeeHomeTrip==null&&goSeeFriendTrip==null)TryApproachGardenPlot(sourcePlan,now);
                 return;
             }

@@ -96,12 +96,18 @@ internal static class GardenCare312Tests
         Check(GardenAutoPlant.PrepareRouteBeds(cleared with{Beds=[cleared.Beds[0] with{ObservedAt=null},cleared.Beds[1]]},definition,now,true,true).Action==GardenCareAction.Inspect,"Unobserved empty beds need inspection");
         var single=definition with{Steps=[definition.Steps[0]]};
         Check(GardenAutoPlant.PrepareRouteBeds(matureBatch,single,now,true,true).Beds.SequenceEqual([1]),"Preparation never harvests beds outside incoming layout");
-        var approach=GardenPlotApproachPolicy.Path(new(0,0,0),new(0,0,0),new(10,0,10),0);
-        Check(approach.SequenceEqual(new[]{new System.Numerics.Vector3(0,0,3)}),"Entrance step follows arrival facing, never diagonally toward the garden");
-        Check(GardenPlotApproachPolicy.Path(new(0,0,0),new(0,0,0),new(-5,0,0),0).SequenceEqual(approach),"Changing bed position cannot steer through a fence");
-        try{GardenPlotApproachPolicy.Path(new(0,0,-16),new(0,0,0),null,0);throw new Exception("Distant entrance accepted");}catch(InvalidOperationException){}
-        try{GardenPlotApproachPolicy.Path(new(float.NaN,0,0),new(0,0,0),null,0);throw new Exception("Invalid coordinates accepted");}catch(InvalidOperationException){}
-        Check(GardenPlotApproachPolicy.Path(new(2,0,-4),new(0,0,0),new(10,0,10),0).SequenceEqual(new[]{new System.Numerics.Vector3(2,0,-1)}),"Teleport arrival walks forward from current position, never toward gate or door");
+        var approach=GardenPlotApproachPolicy.Path(new(0,0,0),new(0,0,0),new(0,0,10));
+        Check(approach.SequenceEqual(new[]{new System.Numerics.Vector3(0,0,3)}),"Entrance step goes three metres toward door, not all the way to it");
+        Check(GardenPlotApproachPolicy.Path(new(0,0,0),new(0,0,0),new(-10,0,0))[0].X==-3,"Door direction replaces stale character facing");
+        try{GardenPlotApproachPolicy.Path(new(0,0,-16),new(0,0,0),new(0,0,10));throw new Exception("Distant entrance accepted");}catch(InvalidOperationException){}
+        var arrival=new GardenArrivalGate();
+        Check(!arrival.Ready(true,new(0,0,0),now),"Pending native teleport blocks movement even when Lifestream idle");
+        Check(!arrival.Ready(false,new(0,0,0),now.AddSeconds(1)),"Idle gap does not immediately start walking");
+        Check(!arrival.Ready(true,new(0,0,0),now.AddSeconds(2)),"Casting or loading resets settled arrival");
+        Check(!arrival.Ready(false,new(50,0,0),now.AddSeconds(8)),"New arrival position starts settling");
+        Check(!arrival.Ready(false,new(51,0,0),now.AddSeconds(10)),"Final Lifestream movement resets settling");
+        Check(!arrival.Ready(false,new(51,0,0),now.AddSeconds(12)),"Arrival waits full three seconds");
+        Check(arrival.Ready(false,new(51,0,0),now.AddSeconds(13)),"Stationary arrival releases approach");
         var progress=new GardenWalkProgress();progress.Reset(new(0,0,0),now);
         Check(!progress.Blocked(new(2,0,0),now.AddSeconds(2)),"Walking advances progress checkpoint");
         Check(!progress.Blocked(new(2,0,0),now.AddSeconds(4)),"Brief pause tolerated");

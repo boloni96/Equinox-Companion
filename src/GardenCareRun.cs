@@ -132,16 +132,14 @@ public static class GardenAutoPlant
 public static class GardenPlotApproachPolicy
 {
     private static bool Finite(Vector3 p)=>float.IsFinite(p.X)&&float.IsFinite(p.Y)&&float.IsFinite(p.Z);
-    public static Vector3[] Path(Vector3 position,Vector3 entrance,Vector3? garden,float rotation)
+    public static Vector3[] Path(Vector3 position,Vector3 entrance,Vector3 door)
     {
-        if(!Finite(position)||!Finite(entrance)||!float.IsFinite(rotation)||Vector3.Distance(position,entrance)>15f)
-            throw new InvalidOperationException("Too far from the destination plot entrance. Move near the gate, face into the plot and restart.");
-        // Bed coordinates do not describe a clear route through the gate.
-        var inward=new Vector3(MathF.Sin(rotation),0,MathF.Cos(rotation));
-        inward.Y=0;
-        if(inward.LengthSquared()<.01f)throw new InvalidOperationException("Cannot identify a short approach into this plot.");
-        var step=position+Vector3.Normalize(inward)*3f;
-        return [step];
+        if(!Finite(position)||!Finite(entrance)||!Finite(door)||Vector3.Distance(position,entrance)>15f||Vector3.Distance(door,entrance)>30f)
+            throw new InvalidOperationException("Cannot verify the house entrance. Move inside the destination plot and restart.");
+        var inward=door-position;inward.Y=0;
+        var distance=inward.Length();
+        if(distance<3f)throw new InvalidOperationException("Too close to the house door for an entrance step. Move inside the yard and restart.");
+        return [position+inward/distance*Math.Min(3f,distance-2f)];
     }
 }
 
@@ -176,5 +174,18 @@ public sealed class GardenWalkRecovery
         Deadline??=now.AddSeconds(30);
         var offset=side*(attempts==0?.8f:attempts%2==1?-1.6f:1.6f);attempts++;
         return [current+offset,destination];
+    }
+}
+
+public sealed class GardenArrivalGate
+{
+    private Vector3 position;
+    private DateTimeOffset? quietSince;
+    public void Reset(){quietSince=null;}
+    public bool Ready(bool travelPending,Vector3 current,DateTimeOffset now)
+    {
+        if(travelPending||!float.IsFinite(current.X)||!float.IsFinite(current.Y)||!float.IsFinite(current.Z)){Reset();return false;}
+        if(quietSince==null||Vector3.Distance(current,position)>.15f){position=current;quietSince=now;return false;}
+        return now-quietSince.Value>=TimeSpan.FromSeconds(3);
     }
 }
