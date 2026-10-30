@@ -79,6 +79,13 @@ public sealed partial class Plugin
             foreach(var e in missing){var old=marketShoppingEntries.FirstOrDefault(x=>x.Request.Name.Equals(e.Name,StringComparison.OrdinalIgnoreCase));if(old==null)marketShoppingEntries.Add(new(new(e.Name,e.Quantity)));else old.Request=old.Request with{Quantity=Math.Max(old.Request.Quantity,e.Quantity)};}
             SaveMarketShopping();OpenMarketSearch("");marketShoppingMode=true;ResetMarketShoppingResults();
         }
+        if(ImGui.Button("Missing → delivery draft")){
+            RefreshGardenSupplyCounts();var sheet=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>();
+            var missing=gardenSupplyItems.Select(e=>e with{Quantity=Math.Max(0,e.Quantity-gardenSupplyBags.GetValueOrDefault(e.ItemId)-gardenSupplyRetainers.GetValueOrDefault(e.ItemId))}).Where(e=>e.Quantity>0).ToArray();
+            var tradable=missing.Where(e=>sheet.GetRowOrDefault(e.ItemId) is {} item&&!item.IsUntradable).ToArray();
+            if(tradable.Length==0)gardenSupplyError="No missing tradable supplies to request. Prepare your recorded stock in Organizer first.";
+            else{deliveryRecipient=CurrentSharedCharacter()?.Id??"";deliverySource=deliveryIntermediary="";deliveryItemsText=string.Join("\n",tradable.Select(e=>$"{e.Quantity}x {e.Name}"));deliveryOpenCreate=true;deliveryNotice="Choose the supplier and review quantities. Both clients must explicitly activate the shared delivery.";OpenItemDelivery();}
+        }
         ImGui.EndDisabled();ImGui.TextDisabled("Review quantities, then start withdrawal yourself. Buying is never automatic.");
     }
 }

@@ -25,6 +25,13 @@ internal static class GardenCare312Tests
         Check(GardenAutoPlant.Next(replace with{Beds=[starter with{ActualCrop="Empty"},beds[1] with{Status="confirmed"}]})==(1,GardenCareAction.Plant),"Removal is followed by planting");
         try{GardenAutoPlant.Next(replace with{Beds=[starter with{ActualSoil="Grade 3 Thanalan Topsoil"},beds[1] with{Status="confirmed"}]});throw new Exception("Removed unrelated crop");}catch(InvalidOperationException){}
         Check(!GardenAutoPlant.MatchesConfirmation(GardenCareAction.RemoveStarter,"Log out?"),"Unrelated confirmation rejected");
+        var empty=plan with{Beds=Enumerable.Range(1,8).Select(n=>Bed(n,"planned",false) with{ActualCrop="Empty",ActualSoil="",Planted=null}).ToArray()};
+        var favourite=new GardenFavourite("saved-cross","sir","Sir","My saved cross","Curiel Root","Mirror Apple","Krakka Root",["Curiel Root"]);
+        var saved=GardenPlanEditing.Build(favourite,empty);
+        var applied=GardenPlanEditing.WithDefinition(empty,saved,now);
+        Check(saved.Steps.Length==8&&saved.Steps[0].ReplantOrder==9&&saved.Steps[0].StarterSoil=="Potting Soil","Existing favourite preserves the temporary starter and replacement");
+        Check(saved.Steps.All(b=>b.Soil=="Grade 3 Thanalan Topsoil")&&saved.Steps[1].Crop=="Krakka Root","Favourite retains exact cross soil and alternating seeds");
+        Check(GardenAutoPlant.Next(applied)==(1,GardenCareAction.Plant),"Auto plant accepts an existing favourite applied to an empty batch");
         var port=new Port();var run=new GardenCareRun(port);run.Start([1,2],GardenCareAction.Tend,now);
         run.Tick(now);run.Tick(now.AddSeconds(1));run.Tick(now.AddSeconds(2));
         Check(run.Completed==0&&port.Acts==1,"Sending does not imply success");

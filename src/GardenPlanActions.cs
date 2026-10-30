@@ -61,6 +61,7 @@ public sealed partial class Plugin
         ImGui.SetNextItemOpen(false,ImGuiCond.Once);
         if(!ImGui.CollapsingHeader("Saved plans###saved-garden-plans"))return;
         if(config.SharedRoster?.ProtocolVersion<12){ImGui.TextWrapped("Upload Journal V7.11.51 and refresh to sync favourites.");return;}
+        ImGui.TextWrapped("Apply a favourite, then use the garden centre → Auto plant saved plan. The saved seed, soil and planting order are used; existing crops stay recorded.");
         var favourites=config.SharedRoster?.GardenFavourites??[];
         if(favourites.Length==0)ImGui.TextWrapped("Favourite crops and recipes on the website. They appear here after the Journal syncs.");
         foreach(var group in favourites.GroupBy(f=>f.PersonId))
@@ -103,3 +104,4 @@ public sealed partial class Plugin
         else if(gardenPlanEditStatus.Length>0)ImGui.TextWrapped(gardenPlanEditStatus);
     }
 }
+

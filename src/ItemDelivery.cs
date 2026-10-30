@@ -28,7 +28,7 @@ public sealed partial class Plugin
     private DeliverySession[] deliverySessions=[];
     private string deliverySelected="",deliverySource="",deliveryRecipient="",deliveryIntermediary="",deliveryPreferred="",deliveryMateria="",deliveryItemsText="",deliveryNotice="",deliveryAccount="",deliveryRun="",deliveryPairing="",deliveryTrip="",deliveryTrade="",deliveryResumeGarden="";
     private DateTimeOffset deliveryPoll,deliveryHeartbeat,deliveryActionDeadline,deliveryLastContact,deliveryTick;
-    private bool deliverySwitchRequested;
+    private bool deliverySwitchRequested,deliveryMustReconcile,deliveryOpenCreate;
     private void OpenItemDelivery(){if(deliveryWindow==null){deliveryWindow=new(this);windows.AddWindow(deliveryWindow);}deliveryWindow.IsOpen=true;deliveryPoll=default;}
     private (SharedPerson Person,SharedCharacter Character)[] DeliveryCharacters()=>(config.SharedRoster?.People??[]).SelectMany(p=>p.Characters.Select(c=>(p,c))).ToArray();
     private SharedCharacter? DeliveryCharacter(string id)=>DeliveryCharacters().FirstOrDefault(x=>x.Character.Id==id).Character;
@@ -41,13 +41,14 @@ public sealed partial class Plugin
     private void DeliveryHousePicker(string label,ref string id,bool materia)
     {
         var houses=DeliveryCharacters().SelectMany(x=>x.Character.Houses).DistinctBy(h=>h.Id).Where(h=>!materia||new[]{"Bismarck","Ravana","Sephirot","Sophia","Zurvan"}.Contains(h.World)).ToArray();
-        ImGui.SetNextItemWidth(-1);if(ImGui.BeginCombo(label,houses.FirstOrDefault(h=>h.Id==id)?.Name??"Choose fallback house")){
+        var selectedId=id;ImGui.SetNextItemWidth(-1);if(ImGui.BeginCombo(label,houses.FirstOrDefault(h=>h.Id==selectedId)?.Name??"Choose fallback house")){
             if(ImGui.Selectable("None",id.Length==0))id="";
             foreach(var h in houses)if(ImGui.Selectable($"{h.Name} · {h.World} · {h.District} W{h.Ward} P{h.Plot}##{h.Id}",id==h.Id))id=h.Id;ImGui.EndCombo();}
     }
     private void DrawItemDelivery()
     {
         if(!config.SyncEnabled||config.PairingKey.Length!=64){ImGui.TextWrapped("Pair both clients with the same Journal first.");return;}
+        if(deliveryOpenCreate){ImGui.SetNextItemOpen(true);deliveryOpenCreate=false;}
         if(ImGui.CollapsingHeader("Create delivery")){
             ImGui.BeginDisabled(deliveryRequest!=null||deliveryRun.Length>0);
             DeliveryCharacterPicker("Supplier",ref deliverySource);DeliveryCharacterPicker("Recipient",ref deliveryRecipient);DeliveryCharacterPicker("Intermediary (same-account deliveries)",ref deliveryIntermediary);
@@ -77,7 +78,7 @@ public sealed partial class Plugin
                 var c=CurrentSharedCharacter();if(c==null||CurrentDeliveryAccount()!=deliveryAccount)deliveryNotice="Log in on the selected account first; no account number is guessed.";
                 else if(!config.EnableGilTrader)deliveryNotice="Enable Gil & Item Trader before starting delivery.";
                 else if(TraderRunning||retrievalRun.Running||organizeRunning||chestRunning||followSession.Armed)deliveryNotice="Finish or stop other trading, storage and follow actions first.";
-                else {deliveryRun=session.Id;deliveryPairing=config.PairingKey;deliveryTrip=deliveryTrade="";deliverySwitchRequested=false;deliveryActionDeadline=DateTimeOffset.UtcNow.AddMinutes(15);if(gardenTendRoute!=null){deliveryResumeGarden=gardenTendBoard;StopTendAdventure("Paused for item delivery.");}DeliveryPost(new{type="join",id=session.Id,revision=session.Revision,clientId=deliveryClientId,accountKey=deliveryAccount,fingerprint=RememberLoadedLoginAccount(),characterId=c.Id,contentId=c.ContentId});}
+                else {deliveryRun=session.Id;deliveryPairing=config.PairingKey;deliveryTrip=deliveryTrade="";deliverySwitchRequested=false;deliveryMustReconcile=false;deliveryActionDeadline=DateTimeOffset.UtcNow.AddMinutes(15);if(gardenTendRoute!=null){deliveryResumeGarden=gardenTendBoard;StopTendAdventure("Paused for item delivery.");}DeliveryPost(new{type="join",id=session.Id,revision=session.Revision,clientId=deliveryClientId,accountKey=deliveryAccount,fingerprint=RememberLoadedLoginAccount(),characterId=c.Id,contentId=c.ContentId});}
             }
             ImGui.SameLine();if(ImGui.Button("Stop both clients"))DeliveryPost(new{type="stop",id=session.Id,revision=session.Revision,clientId=deliveryClientId});
             if(session.Paused&&ImGui.Button("Reconcile bags & resume")){try{deliverySwitchRequested=false;deliveryActionDeadline=DateTimeOffset.UtcNow.AddMinutes(15);DeliveryPost(new{type="reconcile",id=session.Id,revision=session.Revision,clientId=deliveryClientId,legId=session.Plan.Legs[session.Index].Id,counts=DeliveryCounts(session.Plan.Legs[session.Index])});}catch(Exception e){deliveryNotice=e.Message;}}
@@ -104,14 +105,20 @@ public sealed partial class Plugin
         if(deliveryRequest?.IsCompleted==true){var reply=deliveryRequest.IsCompletedSuccessfully?deliveryRequest.Result:new DeliveryReply(null,null,"Delivery request failed.");deliveryRequest=null;
             if(reply.Error.Length==0)deliveryLastContact=now;if(reply.Sessions!=null)deliverySessions=reply.Sessions;if(reply.Session!=null){deliverySessions=deliverySessions.Where(s=>s.Id!=reply.Session.Id).Append(reply.Session).ToArray();deliverySelected=reply.Session.Id;}if(reply.Error.Length>0)deliveryNotice=reply.Error;}
         if(deliveryRun.Length>0&&config.PairingKey!=deliveryPairing){if(itemTrade.Running)StopItemTrade("Pairing changed.");deliveryRun="";deliveryNotice="Delivery stopped: pairing changed.";return;}
-        if(deliveryRun.Length>0&&deliveryLastContact!=default&&now-deliveryLastContact>TimeSpan.FromSeconds(15)){if(itemTrade.Running)StopItemTrade("Delivery connection lost.");if(deliveryTrip.Length>0){try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}goSeeHomeTrip=null;deliveryTrip="";}deliveryNotice="Connection lost · delivery paused until both clients reconcile.";}
+        if(deliveryRun.Length>0&&deliveryLastContact!=default&&now-deliveryLastContact>TimeSpan.FromSeconds(15)){deliveryMustReconcile=true;CancelAssignedLogin("Delivery connection lost.");if(itemTrade.Running)StopItemTrade("Delivery connection lost.");if(deliveryTrip.Length>0){try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}goSeeHomeTrip=null;deliveryTrip="";}deliveryNotice="Connection lost · delivery paused until both clients reconcile.";}
         if(deliveryRequest!=null||config.PairingKey.Length!=64)return;
         var session=deliverySessions.FirstOrDefault(s=>s.Id==deliveryRun);
+        if(session!=null&&!session.Members.ContainsKey(deliveryClientId)){
+            CancelAssignedLogin("Delivery client reservation is no longer active.");if(itemTrade.Running)StopItemTrade("Delivery client reservation is no longer active.");
+            if(deliveryTrip.Length>0){try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}goSeeHomeTrip=null;}
+            deliveryRun=deliveryTrip=deliveryTrade="";deliveryNotice="Join this delivery again to verify this client's account.";return;
+        }
         if(session!=null&&session.Members.TryGetValue(deliveryClientId,out var member)){
             if(session.Status is "stopped" or "complete"){CancelAssignedLogin("Delivery ended.");
                 if(itemTrade.Running)StopItemTrade("Delivery ended.");RequestStorageRefresh();deliveryRun=deliveryTrip=deliveryTrade="";
                 if(session.Status=="complete"&&deliveryResumeGarden.Length>0){var board=adventureBoards.FirstOrDefault(b=>b.Id==deliveryResumeGarden);deliveryResumeGarden="";if(board!=null)StartTendAdventure(board);}return;
             }
+            if(deliveryMustReconcile){if(session.Status=="paused")deliveryMustReconcile=false;else{PauseItemDelivery(session,"Connection was lost. Reconcile both inventories before resuming.");return;}}
             if(now>=deliveryHeartbeat){var c=CurrentSharedCharacter();DeliveryPost(new{type="heartbeat",id=session.Id,revision=session.Revision,clientId=deliveryClientId,characterId=c?.Id??"",contentId=c?.ContentId??""});deliveryHeartbeat=now.AddSeconds(4);return;}
             if(session.Status=="paused"){CancelAssignedLogin("Delivery paused.");if(itemTrade.Running)StopItemTrade("Delivery partner paused or disconnected.");if(deliveryTrip.Length>0){try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}goSeeHomeTrip=null;}deliveryTrip=deliveryTrade="";return;}
             if(session.Status is "ready" or "trading"){
