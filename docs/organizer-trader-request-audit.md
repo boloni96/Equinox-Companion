@@ -2,6 +2,7 @@
 This is an implementation audit, not a claim that every path has been tested in game.
 
 ## Assignment coverage and compact review — 0.5.1.308
+- Fewer item moves compares zero-move shared homes before proposing consolidation; other priorities may gather fitting categories into fewer destinations.
 - Clearing all assignments no longer leaves large categories without suggested homes: categories that cannot fit one destination receive shared homes on current holders, requiring no extra slots for those holdings.
 - Prefer five spare normal slots, then allow otherwise-valid tighter fits; never count crystals against the 175 normal slots.
 - Crystals use separate per-item capacity (9999); quantities too large for one home can remain across several assigned retainers.

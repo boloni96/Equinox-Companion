@@ -14,12 +14,17 @@ internal static class AssignmentHomes308Tests
         Check("cleared ten full retainers covered: "+style,result.Remaining.Length==0&&check.Missing.Length==0&&check.MisplacedSlots==0&&result.Suggestions.Length==10);
         Check("shared full homes require no extra slots",result.Suggestions.All(s=>s.AdditionalSlots==0&&s.MovedStacks==0));
     }
+    var scattered=new Dictionary<ulong,ChestStack[]>{[1]=[new(10000,0,100,1,false,1)],[2]=[new(10000,0,101,1,false,1)],[3]=[]};
+    var keep=AssignmentRecommendations.Build([1,2,3],scattered,[],[],id=>1,AssignmentRecommendationStyle.FewerMoves);
+    var gather=AssignmentRecommendations.Build([1,2,3],scattered,[],[],id=>1,AssignmentRecommendationStyle.FewerHomes);
+    Check("fewer moves compares shared zero-move homes",keep.Suggestions.Length==2&&keep.Suggestions.All(s=>s.MovedStacks==0));
+    Check("fewer homes can collect a fitting category",gather.Suggestions.Length==1&&gather.Remaining.Length==0);
     var crystals=new Dictionary<ulong,ChestStack[]>{[1]=[..Full(100),new(12001,0,2,8000,false,9999)],[2]=[..Full(101),new(12001,0,2,8000,false,9999)]};
     var proposal=AssignmentRecommendations.Build([1,2],crystals,[],[],id=>id==2?59u:1u);
     Check("crystals above one home capacity get shared homes",proposal.Suggestions.Count(s=>s.Category==59)==2&&proposal.Remaining.Length==0);
     Check("crystals never consume normal slots",proposal.Suggestions.Where(s=>s.Category==59).All(s=>s.AdditionalSlots==0));
     crystals[1]=[..Full(100),new(12001,0,2,4000,false,9999)];crystals[2]=[..Full(101),new(12001,0,2,4000,false,9999)];
-    proposal=AssignmentRecommendations.Build([1,2],crystals,[],[],id=>id==2?59u:1u);
+    proposal=AssignmentRecommendations.Build([1,2],crystals,[],[],id=>id==2?59u:1u,AssignmentRecommendationStyle.FewerHomes);
     Check("crystals can consolidate despite full normal inventory",proposal.Suggestions.Count(s=>s.Category==59)==1&&proposal.Remaining.Length==0);
     var unknown=new Dictionary<ulong,ChestStack[]>{[1]=[new(10000,0,999,1,false,1)],[2]=[new(10000,0,998,1,false,1)]};
     proposal=AssignmentRecommendations.Build([1,2],unknown,[],[],id=>0);

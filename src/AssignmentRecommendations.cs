@@ -93,7 +93,8 @@ public static class AssignmentRecommendations
                 _=>choices.OrderBy(x=>x.Moved).ThenBy(x=>x.Added).ThenByDescending(x=>x.Already).ThenByDescending(x=>Free(x.Stock))
             };
             var best=ranked.FirstOrDefault();
-            if(best.Stock==null){
+            if(best.Stock==null||style==AssignmentRecommendationStyle.FewerMoves&&best.Moved>0){
+                // FewerMoves compares the zero-move shared-home option as well.
                 // A shared category home can retain stock already there with no move
                 // or extra slot. This also handles crystal quantities >9999 across
                 // several retainers and full normal inventories.
