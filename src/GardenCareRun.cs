@@ -155,3 +155,21 @@ public sealed class GardenWalkProgress
         return now-progressed>=TimeSpan.FromSeconds(3);
     }
 }
+
+public sealed class GardenWalkRecovery
+{
+    private Vector3 destination,side;
+    private int attempts;
+    public void Reset(Vector3 start,Vector3 target)
+    {
+        destination=target;attempts=0;
+        var forward=target-start;forward.Y=0;
+        side=forward.LengthSquared()>.01f?Vector3.Normalize(new Vector3(-forward.Z,0,forward.X)):Vector3.Zero;
+    }
+    public Vector3[]? Next(Vector3 current)
+    {
+        if(attempts>=2||side==Vector3.Zero||!float.IsFinite(current.X)||!float.IsFinite(current.Y)||!float.IsFinite(current.Z)||Vector3.Distance(current,destination)>35)return null;
+        var offset=side*(attempts++==0?.8f:-1.6f);
+        return [current+offset,destination];
+    }
+}

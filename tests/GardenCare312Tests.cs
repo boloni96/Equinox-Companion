@@ -108,6 +108,14 @@ internal static class GardenCare312Tests
         Check(progress.Blocked(new(2,0,0),now.AddSeconds(5)),"Wall after initial movement detected in three seconds");
         progress.Reset(new(2,0,0),now.AddSeconds(6));
         Check(!progress.Blocked(new(3,0,0),now.AddSeconds(8)),"New walk resets stalled state");
+        var recovery=new GardenWalkRecovery();recovery.Reset(new(0,0,0),new(0,0,3));
+        var left=recovery.Next(new(0,0,1))!;
+        Check(left.Length==2&&left[0]==new System.Numerics.Vector3(-.8f,0,1)&&left[1]==new System.Numerics.Vector3(0,0,3),"First recovery steps left and retains destination");
+        var right=recovery.Next(left[0])!;
+        Check(Math.Abs(right[0].X-.8f)<.001f&&right[1]==left[1],"Second recovery tries other side without changing destination");
+        Check(recovery.Next(right[0])==null,"Recovery stops after two attempts");
+        recovery.Reset(new(0,0,0),new(0,0,3));
+        Check(recovery.Next(new(float.NaN,0,0))==null,"Invalid recovery position rejected");
         var planting=new HarvestPort(GardenCareAction.Plant);var plantingRun=new GardenCareRun(planting);plantingRun.Start([1,2,3],GardenCareAction.Plant,now);
         for(int i=0;i<12;i++)plantingRun.Tick(now.AddSeconds(i));
         Check(plantingRun.Completed==3&&!plantingRun.Running&&planting.Actions==3,"Three planting receipts survive game-cleared targets and send each action once");

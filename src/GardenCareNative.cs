@@ -191,6 +191,7 @@ public sealed partial class Plugin
     {
         private readonly bool postPlantTend;private readonly Plugin p;private readonly SharedGardenPlan original;private readonly ulong owner;private readonly uint world;private Vector3 origin;private bool walking;private int walkedBed;
         private readonly GardenWalkProgress walkProgress=new();
+        private readonly GardenWalkRecovery walkRecovery=new();
         private ulong targetId;private int openedBed;private DateTimeOffset opened,actionAt,next;private bool menuSent,itemOpened,itemSent;private InventoryType fertilizerBag;private int fertilizerSlot;private uint fertilizerId;private bool confirmationSent;private uint plantSeed,plantSoil;private GardenCareAction? issuedAction;
         public GardenCarePort(Plugin plugin,SharedGardenPlan plan,bool postPlantTend=false){this.postPlantTend=postPlantTend;p=plugin;original=plan;owner=Player.ContentId;world=Player.CurrentWorld.RowId;origin=Objects.LocalPlayer?.Position??default;}
         private SharedGardenPlan Current(){var source=p.GardenPlanSources().FirstOrDefault(x=>x.HouseId==original.HouseId&&x.Batch==original.Batch)??throw new InvalidOperationException("Garden plan is no longer available.");if(source.At!=original.At)throw new InvalidOperationException("Garden plan changed during the run.");return p.EffectiveGardenPlan(source);}
@@ -203,7 +204,13 @@ public sealed partial class Plugin
         public bool Open(int bed)
         {
             var now=DateTimeOffset.UtcNow;
-            if(walking){if(walkProgress.Blocked(Objects.LocalPlayer!.Position,now))throw new InvalidOperationException("Garden walk is blocked. Clear the path or move closer, then restart.");if(p.LifestreamBusy())return false;walking=false;origin=Objects.LocalPlayer!.Position;}
+            if(walking){if(walkProgress.Blocked(Objects.LocalPlayer!.Position,now)){
+                var recovery=walkRecovery.Next(Objects.LocalPlayer.Position);
+                if(recovery==null)throw new InvalidOperationException("Garden walk is blocked after two sidesteps. Clear the path or move closer, then restart.");
+                Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();
+                Pi.GetIpcSubscriber<List<Vector3>,bool?,float?,float?,object>("Lifestream.MoveEx").InvokeAction(recovery.ToList(),true,.3f,.3f);
+                walkProgress.Reset(Objects.LocalPlayer.Position,now);return false;
+            }if(p.LifestreamBusy())return false;walking=false;origin=Objects.LocalPlayer!.Position;}
             if(openedBed!=bed){
                 if(SellerAddonPresentForGarden())return false;
                 var plan=Current();var resolver=p.GardenResolver();var found=Objects.Where(o=>o.IsTargetable&&o.BaseId==2003757&&o.ObjectKind==ObjectKind.EventObj&&o.Address!=0&&Vector3.Distance(o.Position,Objects.LocalPlayer!.Position)<=(p.config.GardenCareWalk?30f:4.5f)).Where(o=>{
@@ -219,7 +226,7 @@ public sealed partial class Plugin
                     if(p.LifestreamBusy())throw new InvalidOperationException("Another Lifestream journey is active.");
                     var offset=Objects.LocalPlayer.Position-found[0].Position;offset.Y=0;if(offset.LengthSquared()<.01f)throw new InvalidOperationException("Cannot choose a garden approach point.");
                     var destination=found[0].Position+Vector3.Normalize(offset)*2.2f;
-                    Pi.GetIpcSubscriber<List<Vector3>,bool?,float?,float?,object>("Lifestream.MoveEx").InvokeAction([destination],true,.3f,.3f);walking=true;walkProgress.Reset(Objects.LocalPlayer.Position,now);walkedBed=bed;return false;
+                    Pi.GetIpcSubscriber<List<Vector3>,bool?,float?,float?,object>("Lifestream.MoveEx").InvokeAction([destination],true,.3f,.3f);walking=true;walkRecovery.Reset(Objects.LocalPlayer.Position,destination);walkProgress.Reset(Objects.LocalPlayer.Position,now);walkedBed=bed;return false;
                 }
                 openedBed=bed;targetId=found[0].GameObjectId;opened=now;menuSent=itemOpened=itemSent=confirmationSent=false;issuedAction=null;actionAt=default;
                 Targets.Target=found[0];TargetSystem.Instance()->InteractWithObject((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)found[0].Address,false);return false;
