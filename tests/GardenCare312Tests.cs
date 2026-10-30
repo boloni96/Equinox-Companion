@@ -100,6 +100,7 @@ internal static class GardenCare312Tests
         Check(approach.SequenceEqual(new[]{new System.Numerics.Vector3(0,0,3)}),"Entrance step goes three metres toward door, not all the way to it");
         Check(GardenPlotApproachPolicy.Path(new(0,0,0),new(0,0,0),new(-10,0,0))[0].X==-3,"Door direction replaces stale character facing");
         try{GardenPlotApproachPolicy.Path(new(0,0,-16),new(0,0,0),new(0,0,10));throw new Exception("Distant entrance accepted");}catch(InvalidOperationException){}
+        Check(GardenPlotApproachPolicy.Path(new(0,0,0),new(0,0,0),null,MathF.PI/2)[0].X>2.99f,"Missing or ambiguous door uses settled arrival facing");
         var arrival=new GardenArrivalGate();
         Check(!arrival.Ready(true,new(0,0,0),now),"Pending native teleport blocks movement even when Lifestream idle");
         Check(!arrival.Ready(false,new(0,0,0),now.AddSeconds(1)),"Idle gap does not immediately start walking");

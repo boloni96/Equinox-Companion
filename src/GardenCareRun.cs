@@ -132,11 +132,11 @@ public static class GardenAutoPlant
 public static class GardenPlotApproachPolicy
 {
     private static bool Finite(Vector3 p)=>float.IsFinite(p.X)&&float.IsFinite(p.Y)&&float.IsFinite(p.Z);
-    public static Vector3[] Path(Vector3 position,Vector3 entrance,Vector3 door)
+    public static Vector3[] Path(Vector3 position,Vector3 entrance,Vector3? door,float rotation=0)
     {
-        if(!Finite(position)||!Finite(entrance)||!Finite(door)||Vector3.Distance(position,entrance)>15f||Vector3.Distance(door,entrance)>30f)
+        if(!Finite(position)||!Finite(entrance)||!float.IsFinite(rotation)||Vector3.Distance(position,entrance)>15f)
             throw new InvalidOperationException("Cannot verify the house entrance. Move inside the destination plot and restart.");
-        var inward=door-position;inward.Y=0;
+        var inward=door is {} point&&Finite(point)&&Vector3.Distance(point,entrance)<=30f?point-position:new Vector3(MathF.Sin(rotation),0,MathF.Cos(rotation))*10f;inward.Y=0;
         var distance=inward.Length();
         if(distance<3f)throw new InvalidOperationException("Too close to the house door for an entrance step. Move inside the yard and restart.");
         return [position+inward/distance*Math.Min(3f,distance-2f)];

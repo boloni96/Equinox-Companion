@@ -67,11 +67,11 @@ public sealed partial class Plugin
         var entrance=Pi.GetIpcSubscriber<uint,int,Vector3?>("Lifestream.GetPlotEntrance").InvokeFunc(Client.TerritoryType,plan.Plot-1)
             ??throw new InvalidOperationException("Lifestream has no entrance position for this plot. Move onto the plot first.");
         var names=new[]{DataManager.GetExcelSheet<Lumina.Excel.Sheets.EObjName>().GetRow(2002737).Singular.ToString(),DataManager.GetExcelSheet<Lumina.Excel.Sheets.EObjName>().GetRow(2002739).Singular.ToString()};
-        var doors=Objects.Where(o=>o.IsTargetable&&names.Contains(o.Name.ToString())&&Vector3.Distance(o.Position,entrance)<30f)
+        var doors=Objects.Where(o=>names.Contains(o.Name.ToString())&&Vector3.Distance(o.Position,entrance)<30f)
             .OrderBy(o=>Vector3.Distance(o.Position,entrance)).Take(2).ToArray();
-        if(doors.Length==0||doors.Length>1&&Vector3.Distance(doors[1].Position,entrance)-Vector3.Distance(doors[0].Position,entrance)<2f)
-            throw new InvalidOperationException("Cannot identify this plot's house entrance reliably. Move inside the yard and restart.");
-        var path=GardenPlotApproachPolicy.Path(player.Position,entrance,doors[0].Position);
+        Vector3? door=doors.Length>0&&(doors.Length==1||Vector3.Distance(doors[1].Position,entrance)-Vector3.Distance(doors[0].Position,entrance)>=2f)?doors[0].Position:null;
+        // Arrival was settled before this call: this is the post-teleport facing, never the departure facing.
+        var path=GardenPlotApproachPolicy.Path(player.Position,entrance,door,player.Rotation);
         Pi.GetIpcSubscriber<List<Vector3>,bool?,float?,float?,object>("Lifestream.MoveEx").InvokeAction(path.ToList(),true,.3f,.3f);
         gardenPlotApproaching=gardenPlotApproachAttempted=true;gardenPlotApproachAt=now;gardenPlotProgress.Reset(player.Position,now);gardenPlotRecovery.Reset(player.Position,path[^1]);
         gardenTendStatus="Walking through the plot entrance · "+plan.HouseName;
