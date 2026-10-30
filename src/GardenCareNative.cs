@@ -123,9 +123,12 @@ public sealed partial class Plugin
         var walk=config.GardenCareWalk;if(ImGui.Checkbox("Walk to mapped beds (Lifestream)",ref walk)){config.GardenCareWalk=walk;SaveConfiguration();}
         if(ImGui.IsItemHovered())ImGui.SetTooltip("Short direct approaches inside this plot, up to 30 yalms. Lifestream movement does not find a route around furniture; blocked approaches stop on timeout.");
         ImGui.BeginDisabled(gardenHousePlant!=null||gardenAutoPlantPlan!=null||gardenHouseHarvest!=null||gardenTendRoute!=null||gardenCareRun?.Running==true||!atOutdoorEstate||SharedGardenLocation.Match(currentAddress,[plan])!=plan.HouseId);
-        ImGui.TextDisabled("Apply actions to");
-        if(ImGui.RadioButton("This batch",!gardenCareWholeHouse))gardenCareWholeHouse=false;
-        ImGui.SameLine();if(ImGui.RadioButton("Whole house",gardenCareWholeHouse))gardenCareWholeHouse=true;
+        var multipleBatches=plan.Capacity>1||GardenPlanSources().Any(p=>p.HouseId==plan.HouseId&&p.Batch>1);
+        if(multipleBatches){
+            ImGui.TextDisabled("Apply actions to");
+            if(ImGui.RadioButton("This batch",!gardenCareWholeHouse))gardenCareWholeHouse=false;
+            ImGui.SameLine();if(ImGui.RadioButton("Whole house",gardenCareWholeHouse))gardenCareWholeHouse=true;
+        }else gardenCareWholeHouse=false;
         if(ImGui.BeginTable("GardenCareActions",2,ImGuiTableFlags.SizingStretchSame)){
             ImGui.TableNextRow();ImGui.TableNextColumn();
             if(ImGui.Button("Auto plant",new Vector2(-1,0))){
@@ -149,12 +152,12 @@ public sealed partial class Plugin
             ImGui.EndTable();
         }
         ImGui.Separator();
-        if(ImGui.TreeNode("Choose beds to harvest · all batches")){
+        if(ImGui.TreeNode(multipleBatches?"Choose beds to harvest · all batches":"Choose beds to harvest")){
             var housePlans=GardenPlanSources().Where(p=>p.HouseId==plan.HouseId).OrderBy(p=>p.Batch).Select(EffectiveGardenPlan).ToArray();
             if(ImGui.SmallButton("Select eligible")){foreach(var hp in housePlans)foreach(var bed in hp.Beds.Where(b=>GardenCarePolicy.Eligible(hp,b,GardenCareAction.Harvest,now)))gardenHarvestSelection.Add((hp.Batch,bed.Bed));}
             ImGui.SameLine();if(ImGui.SmallButton("Clear selected"))gardenHarvestSelection.Clear();
             ImGui.BeginChild("house-harvest-beds",new Vector2(0,Math.Min(320,ImGui.GetTextLineHeightWithSpacing()*15)),false);
-            foreach(var hp in housePlans){ImGui.PushID(hp.Batch);ImGui.TextUnformatted($"Batch {hp.Batch}");
+            foreach(var hp in housePlans){ImGui.PushID(hp.Batch);if(multipleBatches)ImGui.TextUnformatted($"Batch {hp.Batch}");
                 foreach(var bed in hp.Beds){var eligible=GardenCarePolicy.Eligible(hp,bed,GardenCareAction.Harvest,now);var key=(hp.Batch,bed.Bed);var pick=gardenHarvestSelection.Contains(key);
                     ImGui.BeginDisabled(!eligible);if(ImGui.Checkbox($"Bed {bed.Bed} · {bed.ActualCrop}",ref pick)){if(pick)gardenHarvestSelection.Add(key);else gardenHarvestSelection.Remove(key);}ImGui.EndDisabled();
                     if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))ImGui.SetTooltip(GardenCarePolicy.Protection(hp,bed) is {Length:>0} why?why:GardenCarePolicy.Certainty(bed));}
