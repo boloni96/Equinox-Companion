@@ -157,6 +157,7 @@ internal sealed record RetrievalSlot(uint ItemId,int Quantity,int Container,int 
 internal interface IRetrievalPort
 {
     bool ContextMatches {get;}
+    void Begin(IEnumerable<uint> items) {}
     bool Prepare();
     bool Select(ulong retainer);
     bool OpenInventory(ulong retainer);
@@ -175,13 +176,13 @@ internal sealed class RetrievalRun(IRetrievalPort port)
     internal string Status{get;private set;}="Ready";
     private HashSet<uint> optionalCategoryItems=[];private bool allAvailable;
     private ulong[] retainers=[];private int index,before,quantity,knownHolders;private RetrievalSlot? slot;private Dictionary<uint,int> targets=[];private DateTimeOffset deadline;
-    internal void Start(ulong[] ids,RetrievalEntry[] plan,bool subtractHeld,DateTimeOffset now,int preferredCount=-1,IEnumerable<uint>? categoryItems=null,bool allAvailable=false){if(Running)throw new InvalidOperationException("Retrieval already running.");if(ids.Length==0||plan.Length==0)throw new ArgumentException("Select items and open the retainer list first.");this.allAvailable=allAvailable;optionalCategoryItems=(categoryItems??[]).ToHashSet();retainers=ids;knownHolders=preferredCount<0?ids.Length:Math.Clamp(preferredCount,0,ids.Length);index=0;targets=plan.ToDictionary(e=>e.ItemId,e=>allAvailable?int.MaxValue:checked((subtractHeld?0:port.Held(e.ItemId))+e.Quantity));Transition(Phase.Prepare,now);}
+    internal void Start(ulong[] ids,RetrievalEntry[] plan,bool subtractHeld,DateTimeOffset now,int preferredCount=-1,IEnumerable<uint>? categoryItems=null,bool allAvailable=false){if(Running)throw new InvalidOperationException("Retrieval already running.");if(ids.Length==0||plan.Length==0)throw new ArgumentException("Select items and open the retainer list first.");port.Begin(plan.Select(e=>e.ItemId));this.allAvailable=allAvailable;optionalCategoryItems=(categoryItems??[]).ToHashSet();retainers=ids;knownHolders=preferredCount<0?ids.Length:Math.Clamp(preferredCount,0,ids.Length);index=0;targets=plan.ToDictionary(e=>e.ItemId,e=>allAvailable?int.MaxValue:checked((subtractHeld?0:port.Held(e.ItemId))+e.Quantity));Transition(Phase.Prepare,now);}
     internal void Stop(string reason){State=Phase.Idle;Status=reason;port.Release();}
     private void Transition(Phase phase,DateTimeOffset now){State=phase;deadline=now.AddSeconds(20);Status=index<knownHolders?phase+" · known holder "+(index+1)+"/"+knownHolders:phase+" · checking missing stock "+(index-knownHolders+1)+"/"+(retainers.Length-knownHolders);}
     internal void Tick(DateTimeOffset now){if(!Running)return;try{
         if(!port.ContextMatches){Stop("Stopped: character, world or bell changed.");return;}if(now>deadline){Stop("Stopped: "+State+" was not confirmed. Check the game window.");return;}
         var id=retainers[index];switch(State){
-        case Phase.Prepare:if(targets.All(x=>port.Held(x.Key)>=x.Value)){Stop("Complete · requested quantities are already in your bags.");return;}if(port.Prepare())Transition(Phase.Select,now);break;
+        case Phase.Prepare:if(targets.All(x=>port.Held(x.Key)>=x.Value)){Stop("Complete · requested quantities are already available.");return;}if(port.Prepare())Transition(Phase.Select,now);break;
         case Phase.Select:if(port.Select(id))Transition(Phase.Open,now);break;
         case Phase.Open:if(port.OpenInventory(id))Transition(Phase.Read,now);break;
         case Phase.Read:
@@ -189,7 +190,7 @@ internal sealed class RetrievalRun(IRetrievalPort port)
             if(slot is null){Transition(Phase.Close,now);break;}before=port.Held(slot.ItemId);quantity=Math.Min(slot.Quantity,targets[slot.ItemId]-before);Transition(Phase.Withdraw,now);break;
         case Phase.Withdraw:if(port.Withdraw(id,slot!,quantity))Transition(Phase.Confirm,now);break;
         case Phase.Confirm:if(port.Held(slot!.ItemId)>=before+quantity){Transition(Phase.Read,now);port.Confirmed(id,slot,quantity);}break;
-        case Phase.Close:if(port.Close(id)){if(targets.All(x=>port.Held(x.Key)>=x.Value)){Stop("Complete · requested quantities are in your bags.");return;}if(++index>=retainers.Length){Stop(allAvailable?"Complete · all available matching items withdrawn (subject to inventory capacity).":targets.Where(x=>!optionalCategoryItems.Contains(x.Key)).All(x=>port.Held(x.Key)>=x.Value)?"Complete · available category items withdrawn.":"Finished checking retainers · some requested items are still missing.");return;}Transition(Phase.Select,now);}break;
+        case Phase.Close:if(port.Close(id)){if(targets.All(x=>port.Held(x.Key)>=x.Value)){Stop("Complete · requested quantities received in bags / Armoury Chest.");return;}if(++index>=retainers.Length){Stop(allAvailable?"Complete · all available matching items withdrawn (subject to inventory capacity).":targets.Where(x=>!optionalCategoryItems.Contains(x.Key)).All(x=>port.Held(x.Key)>=x.Value)?"Complete · available category items withdrawn.":"Finished checking retainers · some requested items are still missing.");return;}Transition(Phase.Select,now);}break;
         }
     }catch(Exception e){Stop("Stopped: "+e.Message);}}
 }

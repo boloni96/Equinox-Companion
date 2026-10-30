@@ -26,6 +26,32 @@ public sealed partial class Plugin
         private readonly Plugin p;private readonly SellerPort navigation;
         internal readonly SellerAutoRetainerPause Pause=new(new SellerAutoRetainerPort());
         internal int TradeFilter;internal RetrievalQuality Quality;internal ulong Character;internal uint World;
+        private readonly WithdrawalArmouryReceipt armouryReceipt=new();
+        private static readonly InventoryType[] ArmouryDestinations=[
+            InventoryType.ArmoryMainHand,InventoryType.ArmoryOffHand,InventoryType.ArmoryHead,
+            InventoryType.ArmoryBody,InventoryType.ArmoryHands,InventoryType.ArmoryLegs,
+            InventoryType.ArmoryFeets,InventoryType.ArmoryEar,InventoryType.ArmoryNeck,
+            InventoryType.ArmoryWrist,InventoryType.ArmoryRings];
+        private int ArmouryHeld(uint item){
+            var m=InventoryManager.Instance();if(m==null)throw new InvalidOperationException("Player inventory unavailable.");
+            var count=0;
+            foreach(var type in ArmouryDestinations){
+                var c=m->GetInventoryContainer(type);
+                if(c==null||!c->IsLoaded||c->Items==null)throw new InvalidOperationException("Armoury Chest is not loaded; open it and retry withdrawal.");
+                for(var i=0;i<c->Size;i++){
+                    var slot=c->Items[i];
+                    if(slot.ItemId==item&&(TradeFilter==0||RetrievalAllowsTradeFilter(slot,TradeFilter))&&
+                        RetainerRetrieval.AllowsQuality((slot.Flags&InventoryItem.ItemFlags.HighQuality)!=0,Quality))
+                        count=checked(count+slot.Quantity);
+                }
+            }
+            return count;
+        }
+        public void Begin(IEnumerable<uint> items){
+            // Only gear can be redirected here. Material/crystal withdrawals keep their existing bag semantics.
+            var gear=items.Distinct().Where(id=>DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>().GetRowOrDefault(id) is {} row&&row.EquipSlotCategory.RowId>0);
+            armouryReceipt.Begin(gear.ToDictionary(id=>id,ArmouryHeld));
+        }
         private ulong inventoryRetainer;private DateTimeOffset inventoryReadyAt;
         private RetrievalSlot? pending;private int quantity;private bool contextSent,numericSent,prepared;private DateTimeOffset openedAt;
         internal RetrieverPort(Plugin plugin){p=plugin;navigation=new(plugin);}
@@ -81,7 +107,7 @@ public sealed partial class Plugin
             return list.ToArray();
         }
         public void Confirmed(ulong id,RetrievalSlot slot,int amount)=>p.ReportStorageTransfer("Withdrew",slot.ItemId,slot.Hq,amount,p.StorageRetainerName(id));
-        public int Held(uint item)=>p.RetrievalHeld(item,Quality,TradeFilter);
+        public int Held(uint item)=>armouryReceipt.Held(item,p.RetrievalHeld(item,Quality,TradeFilter),armouryReceipt.Tracks(item)?ArmouryHeld(item):0);
         public bool Withdraw(ulong id,RetrievalSlot slot,int amount)
         {
             if(!RetrieverActive(id))throw new InvalidOperationException("Selected retainer changed.");
