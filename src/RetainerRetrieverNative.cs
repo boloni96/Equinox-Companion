@@ -14,7 +14,7 @@ public sealed partial class Plugin
     private unsafe int RetrievalHeld(uint item,RetrievalQuality quality=RetrievalQuality.Any,int tradeFilter=0){var m=InventoryManager.Instance();if(m==null)return 0;var count=0;foreach(var t in new[]{InventoryType.Inventory1,InventoryType.Inventory2,InventoryType.Inventory3,InventoryType.Inventory4,InventoryType.Crystals}){var c=m->GetInventoryContainer(t);if(c==null||!c->IsLoaded)continue;for(var i=0;i<c->Size;i++)if(c->Items[i].ItemId==item&&(tradeFilter==0||RetrievalAllowsTradeFilter(c->Items[i],tradeFilter))&&RetainerRetrieval.AllowsQuality((c->Items[i].Flags&InventoryItem.ItemFlags.HighQuality)!=0,quality))count=checked(count+c->Items[i].Quantity);}return count;}
     private void UpdateRetriever(DateTimeOffset now)
     {
-        TickRetainerTools(now);TickRetainerGil(now);TickChest(now);TickOrganize(now);
+        TickStorageRefresh(now);TickRetainerTools(now);TickRetainerGil(now);TickChest(now);TickOrganize(now);
         if(retrievalPort.Pause.RestorePending)retrievalPort.Pause.Release(now);
         if(!config.EnableRetriever){CancelCraftingWithdrawal("");if(retrievalRun.Running)retrievalRun.Stop("Retriever disabled.");retrieverWindow.IsOpen=false;ForgetOptionalLauncher("Equinox Organizer");return;}
         if(retrievalRun.Running&&retrievalRun.State!=RetrievalRun.Phase.Prepare&&retrievalPort.Pause.Held){var pause=retrievalPort.Pause.Check(now);if(!pause.Ready){retrievalRun.Stop(pause.Error.Length>0?pause.Error:"Another AutoRetainer task started; retrieval stopped.");return;}}
@@ -27,6 +27,7 @@ public sealed partial class Plugin
         internal readonly SellerAutoRetainerPause Pause=new(new SellerAutoRetainerPort());
         internal int TradeFilter;internal RetrievalQuality Quality;internal ulong Character;internal uint World;
         private readonly WithdrawalArmouryReceipt armouryReceipt=new();
+        private bool captureAfterTransfer;
         private static readonly InventoryType[] ArmouryDestinations=[
             InventoryType.ArmoryMainHand,InventoryType.ArmoryOffHand,InventoryType.ArmoryHead,
             InventoryType.ArmoryBody,InventoryType.ArmoryHands,InventoryType.ArmoryLegs,
@@ -47,7 +48,7 @@ public sealed partial class Plugin
             }
             return count;
         }
-        public void Begin(IEnumerable<uint> items){
+        public void Begin(IEnumerable<uint> items){captureAfterTransfer=false;
             // Only gear can be redirected here. Material/crystal withdrawals keep their existing bag semantics.
             var gear=items.Distinct().Where(id=>DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>().GetRowOrDefault(id) is {} row&&row.EquipSlotCategory.RowId>0);
             armouryReceipt.Begin(gear.ToDictionary(id=>id,ArmouryHeld));
@@ -106,7 +107,7 @@ public sealed partial class Plugin
             }
             return list.ToArray();
         }
-        public void Confirmed(ulong id,RetrievalSlot slot,int amount)=>p.ReportStorageTransfer("Withdrew",slot.ItemId,slot.Hq,amount,p.StorageRetainerName(id));
+        public void Confirmed(ulong id,RetrievalSlot slot,int amount){captureAfterTransfer=true;p.retainerCaptureStability.ConfirmTransfer(Character,id);p.RequestStorageRefresh();p.ReportStorageTransfer("Withdrew",slot.ItemId,slot.Hq,amount,p.StorageRetainerName(id));}
         public int Held(uint item)=>armouryReceipt.Held(item,p.RetrievalHeld(item,Quality,TradeFilter),armouryReceipt.Tracks(item)?ArmouryHeld(item):0);
         public bool Withdraw(ulong id,RetrievalSlot slot,int amount)
         {
@@ -138,7 +139,7 @@ public sealed partial class Plugin
             var numeric=SellerAddon("InputNumeric");if(numeric==null)return false;
             if(!numericSent){var value=new AtkValue{Type=AtkValueType.Int,Int=quantity};numeric->FireCallback(1,&value,true);numericSent=true;pending=null;return true;}return false;
         }
-        public bool Close(ulong id){pending=null;inventoryRetainer=0;if(AgentRetainer.Instance()!=null&&AgentRetainer.Instance()->IsAgentActive()&&InventoryOpen){AgentRetainer.Instance()->Hide();return false;}var menu=(AddonSelectString*)SellerAddon("SelectString");if(RetrieverActive(id)&&menu!=null){var quit=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Addon>().GetRow(2383).Text.ExtractText();for(var i=0;i<Math.Min(20,(int)menu->PopupMenu.PopupMenu.EntryCount);i++)if(RetainerMenuPolicy.Matches(TravelMenuText(menu->PopupMenu.PopupMenu.EntryNames[i].Value),quit)){if(DateTimeOffset.UtcNow>=inventoryMenuNext){SelectTravelChoice((AtkUnitBase*)menu,i);inventoryMenuNext=DateTimeOffset.UtcNow.AddSeconds(1);}return false;}}return navigation.CloseRetainer(id);}
-        public void Release(){CancelCrystalTransfer();prepared=false;if(pending is {} s){var a=AgentInventoryContext.Instance();if(a!=null&&(int)a->TargetInventoryId==s.Container&&a->TargetInventorySlotId==s.Slot){CloseSellerAddon("ContextMenu");if(contextSent)CloseSellerAddon("InputNumeric");}}pending=null;Pause.Release(DateTimeOffset.UtcNow);}
+        public bool Close(ulong id){pending=null;inventoryRetainer=0;if(AgentRetainer.Instance()!=null&&AgentRetainer.Instance()->IsAgentActive()&&InventoryOpen){if(captureAfterTransfer&&RetrieverActive(id)&&!p.CaptureRetainerBeforeClose())return false;captureAfterTransfer=false;AgentRetainer.Instance()->Hide();return false;}var menu=(AddonSelectString*)SellerAddon("SelectString");if(RetrieverActive(id)&&menu!=null){var quit=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Addon>().GetRow(2383).Text.ExtractText();for(var i=0;i<Math.Min(20,(int)menu->PopupMenu.PopupMenu.EntryCount);i++)if(RetainerMenuPolicy.Matches(TravelMenuText(menu->PopupMenu.PopupMenu.EntryNames[i].Value),quit)){if(DateTimeOffset.UtcNow>=inventoryMenuNext){SelectTravelChoice((AtkUnitBase*)menu,i);inventoryMenuNext=DateTimeOffset.UtcNow.AddSeconds(1);}return false;}}return navigation.CloseRetainer(id);}
+        public void Release(){p.RequestStorageRefresh();CancelCrystalTransfer();prepared=false;if(pending is {} s){var a=AgentInventoryContext.Instance();if(a!=null&&(int)a->TargetInventoryId==s.Container&&a->TargetInventorySlotId==s.Slot){CloseSellerAddon("ContextMenu");if(contextSent)CloseSellerAddon("InputNumeric");}}pending=null;Pause.Release(DateTimeOffset.UtcNow);}
     }
 }

@@ -1,5 +1,11 @@
-# Organizer and Trader request audit — 0.5.1.310
+# Organizer and Trader request audit — 0.5.1.311
 This is an implementation audit, not a claim that every path has been tested in game.
+
+## Post-transfer refresh — 0.5.1.311
+- With complete recorded stock, withdrawals visit only recorded holders; missing items no longer trigger visits to every other retainer. Incomplete records retain the fallback scan.
+- A verified open retainer session can record stable complete slot changes even while the summary ItemCount lags. Confirmation can establish that session; identity changes, incomplete containers and closed windows revoke it.
+- Withdrawals wait for stable capture before closing a changed retainer. Completion/Stop request inventory and UI refreshes, with a short settling window for already-sent operations.
+- Recorded-storage browsing prefers complete dated Companion snapshots/observations over undated Allagan cache, including empty snapshots. Assignment coverage and browsing caches are invalidated after capture.
 
 ## Armoury withdrawal acknowledgement — 0.5.1.310
 - Confirm newly withdrawn gear when the game places it in the Armoury Chest. Include its net change during the current run without subtracting pre-existing Armoury gear from the requested quantities.

@@ -39,6 +39,19 @@ public sealed partial class Plugin
         foreach(var (id,name) in names)
         {
             var rows=latest.Values.Where(e=>e.Storage!.Key.StartsWith("retainer:"+id+":")).Where(e=>int.TryParse(e.Storage!.Key.Split(':').Last(),out var t)&&RetainerRetrieval.IsRetainerStorage((ulong)t)).ToArray();
+            var record=config.OrganizerInventories.Where(x=>x.Character==owner&&x.Retainer==id).MaxBy(x=>x.At);
+            if(record!=null&&rows.All(x=>x.At<=record.At)&&
+                StorageVisit.RecordedMatches(record.Slots,record.Slots.Count(x=>x.Container is >=10000 and <=10006&&x.Item>0))){
+                foreach(var g in record.Slots.Where(x=>x.Item>0&&x.Quantity>0).GroupBy(x=>(x.Item,x.Hq)))
+                    stocks.Add(new(id,name,g.Key.Item,retrievalCatalog?.Names.GetValueOrDefault(g.Key.Item)??g.Key.Item.ToString(),g.Sum(x=>x.Quantity),record.At,g.Key.Hq));
+                continue;
+            }
+            // Dated, complete Companion observations take precedence over undated IPC stock.
+            if(Enumerable.Range(10000,7).Append(12001).All(t=>rows.Any(e=>e.Storage!.Key=="retainer:"+id+":"+t&&e.Storage.Stacks!=null))){
+                foreach(var g in rows.SelectMany(e=>e.Storage!.Stacks!.Select(s=>(s,e.At))).GroupBy(x=>(x.s.ItemId,x.s.Hq)))
+                    stocks.Add(new(id,name,g.Key.ItemId,g.First().s.Name,g.Sum(x=>x.s.Quantity),g.Min(x=>x.At),g.Key.Hq));
+                continue;
+            }
             if(rawById.TryGetValue(id,out var raw))
             {
                 var good=raw.Where(x=>x.Length>3&&RetainerRetrieval.IsRetainerStorage(x[0])&&x[2] is >0 and <=uint.MaxValue&&x[3] is >0 and <=RetainerRetrieval.MaxQuantity);

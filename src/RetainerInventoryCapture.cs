@@ -7,11 +7,30 @@ public sealed partial class Plugin
 {
     private readonly RetainerCaptureStability retainerCaptureStability=new();
     private DateTimeOffset nextRetainerCapture;
+    private bool retainerCapturedThisRead;
+    private DateTimeOffset storageRefreshUntil,storageRefreshNext;
+    private ulong storageRefreshCharacter;
+    private void RequestStorageRefresh(){
+        storageRefreshCharacter=Player.ContentId;storageRefreshUntil=DateTimeOffset.UtcNow.AddSeconds(3);
+        storageRefreshNext=default;nextRetainerCapture=default;
+        retrievalRefreshPending=true;retrievalPreviewDirty=true;assignmentCoverageDirty=true;browseDirty=true;
+    }
+    private void TickStorageRefresh(DateTimeOffset now){
+        if(now>storageRefreshUntil||now<storageRefreshNext||!Player.IsLoaded||Player.ContentId!=storageRefreshCharacter)return;
+        storageRefreshNext=now.AddMilliseconds(500);
+        try{ObserveStorage(now);retrievalRefreshPending=true;retrievalPreviewDirty=true;assignmentCoverageDirty=true;browseDirty=true;}
+        catch(Exception e){Log.Warning(e,"Post-transfer storage refresh failed");}
+    }
+    private bool CaptureRetainerBeforeClose(){
+        nextRetainerCapture=default;retainerCapturedThisRead=false;
+        UpdateRetainerInventoryCapture(DateTimeOffset.UtcNow);
+        return retainerCapturedThisRead;
+    }
     private string retainerCaptureStatus="No retainer inventory open";
     private unsafe void UpdateRetainerInventoryCapture(DateTimeOffset now)
     {
         if(now<nextRetainerCapture)return;
-        nextRetainerCapture=now.AddMilliseconds(250);
+        nextRetainerCapture=now.AddMilliseconds(250);retainerCapturedThisRead=false;
         var rm=RetainerManager.Instance();var agent=AgentRetainer.Instance();
         var ui=UIModule.Instance();var order=ui==null?null:ui->GetItemOrderModule();
         var active=rm==null?null:rm->GetActiveRetainer();
@@ -37,11 +56,11 @@ public sealed partial class Plugin
         }
         var owner=active->RetainerId;var character=Player.ContentId;
         var old=config.OrganizerInventories.Where(x=>x.Character==character&&x.Retainer==owner).MaxBy(x=>x.At);
-        retainerCaptureStatus=$"{active->NameString}: inventory recorded";
+        retainerCaptureStatus=$"{active->NameString}: inventory recorded";retainerCapturedThisRead=true;
         if(old!=null&&old.Slots.SequenceEqual(slots))return;
         config.OrganizerInventories.RemoveAll(x=>x.Character==character&&x.Retainer==owner);
         config.OrganizerInventories.Add(new(character,owner,now,slots));
-        SaveConfiguration();InvalidateOrganizePreview();retrievalPreviewDirty=true;
+        SaveConfiguration();InvalidateOrganizePreview();retrievalPreviewDirty=true;assignmentCoverageDirty=true;browseDirty=true;
         ObserveStorage(now,retainersOnly:true);retrievalRefreshPending=true;
     }
 }
