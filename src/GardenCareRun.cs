@@ -95,6 +95,28 @@ public static class GardenAutoPlant
             GardenCareAction.Plant=>text.Contains("plant")&&(text.Contains("seed")||text.Contains("soil")),
             GardenCareAction.Fertilize=>text.Contains("fertiliz")&&(text.Contains("crop")||text.Contains("fishmeal")),_=>false};
     }
+    // Prepare only the beds used by the incoming route layout. Existing protection
+    // is evaluated against the outgoing plan until all harvest receipts arrive.
+    public static (bool Empty,GardenCareAction? Action,int[] Beds,string Reason) PrepareRouteBeds(
+        SharedGardenPlan plan,GardenPlanDefinition next,DateTimeOffset now,bool harvest,bool tend)
+    {
+        var ids=next.Steps.Select(s=>s.Bed).Distinct().Order().ToArray();
+        var required=ids.Select(id=>plan.Beds.FirstOrDefault(b=>b.Bed==id)).ToArray();
+        if(ids.Length==0||ids.Any(id=>id is <1 or >8)||required.Any(b=>b==null))
+            throw new InvalidOperationException("The route layout has missing or invalid beds.");
+        if(required.Any(b=>b!.ObservedAt==null))return(false,GardenCareAction.Inspect,ids,"Inspecting beds before planting");
+        if(required.All(b=>b!.ActualCrop=="Empty"))return(true,null,[],"");
+        var active=plan.Beds.Where(GardenVisualState.HasActualCrop).ToArray();
+        var occupied=required.OfType<SharedGardenBed>().Where(b=>b.ActualCrop!="Empty").ToArray();
+        if(harvest&&active.Length>0&&active.All(b=>b.Ready)&&occupied.All(b=>GardenCarePolicy.Eligible(plan,b,GardenCareAction.Harvest,now)))
+            return(false,GardenCareAction.Harvest,occupied.Select(b=>b.Bed).ToArray(),"Harvesting ready crops before planting");
+        if(harvest&&active.Any(b=>!b.Ready&&GardenTiming.MaturityEstimateDue(b.HarvestAt,b.GrowingObservedAt,now)))
+            return(false,GardenCareAction.Inspect,plan.Beds.Select(b=>b.Bed).ToArray(),"Checking whole-batch maturity before planting");
+        var due=plan.Beds.Where(b=>GardenCarePolicy.Eligible(plan,b,GardenCareAction.Tend,now)).Select(b=>b.Bed).ToArray();
+        if(tend&&due.Length>0)return(false,GardenCareAction.Tend,due,"Tending while waiting to plant");
+        return(false,null,[],!harvest?"Enable Harvest full batches to clear ready crops before planting":
+            occupied.Any(b=>GardenCarePolicy.Protection(plan,b).Length>0)?"Waiting for protected breeding neighbours before planting":"Waiting for the whole batch to mature before planting");
+    }
     public static bool NeedsPostPlantTend(SharedGardenPlan plan,SharedGardenBed bed) =>
         bed.Status=="confirmed"&&bed.Planted is {} planted&&planted>=plan.At&&
         (bed.Watered==null||bed.Watered<=planted)&&!bed.Ready&&bed.DeadConfirmedAt==null&&!bed.Queued&&

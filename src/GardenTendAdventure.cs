@@ -23,7 +23,7 @@ public sealed partial class Plugin
             }
             ImGui.Checkbox("Switch assigned characters on this account",ref gardenAdventureSwitch);
             var walk=config.GardenCareWalk;if(ImGui.Checkbox("Walk to mapped beds (Lifestream)",ref walk)){config.GardenCareWalk=walk;SaveConfiguration();}
-            ImGui.TextWrapped("Uses the assigned gardeners on this character's Journal account. The growing adventure waits between stages. Planting uses its exact saved seed, soil and bed order; harvesting waits for observed maturity of the whole batch. Stop remains available while waiting.");
+            ImGui.TextWrapped("Uses the assigned gardeners on this character's Journal account. The growing adventure waits between stages. Planting uses its exact saved seed, soil and bed order; with Harvest full batches enabled, ready crops are harvested before the next route layout is applied. Mixed maturity and protected neighbours wait. Stop remains available while waiting.");
             ImGui.BeginDisabled(!adventureFresh||gardenCareRun?.Running==true||!Player.IsLoaded||!(gardenAdventureTend||gardenAdventurePlant||gardenAdventureHarvest));
             if(ImGui.Button("Start automatic gardening"))StartTendAdventure(board);ImGui.EndDisabled();ImGui.EndDisabled();
         }
@@ -119,8 +119,18 @@ public sealed partial class Plugin
                 if(work.Rule.PlanAt.Length>0&&(!DateTimeOffset.TryParse(work.Rule.PlanAt,out var at)||plan.At!=at||!SameGardenDefinition(plan.Definition,work.Rule.PlanTemplate)))throw new InvalidOperationException("The route's saved batch plan changed.");
                 if(work.Rule.PlanAt.Length==0){
                     if(!gardenAdventurePlant){gardenTendRoute.Dequeue();return;}
-                    if(!SameGardenDefinition(plan.Definition,work.Rule.PlanTemplate)||DateTimeOffset.TryParse(work.Rule.ReadyAfter,out var readyAfter)&&plan.At<readyAfter){
-                        if(work.Rule.PlanTemplate.Steps.Any(s=>plan.Beds.FirstOrDefault(b=>b.Bed==s.Bed) is not {ActualCrop:"Empty",ObservedAt:not null}))throw new InvalidOperationException("Inspect and empty the required beds before applying the next route stage. Existing crops are protected.");
+                    if(plan.CompletedAt!=null||!SameGardenDefinition(plan.Definition,work.Rule.PlanTemplate)||DateTimeOffset.TryParse(work.Rule.ReadyAfter,out var readyAfter)&&plan.At<readyAfter){
+                        var preparation=GardenAutoPlant.PrepareRouteBeds(plan,work.Rule.PlanTemplate,now,gardenAdventureHarvest,gardenAdventureTend);
+                        if(!preparation.Empty){
+                            gardenTendStatus=preparation.Reason+" · "+plan.HouseName+" · Batch "+plan.Batch;
+                            var key=plan.HouseId+":"+plan.Batch;
+                            if(preparation.Action is {} prepareAction&&!(prepareAction==GardenCareAction.Inspect&&gardenAdventureInspected.TryGetValue(key,out var checkedAt)&&now-checkedAt<TimeSpan.FromMinutes(10))){
+                                var port=new GardenCarePort(this,plan);port.Validate();gardenCareRun=new(port);
+                                gardenCareRun.Start(preparation.Beds,prepareAction,now);gardenTendStarted=true;
+                                if(prepareAction==GardenCareAction.Inspect)gardenAdventureInspected[key]=now;
+                            }else{gardenTendRoute.Dequeue();gardenTendTravelSent=false;gardenAdventureNext=now.AddSeconds(10);}
+                            return;
+                        }
                         ChangeGardenPlan(plan,work.Rule.PlanTemplate);
                     }
                     gardenTendRoute.Clear();gardenTendStatus="Waiting for the stage plan to sync.";gardenAdventureNext=now.AddSeconds(5);return;
