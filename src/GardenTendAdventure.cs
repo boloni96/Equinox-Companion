@@ -20,7 +20,7 @@ public sealed partial class Plugin
     private void StartTendAdventure(AdventureBoard board)
     {
         if(!Player.IsLoaded||gardenCareRun?.Running==true)return;
-        var characters=(config.SharedRoster?.People??[]).SelectMany(p=>p.Characters).ToArray();var id=Player.ContentId.ToString();
+        var characters=(config.SharedRoster?.People??[]).SelectMany(p=>p.Characters).ToArray();var id=CurrentSharedCharacter()?.Id??"";
         var targets=board.Stops.Skip(board.Index).SelectMany(stop=>stop.Tasks.Where(t=>!t.Done&&t.Rule?.Kind is "care" or "garden"&&
             (t.Rule.Jobs==null||t.Rule.Jobs.Contains("care"))&&AdventurePolicy.TaskCharacterId(t,characters)==id)
             .Select(t=>(House:t.Rule!.HouseId.Length>0?t.Rule.HouseId:stop.HouseId,Batch:t.Rule.Batch>0?t.Rule.Batch:stop.Batch))).Where(x=>x.House.Length>0&&x.Batch>0).Distinct().ToArray();

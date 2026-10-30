@@ -11,7 +11,7 @@ internal static class GardenCare312Tests
         void Check(bool ok,string message){if(!ok)throw new Exception(message);}
         Check(GardenCarePolicy.Protection(plan,beds[0]).Contains("Bed 2"),"Pending planting protects its standing neighbour");
         Check(!GardenCarePolicy.Eligible(plan,beds[0],GardenCareAction.Harvest,now),"Bulk harvest cannot bypass protection");
-        var done=plan with{Beds:[beds[0],beds[1] with{Status="confirmed"}]};
+        var done=plan with{Beds=[beds[0],beds[1] with{Status="confirmed"}]};
         Check(GardenCarePolicy.Protection(done,beds[0])=="","Confirmed planting releases parent even before offspring harvest");
         Check(GardenCarePolicy.Eligible(done,beds[0],GardenCareAction.Harvest,now),"Ready parent can be harvested for seeds");
         Check(!GardenCarePolicy.Eligible(done,beds[0],GardenCareAction.Tend,now),"Tending ignores mature beds");
@@ -20,10 +20,10 @@ internal static class GardenCare312Tests
         Check(GardenCarePolicy.Protection(done,beds[0] with{KeepMature=true}).Length>0,"Explicit keep persists after a plan finishes");
         Check(!GardenCarePolicy.Eligible(plan,beds[1] with{LastFertilized=now},GardenCareAction.Fertilize,now),"Fertilizer cooldown");
         var starter=Bed(1,"replant",false) with{ReplantOrder=9,StarterSoil="Potting Soil",ActualSoil="Potting Soil",Planted=now.AddDays(-4)};
-        var replace=plan with{Beds:[starter, beds[1] with{Status="confirmed"}]};
+        var replace=plan with{Beds=[starter, beds[1] with{Status="confirmed"}]};
         Check(GardenAutoPlant.Next(replace)==(1,GardenCareAction.RemoveStarter),"Verified starter gets removal step");
-        Check(GardenAutoPlant.Next(replace with{Beds:[starter with{ActualCrop="Empty"},beds[1] with{Status="confirmed"}]})==(1,GardenCareAction.Plant),"Removal is followed by planting");
-        try{GardenAutoPlant.Next(replace with{Beds:[starter with{ActualSoil="Grade 3 Thanalan Topsoil"},beds[1]]});throw new Exception("Removed unrelated crop");}catch(InvalidOperationException){}
+        Check(GardenAutoPlant.Next(replace with{Beds=[starter with{ActualCrop="Empty"},beds[1] with{Status="confirmed"}]})==(1,GardenCareAction.Plant),"Removal is followed by planting");
+        try{GardenAutoPlant.Next(replace with{Beds=[starter with{ActualSoil="Grade 3 Thanalan Topsoil"},beds[1] with{Status="confirmed"}]});throw new Exception("Removed unrelated crop");}catch(InvalidOperationException){}
         Check(!GardenAutoPlant.MatchesConfirmation(GardenCareAction.RemoveStarter,"Log out?"),"Unrelated confirmation rejected");
         var port=new Port();var run=new GardenCareRun(port);run.Start([1,2],GardenCareAction.Tend,now);
         run.Tick(now);run.Tick(now.AddSeconds(1));run.Tick(now.AddSeconds(2));

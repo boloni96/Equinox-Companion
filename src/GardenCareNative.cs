@@ -78,7 +78,7 @@ public sealed partial class Plugin
         if(ImGui.IsItemHovered())ImGui.SetTooltip("Uses the saved step order and exact seeds/soil. Removes only its verified temporary starter, after all prerequisite planting. Existing unrelated crops are never removed.");
         if(ImGui.Button("Tend due")){StartGardenCare(plan,GardenCareAction.Tend);ImGui.CloseCurrentPopup();}
         ImGui.SameLine();if(ImGui.Button("Fertilize eligible")){StartGardenCare(plan,GardenCareAction.Fertilize);ImGui.CloseCurrentPopup();}
-        if(ImGui.Button("Harvest all eligible")){if(GardenAutoPlant.PartialHarvest(plan))gardenPartialHarvest=plan;else StartGardenCare(plan,GardenCareAction.Harvest);ImGui.CloseCurrentPopup();}
+        if(ImGui.Button("Harvest all eligible")){gardenPartialSelected=false;if(GardenAutoPlant.PartialHarvest(plan))gardenPartialHarvest=plan;else StartGardenCare(plan,GardenCareAction.Harvest);ImGui.CloseCurrentPopup();}
         if(ImGui.TreeNode("Choose beds to harvest")){
             foreach(var b in plan.Beds){var eligible=GardenCarePolicy.Eligible(plan,b,GardenCareAction.Harvest,now);var pick=gardenHarvestSelection.Contains(b.Bed);
                 ImGui.BeginDisabled(!eligible);if(ImGui.Checkbox($"Bed {b.Bed} · {b.ActualCrop}",ref pick)){if(pick)gardenHarvestSelection.Add(b.Bed);else gardenHarvestSelection.Remove(b.Bed);}ImGui.EndDisabled();
