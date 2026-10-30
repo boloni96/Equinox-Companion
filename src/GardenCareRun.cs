@@ -95,5 +95,10 @@ public static class GardenAutoPlant
             GardenCareAction.Plant=>text.Contains("plant")&&(text.Contains("seed")||text.Contains("soil")),
             GardenCareAction.Fertilize=>text.Contains("fertiliz")&&(text.Contains("crop")||text.Contains("fishmeal")),_=>false};
     }
+    public static bool NeedsPostPlantTend(SharedGardenPlan plan,SharedGardenBed bed) =>
+        bed.Status=="confirmed"&&bed.Planted is {} planted&&planted>=plan.At&&
+        (bed.Watered==null||bed.Watered<=planted)&&!bed.Ready&&bed.DeadConfirmedAt==null&&!bed.Queued&&
+        GardenVisualState.HasActualCrop(bed)&&GardenCropIdentity.Same(bed.ActualCrop,bed.Crop)&&
+        !GardenPlantRequirement.SuppressTending(bed);
     public static bool PartialHarvest(SharedGardenPlan plan)=>plan.Beds.Any(b=>GardenVisualState.HasActualCrop(b)&&!b.Ready&&b.DeadConfirmedAt==null);
 }

@@ -63,7 +63,16 @@ public sealed partial class Plugin
             var live=GardenPlanSources().FirstOrDefault(x=>x.HouseId==source.HouseId&&x.Batch==source.Batch)??throw new InvalidOperationException("Saved plan unavailable.");
             if(live.At!=source.At)throw new InvalidOperationException("Saved plan changed. Review it before restarting.");
             var plan=EffectiveGardenPlan(live);var next=GardenAutoPlant.Next(plan);
-            if(next==null){gardenAutoPlantPlan=null;return;}
+            if(next==null){
+                gardenAutoPlantPlan=null;
+                var beds=plan.Beds.Where(b=>GardenAutoPlant.NeedsPostPlantTend(plan,b)).Select(b=>b.Bed).ToArray();
+                if(beds.Length>0){
+                    var tending=new GardenCarePort(this,plan,postPlantTend:true);tending.Validate();
+                    gardenCareRun=new(tending);gardenCareRun.Start(beds,GardenCareAction.Tend,DateTimeOffset.UtcNow);
+                    gardenHousePlantStatus=$"Planting complete · tending Batch {plan.Batch}";
+                }
+                return;
+            }
             var port=new GardenCarePort(this,plan);port.Validate();
             port.CheckPlantSupplies(plan.Beds.First(b=>b.Bed==next.Value.Bed));
             gardenCareRun=new(port);gardenCareRun.Start([next.Value.Bed],next.Value.Action,DateTimeOffset.UtcNow);
@@ -135,7 +144,7 @@ public sealed partial class Plugin
                 gardenHousePlantStatus="";
                 if(gardenCareWholeHouse)StartHousePlant(plan);else {gardenAutoPlantPlan=plan;gardenCareRun=null;ContinueAutoPlant(plan);}
                 ImGui.CloseCurrentPopup();}
-            if(ImGui.IsItemHovered())ImGui.SetTooltip("Plant each selected batch's own saved plan: exact seeds, soil and step order, including verified starter replacement. Whole house skips batches without an unfinished saved plan. Missing supplies or an unsafe step stop the queue.");
+            if(ImGui.IsItemHovered())ImGui.SetTooltip("Plant each selected batch's own saved plan: exact seeds, soil and step order, including verified starter replacement. Whole house skips batches without an unfinished saved plan. After planting, tends the new crops before finishing. Missing supplies or an unsafe step stop the queue.");
             ImGui.TableNextColumn();
             if(ImGui.Button("Tend due",new Vector2(-1,0))){StartScopedGardenCare(plan,GardenCareAction.Tend,now);ImGui.CloseCurrentPopup();}
             ImGui.TableNextRow();ImGui.TableNextColumn();
@@ -180,9 +189,9 @@ public sealed partial class Plugin
     }
     private sealed unsafe class GardenCarePort : IGardenCarePort
     {
-        private readonly Plugin p;private readonly SharedGardenPlan original;private readonly ulong owner;private readonly uint world;private Vector3 origin;private bool walking;private int walkedBed;
+        private readonly bool postPlantTend;private readonly Plugin p;private readonly SharedGardenPlan original;private readonly ulong owner;private readonly uint world;private Vector3 origin;private bool walking;private int walkedBed;
         private ulong targetId;private int openedBed;private DateTimeOffset opened,actionAt,next;private bool menuSent,itemOpened,itemSent;private InventoryType fertilizerBag;private int fertilizerSlot;private uint fertilizerId;private bool confirmationSent;private uint plantSeed,plantSoil;private GardenCareAction? issuedAction;
-        public GardenCarePort(Plugin plugin,SharedGardenPlan plan){p=plugin;original=plan;owner=Player.ContentId;world=Player.CurrentWorld.RowId;origin=Objects.LocalPlayer?.Position??default;}
+        public GardenCarePort(Plugin plugin,SharedGardenPlan plan,bool postPlantTend=false){this.postPlantTend=postPlantTend;p=plugin;original=plan;owner=Player.ContentId;world=Player.CurrentWorld.RowId;origin=Objects.LocalPlayer?.Position??default;}
         private SharedGardenPlan Current(){var source=p.GardenPlanSources().FirstOrDefault(x=>x.HouseId==original.HouseId&&x.Batch==original.Batch)??throw new InvalidOperationException("Garden plan is no longer available.");if(source.At!=original.At)throw new InvalidOperationException("Garden plan changed during the run.");return p.EffectiveGardenPlan(source);}
         public void Validate()
         {
@@ -227,7 +236,7 @@ public sealed partial class Plugin
             if(action==GardenCareAction.Inspect){actionAt=opened;return Menu(bed)!=null;}
             if(!menuSent){
                 var plan=Current();var crop=plan.Beds.First(b=>b.Bed==bed);
-                if(action is not (GardenCareAction.Plant or GardenCareAction.RemoveStarter)&&!GardenCarePolicy.Eligible(plan,crop,action,DateTimeOffset.UtcNow))throw new InvalidOperationException($"Bed {bed} changed or is protected. Reopen care actions.");
+                if(action is not (GardenCareAction.Plant or GardenCareAction.RemoveStarter)&&!(postPlantTend&&action==GardenCareAction.Tend?GardenAutoPlant.NeedsPostPlantTend(plan,crop):GardenCarePolicy.Eligible(plan,crop,action,DateTimeOffset.UtcNow)))throw new InvalidOperationException($"Bed {bed} changed or is protected. Reopen care actions.");
                 var m=Menu(bed);if(m==null)return false;
                 if(action==GardenCareAction.Harvest&&m.ReadyLocation()==null)throw new InvalidOperationException($"Bed {bed} is not confirmed harvestable in game.");
                 if(action==GardenCareAction.Harvest&&(InventoryManager.Instance()==null||InventoryManager.Instance()->GetEmptySlotsInBag()<2))throw new InvalidOperationException("Free two bag slots for crop and possible seeds.");

@@ -75,6 +75,13 @@ internal static class GardenCare312Tests
         Check(GardenCarePolicy.TargetAllowed(10,0,true,GardenCareAction.Plant),"Game-cleared target allowed after planting confirmation was sent");
         Check(!GardenCarePolicy.TargetAllowed(10,0,false,GardenCareAction.Plant),"Plant target clearing before confirmation still stops");
         Check(!GardenCarePolicy.TargetAllowed(10,11,true,GardenCareAction.Plant),"Different object after planting still stops");
+        var fresh=Bed(1) with{Planted=now,Watered=now,Ready=false,NextTend=now.AddHours(12)};
+        var freshPlan=done with{At=now.AddMinutes(-1),Beds=[fresh]};
+        Check(GardenAutoPlant.NeedsPostPlantTend(freshPlan,fresh),"Auto plant tends fresh final crops even before the ordinary due time");
+        Check(!GardenAutoPlant.NeedsPostPlantTend(freshPlan,fresh with{Watered=now.AddSeconds(1)}),"Resume skips an already tended final crop");
+        Check(!GardenAutoPlant.NeedsPostPlantTend(freshPlan,fresh with{Status="starter"}),"Temporary starter is not tended before replacement");
+        Check(!GardenAutoPlant.NeedsPostPlantTend(freshPlan,fresh with{Planted=now.AddDays(-1)}),"Post-plant tending excludes crops from an older plan");
+        Check(!GardenAutoPlant.NeedsPostPlantTend(freshPlan,fresh with{Ready=true}),"Post-plant tending skips mature crops");
         var planting=new HarvestPort(GardenCareAction.Plant);var plantingRun=new GardenCareRun(planting);plantingRun.Start([1,2,3],GardenCareAction.Plant,now);
         for(int i=0;i<12;i++)plantingRun.Tick(now.AddSeconds(i));
         Check(plantingRun.Completed==3&&!plantingRun.Running&&planting.Actions==3,"Three planting receipts survive game-cleared targets and send each action once");
