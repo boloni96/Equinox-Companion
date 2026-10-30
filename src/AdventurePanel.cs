@@ -33,6 +33,11 @@ public sealed partial class Plugin
  }
  private void UpdateAdventure()
  {
+  var started=System.Diagnostics.Stopwatch.GetTimestamp();
+  try{UpdateAdventureCore();}finally{RecordPerformanceElapsed("Adventure sync",started);}
+ }
+ private void UpdateAdventureCore()
+ {
   var now=DateTimeOffset.UtcNow;
   if(adventureConnectionKey!=config.PairingKey){adventureConnectionKey=config.PairingKey;adventureQueuedAction=null;adventureBoards=[];adventureSelected="";adventurePerson="";adventureAccount="";adventureCompletion.Clear();adventurePrompt=null;adventureFresh=false;adventureNext=default;
    var hash=Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(config.PairingKey)));
@@ -42,7 +47,7 @@ public sealed partial class Plugin
    var reply=adventureRequest.IsCompletedSuccessfully?adventureRequest.Result:new AdventureReply(null,"Adventure request failed.");
    if(adventureRequest.IsFaulted)_=adventureRequest.Exception;
    if(adventureRequestKey==config.PairingKey){adventureMessage=reply.Status;adventureFresh=reply.Boards is not null;if(reply.Boards is null){adventureFollowSession.Reset();adventurePresenceSession.Reset();}if(reply.Boards is {} boards){adventureBoards=AdventurePolicy.Reconcile(adventureBoards,boards,adventureMutation);adventureFetched=now;CacheAdventures();}
-    adventureNext=now.AddSeconds(reply.Boards is null?5:3);
+    adventureNext=now.AddSeconds(AdventurePollPolicy.Seconds(adventureWindow.IsOpen,gardenTendRoute!=null,reply.Boards is null));
    }adventureRequest=null;adventureMutation=false;
   }
   if(adventureRequest is null&&adventureQueuedAction is {} queued){
@@ -52,7 +57,7 @@ public sealed partial class Plugin
    if(adventureFresh&&latest is not null&&(queued.Index is {} index&&index>=0&&index<=latest.Stops.Length||task is not null&&AdventurePolicy.CanEdit(task)))AdventureAction(latest,queued.Index,task,queued.Value);
   }
   UpdateAdventurePresence(now);
-  if(adventureRequest is null&&config.SyncEnabled&&config.PairingKey.Length==64&&now>=adventureNext){adventureRequestKey=config.PairingKey;adventureRequest=adventureSync.Read(config.PairingKey);adventureNext=now.AddSeconds(3);}
+  if(adventureRequest is null&&config.SyncEnabled&&config.PairingKey.Length==64&&now>=adventureNext){adventureRequestKey=config.PairingKey;adventureRequest=adventureSync.Read(config.PairingKey);adventureNext=now.AddSeconds(AdventurePollPolicy.Seconds(adventureWindow.IsOpen,gardenTendRoute!=null,false));}
  }
 
  private void CacheAdventures()
@@ -182,6 +187,11 @@ public sealed partial class Plugin
  }
  private void DrawAdventureProgress(AdventureTask[] tasks)=>ImGui.ProgressBar(tasks.Length==0?0:(float)tasks.Count(t=>t.Done)/tasks.Length,new Vector2(-1,0),$"{tasks.Count(t=>t.Done)} / {tasks.Length} confirmed");
  private void DrawAdventure()
+ {
+  var started=System.Diagnostics.Stopwatch.GetTimestamp();
+  try{DrawAdventureCore();}finally{RecordPerformanceElapsed("Adventure window",started);}
+ }
+ private void DrawAdventureCore()
  {
   if(!config.SyncEnabled||config.PairingKey.Length!=64){ImGui.TextWrapped("Pair Companion with your Journal in Settings to open the same saved adventures here.");if(ImGui.Button("Open Companion settings"))visible=true;return;}
   if(ImGui.Button("Item delivery…"))OpenItemDelivery();ImGui.SameLine();
