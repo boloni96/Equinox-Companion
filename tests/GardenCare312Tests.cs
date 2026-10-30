@@ -58,6 +58,12 @@ internal static class GardenCare312Tests
         Check(!GardenAutoPlant.MatchesPlantConfirmation(plantPrompt,"Mirror Apple Seeds","Potting Soil"),"Wrong seed confirmation rejected");
         Check(!GardenAutoPlant.MatchesPlantConfirmation(plantPrompt,"Krakka Root Seeds","Grade 3 Thanalan Topsoil"),"Wrong soil confirmation rejected");
         Check(!GardenAutoPlant.MatchesPlantConfirmation("Discard Krakka Root Seeds and Potting Soil?","Krakka Root Seeds","Potting Soil"),"Unrelated item confirmation rejected");
+        Check(GardenCarePolicy.TargetAllowed(10,0,true,GardenCareAction.Plant),"Game-cleared target allowed after planting confirmation was sent");
+        Check(!GardenCarePolicy.TargetAllowed(10,0,false,GardenCareAction.Plant),"Plant target clearing before confirmation still stops");
+        Check(!GardenCarePolicy.TargetAllowed(10,11,true,GardenCareAction.Plant),"Different object after planting still stops");
+        var planting=new HarvestPort(GardenCareAction.Plant);var plantingRun=new GardenCareRun(planting);plantingRun.Start([1,2,3],GardenCareAction.Plant,now);
+        for(int i=0;i<12;i++)plantingRun.Tick(now.AddSeconds(i));
+        Check(plantingRun.Completed==3&&!plantingRun.Running&&planting.Actions==3,"Three planting receipts survive game-cleared targets and send each action once");
         var harvesting=new HarvestPort();var harvestingRun=new GardenCareRun(harvesting);harvestingRun.Start([1,2,3],GardenCareAction.Harvest,now);
         for(int i=0;i<12;i++)harvestingRun.Tick(now.AddSeconds(i));
         Check(harvestingRun.Completed==3&&!harvestingRun.Running&&harvesting.Actions==3,"Target clears after each harvest without stopping or duplicating the next bed");
@@ -69,10 +75,10 @@ internal static class GardenCare312Tests
         Check(run.Completed==1&&!run.Running,"Restart has no stale queue");
         run.Start([1,2],GardenCareAction.Tend,now.AddMinutes(2));run.Stop("Stopped");var calls=port.Acts;run.Tick(now.AddMinutes(2));Check(port.Acts==calls,"Stop sends no further actions");
     }
-    private sealed class HarvestPort:IGardenCarePort
+    private sealed class HarvestPort(GardenCareAction expectedAction=GardenCareAction.Harvest):IGardenCarePort
     {
         private ulong expected,current;private bool sent;public int Actions;
-        public void Validate(){if(!GardenCarePolicy.TargetAllowed(expected,current,sent,GardenCareAction.Harvest))throw new InvalidOperationException("Selected garden target changed.");}
+        public void Validate(){if(!GardenCarePolicy.TargetAllowed(expected,current,sent,expectedAction))throw new InvalidOperationException("Selected garden target changed.");}
         public bool Open(int bed){expected=current=(ulong)bed;sent=false;return true;}
         public bool Act(int bed,GardenCareAction action){Actions++;sent=true;current=0;return true;}
         public bool Confirmed(int bed,GardenCareAction action,DateTimeOffset at)=>sent;

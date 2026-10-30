@@ -188,7 +188,7 @@ public sealed partial class Plugin
         {
             if(!Player.IsLoaded||owner==0||Player.ContentId!=owner||Player.CurrentWorld.RowId!=world||!p.ObservingGardens||!p.atOutdoorEstate||SharedGardenLocation.Match(p.currentAddress,[original])!=original.HouseId||Objects.LocalPlayer is not {} player||(!walking&&Vector3.Distance(player.Position,origin)>1.5f)||Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]||Conditions[ConditionFlag.Unconscious]||Conditions[ConditionFlag.TradeOpen]||p.HelperInCutscene()||p.sellerRun.Running||p.TraderRunning||p.retrievalRun.Running||p.organizeRunning||p.chestRunning)
                 throw new InvalidOperationException("Character, location, movement or active operation changed.");
-            if(!GardenCarePolicy.TargetAllowed(targetId,Targets.Target?.GameObjectId??0,menuSent,issuedAction))throw new InvalidOperationException("Selected garden target changed.");
+            if(!GardenCarePolicy.TargetAllowed(targetId,Targets.Target?.GameObjectId??0,menuSent&&(issuedAction!=GardenCareAction.Plant||confirmationSent),issuedAction))throw new InvalidOperationException("Selected garden target changed.");
         }
         public bool Open(int bed)
         {
