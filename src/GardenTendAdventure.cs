@@ -10,7 +10,7 @@ public sealed partial class Plugin
     private ulong gardenTendOwner;
     private string gardenTendBoard="",gardenTendGeneration="",gardenTendStatus="";
     private HashSet<string> gardenAdventureCharacters=[];
-    private DateTimeOffset gardenTendDeadline,gardenAdventureNext;
+    private DateTimeOffset gardenTendDeadline,gardenAdventureNext,gardenSupplyRefreshUntil;
     private bool gardenPlotApproaching,gardenPlotApproachAttempted;
     private DateTimeOffset gardenPlotApproachAt;
     private readonly GardenWalkProgress gardenPlotProgress=new();
@@ -45,6 +45,7 @@ public sealed partial class Plugin
         gardenAdventureCharacters=(person?.Characters??[]).Where(c=>c.AccountId==current.AccountId&&(gardenAdventureSwitch||c.Id==current.Id)).Select(c=>c.Id).ToHashSet();
         gardenTendRoute=new();gardenTendOwner=Player.ContentId;gardenTendBoard=board.Id;gardenTendGeneration=board.Generation;
         gardenTendPreparing=false;gardenTendTravelSent=gardenTendStarted=gardenAdventureSwitchSent=false;gardenPlotApproaching=gardenPlotApproachAttempted=false;gardenCareRun=null;gardenAdventureNext=default;
+        RequestStorageRefresh();gardenSupplyRefreshUntil=DateTimeOffset.UtcNow.AddSeconds(20);adventureNext=default;
         gardenTendStatus="Checking this account's assigned garden work…";
     }
     private void StopTendAdventure(string reason)
@@ -104,6 +105,7 @@ public sealed partial class Plugin
             if(!adventureFresh||now-adventureFetched>TimeSpan.FromSeconds(30))throw new InvalidOperationException("Adventure connection is stale. Reconnect before resuming automatic work.");
             if(followSession.Armed||Conditions[ConditionFlag.InCombat])throw new InvalidOperationException("Another movement operation or combat started.");
             if(gardenTendRoute.Count==0){
+                if(now<gardenSupplyRefreshUntil){gardenTendStatus="Refreshing harvested supplies and selected batches…";return;}
                 var chars=(config.SharedRoster?.People??[]).SelectMany(p=>p.Characters).ToArray();
                 var tasks=board.Stops.SelectMany(s=>s.Tasks).Where(t=>!t.Done&&AdventurePolicy.IsGardenTask(t)&&t.Rule!=null).ToArray();
                 if(tasks.Length==0){StopTendAdventure("Adventure complete · all requested work confirmed.");return;}
@@ -121,10 +123,15 @@ public sealed partial class Plugin
             if(now>=gardenTendDeadline)throw new InvalidOperationException("Travel or garden action timed out. Review before restarting.");
             var work=gardenTendRoute.Peek();
             if(!gardenTendStarted){
-                var liveTask=board.Stops.SelectMany(s=>s.Tasks).FirstOrDefault(t=>t.Id==work.TaskId)??throw new InvalidOperationException("The active garden task was removed.");
+                var liveTask=board.Stops.SelectMany(s=>s.Tasks).FirstOrDefault(t=>t.Id==work.TaskId);
+                if(liveTask==null){gardenTendRoute.Clear();gardenTendTravelSent=false;gardenPlotApproaching=gardenPlotApproachAttempted=false;return;}
                 if(liveTask.Done){gardenTendRoute.Dequeue();gardenTendTravelSent=false;gardenPlotApproaching=gardenPlotApproachAttempted=false;return;}
                 if(liveTask.Rule==null)throw new InvalidOperationException("The active garden task has no rule.");
-                if(liveTask.Rule.HouseId!=work.House||liveTask.Rule.Batch!=work.Batch||liveTask.Rule.Cid!=work.Character)throw new InvalidOperationException("Garden batch assignments changed. Resume automatic gardening to use the updated route.");
+                if(liveTask.Rule.HouseId!=work.House||liveTask.Rule.Batch!=work.Batch||liveTask.Rule.Cid!=work.Character){
+                    if(LifestreamBusy()||goSeeHomeTrip!=null||goSeeFriendTrip!=null||Conditions[ConditionFlag.Casting]||Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51])return;
+                    gardenTendRoute.Clear();gardenTendTravelSent=false;gardenPlotApproaching=gardenPlotApproachAttempted=false;gardenTendStatus="Using the updated selected batch assignment…";return;
+                }
+                if(liveTask.Rule.Kind=="growingcycle"&&liveTask.Rule.Phase is "waiting" or "review"){gardenTendRoute.Dequeue();gardenTendTravelSent=false;gardenPlotApproaching=gardenPlotApproachAttempted=false;return;}
                 work=work with{Rule=liveTask.Rule};
             }
             if(!Player.IsLoaded){gardenArrival.Reset();return;}
@@ -144,7 +151,8 @@ public sealed partial class Plugin
                 if(gardenCareRun?.Running==true||gardenAutoPlantPlan!=null)return;
                 if(gardenCareRun?.Status.StartsWith("Stopped")==true)throw new InvalidOperationException(gardenCareRun.Status);
                 if(gardenTendPreparing){gardenTendPreparing=false;gardenTendStarted=false;gardenTendStatus="Preparation confirmed · continuing this batch";gardenAdventureNext=now.AddSeconds(1);return;}
-                gardenTendRoute.Dequeue();gardenPlotApproaching=gardenPlotApproachAttempted=false;gardenTendStarted=gardenTendTravelSent=false;gardenTendDeadline=now.AddMinutes(10);gardenAdventureNext=now.AddSeconds(3);return;
+                RequestStorageRefresh();nextRosterRead=default;if(syncFailures==0)nextSync=default;adventureNext=default;
+                gardenTendRoute.Clear();gardenSupplyRefreshUntil=now.AddSeconds(20);gardenPlotApproaching=gardenPlotApproachAttempted=false;gardenTendStarted=gardenTendTravelSent=false;gardenTendDeadline=now.AddMinutes(10);gardenAdventureNext=now.AddSeconds(3);return;
             }
             if(gardenTendTravelSent&&!gardenPlotApproaching){
                 var pending=now<goSeeNativeUntil||LifestreamBusy()||goSeeHomeTrip!=null||goSeeFriendTrip!=null||VisibleFollowAddon("SelectYesno")||VisibleFollowAddon("TeleportHousingFriend");
