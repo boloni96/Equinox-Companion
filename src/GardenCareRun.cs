@@ -26,6 +26,7 @@ public static class GardenCarePolicy
 }
 public interface IGardenCarePort
 {
+    DateTimeOffset? MovementRecoveryUntil=>null;
     void Validate();
     bool Open(int bed);
     bool Act(int bed,GardenCareAction action);
@@ -53,7 +54,8 @@ public sealed class GardenCareRun(IGardenCarePort port)
     {
         if(!Running)return;
         try{
-            port.Validate();if(now>=deadline)throw new InvalidOperationException("Timed out waiting for the game; the last action was not retried.");
+            port.Validate();if(phase==0&&port.MovementRecoveryUntil is {} recoveryUntil&&recoveryUntil>deadline)deadline=recoveryUntil;
+            if(now>=deadline)throw new InvalidOperationException("Timed out waiting for the game; the last action was not retried.");
             var bed=beds[index];Status=$"{Action} · Bed {bed} · {Completed}/{Total}";
             bool advance=phase switch{0=>port.Open(bed),1=>port.Act(bed,Action),2=>port.Confirmed(bed,Action,sent),_=>port.Close(bed)};
             if(!advance)return;
@@ -160,15 +162,18 @@ public sealed class GardenWalkRecovery
 {
     private Vector3 destination,side;
     private int attempts;
+    public DateTimeOffset? Deadline{get;private set;}
     public void Reset(Vector3 start,Vector3 target)
     {
-        destination=target;attempts=0;
+        destination=target;attempts=0;Deadline=null;
         var forward=target-start;forward.Y=0;
         side=forward.LengthSquared()>.01f?Vector3.Normalize(new Vector3(-forward.Z,0,forward.X)):Vector3.Zero;
     }
-    public Vector3[]? Next(Vector3 current)
+    public Vector3[]? Next(Vector3 current,DateTimeOffset now)
     {
-        if(attempts>=4||side==Vector3.Zero||!float.IsFinite(current.X)||!float.IsFinite(current.Y)||!float.IsFinite(current.Z)||Vector3.Distance(current,destination)>35)return null;
+        if(Deadline is {} end&&now>=end)return null;
+        if(side==Vector3.Zero||!float.IsFinite(current.X)||!float.IsFinite(current.Y)||!float.IsFinite(current.Z)||Vector3.Distance(current,destination)>35)return null;
+        Deadline??=now.AddSeconds(30);
         var offset=side*(attempts==0?.8f:attempts%2==1?-1.6f:1.6f);attempts++;
         return [current+offset,destination];
     }

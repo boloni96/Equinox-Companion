@@ -195,6 +195,7 @@ public sealed partial class Plugin
         private ulong targetId;private int openedBed;private DateTimeOffset opened,actionAt,next;private bool menuSent,itemOpened,itemSent;private InventoryType fertilizerBag;private int fertilizerSlot;private uint fertilizerId;private bool confirmationSent;private uint plantSeed,plantSoil;private GardenCareAction? issuedAction;
         public GardenCarePort(Plugin plugin,SharedGardenPlan plan,bool postPlantTend=false){this.postPlantTend=postPlantTend;p=plugin;original=plan;owner=Player.ContentId;world=Player.CurrentWorld.RowId;origin=Objects.LocalPlayer?.Position??default;}
         private SharedGardenPlan Current(){var source=p.GardenPlanSources().FirstOrDefault(x=>x.HouseId==original.HouseId&&x.Batch==original.Batch)??throw new InvalidOperationException("Garden plan is no longer available.");if(source.At!=original.At)throw new InvalidOperationException("Garden plan changed during the run.");return p.EffectiveGardenPlan(source);}
+        public DateTimeOffset? MovementRecoveryUntil=>walking?walkRecovery.Deadline:null;
         public void Validate()
         {
             if(!Player.IsLoaded||owner==0||Player.ContentId!=owner||Player.CurrentWorld.RowId!=world||!p.ObservingGardens||!p.atOutdoorEstate||SharedGardenLocation.Match(p.currentAddress,[original])!=original.HouseId||Objects.LocalPlayer is not {} player||(!walking&&Vector3.Distance(player.Position,origin)>1.5f)||Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]||Conditions[ConditionFlag.Unconscious]||Conditions[ConditionFlag.TradeOpen]||p.HelperInCutscene()||p.sellerRun.Running||p.TraderRunning||p.retrievalRun.Running||p.organizeRunning||p.chestRunning)
@@ -205,8 +206,8 @@ public sealed partial class Plugin
         {
             var now=DateTimeOffset.UtcNow;
             if(walking){if(walkProgress.Blocked(Objects.LocalPlayer!.Position,now)){
-                var recovery=walkRecovery.Next(Objects.LocalPlayer.Position);
-                if(recovery==null)throw new InvalidOperationException("Garden walk is blocked after four sidesteps. Clear the path or move closer, then restart.");
+                var recovery=walkRecovery.Next(Objects.LocalPlayer.Position,now);
+                if(recovery==null)throw new InvalidOperationException("Garden walk is blocked after 30 seconds of recovery. Clear the path or move closer, then restart.");
                 Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();
                 Pi.GetIpcSubscriber<List<Vector3>,bool?,float?,float?,object>("Lifestream.MoveEx").InvokeAction(recovery.ToList(),true,.3f,.3f);
                 walkProgress.Reset(Objects.LocalPlayer.Position,now);return false;

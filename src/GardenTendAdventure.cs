@@ -75,7 +75,7 @@ public sealed partial class Plugin
     }
     private bool TryRecoverGardenPlot(Vector3 position,DateTimeOffset now)
     {
-        var path=gardenPlotRecovery.Next(position);if(path==null)return false;
+        var path=gardenPlotRecovery.Next(position,now);if(path==null)return false;
         Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();
         Pi.GetIpcSubscriber<List<Vector3>,bool?,float?,float?,object>("Lifestream.MoveEx").InvokeAction(path.ToList(),true,.3f,.3f);
         gardenPlotProgress.Reset(position,now);gardenTendStatus="Plot approach blocked · trying a short sidestep";return true;
@@ -151,7 +151,7 @@ public sealed partial class Plugin
                 if(atDestination){
                     // Finish the short forward leg; crossing the boundary alone can leave us beside the fence.
                     if(LifestreamBusy()){
-                        if(now-gardenPlotApproachAt>TimeSpan.FromSeconds(20))
+                        if(now>=(gardenPlotRecovery.Deadline??gardenPlotApproachAt.AddSeconds(20)))
                             throw new InvalidOperationException("Forward plot approach timed out.");
                         if(Objects.LocalPlayer is {} inside&&gardenPlotProgress.Blocked(inside.Position,now)&&!TryRecoverGardenPlot(inside.Position,now))
                             throw new InvalidOperationException("Forward plot approach is blocked. Clear the path or move further inside, then restart.");
@@ -161,7 +161,7 @@ public sealed partial class Plugin
                 }
                 else{
                     if(atOutdoorEstate)throw new InvalidOperationException("Plot approach reached a different estate. Review the entrance before restarting.");
-                    if(now-gardenPlotApproachAt>TimeSpan.FromSeconds(20))throw new InvalidOperationException("Plot entrance approach timed out.");
+                    if(now>=(gardenPlotRecovery.Deadline??gardenPlotApproachAt.AddSeconds(20)))throw new InvalidOperationException("Plot entrance approach timed out.");
                     if(Objects.LocalPlayer is {} stalled&&gardenPlotProgress.Blocked(stalled.Position,now)&&!TryRecoverGardenPlot(stalled.Position,now))
                         throw new InvalidOperationException("Plot entrance approach is blocked. Move inside the destination plot and restart.");
                     if(now-gardenPlotApproachAt>TimeSpan.FromSeconds(3)&&!LifestreamBusy())throw new InvalidOperationException("The short approach did not enter the destination plot. Move inside and restart.");

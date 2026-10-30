@@ -109,15 +109,21 @@ internal static class GardenCare312Tests
         progress.Reset(new(2,0,0),now.AddSeconds(6));
         Check(!progress.Blocked(new(3,0,0),now.AddSeconds(8)),"New walk resets stalled state");
         var recovery=new GardenWalkRecovery();recovery.Reset(new(0,0,0),new(0,0,3));
-        var left=recovery.Next(new(0,0,1))!;
+        var left=recovery.Next(new(0,0,1),now)!;
         Check(left.Length==2&&left[0]==new System.Numerics.Vector3(-.8f,0,1)&&left[1]==new System.Numerics.Vector3(0,0,3),"First recovery steps left and retains destination");
-        var right=recovery.Next(left[0])!;
+        var right=recovery.Next(left[0],now.AddSeconds(4))!;
         Check(Math.Abs(right[0].X-.8f)<.001f&&right[1]==left[1],"Second recovery tries other side without changing destination");
-        var leftAgain=recovery.Next(right[0])!;var rightAgain=recovery.Next(leftAgain[0])!;
+        var leftAgain=recovery.Next(right[0],now.AddSeconds(8))!;var rightAgain=recovery.Next(leftAgain[0],now.AddSeconds(12))!;
         Check(leftAgain[0].X<0&&rightAgain[0].X>0,"Recovery alternates left right left right");
-        Check(recovery.Next(rightAgain[0])==null,"Recovery stops after four attempts");
+        Check(recovery.Next(rightAgain[0],now.AddSeconds(20))!=null,"Recovery continues beyond four attempts within time budget");
+        Check(recovery.Deadline==now.AddSeconds(30),"Recovery retries never extend initial thirty second deadline");
+        Check(recovery.Next(rightAgain[0],now.AddSeconds(30))==null,"Recovery stops at thirty seconds");
         recovery.Reset(new(0,0,0),new(0,0,3));
-        Check(recovery.Next(new(float.NaN,0,0))==null,"Invalid recovery position rejected");
+        Check(recovery.Next(new(float.NaN,0,0),now)==null,"Invalid recovery position rejected");
+        var blockedPort=new Port{OpenReady=false,MovementRecoveryUntil=now.AddSeconds(33)};
+        var blockedRun=new GardenCareRun(blockedPort);blockedRun.Start([1],GardenCareAction.Plant,now);
+        blockedRun.Tick(now.AddSeconds(21));Check(blockedRun.Running&&blockedPort.Acts==0,"Walking recovery can outlast ordinary twenty second opening deadline without planting");
+        blockedRun.Tick(now.AddSeconds(33));Check(!blockedRun.Running&&blockedPort.Acts==0,"Walking recovery deadline stops runner before sending an action");
         var planting=new HarvestPort(GardenCareAction.Plant);var plantingRun=new GardenCareRun(planting);plantingRun.Start([1,2,3],GardenCareAction.Plant,now);
         for(int i=0;i<12;i++)plantingRun.Tick(now.AddSeconds(i));
         Check(plantingRun.Completed==3&&!plantingRun.Running&&planting.Actions==3,"Three planting receipts survive game-cleared targets and send each action once");
@@ -143,8 +149,8 @@ internal static class GardenCare312Tests
     }
     private sealed class Port:IGardenCarePort
     {
-        public int Acts;public bool Receipt;
-        public void Validate(){} public bool Open(int bed)=>true;
+        public int Acts;public bool Receipt;public bool OpenReady=true;public DateTimeOffset? MovementRecoveryUntil{get;set;}
+        public void Validate(){} public bool Open(int bed)=>OpenReady;
         public bool Act(int bed,GardenCareAction action){Acts++;return true;}
         public bool Confirmed(int bed,GardenCareAction action,DateTimeOffset sent)=>Receipt;
         public bool Close(int bed)=>true;public void Release(){}
