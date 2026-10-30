@@ -1,5 +1,9 @@
-# Organizer and Trader request audit — 0.5.1.308
+# Organizer and Trader request audit — 0.5.1.309
 This is an implementation audit, not a claim that every path has been tested in game.
+
+## Transfer notice — 0.5.1.309
+- Replaced the unbounded list of non-craftable item names with a collapsed count and a six-row scrolling detail area. Long names are available on hover.
+- Cached missing-recipe names until the plan or catalog changes. Transfer mode and quantities are preserved; items without recipes still transfer as listed.
 
 ## Assignment coverage and compact review — 0.5.1.308
 - Fewer item moves compares zero-move shared homes before proposing consolidation; other priorities may gather fitting categories into fewer destinations.

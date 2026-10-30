@@ -6,6 +6,9 @@ namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
     private bool organizerTabWasVisible;
+    private RetrievalEntry[]? retrievalNoRecipeSource;
+    private RetrievalCatalog? retrievalNoRecipeCatalog;
+    private string[] retrievalNoRecipeNames=[];
     private int retrievalInventoryView,retrievalPlansView;
     private RetrieverWindow retrieverWindow=null!;private bool retrieverCommand,organizerCommand;
     private string retrievalName="New list",retrievalPaste="",retrievalSearch="",retrievalJob="All crafting logs",retrievalError="";
@@ -17,6 +20,26 @@ public sealed partial class Plugin
     private readonly HashSet<uint> retrievalSourceCategories=[];private bool retrievalSourceAllCategories=true;
     private int retrievalSearchPage;private RetrievalPreset[] retrievalSearchWorkshop=[];
     private string retrievalLastFilter="";private RetrievalRecipe[] retrievalSearchRecipes=[];private KeyValuePair<uint,string>[] retrievalSearchItems=[];
+    private void DrawNonCraftableTransferNotice()
+    {
+        if(!ReferenceEquals(retrievalNoRecipeSource,retrievalItems)||!ReferenceEquals(retrievalNoRecipeCatalog,retrievalCatalog)){
+            retrievalNoRecipeSource=retrievalItems;retrievalNoRecipeCatalog=retrievalCatalog;
+            retrievalNoRecipeNames=retrievalItems.Where(e=>!e.ReadyMaterial&&!retrievalCatalog!.Recipes.ContainsKey(e.ItemId)&&
+                !retrievalCatalog.WorkshopByItem.ContainsKey(e.ItemId)&&!retrievalCatalog.Outfits.ContainsKey(e.ItemId)).Select(e=>e.Name).ToArray();
+        }
+        if(retrievalNoRecipeNames.Length==0)return;
+        if(ImGui.TreeNode($"{retrievalNoRecipeNames.Length:N0} items without recipes · transferred as listed###TransferNoRecipes")){
+            ImGui.TextWrapped("These items stay unchanged. To transfer every item itself, choose Listed items themselves above.");
+            ImGui.BeginChild("TransferNoRecipeNames",new Vector2(0,ImGui.GetTextLineHeightWithSpacing()*6),true);
+            var clip=ImGui.ImGuiListClipper();clip.Begin(retrievalNoRecipeNames.Length,ImGui.GetTextLineHeightWithSpacing());
+            while(clip.Step())for(var i=clip.DisplayStart;i<clip.DisplayEnd;i++){
+                ImGui.TextUnformatted(retrievalNoRecipeNames[i]);
+                if(ImGui.IsItemHovered())ImGui.SetTooltip(retrievalNoRecipeNames[i]);
+            }
+            clip.End();clip.Destroy();ImGui.EndChild();ImGui.TreePop();
+        }
+        if(ImGui.IsItemHovered())ImGui.SetTooltip("No recipe, workshop turn-in or outfit expansion was found for these items. They remain in the transfer list; this does not prevent transferring them.");
+    }
     private sealed class RetrieverWindow(Plugin p):Window("Equinox Organizer###EquinoxRetriever")
     {
         public override void OnOpen(){Size??=new(720,500);SizeCondition=ImGuiCond.FirstUseEver;SizeConstraints=new(){MinimumSize=new(420,340),MaximumSize=new(float.MaxValue)};RespectCloseHotkey=false;AllowPinning=true;}
@@ -137,7 +160,7 @@ public sealed partial class Plugin
         if(retrievalPreviewDirty){retrievalPreviewDirty=false;RetrievalTry(()=>PreviewRetrieval(retrievalPreviewSelected,false));}
         ImGui.BeginChild("RetrievalContents",new Vector2(0,Math.Max(80,ImGui.GetContentRegionAvail().Y-8)),false);
         if(retrievalError.Length>0)ImGui.TextWrapped(retrievalError);
-        if(retrievalEntrust==null&&retrievalMode!=RetrievalMode.CompletedItems){var uncraftable=retrievalItems.Where(e=>!e.ReadyMaterial&&!retrievalCatalog!.Recipes.ContainsKey(e.ItemId)&&!retrievalCatalog.WorkshopByItem.ContainsKey(e.ItemId)&&!retrievalCatalog.Outfits.ContainsKey(e.ItemId)).Select(e=>e.Name).ToArray();if(uncraftable.Length>0)ImGui.TextWrapped("No crafting recipe found: "+string.Join(", ",uncraftable)+". These items stay unchanged. Choose Crafting logs in Add items to find craftable equipment; upgraded/exchange versions may not be craftable.");}
+        if(retrievalEntrust==null&&retrievalMode!=RetrievalMode.CompletedItems)DrawNonCraftableTransferNotice();
         ImGui.TextDisabled(retrievalPlan.Length+" items"+(retrievalPreviewSelected?" · selected only":""));
         if(retrievalPreview.Length>0&&ImGui.BeginTable("RetrievalPreview",6,ImGuiTableFlags.RowBg|ImGuiTableFlags.Resizable|ImGuiTableFlags.BordersInnerH)){
             ImGui.TableSetupColumn("Item",ImGuiTableColumnFlags.WidthStretch,3);foreach(var t in new[]{"Required","Bags used","To fetch","Retainers*","Missing*"})ImGui.TableSetupColumn(t,ImGuiTableColumnFlags.WidthStretch,1);ImGui.TableHeadersRow();
