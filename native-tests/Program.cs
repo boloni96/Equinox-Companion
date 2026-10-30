@@ -14,6 +14,9 @@ foreach (var name in soil.Concat(seeds).Concat(new[] { "Terreau de Thanalan III"
     Check(Read(Label(name)) == name.Trim(), $"Formatted label did not decode: {name}");
     Check(Read([..Encoding.UTF8.GetBytes(name), 0]) == name.Trim(), $"Plain label changed: {name}");
 }
+// Reproduce the formatted confirmation from the 0.5.1.316 Bed 2 report.
+byte[] prompt = [..Encoding.UTF8.GetBytes("Prepare the bed with a "), ..Label("bag of grade 3 Thanalan topsoil")[..^1], ..Encoding.UTF8.GetBytes(" and a "), ..Label("bag of mirror apple seeds")[..^1], (byte)'?', 0];
+Check(Read(prompt) == "Prepare the bed with a bag of grade 3 Thanalan topsoil and a bag of mirror apple seeds?", "Plant confirmation must decode colour payloads before matching exact seed and soil.");
 var soilDecoded = soil.Select(x => Read(Label(x))).ToArray();
 var seedsDecoded = seeds.Select(x => Read(Label(x))).ToArray();
 Check(soilDecoded.Select((name, index) => (name, index)).Where(x => x.name == "Potting Soil").Select(x => x.index).SequenceEqual(new[] { 0 }), "Only Potting Soil should be required in the captured starter step.");

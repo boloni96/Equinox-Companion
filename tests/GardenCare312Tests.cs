@@ -57,6 +57,10 @@ internal static class GardenCare312Tests
         Check(GardenAutoPlant.MatchesPlantConfirmation(plantPrompt,"Krakka Root Seeds","Potting Soil"),"Observed prepare-bed confirmation accepts exact planned seed and soil");
         Check(!GardenAutoPlant.MatchesPlantConfirmation(plantPrompt,"Mirror Apple Seeds","Potting Soil"),"Wrong seed confirmation rejected");
         Check(!GardenAutoPlant.MatchesPlantConfirmation(plantPrompt,"Krakka Root Seeds","Grade 3 Thanalan Topsoil"),"Wrong soil confirmation rejected");
+        const string bedTwoPrompt="Prepare the bed with a bag of grade 3 Thanalan topsoil and a bag of mirror apple seeds?";
+        Check(GardenAutoPlant.MatchesPlantConfirmation(bedTwoPrompt,"Mirror Apple Seeds","Grade 3 Thanalan Topsoil"),"Reported second-bed prompt matches exact materials");
+        Check(!GardenAutoPlant.MatchesPlantConfirmation(bedTwoPrompt,"Mirror Apple Seeds","Grade 2 Thanalan Topsoil"),"Different topsoil grade rejected");
+        Check(!GardenAutoPlant.MatchesPlantConfirmation(bedTwoPrompt,"Old World Fig Seeds","Grade 3 Thanalan Topsoil"),"Different cross seed rejected");
         Check(!GardenAutoPlant.MatchesPlantConfirmation("Discard Krakka Root Seeds and Potting Soil?","Krakka Root Seeds","Potting Soil"),"Unrelated item confirmation rejected");
         Check(GardenCarePolicy.TargetAllowed(10,0,true,GardenCareAction.Plant),"Game-cleared target allowed after planting confirmation was sent");
         Check(!GardenCarePolicy.TargetAllowed(10,0,false,GardenCareAction.Plant),"Plant target clearing before confirmation still stops");
