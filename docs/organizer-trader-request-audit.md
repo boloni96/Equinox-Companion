@@ -1,7 +1,16 @@
-# Organizer and Trader request audit — 0.5.1.307
+# Organizer and Trader request audit — 0.5.1.308
 This is an implementation audit, not a claim that every path has been tested in game.
 
-## Completed in this update
+## Assignment coverage and compact review — 0.5.1.308
+- Clearing all assignments no longer leaves large categories without suggested homes: categories that cannot fit one destination receive shared homes on current holders, requiring no extra slots for those holdings.
+- Prefer five spare normal slots, then allow otherwise-valid tighter fits; never count crystals against the 175 normal slots.
+- Crystals use separate per-item capacity (9999); quantities too large for one home can remain across several assigned retainers.
+- Unknown categories receive specific-item homes rather than a catch-all category-zero rule.
+- The exact proposed additions are applied to a copied setup and checked again. The preview shows the number of item types still without homes before saving.
+- Compact default summary; proposed homes grouped by retainer in a collapsed, bounded scrolling area. Slot/move explanations on hover. Missing-item details also scroll within a bounded area. Restore/Clear and Save/Load remain available in expandable sections.
+- Existing item/plan overrides and other character assignments remain intact. Optional capacity relief remains separate from assignment coverage; coverage is not a promise that every physical move is immediately executable.
+
+## UI cleanup — 0.5.1.307
 - Trader: item icons loaded independently of opening Organizer; Nearby players first and default; Gil & Item Trader labels in launcher/settings/floating icons. Existing standalone window retained.
 - Organizer: Inventory / Plans / Transfer / Organize / FC chest. Inventory contains current bags and recorded-storage browsing; Plans contains Add items and saved/Artisan/import/export sources.
 - Organize: one scope selector and one Preview/Organize pair. Source/destination appear for Selected movement. Assignments grouped together; Sort after organizing and staging reserve in Options.
