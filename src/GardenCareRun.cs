@@ -66,8 +66,10 @@ public sealed class GardenCareRun(IGardenCarePort port)
 
 public static class GardenAutoPlant
 {
+    public static SharedGardenPlan[] HousePlans(IEnumerable<SharedGardenPlan> plans,string house)=>plans.Where(p=>p.HouseId==house&&p.Definition?.Steps.Length>0&&p.CompletedAt==null&&p.Beds.Any(b=>b.Crop.Length>0&&b.Status is not ("confirmed" or "starter"))).OrderBy(p=>p.Batch).ToArray();
     public static (int Bed,GardenCareAction Action)? Next(SharedGardenPlan plan)
     {
+        if(!GardenGuidance.ValidOrder(plan))throw new InvalidOperationException("Saved planting order is invalid. Review this batch before auto planting.");
         var next=GardenGuidance.Next(plan);if(next==null)return null;
         if(GardenPlantRequirement.RemoveStarter(next)){
             if(next.KeepMature||next.Planted==null||next.Planted<plan.At||!GardenCropIdentity.Same(next.ActualCrop,next.Crop)||next.ActualSoil!=next.StarterSoil)

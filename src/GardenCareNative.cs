@@ -13,6 +13,11 @@ public sealed partial class Plugin
     private GardenCareRun? gardenCareRun;
     private DateTimeOffset gardenCareNext;
     private SharedGardenPlan? gardenAutoPlantPlan;
+    private Queue<SharedGardenPlan>? gardenHousePlant;
+    private ulong gardenHousePlantOwner;
+    private uint gardenHousePlantWorld;
+    private string gardenHousePlantStatus="";
+    private bool gardenCareWholeHouse;
     private SharedGardenPlan? gardenPartialHarvest;
     private bool gardenPartialSelected;
     private SharedGardenPlan[]? gardenPartialHouse;
@@ -31,9 +36,26 @@ public sealed partial class Plugin
             else gardenHouseHarvest=null;
         }
         if(gardenAutoPlantPlan is {} plan&&gardenCareRun?.Running!=true){
-            if(gardenCareRun?.Status.StartsWith("Stopped")==true){gardenAutoPlantPlan=null;return;}
+            if(gardenCareRun?.Status.StartsWith("Stopped")==true){gardenAutoPlantPlan=null;gardenHousePlant=null;return;}
             ContinueAutoPlant(plan);
         }
+        if(gardenHousePlant!=null&&gardenAutoPlantPlan==null&&gardenCareRun?.Running!=true){
+            if(gardenCareRun?.Status.StartsWith("Stopped")==true){gardenHousePlant=null;return;}
+            if(!Player.IsLoaded||Player.ContentId!=gardenHousePlantOwner||Player.CurrentWorld.RowId!=gardenHousePlantWorld){StopHousePlant("Stopped: character or world changed.");return;}
+            if(gardenHousePlant.TryDequeue(out var batch)){
+                gardenHousePlantStatus=$"Auto plant · Batch {batch.Batch} · {gardenHousePlant.Count} batches remaining";
+                gardenAutoPlantPlan=batch;ContinueAutoPlant(batch);
+            }else {gardenHousePlant=null;gardenHousePlantStatus="Complete · house saved plans finished.";}
+        }
+    }
+    private void StopHousePlant(string reason){gardenHousePlant=null;gardenAutoPlantPlan=null;gardenHousePlantStatus=reason;gardenCareRun?.Stop(reason);}
+    private void StartHousePlant(SharedGardenPlan plan)
+    {
+        var plans=GardenAutoPlant.HousePlans(GardenPlanSources().Where(p=>p.HouseId==plan.HouseId).Select(EffectiveGardenPlan),plan.HouseId);
+        gardenHouseHarvest=null;gardenCareRun=null;gardenAutoPlantPlan=null;
+        gardenHousePlantOwner=Player.ContentId;gardenHousePlantWorld=Player.CurrentWorld.RowId;
+        gardenHousePlant=plans.Length>0?new(plans):null;
+        gardenHousePlantStatus=plans.Length>0?$"Auto plant · {plans.Length} saved batches queued":"No unfinished saved plans at this house.";
     }
     private void ContinueAutoPlant(SharedGardenPlan source)
     {
@@ -45,13 +67,13 @@ public sealed partial class Plugin
             var port=new GardenCarePort(this,plan);port.Validate();
             port.CheckPlantSupplies(plan.Beds.First(b=>b.Bed==next.Value.Bed));
             gardenCareRun=new(port);gardenCareRun.Start([next.Value.Bed],next.Value.Action,DateTimeOffset.UtcNow);
-        }catch(Exception e){gardenAutoPlantPlan=null;gardenCareRun?.Stop("Stopped: "+e.Message);PrintEquinox("Auto plant: "+e.Message);}
+        }catch(Exception e){StopHousePlant("Stopped: "+e.Message);PrintEquinox("Auto plant: "+e.Message);}
     }
     private void StartHouseHarvest(SharedGardenPlan[] plans)=>StartHouseCare(plans,GardenCareAction.Harvest,gardenPartialHouseSelected);
     private void StartHouseCare(SharedGardenPlan[] plans,GardenCareAction action,bool selected=false)
     {
         if(gardenCareRun?.Running==true||gardenTendRoute!=null)return;
-        gardenAutoPlantPlan=null;gardenHouseHarvest=new(plans.Select(p=>(p,action,selected?p.Beds.Where(b=>gardenHarvestSelection.Contains((p.Batch,b.Bed))).Select(b=>b.Bed).ToArray():null)));gardenCareRun=null;
+        gardenHousePlant=null;gardenHousePlantStatus="";gardenAutoPlantPlan=null;gardenHouseHarvest=new(plans.Select(p=>(p,action,selected?p.Beds.Where(b=>gardenHarvestSelection.Contains((p.Batch,b.Bed))).Select(b=>b.Bed).ToArray():null)));gardenCareRun=null;
     }
     private void StartGardenCare(SharedGardenPlan plan,GardenCareAction action,bool selected=false,int[]? allowedBeds=null)
     {
@@ -66,6 +88,8 @@ public sealed partial class Plugin
     private static unsafe bool SellerAddonPresentForGarden()=>new[]{"SelectString","SelectYesno","SelectIconString","Talk","ContextMenu","HousingGardening"}.Any(n=>SellerAddon(n)!=null);
     private void DrawGardenCareProgress()
     {
+        if(gardenHousePlantStatus.Length>0)ImGui.TextWrapped(gardenHousePlantStatus);
+        if(gardenHousePlant!=null&&ImGui.SmallButton("Stop house planting"))StopHousePlant("Stopped by you · an already-sent action may still finish.");
         if(gardenPartialHouse is {} house){
             ImGui.TextWrapped("Some crops in this house are still growing. Harvest only ready, unprotected beds across its batches now?");
             if(ImGui.Button("Harvest ready beds across batches")){StartHouseHarvest(house);gardenPartialHouse=null;}
@@ -79,9 +103,14 @@ public sealed partial class Plugin
         }
         if(gardenCareRun==null||gardenCareRun.Status.Length==0)return;
         if(gardenCareRun.Running){
-            if(ImGui.SmallButton("Stop garden care")){gardenAutoPlantPlan=null;gardenHouseHarvest=null;StopTendAdventure("Stopped by you.");gardenCareRun.Stop("Stopped by you · an already-sent action may still finish.");}
+            if(ImGui.SmallButton("Stop garden care")){gardenHousePlant=null;gardenHousePlantStatus="";gardenAutoPlantPlan=null;gardenHouseHarvest=null;StopTendAdventure("Stopped by you.");gardenCareRun.Stop("Stopped by you · an already-sent action may still finish.");}
             ImGui.SameLine();ImGui.ProgressBar((float)gardenCareRun.Completed/Math.Max(1,gardenCareRun.Total),new Vector2(Math.Max(100,ImGui.GetContentRegionAvail().X),ImGui.GetFrameHeight()),gardenCareRun.Status);
         }else ImGui.TextWrapped(gardenCareRun.Status);
+    }
+    private void StartScopedGardenCare(SharedGardenPlan plan,GardenCareAction action,DateTimeOffset now)
+    {
+        if(gardenCareWholeHouse)StartHouseCare(GardenCarePolicy.HouseCare(GardenPlanSources().Where(p=>p.HouseId==plan.HouseId).Select(EffectiveGardenPlan),plan.HouseId,action,now),action);
+        else StartGardenCare(plan,action);
     }
     private void DrawGardenCareMenu(SharedGardenPlan plan,string popup)
     {
@@ -93,22 +122,33 @@ public sealed partial class Plugin
         ImGui.TextUnformatted($"Batch {plan.Batch} · care actions");
         var walk=config.GardenCareWalk;if(ImGui.Checkbox("Walk to mapped beds (Lifestream)",ref walk)){config.GardenCareWalk=walk;SaveConfiguration();}
         if(ImGui.IsItemHovered())ImGui.SetTooltip("Short direct approaches inside this plot, up to 30 yalms. Lifestream movement does not find a route around furniture; blocked approaches stop on timeout.");
-        ImGui.BeginDisabled(gardenHouseHarvest!=null||gardenTendRoute!=null||gardenCareRun?.Running==true||!atOutdoorEstate||SharedGardenLocation.Match(currentAddress,[plan])!=plan.HouseId);
-        if(ImGui.Button("Auto plant saved plan")){gardenAutoPlantPlan=plan;gardenCareRun=null;ContinueAutoPlant(plan);ImGui.CloseCurrentPopup();}
-        if(ImGui.IsItemHovered())ImGui.SetTooltip("Uses the saved step order and exact seeds/soil. Removes only its verified temporary starter, after all prerequisite planting. Existing unrelated crops are never removed.");
-        if(ImGui.Button("Tend due")){StartGardenCare(plan,GardenCareAction.Tend);ImGui.CloseCurrentPopup();}
-        ImGui.SameLine();if(ImGui.Button("Fertilize eligible")){StartGardenCare(plan,GardenCareAction.Fertilize);ImGui.CloseCurrentPopup();}
-        if(ImGui.Button("Harvest all eligible")){gardenPartialSelected=false;if(GardenAutoPlant.PartialHarvest(plan))gardenPartialHarvest=plan;else StartGardenCare(plan,GardenCareAction.Harvest);ImGui.CloseCurrentPopup();}
-        if(ImGui.Button("Harvest all batches at this house")){
-            var plans=GardenCarePolicy.HouseHarvest(GardenPlanSources().Where(p=>p.HouseId==plan.HouseId).Select(EffectiveGardenPlan),plan.HouseId,now);
-            gardenPartialHouseSelected=false;
-            gardenPartialHarvest=null;gardenPartialSelected=false;
-            if(plans.Any(GardenAutoPlant.PartialHarvest))gardenPartialHouse=plans;else StartHouseHarvest(plans);
-            ImGui.CloseCurrentPopup();
+        ImGui.BeginDisabled(gardenHousePlant!=null||gardenAutoPlantPlan!=null||gardenHouseHarvest!=null||gardenTendRoute!=null||gardenCareRun?.Running==true||!atOutdoorEstate||SharedGardenLocation.Match(currentAddress,[plan])!=plan.HouseId);
+        ImGui.TextDisabled("Apply actions to");
+        if(ImGui.RadioButton("This batch",!gardenCareWholeHouse))gardenCareWholeHouse=false;
+        ImGui.SameLine();if(ImGui.RadioButton("Whole house",gardenCareWholeHouse))gardenCareWholeHouse=true;
+        if(ImGui.BeginTable("GardenCareActions",2,ImGuiTableFlags.SizingStretchSame)){
+            ImGui.TableNextRow();ImGui.TableNextColumn();
+            if(ImGui.Button("Auto plant",new Vector2(-1,0))){
+                gardenHousePlantStatus="";
+                if(gardenCareWholeHouse)StartHousePlant(plan);else {gardenAutoPlantPlan=plan;gardenCareRun=null;ContinueAutoPlant(plan);}
+                ImGui.CloseCurrentPopup();}
+            if(ImGui.IsItemHovered())ImGui.SetTooltip("Plant each selected batch's own saved plan: exact seeds, soil and step order, including verified starter replacement. Whole house skips batches without an unfinished saved plan. Missing supplies or an unsafe step stop the queue.");
+            ImGui.TableNextColumn();
+            if(ImGui.Button("Tend due",new Vector2(-1,0))){StartScopedGardenCare(plan,GardenCareAction.Tend,now);ImGui.CloseCurrentPopup();}
+            ImGui.TableNextRow();ImGui.TableNextColumn();
+            if(ImGui.Button("Fertilize",new Vector2(-1,0))){StartScopedGardenCare(plan,GardenCareAction.Fertilize,now);ImGui.CloseCurrentPopup();}
+            if(ImGui.IsItemHovered())ImGui.SetTooltip("Fertilizes eligible growing beds. Fishmeal must be in bags; recorded cooldowns are respected.");
+            ImGui.TableNextColumn();
+            if(ImGui.Button("Harvest",new Vector2(-1,0))){
+                gardenPartialHarvest=null;gardenPartialSelected=false;gardenPartialHouseSelected=false;
+                if(gardenCareWholeHouse){var plans=GardenCarePolicy.HouseHarvest(GardenPlanSources().Where(p=>p.HouseId==plan.HouseId).Select(EffectiveGardenPlan),plan.HouseId,now);
+                    if(plans.Any(GardenAutoPlant.PartialHarvest))gardenPartialHouse=plans;else StartHouseHarvest(plans);}
+                else if(GardenAutoPlant.PartialHarvest(plan))gardenPartialHarvest=plan;else StartGardenCare(plan,GardenCareAction.Harvest);
+                ImGui.CloseCurrentPopup();}
+            if(ImGui.IsItemHovered())ImGui.SetTooltip("Harvests eligible beds in the chosen scope. Protected crops stay; mixed maturity asks before harvesting ready beds.");
+            ImGui.EndTable();
         }
-        if(ImGui.IsItemHovered())ImGui.SetTooltip("Queues this house's batches in order. Protected and immature crops stay. Enable Walk to mapped beds to reach other patches; Stop cancels the remaining queue.");
-        if(ImGui.Button("Tend due across all batches")){StartHouseCare(GardenCarePolicy.HouseCare(GardenPlanSources().Where(p=>p.HouseId==plan.HouseId).Select(EffectiveGardenPlan),plan.HouseId,GardenCareAction.Tend,now),GardenCareAction.Tend);ImGui.CloseCurrentPopup();}
-        if(ImGui.Button("Fertilize all eligible batches")){StartHouseCare(GardenCarePolicy.HouseCare(GardenPlanSources().Where(p=>p.HouseId==plan.HouseId).Select(EffectiveGardenPlan),plan.HouseId,GardenCareAction.Fertilize,now),GardenCareAction.Fertilize);ImGui.CloseCurrentPopup();}
+        ImGui.Separator();
         if(ImGui.TreeNode("Choose beds to harvest · all batches")){
             var housePlans=GardenPlanSources().Where(p=>p.HouseId==plan.HouseId).OrderBy(p=>p.Batch).Select(EffectiveGardenPlan).ToArray();
             if(ImGui.SmallButton("Select eligible")){foreach(var hp in housePlans)foreach(var bed in hp.Beds.Where(b=>GardenCarePolicy.Eligible(hp,b,GardenCareAction.Harvest,now)))gardenHarvestSelection.Add((hp.Batch,bed.Bed));}
