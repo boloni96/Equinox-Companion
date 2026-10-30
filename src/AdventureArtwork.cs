@@ -71,9 +71,6 @@ public sealed partial class Plugin
     DrawSavedGardenPlans(plan,canPlan);
     ImGui.BeginDisabled(!canPlan);DrawGardenPlanActions(plan);ImGui.EndDisabled();
     if(!canPlan)ImGui.TextDisabled("Visit this house to apply or change its saved plan.");
-    if(selectedGardenBed is {} selected&&selected.House==plan.HouseId&&selected.Batch==plan.Batch&&plan.Beds.FirstOrDefault(b=>b.Bed==selected.Bed) is {} bed){
-     DrawGardenPlanTooltip(bed,false);DrawGardenCareTooltip(bed,showPlan,false);
-    }
    }ImGui.PopID();
   }
   ImGui.Checkbox("Show observed garden",ref adventureShowActual);
