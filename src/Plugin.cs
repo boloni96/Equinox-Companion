@@ -599,7 +599,7 @@ public sealed partial class Plugin : IDalamudPlugin
         // Consume the menu once, so both paths retain one action/receipt identity.
         if (!ReferenceEquals(Interlocked.CompareExchange(ref activeGardenMenu, null, menu), menu)) return;
         var option = menu.OptionAt(copied[0]);
-        Volatile.Write(ref pendingTend, TendIntent.From(menu, option, now));
+        Volatile.Write(ref pendingTend, TendIntent.From(menu, option, now,GardenResolver()));
         Volatile.Write(ref pendingRemove, RemoveIntent.From(menu, option, now));
         Volatile.Write(ref pendingHarvest, HarvestIntent.From(menu, option, now, harvestInspections.ToArray(), CropItemId));
         menuMessages.Enqueue(new(now, "garden.callbackObservation", new {

@@ -19,11 +19,21 @@ public sealed partial class Plugin
         if(presence!=null&&(observed==null||DateTimeOffset.Parse(presence.At)>observed.At))return presence.World;
         return !string.IsNullOrEmpty(observed?.Actor.CurrentWorldName)?observed.Actor.CurrentWorldName:target.World;
     }
-    private bool StartAssignedCharacterSwitch(SharedCharacter target)
+    private int GardenServiceAccount(SharedCharacter target)
+    {
+        var current=CurrentSharedCharacter();if(current==null)return -1;
+        var from=CharacterSwitchScope(current.Id);var to=CharacterSwitchScope(target.Id);
+        if(from.PersonId.Length==0||from.PersonId!=to.PersonId)return -1;
+        if(LoginRelationship(target,from,to)==CharacterLoginRelationship.Unverified)return -1;
+        if(from.AccountId==to.AccountId)return CurrentLoginServiceAccount();
+        var key=SquareEnixLoginState.TargetAccountKey(config.SharedRoster,target,to.PersonId,to.AccountId);
+        return config.ObservedServiceAccountIndices.TryGetValue(key,out var index)&&index is >=0 and <=15?index:-1;
+    }
+    private bool StartAssignedCharacterSwitch(SharedCharacter target,bool allowLinkedAccounts=false)
     {
         if(assignedLogin!=null)return assignedLogin.Target.Id==target.Id;
-        var current=CurrentSharedCharacter();var index=CurrentLoginServiceAccount();
-        if(current==null||index is <0 or >15||current.AccountId!=target.AccountId||!DeliveryCharacters().Any(x=>x.Character.Id==target.Id&&x.Person.Characters.Any(c=>c.Id==current.Id))){characterTravelStatus="Verify this client's current service account before automatic switching.";return false;}
+        var current=CurrentSharedCharacter();var index=allowLinkedAccounts?GardenServiceAccount(target):CurrentLoginServiceAccount();
+        if(current==null||index is <0 or >15||(!allowLinkedAccounts&&current.AccountId!=target.AccountId)||!DeliveryCharacters().Any(x=>x.Character.Id==target.Id&&x.Person.Characters.Any(c=>c.Id==current.Id))){characterTravelStatus="Verify this client's current service account before automatic switching.";return false;}
         if(LifestreamBusy()||followSession.Armed||TraderRunning||HelperInCutscene()){characterTravelStatus="Finish the active operation before switching.";return false;}
         try{
             Pi.GetIpcSubscriber<object>("Lifestream.Logout").InvokeFunc();

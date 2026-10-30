@@ -85,6 +85,9 @@ public sealed partial class Plugin
             observedLoginFingerprint = Convert.ToHexString(System.Security.Cryptography.HMACSHA256.HashData(
                 System.Text.Encoding.UTF8.GetBytes(config.PairingKey), System.Text.Encoding.UTF8.GetBytes(identity))).ToLowerInvariant();
         }
+        if(!config.ObservedServiceAccountIndices.TryGetValue(observedLoginFingerprint,out var savedIndex)||savedIndex!=index){
+            config.ObservedServiceAccountIndices[observedLoginFingerprint]=index;SaveConfiguration();
+        }
         ObserveSquareEnixLogin(observedLoginFingerprint);
         return observedLoginFingerprint;
     }

@@ -6,10 +6,18 @@ public sealed record TendingRecord(string EventId, DateTimeOffset SelectedAt, Da
 
 public sealed record TendIntent(string EventId, DateTimeOffset At, GardenSnapshot Target, int Patch, int Bed, string Kind = "garden.tended")
 {
-    public static TendIntent? From(GardenMenu menu, string? option, DateTimeOffset at)
+    public static TendIntent? From(GardenMenu menu, string? option, DateTimeOffset at,Func<SyncEvent,SyncEvent>? resolver=null)
     {
         if (option is not ("Tend Crop" or "Fertilize Crop") || menu.Target.Address is null || menu.Target.TargetId is null) return null;
         var match = Regex.Match(menu.Title, @"^([1-8])(?:st|nd|rd|th) Bed, ([1-3])(?:st|nd|rd|th) Patch$", RegexOptions.CultureInvariant);
+        if(!match.Success&&option=="Tend Crop"&&menu.Options.Contains(option)&&resolver!=null&&
+            menu.Target.Address is {Apartment:false,Workshop:false,Room:0,Plot:>0} address&&
+            menu.Target.TargetDetails is {DataId:2003757,EventArgument:{} argument} details){
+            var mapped=resolver(new("visitor-care","garden.unmapped",at,menu.Target.Actor,address,
+                GardenTarget:new(argument,details.X,details.Y,details.Z)));
+            if(mapped.Patch is >=1 and <=3&&mapped.Bed is >=1 and <=8)
+                return new(Guid.NewGuid().ToString("N"),at,menu.Target,mapped.Patch.Value,mapped.Bed.Value);
+        }
         return match.Success ? new(Guid.NewGuid().ToString("N"), at, menu.Target,
             int.Parse(match.Groups[2].Value), int.Parse(match.Groups[1].Value), option == "Fertilize Crop" ? "garden.fertilized" : "garden.tended") : null;
     }
