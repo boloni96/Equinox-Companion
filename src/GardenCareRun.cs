@@ -6,7 +6,7 @@ public static class GardenCarePolicy
 {
     public static bool TargetAllowed(ulong expected,ulong current,bool sent,GardenCareAction? action)=>expected==0||expected==current||current==0&&sent&&action is GardenCareAction.Harvest or GardenCareAction.RemoveStarter or GardenCareAction.Plant or GardenCareAction.Tend or GardenCareAction.Fertilize;
     public static SharedGardenPlan[] HouseHarvest(IEnumerable<SharedGardenPlan> plans,string house,DateTimeOffset now)=>HouseCare(plans,house,GardenCareAction.Harvest,now);
-    public static SharedGardenPlan[] HouseCare(IEnumerable<SharedGardenPlan> plans,string house,GardenCareAction action,DateTimeOffset now)=>plans.Where(p=>p.HouseId==house&&p.Beds.Any(b=>Eligible(p,b,action,now))).OrderBy(p=>p.Batch).ToArray();
+    public static SharedGardenPlan[] HouseCare(IEnumerable<SharedGardenPlan> plans,string house,GardenCareAction action,DateTimeOffset now,bool tendAll=false)=>plans.Where(p=>p.HouseId==house&&p.Beds.Any(b=>Eligible(p,b,action,now,tendAll))).OrderBy(p=>p.Batch).ToArray();
     public const string KeepGuide = "A cross is determined when the new seed is planted beside a compatible crop. Harvesting later collects that bed's possible crossbred seeds. Keep a standing neighbour only until all planting steps that need it are confirmed. Keep for repeated crosses is optional; release it when you no longer need that standing plant. Needing seeds for a later stage does not mean its parent must stay planted.";
     public static string Protection(SharedGardenPlan plan, SharedGardenBed bed)
     {
@@ -15,12 +15,12 @@ public static class GardenCarePolicy
         var required=(plan.Definition?.Steps??[]).Where(s=>s.Neighbour==bed.Bed && plan.Beds.FirstOrDefault(b=>b.Bed==s.Bed)?.Status!="confirmed").Select(s=>s.Bed).Distinct().ToArray();
         return required.Length>0?"Needed beside Bed "+string.Join(", ",required)+" until its planting is confirmed.":"";
     }
-    public static bool Eligible(SharedGardenPlan plan,SharedGardenBed bed,GardenCareAction action,DateTimeOffset now)
+    public static bool Eligible(SharedGardenPlan plan,SharedGardenBed bed,GardenCareAction action,DateTimeOffset now,bool tendAll=false)
     {
         if(!GardenVisualState.HasActualCrop(bed)||bed.DeadConfirmedAt!=null||bed.Queued)return false;
         if(action==GardenCareAction.Harvest)return Protection(plan,bed).Length==0 && (bed.Ready || GardenTiming.MaturityEstimateDue(bed.HarvestAt,bed.GrowingObservedAt,now));
         if(bed.Ready || bed.KeepMature || GardenPlantRequirement.SuppressTending(bed))return false;
-        return action==GardenCareAction.Tend ? bed.NextTend==null||bed.NextTend<=now : bed.LastFertilized==null||now-bed.LastFertilized>=TimeSpan.FromHours(1);
+        return action==GardenCareAction.Tend ? tendAll&&bed.ObservedAt!=null||bed.NextTend==null||bed.NextTend<=now : bed.LastFertilized==null||now-bed.LastFertilized>=TimeSpan.FromHours(1);
     }
     public static string Certainty(SharedGardenBed bed) => bed.Ready?"Confirmed ready":bed.Planted==null?"Planting time unknown":bed.HarvestAt is {} at?$"Estimated maturity from {at.LocalDateTime:g} · check in game; actual readiness can be later":"Harvest timing unknown";
 }

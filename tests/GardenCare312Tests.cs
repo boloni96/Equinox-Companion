@@ -54,6 +54,12 @@ internal static class GardenCare312Tests
         var watered=growing with {Batch=2,Beds=[growing.Beds[0] with {NextTend=now.AddHours(12),LastFertilized=now}]};
         Check(GardenCarePolicy.HouseCare([mature,growing,watered,growing with{HouseId="other"}],"house",GardenCareAction.Tend,now).Length==1,"House tending skips mature, recently tended and other houses");
         Check(GardenCarePolicy.HouseCare([mature,growing,watered],"house",GardenCareAction.Fertilize,now).Length==1,"House fertilizing respects maturity and cooldown");
+        Check(GardenCarePolicy.Eligible(watered,watered.Beds[0],GardenCareAction.Tend,now,true),"Manual Tend all includes recently watered crops");
+        Check(!GardenCarePolicy.Eligible(watered,watered.Beds[0],GardenCareAction.Tend,now),"Automatic Tend due still skips recently watered crops");
+        Check(GardenCarePolicy.HouseCare([mature,growing,watered,growing with{HouseId="other"}],"house",GardenCareAction.Tend,now,true).Length==2,"Manual house tending includes watered batches but excludes mature and other houses");
+        Check(!GardenCarePolicy.Eligible(mature,mature.Beds[0],GardenCareAction.Tend,now,true),"Manual Tend all still skips mature crops");
+        Check(!GardenCarePolicy.Eligible(watered,watered.Beds[0] with{DeadConfirmedAt=now},GardenCareAction.Tend,now,true),"Manual Tend all skips dead crops");
+
         var pending=new GardenPendingDisplay();var builds=0;var sent=new List<string>();
         IEnumerable<SyncEvent> Read(){builds++;return [];}
         var roster=new object();for(var i=0;i<600;i++)pending.Get(growing,roster,"same",i*16,Read,()=>sent);

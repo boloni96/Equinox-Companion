@@ -21,7 +21,7 @@ public sealed partial class Plugin
     private SharedGardenPlan? gardenPartialHarvest;
     private bool gardenPartialSelected;
     private SharedGardenPlan[]? gardenPartialHouse;
-    private Queue<(SharedGardenPlan Plan,GardenCareAction Action,int[]? Beds)>? gardenHouseHarvest;
+    private Queue<(SharedGardenPlan Plan,GardenCareAction Action,int[]? Beds,bool TendAll)>? gardenHouseHarvest;
     private bool gardenPartialHouseSelected;
     private readonly HashSet<(int Batch,int Bed)> gardenHarvestSelection=[];
     private string gardenHarvestScope="";
@@ -32,7 +32,7 @@ public sealed partial class Plugin
         if(gardenCareRun?.Running==true)gardenCareRun.Tick(now);
         if(gardenHouseHarvest!=null&&gardenCareRun?.Running!=true){
             if(gardenCareRun?.Status.StartsWith("Stopped")==true)gardenHouseHarvest=null;
-            else if(gardenHouseHarvest.TryDequeue(out var nextBatch))StartGardenCare(nextBatch.Plan,nextBatch.Action,allowedBeds:nextBatch.Beds);
+            else if(gardenHouseHarvest.TryDequeue(out var nextBatch))StartGardenCare(nextBatch.Plan,nextBatch.Action,allowedBeds:nextBatch.Beds,tendAll:nextBatch.TendAll);
             else gardenHouseHarvest=null;
         }
         if(gardenAutoPlantPlan is {} plan&&gardenCareRun?.Running!=true){
@@ -79,19 +79,19 @@ public sealed partial class Plugin
         }catch(Exception e){StopHousePlant("Stopped: "+e.Message);PrintEquinox("Auto plant: "+e.Message);}
     }
     private void StartHouseHarvest(SharedGardenPlan[] plans)=>StartHouseCare(plans,GardenCareAction.Harvest,gardenPartialHouseSelected);
-    private void StartHouseCare(SharedGardenPlan[] plans,GardenCareAction action,bool selected=false)
+    private void StartHouseCare(SharedGardenPlan[] plans,GardenCareAction action,bool selected=false,bool tendAll=false)
     {
         if(gardenCareRun?.Running==true||gardenTendRoute!=null)return;
-        gardenHousePlant=null;gardenHousePlantStatus="";gardenAutoPlantPlan=null;gardenHouseHarvest=new(plans.Select(p=>(p,action,selected?p.Beds.Where(b=>gardenHarvestSelection.Contains((p.Batch,b.Bed))).Select(b=>b.Bed).ToArray():null)));gardenCareRun=null;
+        gardenHousePlant=null;gardenHousePlantStatus="";gardenAutoPlantPlan=null;gardenHouseHarvest=new(plans.Select(p=>(p,action,selected?p.Beds.Where(b=>gardenHarvestSelection.Contains((p.Batch,b.Bed))).Select(b=>b.Bed).ToArray():null,tendAll)));gardenCareRun=null;
     }
-    private void StartGardenCare(SharedGardenPlan plan,GardenCareAction action,bool selected=false,int[]? allowedBeds=null)
+    private void StartGardenCare(SharedGardenPlan plan,GardenCareAction action,bool selected=false,int[]? allowedBeds=null,bool tendAll=false)
     {
         if(gardenCareRun?.Running==true)return;
         try{
-            var port=new GardenCarePort(this,plan);port.Validate();
+            var port=new GardenCarePort(this,plan,tendAll:tendAll);port.Validate();
             if(SellerAddonPresentForGarden())throw new InvalidOperationException("Close the current game dialogue or item menu before starting garden care.");
             gardenCareRun=new(port);
-            gardenCareRun.Start(plan.Beds.Where(b=>GardenCarePolicy.Eligible(plan,b,action,DateTimeOffset.UtcNow)&&(!selected||gardenHarvestSelection.Contains((plan.Batch,b.Bed)))&&(allowedBeds==null||allowedBeds.Contains(b.Bed))).Select(b=>b.Bed),action,DateTimeOffset.UtcNow);
+            gardenCareRun.Start(plan.Beds.Where(b=>GardenCarePolicy.Eligible(plan,b,action,DateTimeOffset.UtcNow,tendAll)&&(!selected||gardenHarvestSelection.Contains((plan.Batch,b.Bed)))&&(allowedBeds==null||allowedBeds.Contains(b.Bed))).Select(b=>b.Bed),action,DateTimeOffset.UtcNow);
         }catch(Exception e){gardenHouseHarvest=null;PrintEquinox("Garden care: "+e.Message);}
     }
     private static unsafe bool SellerAddonPresentForGarden()=>new[]{"SelectString","SelectYesno","SelectIconString","Talk","ContextMenu","HousingGardening"}.Any(n=>SellerAddon(n)!=null);
@@ -116,10 +116,10 @@ public sealed partial class Plugin
             ImGui.SameLine();ImGui.ProgressBar((float)gardenCareRun.Completed/Math.Max(1,gardenCareRun.Total),new Vector2(Math.Max(100,ImGui.GetContentRegionAvail().X),ImGui.GetFrameHeight()),gardenCareRun.Status);
         }else ImGui.TextWrapped(gardenCareRun.Status);
     }
-    private void StartScopedGardenCare(SharedGardenPlan plan,GardenCareAction action,DateTimeOffset now)
+    private void StartScopedGardenCare(SharedGardenPlan plan,GardenCareAction action,DateTimeOffset now,bool tendAll=false)
     {
-        if(gardenCareWholeHouse)StartHouseCare(GardenCarePolicy.HouseCare(GardenPlanSources().Where(p=>p.HouseId==plan.HouseId).Select(EffectiveGardenPlan),plan.HouseId,action,now),action);
-        else StartGardenCare(plan,action);
+        if(gardenCareWholeHouse)StartHouseCare(GardenCarePolicy.HouseCare(GardenPlanSources().Where(p=>p.HouseId==plan.HouseId).Select(EffectiveGardenPlan),plan.HouseId,action,now,tendAll),action,tendAll:tendAll);
+        else StartGardenCare(plan,action,tendAll:tendAll);
     }
     private void DrawGardenCareMenu(SharedGardenPlan plan,string popup)
     {
@@ -146,7 +146,7 @@ public sealed partial class Plugin
                 ImGui.CloseCurrentPopup();}
             if(ImGui.IsItemHovered())ImGui.SetTooltip("Plant each selected batch's own saved plan: exact seeds, soil and step order, including verified starter replacement. Whole house skips batches without an unfinished saved plan. After planting, tends the new crops before finishing. Missing supplies or an unsafe step stop the queue.");
             ImGui.TableNextColumn();
-            if(ImGui.Button("Tend due",new Vector2(-1,0))){StartScopedGardenCare(plan,GardenCareAction.Tend,now);ImGui.CloseCurrentPopup();}
+            if(ImGui.Button("Tend all",new Vector2(-1,0))){StartScopedGardenCare(plan,GardenCareAction.Tend,now,tendAll:true);ImGui.CloseCurrentPopup();}
             ImGui.TableNextRow();ImGui.TableNextColumn();
             if(ImGui.Button("Fertilize",new Vector2(-1,0))){StartScopedGardenCare(plan,GardenCareAction.Fertilize,now);ImGui.CloseCurrentPopup();}
             if(ImGui.IsItemHovered())ImGui.SetTooltip("Fertilizes eligible growing beds. Fishmeal must be in bags; recorded cooldowns are respected.");
@@ -189,11 +189,11 @@ public sealed partial class Plugin
     }
     private sealed unsafe class GardenCarePort : IGardenCarePort
     {
-        private readonly bool postPlantTend;private readonly Plugin p;private readonly SharedGardenPlan original;private readonly ulong owner;private readonly uint world;private Vector3 origin;private bool walking;private int walkedBed;
+        private readonly bool postPlantTend,tendAll;private readonly Plugin p;private readonly SharedGardenPlan original;private readonly ulong owner;private readonly uint world;private Vector3 origin;private bool walking;private int walkedBed;
         private readonly GardenWalkProgress walkProgress=new();
         private readonly GardenWalkRecovery walkRecovery=new();
         private ulong targetId;private int openedBed;private DateTimeOffset opened,actionAt,next;private bool menuSent,itemOpened,itemSent;private InventoryType fertilizerBag;private int fertilizerSlot;private uint fertilizerId;private bool confirmationSent;private uint plantSeed,plantSoil;private GardenCareAction? issuedAction;
-        public GardenCarePort(Plugin plugin,SharedGardenPlan plan,bool postPlantTend=false){this.postPlantTend=postPlantTend;p=plugin;original=plan;owner=Player.ContentId;world=Player.CurrentWorld.RowId;origin=Objects.LocalPlayer?.Position??default;}
+        public GardenCarePort(Plugin plugin,SharedGardenPlan plan,bool postPlantTend=false,bool tendAll=false){this.postPlantTend=postPlantTend;this.tendAll=tendAll;p=plugin;original=plan;owner=Player.ContentId;world=Player.CurrentWorld.RowId;origin=Objects.LocalPlayer?.Position??default;}
         private SharedGardenPlan Current(){var source=p.GardenPlanSources().FirstOrDefault(x=>x.HouseId==original.HouseId&&x.Batch==original.Batch)??throw new InvalidOperationException("Garden plan is no longer available.");if(source.At!=original.At)throw new InvalidOperationException("Garden plan changed during the run.");return p.EffectiveGardenPlan(source);}
         public DateTimeOffset? MovementRecoveryUntil=>walking?walkRecovery.Deadline:null;
         public void Validate()
@@ -245,7 +245,7 @@ public sealed partial class Plugin
             if(action==GardenCareAction.Inspect){actionAt=opened;return Menu(bed)!=null;}
             if(!menuSent){
                 var plan=Current();var crop=plan.Beds.First(b=>b.Bed==bed);
-                if(action is not (GardenCareAction.Plant or GardenCareAction.RemoveStarter)&&!(postPlantTend&&action==GardenCareAction.Tend?GardenAutoPlant.NeedsPostPlantTend(plan,crop):GardenCarePolicy.Eligible(plan,crop,action,DateTimeOffset.UtcNow)))throw new InvalidOperationException($"Bed {bed} changed or is protected. Reopen care actions.");
+                if(action is not (GardenCareAction.Plant or GardenCareAction.RemoveStarter)&&!(postPlantTend&&action==GardenCareAction.Tend?GardenAutoPlant.NeedsPostPlantTend(plan,crop):GardenCarePolicy.Eligible(plan,crop,action,DateTimeOffset.UtcNow,tendAll)))throw new InvalidOperationException($"Bed {bed} changed or is protected. Reopen care actions.");
                 var m=Menu(bed);if(m==null)return false;
                 if(action==GardenCareAction.Harvest&&m.ReadyLocation()==null)throw new InvalidOperationException($"Bed {bed} is not confirmed harvestable in game.");
                 if(action==GardenCareAction.Harvest&&(InventoryManager.Instance()==null||InventoryManager.Instance()->GetEmptySlotsInBag()<2))throw new InvalidOperationException("Free two bag slots for crop and possible seeds.");
