@@ -278,6 +278,12 @@ public sealed partial class Plugin
                     fertilizerBag=type;fertilizerSlot=i;fertilizerId=item.ItemId;return true;}
             }return false;
         }
+        private bool MatchesPrompt(GardenCareAction action,string prompt)
+        {
+            if(action!=GardenCareAction.Plant)return GardenAutoPlant.MatchesConfirmation(action,prompt);
+            var sheet=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>(Dalamud.Game.ClientLanguage.English);
+            return GardenAutoPlant.MatchesPlantConfirmation(prompt,sheet.GetRowOrDefault(plantSeed)?.Name.ToString()??"",sheet.GetRowOrDefault(plantSoil)?.Name.ToString()??"");
+        }
         public bool Confirmed(int bed,GardenCareAction action,DateTimeOffset sent)
         {
             // Opening this exact numbered menu is the inspection receipt. Identical
@@ -286,7 +292,7 @@ public sealed partial class Plugin
             var dialog=(AddonSelectYesno*)SellerAddon("SelectYesno");
             if(dialog!=null){
                 if(confirmationSent)return false;
-                if(dialog->PromptText==null||dialog->YesButton==null||!dialog->YesButton->IsEnabled||!GardenAutoPlant.MatchesConfirmation(action,dialog->PromptText->NodeText.ToString()))throw new InvalidOperationException("Unrecognized garden confirmation; review it manually.");
+                if(dialog->PromptText==null||dialog->YesButton==null||!dialog->YesButton->IsEnabled||!MatchesPrompt(action,dialog->PromptText->NodeText.ToString()))throw new InvalidOperationException("Unrecognized garden confirmation; review it manually.");
                 if(action==GardenCareAction.RemoveStarter&&GardenAutoPlant.Next(Current())!=(bed,action))throw new InvalidOperationException("Starter replacement changed.");
                 dialog->FireCallbackInt(0);confirmationSent=true;return false;
             }

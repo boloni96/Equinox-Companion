@@ -53,6 +53,11 @@ internal static class GardenCare312Tests
         var housePlant=GardenAutoPlant.HousePlans([applied with{Batch=2},applied,applied with{HouseId="other"},applied with{Batch=3,Definition=null},applied with{Batch=3,CompletedAt=now}],"house");
         Check(housePlant.Select(p=>p.Batch).SequenceEqual([1,2]),"House planting uses unfinished saved plans in batch order only");
         Check(housePlant.All(p=>p.Definition==applied.Definition),"House queue preserves each saved definition");
+        const string plantPrompt="Prepare the bed with a bag of potting soil and a bag of krakka root seeds?";
+        Check(GardenAutoPlant.MatchesPlantConfirmation(plantPrompt,"Krakka Root Seeds","Potting Soil"),"Observed prepare-bed confirmation accepts exact planned seed and soil");
+        Check(!GardenAutoPlant.MatchesPlantConfirmation(plantPrompt,"Mirror Apple Seeds","Potting Soil"),"Wrong seed confirmation rejected");
+        Check(!GardenAutoPlant.MatchesPlantConfirmation(plantPrompt,"Krakka Root Seeds","Grade 3 Thanalan Topsoil"),"Wrong soil confirmation rejected");
+        Check(!GardenAutoPlant.MatchesPlantConfirmation("Discard Krakka Root Seeds and Potting Soil?","Krakka Root Seeds","Potting Soil"),"Unrelated item confirmation rejected");
         var harvesting=new HarvestPort();var harvestingRun=new GardenCareRun(harvesting);harvestingRun.Start([1,2,3],GardenCareAction.Harvest,now);
         for(int i=0;i<12;i++)harvestingRun.Tick(now.AddSeconds(i));
         Check(harvestingRun.Completed==3&&!harvestingRun.Running&&harvesting.Actions==3,"Target clears after each harvest without stopping or duplicating the next bed");

@@ -79,6 +79,13 @@ public static class GardenAutoPlant
         if(GardenVisualState.HasActualCrop(next)&&next.ActualCrop!="Empty")throw new InvalidOperationException("The next bed contains an existing crop. Auto plant only removes a verified temporary starter.");
         return(next.Bed,GardenCareAction.Plant);
     }
+    public static bool MatchesPlantConfirmation(string prompt,string seed,string soil)
+    {
+        static string Clean(string text)=>string.Join(" ",text.Split((char[]?)null,StringSplitOptions.RemoveEmptyEntries)).ToLowerInvariant();
+        var text=Clean(prompt);var requiredSeed=Clean(seed);var requiredSoil=Clean(soil);
+        return text.Length<=600&&requiredSeed.Length>0&&requiredSoil.Length>0&&text.EndsWith("?")&&
+            (text.StartsWith("prepare the bed with ")||text.StartsWith("plant "))&&text.Contains(requiredSeed)&&text.Contains(requiredSoil);
+    }
     public static bool MatchesConfirmation(GardenCareAction action,string prompt)
     {
         var text=prompt.Trim().ToLowerInvariant();if(text.Length>600)return false;
