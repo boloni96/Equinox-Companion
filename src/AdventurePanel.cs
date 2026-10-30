@@ -201,6 +201,7 @@ public sealed partial class Plugin
     ImGui.PopID();
    }ImGui.EndChild();return;
   }
+  DrawTendAdventure(board);
   DrawAdventureTotal(board);
   DrawAdventureLocation(board);
   // Resolve game selection before any collapsed house/character section is drawn.
@@ -258,5 +259,6 @@ public sealed partial class Plugin
   }
  }
 }
+
 
 

@@ -100,6 +100,7 @@ public sealed partial class Plugin
         ImGui.SameLine();if(ImGui.SmallButton("...##OrganizerOptions"))ImGui.OpenPopup("Organizer options");
         MarketHelp("Rename, save or clear the current list; inventory picking and chat messages.");
         if(ImGui.BeginPopup("Organizer options")){
+            if(ImGui.Button("Paste garden supply list")){PasteGardenSupplies();ImGui.CloseCurrentPopup();}
             ImGui.SetNextItemWidth(220);ImGui.InputText("Name",ref retrievalName,100);
             if(ImGui.Button("Save preset"))RetrievalTry(SaveRetrievalPreset);
         if(ImGui.SmallButton("Clear list"))ClearRetrievalList();
@@ -296,6 +297,7 @@ public sealed partial class Plugin
         ImGui.EndTabBar();
     }
 }
+
 
 
 

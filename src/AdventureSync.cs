@@ -3,7 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 namespace EquinoxCompanion;
 public sealed record AdventureTask(string Id,string Label,string Group,bool Done,bool CanCheck,string Status="",bool ServerConfirmed=false,AdventureTaskRule? Rule=null);
-public sealed record AdventureTaskRule(string Kind="",string HouseId="",int Batch=0,int Bed=0,string Cid="",uint[]? Quests=null,string RetainerId="");
+public sealed record AdventureTaskRule(string Kind="",string HouseId="",int Batch=0,int Bed=0,string Cid="",uint[]? Quests=null,string RetainerId="",string[]? Jobs=null);
 public sealed record AdventurePortrait(string Id,string Hash);
 public sealed record AdventureStop(string Title,string Subtitle,string HouseId,int Batch,AdventureTask[] Tasks,string World="",string[]? CharacterIds=null,AdventurePortrait[]? Portraits=null);
 public sealed record AdventureIntent(string Id,string TaskId,bool Checked);
@@ -104,3 +104,4 @@ public sealed class AdventureLocationSession
   var changed=settledContext!=context;settled=key;settledContext=context;return(true,changed);
  }
 }
+

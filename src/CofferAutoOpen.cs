@@ -33,7 +33,7 @@ public sealed partial class Plugin
     }
     private unsafe void TryAutoOpenCoffer(DateTimeOffset now)
     {
-        if(!config.EnableCofferMarkers || !config.AutoOpenCoffers || cofferAutoFault || sellerRun?.Running==true || TraderRunning)return;
+        if(!config.EnableCofferMarkers || !config.AutoOpenCoffers || cofferAutoFault || sellerRun?.Running==true || TraderRunning || gardenCareRun?.Running==true)return;
         if(!CofferInteractionReady()){cofferAutoStatus="Waiting: loading, casting or another interaction is active.";return;}
         var self=Objects.LocalPlayer!;
         foreach(var point in cofferMemory.Points.OrderBy(p=>Vector3.DistanceSquared(self.Position,p.Position)))
@@ -87,3 +87,4 @@ public sealed partial class Plugin
         if(cofferAutoFault && ImGui.Button("Retry coffer auto-open"))ResetCofferAutoOpen();
     }
 }
+

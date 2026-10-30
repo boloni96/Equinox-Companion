@@ -195,6 +195,8 @@ public sealed partial class Plugin
         DrawBedSyncButton(plan,syncSize);
         }
         ImGui.SetCursorScreenPos(tabsAt+new Vector2(0,rowHeight+ImGui.GetStyle().ItemSpacing.Y));
+        DrawGardenCareProgress();
+        DrawGardenSuppliesWindow();
         var visible=ImGui.BeginChild("garden-guide-content",Vector2.Zero);
         if(!visible){ImGui.EndChild();return;}
         if(BedSyncMatches(plan)&&gardenBedSync is {Complete:false})
@@ -288,8 +290,11 @@ public sealed partial class Plugin
                 centerDraw.AddRectFilled(labelAt-new Vector2(4,2),labelAt+labelSize+new Vector2(4,2),0xdd201710,3);
                 centerDraw.AddText(labelAt,0xffffffff,centerLabel);
                 centerDraw.PopClipRect();
-                ImGui.SetCursorScreenPos(at);ImGui.InvisibleButton("garden-center",new Vector2(tile));
+                ImGui.SetCursorScreenPos(at);
+                var carePopup="Garden care##"+plan.HouseId+":"+plan.Batch;
+                if(ImGui.InvisibleButton("garden-center",new Vector2(tile)))ImGui.OpenPopup(carePopup);
                 if(ImGui.IsItemHovered())ImGui.SetTooltip(liveGuide&&BedSyncMatches(plan)&&gardenBedSync is {Complete:false} centerHelp?$"Bed sync · Touch Bed {centerHelp.NextBed} in game. Use the top-right sync button to restart.":$"Batch {plan.Batch} · {(complete?"Planting complete":showPlan?"Automatic planting guide":"Actual garden")}");
+                DrawGardenCareMenu(plan,carePopup);
                 continue;
             }
             var wrong= liveGuide&&gardenWrongBed is {} mismatch&&mismatch.House==plan.HouseId&&mismatch.Batch==plan.Batch&&mismatch.WrongBed==n;
@@ -345,6 +350,7 @@ public sealed partial class Plugin
     private void DrawGardenCareTooltip(SharedGardenBed b, bool showPlan, bool wrong)
     {
         ImGui.TextUnformatted($"Bed {b.Bed} · Crop and care");
+        ImGui.TextWrapped(GardenCarePolicy.Certainty(b));
         if(b.Queued)DrawGardenInfoLabel("queued","Recorded locally · waiting for server acknowledgement. Another client may still need to refresh afterwards.");
         if(EquinoxCompanion.GardenVisualState.SeedlingEstimate(b,DateTimeOffset.UtcNow))DrawGardenInfoLabel("seedling","Seedling illustration · first 33% of the recorded growth estimate; the game stage has not been observed.");
         var icon = GardenCareIcon(b,showPlan,wrong);
@@ -392,4 +398,5 @@ public sealed partial class Plugin
     }
 
 }
+
 

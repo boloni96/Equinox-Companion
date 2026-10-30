@@ -321,6 +321,7 @@ public sealed partial class Plugin : IDalamudPlugin
     private unsafe void UpdateCore(IFramework framework)
     {
         var now = DateTimeOffset.UtcNow;
+        UpdateGardenCare(now);
         // The login cancellation/deadline runs before account observations and
         // all other optional work, including while logged out or windows closed.
         UpdateCancelledLoginReturn(now);
@@ -335,7 +336,7 @@ public sealed partial class Plugin : IDalamudPlugin
         RunOptionalTool("Coffer markers",now);
         // Give a coffer click a short uncontested turn before other automatic interactions.
         // Movement-stop handling remains responsive during this brief priority window.
-        if(now>=cofferPriorityUntil&&sellerRun?.Running!=true&&!TraderRunning)
+        if(now>=cofferPriorityUntil&&sellerRun?.Running!=true&&!TraderRunning&&gardenCareRun?.Running!=true)
         {
             RunOptionalTool("Follow portals",now);
             RunOptionalTool("Quest Helper",now);
@@ -1321,6 +1322,7 @@ public sealed partial class Plugin : IDalamudPlugin
         FlushConfiguration();
     }
 }
+
 
 
 
