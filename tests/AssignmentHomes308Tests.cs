@@ -29,7 +29,7 @@ internal static class AssignmentHomes308Tests
     var existing=new[]{new RetainerAssignment(2,[],[999])};
     proposal=AssignmentRecommendations.Build([1,2],unknown,existing,[],id=>1,relieveFullHomes:true);
     rows=AssignmentRecommendations.Apply(existing,proposal.Suggestions);
-    Check("explicit item homes preserved",rows.Single(r=>r.Retainer==2).Items.Contains(999)&&existing[0].Categories.Length==0);
+    Check("explicit item homes preserved",rows.Single(r=>r.Retainer==2).Items.Contains(999u)&&existing[0].Categories.Length==0);
     Check("reported remaining matches applied coverage",proposal.Remaining.Length==AssignmentCoverage.Check([1,2],unknown,rows,[],id=>1).Missing.Length);
     var twice=AssignmentRecommendations.Apply(rows,proposal.Suggestions);
     Check("applying additions is idempotent",System.Text.Json.JsonSerializer.Serialize(rows)==System.Text.Json.JsonSerializer.Serialize(twice));
