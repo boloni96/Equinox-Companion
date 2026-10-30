@@ -1,5 +1,10 @@
-# Organizer and Trader request audit — 0.5.1.309
+# Organizer and Trader request audit — 0.5.1.310
 This is an implementation audit, not a claim that every path has been tested in game.
+
+## Armoury withdrawal acknowledgement — 0.5.1.310
+- Confirm newly withdrawn gear when the game places it in the Armoury Chest. Include its net change during the current run without subtracting pre-existing Armoury gear from the requested quantities.
+- Preserve quality/tradability filters and normal bag/crystal behavior. Reset the Armoury baseline for each run, including restart and All available.
+- Delayed/missing receipt regression checks ensure no blind repeated withdrawal; game inventory routing preferences remain unchanged.
 
 ## Transfer notice — 0.5.1.309
 - Replaced the unbounded list of non-craftable item names with a collapsed count and a six-row scrolling detail area. Long names are available on hover.

@@ -20,7 +20,7 @@ internal static class ArmouryWithdrawal310Tests
     Check("restart resets baseline rather than reusing prior receipts",p.Sent==4&&p.Armoury[100]==7&&run.Status.StartsWith("Complete"));
     p=new Port{ToBags=true};run=new(p);run.Start([1],[new(100,"Boots",2)],true,now);
     for(var i=0;i<40&&run.Running;i++){p.Deliver();run.Tick(now.AddMilliseconds(i*200));}
-    Check("normal bag destination still completes",p.Bags.GetValueOrDefault(100)==2&&p.Armoury[100]==4&&run.Status.StartsWith("Complete"));
+    Check("normal bag destination still completes",p.Bags.GetValueOrDefault(100u)==2&&p.Armoury[100]==4&&run.Status.StartsWith("Complete"));
     p=new Port{Acknowledge=false};run=new(p);run.Start([1],[new(100,"Boots",2)],true,now);
     for(var i=0;i<40&&run.Running;i++){p.Deliver();run.Tick(now.AddSeconds(i));}
     Check("missing receipt stops without repeating withdrawal",p.Sent==1&&!run.Running&&run.Status.Contains("Confirm was not confirmed"));
