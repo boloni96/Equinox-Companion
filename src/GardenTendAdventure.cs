@@ -30,9 +30,9 @@ public sealed partial class Plugin
             }
             ImGui.Checkbox("Switch assigned characters on this account",ref gardenAdventureSwitch);
             var walk=config.GardenCareWalk;if(ImGui.Checkbox("Walk to mapped beds (Lifestream)",ref walk)){config.GardenCareWalk=walk;SaveConfiguration();}
-            ImGui.TextWrapped("Uses the assigned gardeners on this character's Journal account. The growing adventure waits between stages. Planting uses its exact saved seed, soil and bed order; with Harvest full batches enabled, ready crops are harvested before the next route layout is applied. Mixed maturity and protected neighbours wait. After teleporting, Walk to mapped beds also makes a short approach through the plot entrance. Stop remains available while waiting.");
+            ImGui.TextWrapped("Uses the assigned gardeners on this character's Journal account. The growing adventure pauses when no work is ready; resume it later. Planting uses its exact saved seed, soil and bed order; with Harvest full batches enabled, ready crops are harvested before the next route layout is applied. Mixed maturity and protected neighbours wait. After teleporting, Walk to mapped beds also makes a short approach through the plot entrance. Stop remains available during active work.");
             ImGui.BeginDisabled(!adventureFresh||gardenCareRun?.Running==true||!Player.IsLoaded||!(gardenAdventureTend||gardenAdventurePlant||gardenAdventureHarvest));
-            if(ImGui.Button("Start automatic gardening"))StartTendAdventure(board);ImGui.EndDisabled();ImGui.EndDisabled();
+            if(ImGui.Button("Resume automatic gardening"))StartTendAdventure(board);ImGui.EndDisabled();ImGui.EndDisabled();
         }
         if(gardenTendRoute!=null){if(ImGui.SmallButton("Stop automatic gardening"))StopTendAdventure("Stopped by you.");ImGui.SameLine();}
         if(gardenTendStatus.Length>0)ImGui.TextWrapped(gardenTendStatus);
@@ -115,7 +115,7 @@ public sealed partial class Plugin
                     if(rule.Kind=="growingcycle"&&rule.Phase=="plan"&&gardenAdventurePlant||GardenAdventureAction(live,rule,now)!=null)
                         gardenTendRoute.Enqueue(new(task.Id,cid,rule.HouseId,rule.Batch,rule));
                 }
-                if(gardenTendRoute.Count==0){gardenTendStatus="Waiting for growth, supplies, another assigned account, or a garden inspection · route stays active.";gardenAdventureNext=now.AddSeconds(10);return;}
+                if(gardenTendRoute.Count==0){StopTendAdventure("Paused · no garden work is ready for this account. Resume automatic gardening later; saved progress is kept.");return;}
                 gardenTendDeadline=now.AddMinutes(10);gardenTendPreparing=false;gardenTendTravelSent=gardenTendStarted=gardenAdventureSwitchSent=false;gardenPlotApproaching=gardenPlotApproachAttempted=false;
             }
             if(now>=gardenTendDeadline)throw new InvalidOperationException("Travel or garden action timed out. Review before restarting.");
