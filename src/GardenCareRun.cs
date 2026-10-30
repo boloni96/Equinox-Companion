@@ -1,6 +1,6 @@
 namespace EquinoxCompanion;
 
-public enum GardenCareAction { Tend, Fertilize, Harvest, Plant, RemoveStarter }
+public enum GardenCareAction { Tend, Fertilize, Harvest, Plant, RemoveStarter, Inspect }
 public static class GardenCarePolicy
 {
     public const string KeepGuide = "A cross is determined when the new seed is planted beside a compatible crop. Harvesting later collects that bed's possible crossbred seeds. Keep a standing neighbour only until all planting steps that need it are confirmed. Keep for repeated crosses is optional; release it when you no longer need that standing plant. Needing seeds for a later stage does not mean its parent must stay planted.";

@@ -73,7 +73,7 @@ public sealed partial class Plugin
         ImGui.TextUnformatted($"Batch {plan.Batch} · care actions");
         var walk=config.GardenCareWalk;if(ImGui.Checkbox("Walk to mapped beds (Lifestream)",ref walk)){config.GardenCareWalk=walk;SaveConfiguration();}
         if(ImGui.IsItemHovered())ImGui.SetTooltip("Short direct approaches inside this plot, up to 30 yalms. Lifestream movement does not find a route around furniture; blocked approaches stop on timeout.");
-        ImGui.BeginDisabled(gardenCareRun?.Running==true||!atOutdoorEstate||SharedGardenLocation.Match(currentAddress,[plan])!=plan.HouseId);
+        ImGui.BeginDisabled(gardenTendRoute!=null||gardenCareRun?.Running==true||!atOutdoorEstate||SharedGardenLocation.Match(currentAddress,[plan])!=plan.HouseId);
         if(ImGui.Button("Auto plant saved plan")){gardenAutoPlantPlan=plan;gardenCareRun=null;ContinueAutoPlant(plan);ImGui.CloseCurrentPopup();}
         if(ImGui.IsItemHovered())ImGui.SetTooltip("Uses the saved step order and exact seeds/soil. Removes only its verified temporary starter, after all prerequisite planting. Existing unrelated crops are never removed.");
         if(ImGui.Button("Tend due")){StartGardenCare(plan,GardenCareAction.Tend);ImGui.CloseCurrentPopup();}
@@ -139,6 +139,7 @@ public sealed partial class Plugin
         }
         public bool Act(int bed,GardenCareAction action)
         {
+            if(action==GardenCareAction.Inspect){actionAt=opened;return Menu(bed)!=null;}
             if(!menuSent){
                 var plan=Current();var crop=plan.Beds.First(b=>b.Bed==bed);
                 if(action is not (GardenCareAction.Plant or GardenCareAction.RemoveStarter)&&!GardenCarePolicy.Eligible(plan,crop,action,DateTimeOffset.UtcNow))throw new InvalidOperationException($"Bed {bed} changed or is protected. Reopen care actions.");
@@ -194,6 +195,7 @@ public sealed partial class Plugin
         }
         public bool Confirmed(int bed,GardenCareAction action,DateTimeOffset sent)
         {
+            if(action==GardenCareAction.Inspect)return Menu(bed)!=null&&Current().Beds.First(b=>b.Bed==bed).ObservedAt>=opened;
             var dialog=(AddonSelectYesno*)SellerAddon("SelectYesno");
             if(dialog!=null){
                 if(confirmationSent)return false;

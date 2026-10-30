@@ -3,7 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 namespace EquinoxCompanion;
 public sealed record AdventureTask(string Id,string Label,string Group,bool Done,bool CanCheck,string Status="",bool ServerConfirmed=false,AdventureTaskRule? Rule=null);
-public sealed record AdventureTaskRule(string Kind="",string HouseId="",int Batch=0,int Bed=0,string Cid="",uint[]? Quests=null,string RetainerId="",string[]? Jobs=null);
+public sealed record AdventureTaskRule(string Kind="",string HouseId="",int Batch=0,int Bed=0,string Cid="",uint[]? Quests=null,string RetainerId="",string[]? Jobs=null,int Stage=0,string Phase="",string PlanAt="",GardenPlanDefinition? PlanTemplate=null,string ReadyAfter="",int PhysicalPatch=0);
 public sealed record AdventurePortrait(string Id,string Hash);
 public sealed record AdventureStop(string Title,string Subtitle,string HouseId,int Batch,AdventureTask[] Tasks,string World="",string[]? CharacterIds=null,AdventurePortrait[]? Portraits=null);
 public sealed record AdventureIntent(string Id,string TaskId,bool Checked);
@@ -42,7 +42,7 @@ public static class AdventurePolicy
   var start=task.Id.IndexOf('{');var end=task.Id.LastIndexOf('}');if(start<0||end<start)return "";
   try{using var json=JsonDocument.Parse(task.Id.Substring(start,end-start+1));return json.RootElement.TryGetProperty(field,out var value)&&value.ValueKind==JsonValueKind.String?value.GetString()??"":"";}catch(JsonException){return "";}
  }
- public static bool IsGardenTask(AdventureTask task)=>task.Rule?.Kind is "care" or "harvest" or "plant" or "inspect" or "inspecthouse" or "empty" or "planplant" or "garden";
+ public static bool IsGardenTask(AdventureTask task)=>task.Rule?.Kind is "care" or "harvest" or "plant" or "inspect" or "inspecthouse" or "empty" or "planplant" or "garden" or "growingcycle";
  public static bool IsFashion(AdventureTask task)=>task.Rule?.Kind=="fashion"||(task.Rule is null&&LegacyTaskField(task,"multiFashion").Length>0);
  public static bool IsHouseVisit(AdventureTask task)=>task.Rule?.Kind=="visit"||(task.Rule is null&&LegacyTaskField(task,"multiHouse").Length>0);
  public static string TaskHouseId(AdventureTask task)=>!string.IsNullOrEmpty(task.Rule?.HouseId)?task.Rule.HouseId:LegacyTaskField(task,"multiHouse");
