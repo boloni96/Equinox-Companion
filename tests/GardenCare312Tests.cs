@@ -36,7 +36,17 @@ internal static class GardenCare312Tests
         Check(GardenCarePolicy.TargetAllowed(10,0,true,GardenCareAction.RemoveStarter),"Starter removal can clear target");
         Check(!GardenCarePolicy.TargetAllowed(10,11,true,GardenCareAction.Harvest),"Different selected target still stops");
         Check(!GardenCarePolicy.TargetAllowed(10,0,false,GardenCareAction.Harvest),"Cleared target before sending still stops");
-        Check(!GardenCarePolicy.TargetAllowed(10,0,true,GardenCareAction.Tend),"Tending does not exempt target changes");
+        foreach(var action in new[]{GardenCareAction.Tend,GardenCareAction.Fertilize}){
+            Check(GardenCarePolicy.TargetAllowed(10,0,true,action),$"{action} may clear target after submission");
+            Check(!GardenCarePolicy.TargetAllowed(10,0,false,action),$"{action} cannot lose target before submission");
+            Check(!GardenCarePolicy.TargetAllowed(10,11,true,action),$"{action} rejects a different selected object");
+            var carePort=new HarvestPort(action);var careRun=new GardenCareRun(carePort);careRun.Start([1,2,3,4,5,6,7,8],action,now);
+            for(int i=0;i<32;i++)careRun.Tick(now.AddSeconds(i));
+            Check(careRun.Completed==8&&!careRun.Running&&carePort.Actions==8,$"{action} continues across eight game-cleared targets without duplicate actions");
+            var missingReceipt=new HarvestPort(action){Receipt=false};var waiting=new GardenCareRun(missingReceipt);waiting.Start([1,2],action,now);
+            waiting.Tick(now);waiting.Tick(now.AddSeconds(1));waiting.Tick(now.AddSeconds(2));waiting.Tick(now.AddSeconds(23));
+            Check(!waiting.Running&&waiting.Completed==0&&missingReceipt.Actions==1,$"{action} still requires a receipt and does not retry unconfirmed work");
+        }
         var house=GardenCarePolicy.HouseHarvest([done with{Batch=2},done with{HouseId="other"},done,done with{Batch=3,Beds=[beds[0] with{KeepMature=true}]}],"house",now);
         Check(house.Select(p=>p.Batch).SequenceEqual([1,2]),"House harvest queues eligible batches in order and excludes protected beds and other houses");
         var mature=done with {Beds=[Bed(1)]};
@@ -81,11 +91,11 @@ internal static class GardenCare312Tests
     }
     private sealed class HarvestPort(GardenCareAction expectedAction=GardenCareAction.Harvest):IGardenCarePort
     {
-        private ulong expected,current;private bool sent;public int Actions;
+        private ulong expected,current;private bool sent;public int Actions;public bool Receipt=true;
         public void Validate(){if(!GardenCarePolicy.TargetAllowed(expected,current,sent,expectedAction))throw new InvalidOperationException("Selected garden target changed.");}
         public bool Open(int bed){expected=current=(ulong)bed;sent=false;return true;}
         public bool Act(int bed,GardenCareAction action){Actions++;sent=true;current=0;return true;}
-        public bool Confirmed(int bed,GardenCareAction action,DateTimeOffset at)=>sent;
+        public bool Confirmed(int bed,GardenCareAction action,DateTimeOffset at)=>sent&&Receipt;
         public bool Close(int bed){expected=current=0;sent=false;return true;}public void Release(){}
     }
     private sealed class Port:IGardenCarePort
