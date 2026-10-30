@@ -36,7 +36,7 @@ public sealed partial class Plugin
             optionsChanged|=ImGui.Checkbox("Switch assigned characters on this account",ref switchCharacters);
             if(optionsChanged){config.GardenAdventureTend=tend;config.GardenAdventurePlant=plant;config.GardenAdventureHarvest=harvest;config.GardenAdventureSwitch=switchCharacters;SaveConfiguration();}
             var walk=config.GardenCareWalk;if(ImGui.Checkbox("Walk to mapped beds (Lifestream)",ref walk)){config.GardenCareWalk=walk;SaveConfiguration();}
-            ImGui.TextWrapped("Uses the assigned gardeners on this character's Journal account. The growing adventure pauses when no work is ready; resume it later. Planting uses its exact saved seed, soil and bed order; with Harvest full batches enabled, ready crops are harvested before the next route layout is applied. Mixed maturity and protected neighbours wait. After teleporting, Walk to mapped beds also makes a short approach through the plot entrance. Stop remains available during active work.");
+            ImGui.TextWrapped("Uses the assigned gardeners on this character's Journal account. The growing adventure pauses when no work is ready; resume it later. Planting uses its exact saved seed, soil and bed order; with Harvest full batches enabled, ready crops are harvested before the next route layout is applied. Mixed maturity and protected neighbours wait. Each batch visit starts with house travel, even when already on the plot. After travel finishes, Walk to mapped beds makes a short approach through the plot entrance. Stop remains available during active work.");
             ImGui.BeginDisabled(!adventureFresh||gardenCareRun?.Running==true||!Player.IsLoaded||!(gardenAdventureTend||gardenAdventurePlant||gardenAdventureHarvest));
             if(ImGui.Button("Resume automatic gardening"))StartTendAdventure(board);ImGui.EndDisabled();ImGui.EndDisabled();
         }
@@ -183,6 +183,14 @@ public sealed partial class Plugin
                 RequestStorageRefresh();nextRosterRead=default;if(syncFailures==0)nextSync=default;adventureNext=default;
                 gardenTendRoute.Clear();gardenSupplyRefreshUntil=now.AddSeconds(20);gardenPlotApproaching=gardenPlotApproachAttempted=false;gardenTendStarted=gardenTendTravelSent=false;gardenTendDeadline=now.AddMinutes(10);gardenAdventureNext=now.AddSeconds(3);return;
             }
+            // Every new batch visit starts via the estate arrival route, even if already
+            // inside its plot: a straight line from behind the building is not a safe approach.
+            if(!gardenTendTravelSent){
+                if(LifestreamBusy())throw new InvalidOperationException("Another Lifestream journey is active.");EnsureBidWorlds();var world=bidWorlds!.FirstOrDefault(w=>w.Name==sourcePlan.World);if(world.Id==0)throw new InvalidOperationException("Destination world unavailable.");gardenArrival.Reset();GoSeeBid(world.Id,sourcePlan.District,sourcePlan.Ward,sourcePlan.Plot);if(now>=goSeeNativeUntil&&goSeeHomeTrip==null&&goSeeFriendTrip==null&&!LifestreamBusy())
+                    throw new InvalidOperationException("House travel did not start: "+bidTravelMessage);
+                gardenTendTravelSent=true;gardenTendStatus="Travelling to "+sourcePlan.HouseName;
+                return;
+            }
             if(gardenTendTravelSent&&!gardenPlotApproaching){
                 var pending=now<goSeeNativeUntil||LifestreamBusy()||goSeeHomeTrip!=null||goSeeFriendTrip!=null||VisibleFollowAddon("SelectYesno")||VisibleFollowAddon("TeleportHousingFriend");
                 if(!gardenArrival.Ready(pending,Objects.LocalPlayer!.Position,now)){gardenTendStatus="Waiting for teleport and travel to finish · "+sourcePlan.HouseName;return;}
@@ -210,8 +218,7 @@ public sealed partial class Plugin
                 }
             }
             if(!atDestination){
-                if(!gardenTendTravelSent){if(LifestreamBusy())throw new InvalidOperationException("Another Lifestream journey is active.");EnsureBidWorlds();var world=bidWorlds!.FirstOrDefault(w=>w.Name==sourcePlan.World);if(world.Id==0)throw new InvalidOperationException("Destination world unavailable.");gardenArrival.Reset();GoSeeBid(world.Id,sourcePlan.District,sourcePlan.Ward,sourcePlan.Plot);gardenTendTravelSent=true;gardenTendStatus="Travelling to "+sourcePlan.HouseName;}
-                else if(!LifestreamBusy()&&goSeeHomeTrip==null&&goSeeFriendTrip==null)TryApproachGardenPlot(sourcePlan,now);
+                if(!LifestreamBusy()&&goSeeHomeTrip==null&&goSeeFriendTrip==null)TryApproachGardenPlot(sourcePlan,now);
                 return;
             }
             if(LifestreamBusy()||goSeeHomeTrip!=null)return;
