@@ -96,12 +96,17 @@ internal static class GardenCare312Tests
         Check(GardenAutoPlant.PrepareRouteBeds(cleared with{Beds=[cleared.Beds[0] with{ObservedAt=null},cleared.Beds[1]]},definition,now,true,true).Action==GardenCareAction.Inspect,"Unobserved empty beds need inspection");
         var single=definition with{Steps=[definition.Steps[0]]};
         Check(GardenAutoPlant.PrepareRouteBeds(matureBatch,single,now,true,true).Beds.SequenceEqual([1]),"Preparation never harvests beds outside incoming layout");
-        var approach=GardenPlotApproachPolicy.Path(new(0,0,-4),new(0,0,0),new(10,0,10),0);
-        Check(approach.Length==2&&approach[0]==System.Numerics.Vector3.Zero&&Math.Abs(approach[1].Length()-3)<.001f,"Gate approach uses the known entrance then a bounded inward step");
-        Check(GardenPlotApproachPolicy.Path(new(0,0,0),new(0,0,0),null,0).SequenceEqual(new[]{new System.Numerics.Vector3(0,0,3)}),"Arrival at gate uses a short facing step when no bed map exists");
-        Check(GardenPlotApproachPolicy.Path(new(0,0,0),new(0,0,0),new(-5,0,0),0)[0].X<0,"Mapped garden determines inward direction instead of camera facing");
-        try{GardenPlotApproachPolicy.Path(new(0,0,-16),new(0,0,0),null,0);throw new Exception("Distant entrance accepted");}catch(InvalidOperationException){}
+        var approach=GardenPlotApproachPolicy.Path(new(0,0,0),new(0,0,0),new(10,0,10),0);
+        Check(approach.SequenceEqual(new[]{new System.Numerics.Vector3(0,0,3)}),"Entrance step follows arrival facing, never diagonally toward the garden");
+        Check(GardenPlotApproachPolicy.Path(new(0,0,0),new(0,0,0),new(-5,0,0),0).SequenceEqual(approach),"Changing bed position cannot steer through a fence");
+        try{GardenPlotApproachPolicy.Path(new(0,0,-2),new(0,0,0),null,0);throw new Exception("Distant entrance accepted");}catch(InvalidOperationException){}
         try{GardenPlotApproachPolicy.Path(new(float.NaN,0,0),new(0,0,0),null,0);throw new Exception("Invalid coordinates accepted");}catch(InvalidOperationException){}
+        var progress=new GardenWalkProgress();progress.Reset(new(0,0,0),now);
+        Check(!progress.Blocked(new(2,0,0),now.AddSeconds(2)),"Walking advances progress checkpoint");
+        Check(!progress.Blocked(new(2,0,0),now.AddSeconds(4)),"Brief pause tolerated");
+        Check(progress.Blocked(new(2,0,0),now.AddSeconds(5)),"Wall after initial movement detected in three seconds");
+        progress.Reset(new(2,0,0),now.AddSeconds(6));
+        Check(!progress.Blocked(new(3,0,0),now.AddSeconds(8)),"New walk resets stalled state");
         var planting=new HarvestPort(GardenCareAction.Plant);var plantingRun=new GardenCareRun(planting);plantingRun.Start([1,2,3],GardenCareAction.Plant,now);
         for(int i=0;i<12;i++)plantingRun.Tick(now.AddSeconds(i));
         Check(plantingRun.Completed==3&&!plantingRun.Running&&planting.Actions==3,"Three planting receipts survive game-cleared targets and send each action once");

@@ -132,12 +132,26 @@ public static class GardenPlotApproachPolicy
     private static bool Finite(Vector3 p)=>float.IsFinite(p.X)&&float.IsFinite(p.Y)&&float.IsFinite(p.Z);
     public static Vector3[] Path(Vector3 position,Vector3 entrance,Vector3? garden,float rotation)
     {
-        if(!Finite(position)||!Finite(entrance)||!float.IsFinite(rotation)||Vector3.Distance(position,entrance)>15f)
-            throw new InvalidOperationException("Plot entrance is too far away or unavailable. Move near the destination gate and restart.");
-        var inward=garden is {} bed&&Finite(bed)&&Vector3.Distance(bed,entrance)<=40f?bed-entrance:new Vector3(MathF.Sin(rotation),0,MathF.Cos(rotation));
+        if(!Finite(position)||!Finite(entrance)||!float.IsFinite(rotation)||Vector3.Distance(position,entrance)>1.5f)
+            throw new InvalidOperationException("Not at the plot entrance. Move to the gate, face into the plot and restart.");
+        // Bed coordinates do not describe a clear route through the gate.
+        var inward=new Vector3(MathF.Sin(rotation),0,MathF.Cos(rotation));
         inward.Y=0;
         if(inward.LengthSquared()<.01f)throw new InvalidOperationException("Cannot identify a short approach into this plot.");
-        var step=entrance+Vector3.Normalize(inward)*3f;
-        return Vector3.Distance(position,entrance)>1f?[entrance,step]:[step];
+        var step=position+Vector3.Normalize(inward)*3f;
+        return [step];
+    }
+}
+
+// Watch recent progress, not displacement from the starting point.
+public sealed class GardenWalkProgress
+{
+    private Vector3 position;
+    private DateTimeOffset progressed;
+    public void Reset(Vector3 current,DateTimeOffset now){position=current;progressed=now;}
+    public bool Blocked(Vector3 current,DateTimeOffset now)
+    {
+        if(Vector3.Distance(current,position)>=.3f){Reset(current,now);return false;}
+        return now-progressed>=TimeSpan.FromSeconds(3);
     }
 }
