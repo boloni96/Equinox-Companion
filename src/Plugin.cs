@@ -954,7 +954,7 @@ public sealed partial class Plugin : IDalamudPlugin
         {
             var harvested=chatHarvest.Record;
             if(!ObservingGardens||config.Discoveries.Any(e=>e.Id==harvested.EventId))continue;
-            KeepDiscovery(new(harvested.EventId,"garden.empty",harvested.ConfirmedAt,WithWorldNames(harvested.Actor),WithAddressNames(harvested.Address),harvested.Patch,harvested.Bed,GardenTarget:GardenTargetOf(chatHarvest.Target)),force:true);
+            KeepDiscovery(new(harvested.EventId,"garden.empty",harvested.ConfirmedAt,WithWorldNames(harvested.Actor),WithAddressNames(harvested.Address),harvested.Patch,harvested.Bed,GardenTarget:GardenTargetOf(chatHarvest.Target),HarvestItemId:chatHarvest.Item),force:true);
             cropChatStatus=$"Harvested · patch {harvested.Patch}, bed {harvested.Bed} is empty.";
             gardenMessageJournal.Record(new(harvested.ConfirmedAt,"garden.harvestConfirmed",new {harvested.Patch,harvested.Bed,receivedItem=chatHarvest.Item,evidence="original-obtain-chat-item-link"}));
         }
@@ -965,7 +965,7 @@ public sealed partial class Plugin : IDalamudPlugin
             var harvested = message.Harvest?.Confirm(message.Id, message.ReceivedItem, message.At, candidate);
             if (harvested is not null && !config.Discoveries.Any(e => e.Id == harvested.EventId))
             {
-                KeepDiscovery(new(harvested.EventId, "garden.empty", harvested.ConfirmedAt, WithWorldNames(harvested.Actor), WithAddressNames(harvested.Address), harvested.Patch, harvested.Bed, GardenTarget:GardenTargetOf(message.Harvest!.Target)), force:true);
+                KeepDiscovery(new(harvested.EventId, "garden.empty", harvested.ConfirmedAt, WithWorldNames(harvested.Actor), WithAddressNames(harvested.Address), harvested.Patch, harvested.Bed, GardenTarget:GardenTargetOf(message.Harvest!.Target), HarvestItemId:message.ReceivedItem), force:true);
                 cropChatStatus = $"Harvested · patch {harvested.Patch}, bed {harvested.Bed} is empty.";
                 gardenMessageJournal.Record(new(message.At, "garden.harvestConfirmed", new { harvested.Patch, harvested.Bed, cropItemId=message.Harvest.CropItemId, receivedItem=message.ReceivedItem, logMessageId=message.Id }));
             }

@@ -4,7 +4,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 namespace EquinoxCompanion;
 
-public sealed record SyncEvent(string Id, string Kind, DateTimeOffset At, Actor Actor, Address? Address, int? Patch = null, int? Bed = null, PlantDetails? Plant = null, HouseDetails? House = null, CharacterDetails? Character = null, CropDetails? Crop = null, CollectionDetails? Collection = null, FashionDetails? Fashion = null, VoyageDetails? Voyage = null, GardenTargetDetails? GardenTarget = null, StorageDetails? Storage = null, FreeCompanyDetails? Company = null, CachedVoyage? CachedVoyage = null, GardenPlanChange? PlanEdit = null, SubmarineSupplies? Supplies = null, CharacterRegistration? Registration = null, GardenBatchOrderChange? BatchOrder = null, LotteryBid? Lottery = null, LotteryResult? LotteryResult = null, SharedEstateObservation? SharedEstates = null, RetainerMarketDetails? Market = null)
+public sealed record SyncEvent(string Id, string Kind, DateTimeOffset At, Actor Actor, Address? Address, int? Patch = null, int? Bed = null, PlantDetails? Plant = null, HouseDetails? House = null, CharacterDetails? Character = null, CropDetails? Crop = null, CollectionDetails? Collection = null, FashionDetails? Fashion = null, VoyageDetails? Voyage = null, GardenTargetDetails? GardenTarget = null, StorageDetails? Storage = null, FreeCompanyDetails? Company = null, CachedVoyage? CachedVoyage = null, GardenPlanChange? PlanEdit = null, SubmarineSupplies? Supplies = null, CharacterRegistration? Registration = null, GardenBatchOrderChange? BatchOrder = null, LotteryBid? Lottery = null, LotteryResult? LotteryResult = null, SharedEstateObservation? SharedEstates = null, RetainerMarketDetails? Market = null, uint? HarvestItemId = null)
 {
     // At is the original occurrence/observation time; a resend never refreshes it.
     // Imported third-party cache data has no known game observation time.
@@ -107,4 +107,5 @@ public sealed class SubmarineRouteJson : System.Text.Json.Serialization.JsonConv
     public override void Write(Utf8JsonWriter writer, byte[] value, JsonSerializerOptions options)
     {writer.WriteStartArray();foreach(var sector in value)writer.WriteNumberValue(sector);writer.WriteEndArray();}
 }
+
 
