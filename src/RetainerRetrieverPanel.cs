@@ -28,7 +28,9 @@ public sealed partial class Plugin
                 !retrievalCatalog.WorkshopByItem.ContainsKey(e.ItemId)&&!retrievalCatalog.Outfits.ContainsKey(e.ItemId)).Select(e=>e.Name).ToArray();
         }
         if(retrievalNoRecipeNames.Length==0)return;
-        if(ImGui.TreeNode($"{retrievalNoRecipeNames.Length:N0} items without recipes · transferred as listed###TransferNoRecipes")){
+        var open=ImGui.TreeNode($"{retrievalNoRecipeNames.Length:N0} items without recipes · transferred as listed###TransferNoRecipes");
+        if(ImGui.IsItemHovered())ImGui.SetTooltip("No recipe, workshop turn-in or outfit expansion was found for these items. They remain in the transfer list; this does not prevent transferring them.");
+        if(open){
             ImGui.TextWrapped("These items stay unchanged. To transfer every item itself, choose Listed items themselves above.");
             ImGui.BeginChild("TransferNoRecipeNames",new Vector2(0,ImGui.GetTextLineHeightWithSpacing()*6),true);
             var clip=ImGui.ImGuiListClipper();clip.Begin(retrievalNoRecipeNames.Length,ImGui.GetTextLineHeightWithSpacing());
@@ -38,7 +40,6 @@ public sealed partial class Plugin
             }
             clip.End();clip.Destroy();ImGui.EndChild();ImGui.TreePop();
         }
-        if(ImGui.IsItemHovered())ImGui.SetTooltip("No recipe, workshop turn-in or outfit expansion was found for these items. They remain in the transfer list; this does not prevent transferring them.");
     }
     private sealed class RetrieverWindow(Plugin p):Window("Equinox Organizer###EquinoxRetriever")
     {
