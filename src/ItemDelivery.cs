@@ -169,7 +169,15 @@ public sealed partial class Plugin
         gilPartnerName=partner.Name;gilPartnerWorld=home.Id;gilPartnerContent=ulong.TryParse(partner.ContentId,out var content)?content:0;gilPartnerRequiresParty=false;
         if(GilTradePartner() is not {} nearby||Objects.LocalPlayer is not {} self||Vector3.Distance(self.Position,nearby.Position)>5)return;
         if(!sending&&deliveryTrade!=trade&&!ItemTradePlan.CanReceiveManifest(leg.Items.Select(i=>new TradeItemAmount(i.ItemId,i.Hq,i.Quantity)).ToArray(),bags,id=>CrystalStorage.IsItem(id)?9999:OrganizerStackLimit(id)))throw new InvalidOperationException("Free enough inventory space for the complete delivery.");
-        if(!leg.Started){if(!leg.Armed.ContainsKey(deliveryClientId))DeliveryPost(new{type="arm",id=s.Id,revision=s.Revision,clientId=deliveryClientId,legId=leg.Id,counts=DeliveryCounts(leg)});return;}
+        if(sending&&deliveryTrade!=trade){PrepareTradeItemShortcutLabels();if(tradeItemLabelsTask?.IsFaulted==true)throw new InvalidOperationException("Item trade actions could not be loaded.");if(tradeItemLabelsTask?.IsCompletedSuccessfully!=true)return;}
+        if(!leg.Started){
+            // The receiver must be listening before its readiness allows a sender to request trade.
+            if(!sending&&deliveryTrade!=trade){
+                if(TraderRunning)throw new InvalidOperationException("Another trade is active.");OpenGilTrader();gilItemsMode=true;gilReceive=true;itemTradeSelection.Clear();foreach(var i in leg.Items)itemTradeSelection[new(i.ItemId,i.Hq)]=i.Quantity;
+                StartItemTrade(exactReceive:true);if(!itemTrade.Running)throw new InvalidOperationException(gilTradeNotice.Length>0?gilTradeNotice:itemTrade.Status);deliveryTrade=trade;
+            }
+            if(!leg.Armed.ContainsKey(deliveryClientId))DeliveryPost(new{type="arm",id=s.Id,revision=s.Revision,clientId=deliveryClientId,legId=leg.Id,counts=DeliveryCounts(leg)});return;
+        }
         if(deliveryTrade!=trade){
             if(TraderRunning)throw new InvalidOperationException("Another trade is active.");OpenGilTrader();gilItemsMode=true;gilReceive=!sending;itemTradeSelection.Clear();foreach(var i in leg.Items)itemTradeSelection[new(i.ItemId,i.Hq)]=i.Quantity;
             StartItemTrade(exactReceive:!sending);if(!itemTrade.Running)throw new InvalidOperationException(gilTradeNotice.Length>0?gilTradeNotice:itemTrade.Status);deliveryTrade=trade;return;

@@ -17,7 +17,10 @@ public sealed partial class Plugin
         if(!board.Stops.Any(s=>s.Tasks.Any(AdventurePolicy.IsGardenTask)))return;
         if(ImGui.CollapsingHeader("Automatic gardening")){
             ImGui.BeginDisabled(gardenTendRoute!=null);
-            ImGui.Checkbox("Tend due",ref gardenAdventureTend);ImGui.SameLine();ImGui.Checkbox("Plant route",ref gardenAdventurePlant);ImGui.SameLine();ImGui.Checkbox("Harvest full batches",ref gardenAdventureHarvest);
+            if(ImGui.BeginTable("AutomaticGardenOptions",2,ImGuiTableFlags.SizingStretchSame)){
+                ImGui.TableNextRow();ImGui.TableNextColumn();ImGui.Checkbox("Tend due",ref gardenAdventureTend);ImGui.TableNextColumn();ImGui.Checkbox("Plant saved plans",ref gardenAdventurePlant);
+                ImGui.TableNextRow();ImGui.TableNextColumn();ImGui.Checkbox("Harvest full batches",ref gardenAdventureHarvest);ImGui.EndTable();
+            }
             ImGui.Checkbox("Switch assigned characters on this account",ref gardenAdventureSwitch);
             var walk=config.GardenCareWalk;if(ImGui.Checkbox("Walk to mapped beds (Lifestream)",ref walk)){config.GardenCareWalk=walk;SaveConfiguration();}
             ImGui.TextWrapped("Uses the assigned gardeners on this character's Journal account. The growing adventure waits between stages. Planting uses its exact saved seed, soil and bed order; harvesting waits for observed maturity of the whole batch. Stop remains available while waiting.");
