@@ -51,6 +51,15 @@ internal static class GardenCare312Tests
         Check(house.Select(p=>p.Batch).SequenceEqual([1,2]),"House harvest queues eligible batches in order and excludes protected beds and other houses");
         var mature=done with {Beds=[Bed(1)]};
         var growing=done with {Beds=[Bed(1,"confirmed",false) with {NextTend=now.AddMinutes(-1)}]};
+        foreach(var phase in new[]{"plan","grow","waiting","review"}){
+            var rule=new AdventureTaskRule(Kind:"growingcycle",HouseId:growing.HouseId,Batch:growing.Batch,Phase:phase);
+            Check(GardenCarePolicy.RouteTendingNeeded(rule,growing,true,now),"Existing due crops receive route care during "+phase);
+            Check(!GardenCarePolicy.RouteTendingNeeded(rule,growing,false,now),"Disabled tending stays disabled during "+phase);
+            Check(!GardenCarePolicy.RouteTendingNeeded(rule,mature,true,now),"Mature crops do not create tending work during "+phase);
+            Check(!GardenCarePolicy.RouteTendingNeeded(rule,growing with{HouseId:"unselected"},true,now),"Route care stays on selected house during "+phase);
+            Check(!GardenCarePolicy.RouteTendingNeeded(rule,growing with{Batch=3},true,now),"Route care stays on selected batch during "+phase);
+            Check(!GardenCarePolicy.RouteTendingNeeded(rule,growing with{Beds=[growing.Beds[0] with{NextTend=now.AddHours(12)}]},true,now),"Recently tended batch does not create repeat work during "+phase);
+        }
         var watered=growing with {Batch=2,Beds=[growing.Beds[0] with {NextTend=now.AddHours(12),LastFertilized=now}]};
         Check(GardenCarePolicy.HouseCare([mature,growing,watered,growing with{HouseId="other"}],"house",GardenCareAction.Tend,now).Length==1,"House tending skips mature, recently tended and other houses");
         Check(GardenCarePolicy.HouseCare([mature,growing,watered],"house",GardenCareAction.Fertilize,now).Length==1,"House fertilizing respects maturity and cooldown");

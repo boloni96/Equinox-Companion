@@ -4,6 +4,8 @@ namespace EquinoxCompanion;
 public enum GardenCareAction { Tend, Fertilize, Harvest, Plant, RemoveStarter, Inspect }
 public static class GardenCarePolicy
 {
+    public static bool RouteTendingNeeded(AdventureTaskRule rule,SharedGardenPlan plan,bool enabled,DateTimeOffset now)=>
+        enabled&&rule.Kind=="growingcycle"&&rule.HouseId==plan.HouseId&&rule.Batch==plan.Batch&&plan.Beds.Any(b=>Eligible(plan,b,GardenCareAction.Tend,now));
     public static bool TargetAllowed(ulong expected,ulong current,bool sent,GardenCareAction? action)=>expected==0||expected==current||current==0&&sent&&action is GardenCareAction.Harvest or GardenCareAction.RemoveStarter or GardenCareAction.Plant or GardenCareAction.Tend or GardenCareAction.Fertilize;
     public static SharedGardenPlan[] HouseHarvest(IEnumerable<SharedGardenPlan> plans,string house,DateTimeOffset now)=>HouseCare(plans,house,GardenCareAction.Harvest,now);
     public static SharedGardenPlan[] HouseCare(IEnumerable<SharedGardenPlan> plans,string house,GardenCareAction action,DateTimeOffset now,bool tendAll=false)=>plans.Where(p=>p.HouseId==house&&p.Beds.Any(b=>Eligible(p,b,action,now,tendAll))).OrderBy(p=>p.Batch).ToArray();

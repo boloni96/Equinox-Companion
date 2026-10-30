@@ -5,7 +5,7 @@ using Dalamud.Game.ClientState.Conditions;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
-    private sealed record GardenAdventureWork(string TaskId,string Character,string House,int Batch,AdventureTaskRule Rule);
+    private sealed record GardenAdventureWork(string TaskId,string Character,string House,int Batch,AdventureTaskRule Rule,bool TendOnly=false);
     private Queue<GardenAdventureWork>? gardenTendRoute;
     private ulong gardenTendOwner;
     private string gardenTendBoard="",gardenTendGeneration="",gardenTendStatus="";
@@ -124,9 +124,15 @@ public sealed partial class Plugin
                 var blocked=new List<string>();
                 foreach(var task in tasks){
                     var rule=task.Rule!;var cid=AdventurePolicy.TaskCharacterId(task,chars);if(!gardenAdventureCharacters.Contains(cid)||rule.Batch is <1 or >3||rule.HouseId.Length==0)continue;
-                    if(rule.Kind=="growingcycle"&&rule.Phase is "waiting" or "review")continue;
                     var source=GardenPlanSources().FirstOrDefault(p=>p.HouseId==rule.HouseId&&(rule.Kind!="growingcycle"||p.Batch==rule.Batch)&&p.Batch==rule.Batch);if(source==null)continue;
                     var live=EffectiveGardenPlan(source);
+                    // Route dependencies gate planting, not care of crops already in this selected batch.
+                    if(GardenCarePolicy.RouteTendingNeeded(rule,live,gardenAdventureTend,now)){
+                        if(!gardenTendRoute.Any(w=>w.House==rule.HouseId&&w.Batch==rule.Batch))
+                            gardenTendRoute.Enqueue(new(task.Id,cid,rule.HouseId,rule.Batch,rule,TendOnly:true));
+                        continue;
+                    }
+                    if(rule.Kind=="growingcycle"&&rule.Phase is "waiting" or "review")continue;
                     if(rule.Kind=="growingcycle"&&rule.Phase=="plan"&&gardenAdventurePlant){
                         if(rule.PlanTemplate==null)continue;
                         var preparation=GardenRoutePreparation(live,rule.PlanTemplate,now);
@@ -154,7 +160,7 @@ public sealed partial class Plugin
                     if(LifestreamBusy()||goSeeHomeTrip!=null||goSeeFriendTrip!=null||Conditions[ConditionFlag.Casting]||Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51])return;
                     gardenTendRoute.Clear();gardenTendTravelSent=false;gardenPlotApproaching=gardenPlotApproachAttempted=false;gardenTendStatus="Using the updated selected batch assignment…";return;
                 }
-                if(liveTask.Rule.Kind=="growingcycle"&&liveTask.Rule.Phase is "waiting" or "review"){gardenTendRoute.Dequeue();gardenTendTravelSent=false;gardenPlotApproaching=gardenPlotApproachAttempted=false;return;}
+                if(!work.TendOnly&&liveTask.Rule.Kind=="growingcycle"&&liveTask.Rule.Phase is "waiting" or "review"){gardenTendRoute.Dequeue();gardenTendTravelSent=false;gardenPlotApproaching=gardenPlotApproachAttempted=false;return;}
                 work=work with{Rule=liveTask.Rule};
             }
             if(!Player.IsLoaded){gardenArrival.Reset();return;}
@@ -211,7 +217,7 @@ public sealed partial class Plugin
             if(LifestreamBusy()||goSeeHomeTrip!=null)return;
             var plan=EffectiveGardenPlan(sourcePlan);
             if(work.Rule.PhysicalPatch>0&&(plan.PhysicalPatch>0?plan.PhysicalPatch:plan.Batch)!=work.Rule.PhysicalPatch)throw new InvalidOperationException("Batch labels changed. Refresh the route before restarting.");
-            if(work.Rule.Kind=="growingcycle"){
+            if(!work.TendOnly&&work.Rule.Kind=="growingcycle"){
                 if(work.Rule.PlanTemplate==null)throw new InvalidOperationException("Route planting layout is missing.");
                 if(work.Rule.PlanAt.Length>0&&(!DateTimeOffset.TryParse(work.Rule.PlanAt,out var at)||plan.At!=at||!SameGardenDefinition(plan.Definition,work.Rule.PlanTemplate)))throw new InvalidOperationException("The route's saved batch plan changed.");
                 if(work.Rule.PlanAt.Length==0){
@@ -234,7 +240,7 @@ public sealed partial class Plugin
                 }
             }
             if(plan.Beds.Any(b=>!b.ObservedAt.HasValue))throw new InvalidOperationException("Inspect / sync the batch before automatic gardening.");
-            var action=GardenAdventureAction(plan,work.Rule,now);
+            var action=work.TendOnly?(GardenCarePolicy.RouteTendingNeeded(work.Rule,plan,gardenAdventureTend,now)?(GardenCareAction?)GardenCareAction.Tend:null):GardenAdventureAction(plan,work.Rule,now);
             if(action==null){gardenTendRoute.Dequeue();return;}
             if(action==GardenCareAction.Plant){gardenAutoPlantPlan=plan;gardenCareRun=null;ContinueAutoPlant(plan);if(gardenCareRun==null)throw new InvalidOperationException("Planting needs its exact seeds and soil in bags.");}
             else{
