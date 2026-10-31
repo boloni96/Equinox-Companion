@@ -5,6 +5,7 @@ public sealed class Configuration : IPluginConfiguration
 {
     public bool ShowStorageTransfersInChat { get; set; }
     public Dictionary<ulong,List<AssignmentSetup>> RetainerAssignmentSetups { get; set; } = [];
+    public Dictionary<ulong,HashSet<uint>> ArmoireExcludedItems { get; set; } = [];
     public bool SortItemsAfterOrganizing { get; set; }
     public int StorageKeepInBags { get; set; }
     public bool WithdrawUntradableOnly { get; set; }
@@ -136,6 +137,7 @@ public sealed class Configuration : IPluginConfiguration
     public List<TendingRecord> Tending { get; set; } = [];
     public List<HouseObservation> Houses { get; set; } = [];
 }
+
 
 
 

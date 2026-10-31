@@ -20,7 +20,7 @@ public sealed partial class Plugin
     private uint OrganizeCategory(uint item)=>DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>().GetRowOrDefault(item)?.ItemUICategory.RowId??0;
     private void DrawRetainerOrganizer()
     {
-        ImGui.BeginDisabled(organizeRunning||retrievalRun.Running||chestRunning);
+        ImGui.BeginDisabled(armoireRunning||organizeRunning||retrievalRun.Running||chestRunning);
         if(NoOrganizerPlan)ImGui.TextDisabled("No plan · all retainer items, narrowed by movement filters");else DrawPlanCategoryRules();
         var scope=organizeSelectionMode?1:0;ImGui.SetNextItemWidth(220);
         if(ImGui.Combo("Scope",ref scope,"All retainers\0Selected movement\0")){organizeSelectionMode=scope==1;InvalidateOrganizePreview();}
@@ -83,7 +83,7 @@ public sealed partial class Plugin
     private unsafe void StartStorageRouting(StorageRoute[] rules,bool bagsOnly,bool temporarySelection=false,int temporaryTradeFilter=0)
     {
         RetrievalTry(()=>{
-            if(craftingWithdrawalPending||organizeRunning||retrievalRun.Running||chestRunning||sellerRun.Running||TraderRunning||retainerGilRunning)throw new InvalidOperationException("Finish the current inventory operation first.");
+            if(armoireRunning||craftingWithdrawalPending||organizeRunning||retrievalRun.Running||chestRunning||sellerRun.Running||TraderRunning||retainerGilRunning)throw new InvalidOperationException("Finish the current inventory operation first.");
             if(!Player.IsLoaded||!RetainerToolsContext())throw new InvalidOperationException("Open the summoning bell's retainer list first.");
             var owned=ReadSellerRetainers().Select(x=>x.Id).ToArray();
             if(rules.Any(r=>r.To==0||r.To!=StorageAutoRouting.AllRetainers&&!owned.Contains(r.To)||r.From!=0&&r.From!=StorageRouting.AllSources&&!owned.Contains(r.From)))throw new InvalidOperationException("Choose this character's retainers for every movement.");
@@ -175,5 +175,6 @@ public sealed partial class Plugin
         return confirmed;
     }
 }
+
 
 
