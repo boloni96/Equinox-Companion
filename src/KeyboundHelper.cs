@@ -12,6 +12,7 @@ public sealed partial class Plugin
     private bool keyboundEnabled,keyboundSeen,keyboundAwaiting;
     private bool keyboundAutoRepeat;
     private int keyboundDelayDraft;
+    private DateTimeOffset keyboundTimingEditUntil;
     private DateTimeOffset keyboundSubmitAt;
     private string keyboundStatus="Off",keyboundWord="",keyboundSent="",keyboundExpected="";
     private nint keyboundTarget;
@@ -60,10 +61,12 @@ public sealed partial class Plugin
     private bool DrawKeyboundDelay(string label,ref int value,int minimum,int maximum)
     {
         var changed=ImGui.SliderInt(label,ref value,minimum,maximum,"%d ms");
+        if(ImGui.IsItemActive())keyboundTimingEditUntil=DateTimeOffset.UtcNow.AddMilliseconds(250);
         var popup="Exact milliseconds##"+label;
         if(ImGui.IsItemClicked(ImGuiMouseButton.Right)){keyboundDelayDraft=value;ImGui.OpenPopup(popup);}
         if(ImGui.IsItemHovered())ImGui.SetTooltip("Drag to adjust · right-click to type milliseconds");
         if(ImGui.BeginPopup(popup)){
+            keyboundTimingEditUntil=DateTimeOffset.UtcNow.AddMilliseconds(250);
             ImGui.TextUnformatted(label);
             if(ImGui.IsWindowAppearing())ImGui.SetKeyboardFocusHere();
             ImGui.SetNextItemWidth(160);
@@ -111,6 +114,7 @@ public sealed partial class Plugin
         try{
             if(!Client.IsLoggedIn){StopKeybound("Stopped: logged out");return;}
             KeepKeyboundActive(now);
+            if(now<keyboundTimingEditUntil){keyboundDeadline=now.AddSeconds(2);keyboundStatus="Paused: editing timing";return;}
             var stage=AtkStage.Instance();if(stage==null)return;
             if(keyboundAutoRepeat&&UpdateKeyboundLoop(now))return;
             var input=stage->RaptureAtkUnitManager->GetAddonByName("KTGInput");
