@@ -243,6 +243,7 @@ public sealed partial class Plugin : IDalamudPlugin
         Pi.UiBuilder.OpenMainUi += Open;
         Pi.UiBuilder.OpenConfigUi += OpenSettings;
         Framework.Update += Update;
+        Framework.Update += UpdateKeybound;
         Client.Login += OnGardenNoticeLogin;
         InitializeLottery();InitializeSaddleTracking();
         Client.Login += ResetMaintenanceLogin;
@@ -1295,6 +1296,8 @@ public sealed partial class Plugin : IDalamudPlugin
         Chat.ChatMessage -= OnGardenChat;
         foreach (var menuEvent in MenuEvents) Addons.UnregisterListener(menuEvent, GardenMenus, OnGardenMenu);
         Framework.Update -= Update;
+        Framework.Update -= UpdateKeybound;
+        StopKeybound();
         Client.Login -= OnGardenNoticeLogin;
         DisposeLottery();Addons.UnregisterListener(ObserveSaddleAddon);
         Client.Login -= ResetMaintenanceLogin;
@@ -1326,6 +1329,7 @@ public sealed partial class Plugin : IDalamudPlugin
         FlushConfiguration();
     }
 }
+
 
 
 

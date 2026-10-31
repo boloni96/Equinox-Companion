@@ -1,0 +1,102 @@
+using System.Diagnostics;
+using System.Runtime.InteropServices;
+using Dalamud.Bindings.ImGui;
+using Dalamud.Plugin.Services;
+using FFXIVClientStructs.FFXIV.Client.UI;
+using FFXIVClientStructs.FFXIV.Component.GUI;
+using EquinoxCompanion.Keybound;
+namespace EquinoxCompanion;
+
+public sealed partial class Plugin
+{
+    private bool keyboundEnabled,keyboundSeen,keyboundAwaiting;
+    private string keyboundStatus="Off",keyboundWord="",keyboundSent="",keyboundExpected="";
+    private nint keyboundTarget;
+    private DateTimeOffset keyboundNext,keyboundDeadline,keyboundHold,keyboundMissing;
+    private int keyboundOpenAttempts;
+    private string? keyboundDangerName;
+    private readonly Dictionary<string,DateTimeOffset> keyboundRecent=[];
+    [DllImport("user32.dll")] private static extern nint GetForegroundWindow();
+    [DllImport("user32.dll",SetLastError=true)] private static extern bool PostMessageW(nint window,uint message,nint value,nint detail);
+    private static bool KeyboundSend(nint window,char character)=>PostMessageW(window,0x102,(nint)character,1);
+    private static bool KeyboundEnter(nint window)=>PostMessageW(window,0x100,13,0x001c0001)&&PostMessageW(window,0x101,13,unchecked((nint)(int)0xc01c0001));
+    private void StopKeybound(string reason="Stopped")
+    {
+        keyboundEnabled=false;keyboundSeen=false;keyboundAwaiting=false;keyboundWord=keyboundSent=keyboundExpected="";keyboundTarget=0;keyboundRecent.Clear();keyboundOpenAttempts=0;keyboundStatus=reason;
+    }
+    private void DrawKeyboundHelper()
+    {
+        ImGui.TextWrapped("Optional Keybound Brawler typing helper. Press Start, then enter the minigame. Types live phrases and submits them with Enter. Stop is always available here. It turns off when you leave the minigame or log out.");
+        ImGui.TextWrapped("Keep this game window in the foreground. Other text fields and no-typing casts pause the helper. Existing text is kept; clear it yourself before starting. No automatic queueing, purchases or Adventure activation.");
+        if(ImGui.Button(keyboundEnabled?"Stop typing":"Start typing")){
+            if(keyboundEnabled)StopKeybound();else{StopKeybound();keyboundEnabled=true;keyboundNext=keyboundHold=keyboundMissing=default;keyboundStatus="Waiting for Keybound Brawler";}
+        }
+        ImGui.TextWrapped(keyboundStatus);
+        ImGui.TextDisabled("Initial release: live in-game validation pending.");
+    }
+    private static unsafe bool KeyboundContains(AtkUldManager* uld,AtkResNode* target,int depth=0)
+    {
+        if(uld==null||uld->NodeList==null||depth>8)return false;
+        for(int i=0;i<Math.Min((int)uld->NodeListCount,1024);i++){
+            var node=uld->NodeList[i];if(node==null)continue;if(node==target)return true;
+            if((int)node->Type>=1000){var component=node->GetComponent();if(component!=null&&KeyboundContains(&component->UldManager,target,depth+1))return true;}
+        }
+        return false;
+    }
+    private unsafe void UpdateKeybound(IFramework framework)
+    {
+        if(!keyboundEnabled)return;
+        var now=DateTimeOffset.UtcNow;if(now<keyboundNext)return;keyboundNext=now.AddMilliseconds(80);
+        try{
+            if(!Client.IsLoggedIn){StopKeybound("Stopped: logged out");return;}
+            var stage=AtkStage.Instance();if(stage==null)return;
+            var input=stage->RaptureAtkUnitManager->GetAddonByName("KTGInput");
+            if(input==null||!input->IsVisible){
+                if(keyboundSeen){if(keyboundMissing==default)keyboundMissing=now;if(now-keyboundMissing>TimeSpan.FromSeconds(2))StopKeybound("Stopped: minigame closed");}
+                else{keyboundStatus="Waiting for Keybound Brawler";keyboundNext=now.AddMilliseconds(500);}return;
+            }
+            keyboundSeen=true;keyboundMissing=default;
+            using var process=Process.GetCurrentProcess();var window=process.MainWindowHandle;
+            if(window==0||GetForegroundWindow()!=window){keyboundDeadline=now.AddSeconds(2);keyboundStatus="Paused: bring this game window to the foreground";return;}
+            var focus=stage->GetFocus();var ownsFocus=focus!=null&&KeyboundContains(&input->UldManager,focus);
+            var module=RaptureAtkModule.Instance();if(module==null)return;
+            if(!ownsFocus&&module->AtkModule.IsTextInputActive()){keyboundDeadline=now.AddSeconds(2);keyboundStatus="Paused: another text field has focus";return;}
+            // Hold throughout these casts, plus their landing animation. No keys,
+            // including clearing or Enter, are sent while input is dangerous.
+            var dangerName=keyboundDangerName??=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Action>().GetRowOrDefault(49529)?.Name.ExtractText()??"Cursed Gaze";
+            if(KeyboundUi.Texts("KTGEnemyCastBar").Any(t=>t.NodeId==4&&((dangerName.Length>0&&t.Text.Contains(dangerName,StringComparison.OrdinalIgnoreCase))||t.Text.Contains("Sensory Jammer",StringComparison.OrdinalIgnoreCase))))keyboundHold=now.AddMilliseconds(3500);
+            if(now<keyboundHold){keyboundDeadline=now.AddSeconds(2);keyboundStatus="Paused: no-typing cast";return;}
+            var actual=KeyboundUi.Texts("KTGInput").FirstOrDefault(t=>t.NodeId==16).Text??"";
+            if(keyboundAwaiting){
+                if(actual==keyboundExpected){keyboundAwaiting=false;keyboundSent=actual;keyboundOpenAttempts=0;}
+                else {if(now>=keyboundDeadline)StopKeybound("Stopped: input did not match; existing text kept");return;}
+            }
+            if(!KeyboundPolicy.OwnsInput(actual,keyboundSent)){if(keyboundSent.Length>0)StopKeybound("Stopped: text was changed; existing text kept");else keyboundStatus="Paused: clear existing text to resume";return;}
+            var words=KeyboundUi.AllTexts("KTGEWord").Where(t=>(t.LabelVisible&&t.TextVisible||t.Obscured)&&KeyboundPolicy.IsPhrase(t.Text.Trim())).Select(t=>t with{Text=t.Text.Trim()}).ToArray();
+            var live=words.FirstOrDefault(t=>t.Key==keyboundTarget&&t.Text==keyboundWord);
+            if(keyboundWord.Length>0&&live.Text==null){
+                if(actual.Length>0){if(!ownsFocus)return;if(!KeyboundSend(window,'\b')){StopKeybound("Stopped: input unavailable");return;}KeyboundExpect(actual[..^1],now);return;}
+                keyboundWord="";keyboundTarget=0;
+            }
+            if(keyboundWord.Length==0){
+                foreach(var old in keyboundRecent.Where(x=>now-x.Value>TimeSpan.FromSeconds(2)).Select(x=>x.Key).ToArray())keyboundRecent.Remove(old);
+                var next=words.Where(t=>!keyboundRecent.ContainsKey(t.Text)).OrderBy(t=>t.Tint==LabelTint.Green?0:t.Tint==LabelTint.Red?1:t.Tint==LabelTint.Gold?2:3).ThenByDescending(t=>t.Y).FirstOrDefault();
+                if(next.Text==null){keyboundStatus="Waiting for a live phrase";return;}keyboundWord=next.Text;keyboundTarget=next.Key;live=next;
+            }
+            if(!ownsFocus){
+                if(++keyboundOpenAttempts>3){StopKeybound("Stopped: minigame input could not be focused");return;}
+                if(!KeyboundEnter(window)){StopKeybound("Stopped: input unavailable");return;}keyboundNext=now.AddMilliseconds(300);keyboundStatus="Opening minigame input";return;
+            }
+            if(KeyboundPolicy.CanSubmit(live.Text??"",actual,keyboundWord)){
+                if(!KeyboundEnter(window)){StopKeybound("Stopped: submit unavailable");return;}
+                keyboundRecent[keyboundWord]=now;keyboundStatus="Submitted: "+keyboundWord;keyboundWord="";keyboundTarget=0;KeyboundExpect("",now);return;
+            }
+            if(!keyboundWord.StartsWith(actual,StringComparison.Ordinal)){StopKeybound("Stopped: phrase changed; existing text kept");return;}
+            if(actual.Length<keyboundWord.Length){
+                var letter=keyboundWord[actual.Length];if(!KeyboundSend(window,letter)){StopKeybound("Stopped: input unavailable");return;}
+                KeyboundExpect(actual+letter,now);keyboundStatus="Typing: "+keyboundWord;
+            }
+        }catch(Exception ex){StopKeybound("Stopped: minigame UI unavailable");Log.Warning(ex,"Keybound helper stopped");}
+    }
+    private void KeyboundExpect(string expected,DateTimeOffset now){keyboundExpected=expected;keyboundAwaiting=true;keyboundDeadline=now.AddSeconds(2);}
+}

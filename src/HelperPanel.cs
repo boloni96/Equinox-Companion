@@ -20,6 +20,7 @@ public sealed partial class Plugin
     private void DrawHelperPanel()
     {
         if(ImGui.BeginTabBar("helper-sections")){
+            if(ImGui.BeginTabItem("Keybound Brawler")){DrawKeyboundHelper();ImGui.EndTabItem();}
             if(ImGui.BeginTabItem("FollowThem")){if(ImGui.BeginChild("FollowThemBody",Vector2.Zero,false))DrawFollowThem();ImGui.EndChild();ImGui.EndTabItem();}
             if(ImGui.BeginTabItem("Quest Helper")){
                 ImGui.BeginChild("QuestHelperBody",Vector2.Zero,false);
@@ -94,4 +95,5 @@ public sealed partial class Plugin
         ImGui.End();
     }
 }
+
 
