@@ -79,3 +79,8 @@ Check(KeyboundShoppingPolicy.Total(wishes)==260&&unknown==1,"Journal wanted-not-
 var duplicates=KeyboundShoppingPolicy.WishlistPlan(new[]{("Avalanche Brawler’s Top",true,false),("Avalanche Brawler's Top",true,false)},out unknown);
 Check(KeyboundShoppingPolicy.Total(duplicates)==430&&unknown==0,"normalized apostrophe and duplicate wishlist entries");
 Check(KeyboundShoppingPolicy.Total(KeyboundShoppingPolicy.WishlistPlan(Array.Empty<(string,bool,bool)>(),out unknown))==0,"empty synced wishlist never selects everything");
+
+Check(KeyboundPolicy.IsPhrase("Worth the Weight?"),"wave two boss question phrase is accepted");
+Check(KeyboundPolicy.CanSubmit("Worth the Weight?","Worth the Weight?","Worth the Weight?"),"boss question mark is preserved on submission");
+Check(!KeyboundPolicy.CanSubmit("Worth the Weight?","Worth the Weight","Worth the Weight?"),"boss phrase requires its final punctuation");
+Check(!KeyboundPolicy.IsPhrase("???")&&!KeyboundPolicy.IsPhrase("***"),"placeholder-only labels stay excluded");
