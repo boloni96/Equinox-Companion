@@ -1,5 +1,4 @@
 using System.Numerics;
-using System.Diagnostics;
 using Dalamud.Game.ClientState.Conditions;
 using FFXIVClientStructs.FFXIV.Client.Game.Control;
 using FFXIVClientStructs.FFXIV.Client.UI.Misc;
@@ -28,8 +27,7 @@ public sealed partial class Plugin
         if(Client.TerritoryType==1359&&result==null)return false;
         if(now<keyboundLoopNext)return true;
         keyboundLoopNext=now.AddSeconds(1);
-        using var process=Process.GetCurrentProcess();
-        if(process.MainWindowHandle==0||GetForegroundWindow()!=process.MainWindowHandle){keyboundStatus="Paused: bring this game window to the foreground";return true;}
+        if(!config.KeyboundRunInBackground&&GetForegroundWindow()!=KeyboundGameWindow()){keyboundStatus="Paused: enable Run in background or return to the game";return true;}
         if(result!=null&&Client.TerritoryType==1359){
             if(keyboundResultsReadyAt==default)keyboundResultsReadyAt=now;
             if(now-keyboundResultsReadyAt<TimeSpan.FromSeconds(5)){keyboundStatus="Waiting for results and reward balance";return true;}

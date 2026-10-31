@@ -39,3 +39,13 @@ Check(!KeyboundPolicy.CanClear(true,"",""),"never Escape an empty input and quit
 Check(!KeyboundPolicy.CanClear(false,"Cur","Cur"),"never Escape inactive input");
 Check(!KeyboundPolicy.CanClear(true,"my text","Cur"),"never clear someone else's text");
 Check(KeyboundPolicy.TypingDelay(200,100,0)==100&&KeyboundPolicy.TypingDelay(200,100,1)==200,"independent crossed sliders produce bounded sorted timing");
+
+Check(KeyboundPolicy.CanRecoverInput("Cu","Cu","Cur",true),"interrupted pending key can clear its observed buffer");
+Check(KeyboundPolicy.CanRecoverInput("C","Cu","Cur",true),"game-truncated pending prefix can recover");
+Check(KeyboundPolicy.CanRecoverInput("Curr","Cu","Cur",true),"one duplicated outstanding character can recover");
+Check(!KeyboundPolicy.CanRecoverInput("Curx","Cu","Cur",true),"arbitrary appended user text cannot be cleared");
+Check(!KeyboundPolicy.CanRecoverInput("Other","Cu","Cur",true),"unrelated text is preserved during recovery");
+Check(!KeyboundPolicy.CanRecoverInput("C","Cu","Cur",false),"stale expected text does not grant ownership");
+Check(KeyboundPolicy.CanRecoverInput("Cura","Cura","",true),"interrupted submission can clear owned complete word");
+Check(KeyboundPolicy.CanRecoverInput("","","Cur",true),"game-cleared field recovers without Escape");
+Check(!KeyboundPolicy.CanRecoverInput("Phoenix","","Cura",true),"unexpected history phrase is preserved");

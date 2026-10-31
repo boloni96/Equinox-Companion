@@ -7,6 +7,18 @@ public static class KeyboundPolicy
     public static bool CanClear(bool inputActive,string actual,string owned)=>inputActive&&actual.Length>0&&actual==owned;
     public static bool LoopTerritory(uint territory)=>territory is 1359 or 1360;
     public static bool ShouldRecall(string input,string selected,string lastSubmitted,bool attempted)=>!attempted&&input.Length==0&&selected.Length>0&&selected==lastSubmitted;
+    public static bool CanRecoverInput(string actual,string observed,string expected,bool awaiting)
+    {
+        if(actual.Length==0||actual==observed)return true;
+        if(!awaiting||expected.Length==0)return false;
+        // The game can clear or truncate an owned prefix during a stun/transition.
+        if(expected.StartsWith(actual,StringComparison.Ordinal))return true;
+        // A delayed key from the old queued transport may have been delivered
+        // twice. Only accept that one outstanding character, never arbitrary text.
+        return expected.Length==observed.Length+1
+            &&expected.StartsWith(observed,StringComparison.Ordinal)
+            &&actual==expected+expected[^1];
+    }
     public static bool CanRetryInput(string actual,string lastObserved)=>actual.Length==0||actual==lastObserved;
     public static bool AbandonMissingTarget(bool targetLive,string actual,string observed,string expected)=>!targetLive&&(actual.Length==0||actual==observed||actual==expected);
     public static bool CanSubmit(string liveWord,string input,string selected)=>selected.Length>0&&liveWord==selected&&input==selected;

@@ -70,6 +70,7 @@ public sealed class Configuration : IPluginConfiguration
     public bool CofferMainMap { get; set; } = true;
     public bool FollowAntiAfk { get; set; }
     public bool EnableKeyboundBrawler { get; set; }
+    public bool KeyboundRunInBackground { get; set; } = true;
     public int KeyboundMinDelayMs { get; set; } = KeyboundPolicy.SoftMinMs;
     public int KeyboundMaxDelayMs { get; set; } = KeyboundPolicy.SoftMaxMs;
     public int KeyboundSubmitDelayMs { get; set; } = KeyboundPolicy.SoftSubmitMs;

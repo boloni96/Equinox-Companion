@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Plugin.Services;
@@ -24,10 +23,6 @@ public sealed partial class Plugin
     private readonly Dictionary<string,DateTimeOffset> keyboundRecent=[];
     [DllImport("user32.dll")] private static extern nint GetForegroundWindow();
     [DllImport("user32.dll",SetLastError=true)] private static extern bool PostMessageW(nint window,uint message,nint value,nint detail);
-    private static bool KeyboundSend(nint window,char character)=>PostMessageW(window,0x102,(nint)character,1);
-    private static bool KeyboundEnter(nint window)=>PostMessageW(window,0x100,13,0x001c0001)&&PostMessageW(window,0x101,13,unchecked((nint)(int)0xc01c0001));
-    private static bool KeyboundClear(nint window)=>PostMessageW(window,0x100,0x1b,0x00010001)&&PostMessageW(window,0x101,0x1b,unchecked((nint)(int)0xc0010001));
-    private static bool KeyboundUp(nint window)=>PostMessageW(window,0x100,0x26,0x01480001)&&PostMessageW(window,0x101,0x26,unchecked((nint)(int)0xc1480001));
     private void StopKeybound(string reason="Stopped")
     {
         keyboundLastSubmitted=keyboundPendingSubmission="";keyboundRecallTried=keyboundRecalling=keyboundClearing=false;
@@ -36,13 +31,16 @@ public sealed partial class Plugin
     }
     private void DrawKeyboundHelper()
     {
-        ImGui.TextUnformatted(keyboundWord.Length>0?keyboundWord:"Keybound Brawler");
         if(ImGui.Button(keyboundEnabled?"Stop":"Start")){
             if(keyboundEnabled)StopKeybound();else{StopKeybound();keyboundEnabled=true;keyboundNext=keyboundHold=keyboundMissing=default;keyboundStatus="Waiting for Keybound Brawler";}
         }
-        DrawHelperStatusText(keyboundStatus,stopped:!keyboundEnabled);
-        ImGui.Checkbox("Auto-queue & repeat",ref keyboundAutoRepeat);
-        ImGui.Checkbox("Anti-AFK while running",ref keyboundAntiAfk);
+        ImGui.SameLine();ImGui.TextUnformatted(keyboundEnabled?"Running":"Stopped");
+        ImGui.TextWrapped(keyboundStatus);
+        if(keyboundWord.Length>0)ImGui.TextWrapped("Word: "+keyboundWord);
+        ImGui.Checkbox("Auto-repeat",ref keyboundAutoRepeat);
+        ImGui.SameLine();ImGui.Checkbox("Anti-AFK",ref keyboundAntiAfk);
+        var background=config.KeyboundRunInBackground;
+        if(ImGui.Checkbox("Run in background",ref background)){config.KeyboundRunInBackground=background;SaveConfiguration();}
         DrawKeyboundRewards();
         if(ImGui.Button("Soft · 80 / 150 / 80 ms")){
             config.KeyboundMinDelayMs=KeyboundPolicy.SoftMinMs;config.KeyboundMaxDelayMs=KeyboundPolicy.SoftMaxMs;config.KeyboundSubmitDelayMs=KeyboundPolicy.SoftSubmitMs;SaveConfiguration();
@@ -50,17 +48,18 @@ public sealed partial class Plugin
         var min=Math.Clamp(config.KeyboundMinDelayMs,10,1000);
         var max=Math.Clamp(config.KeyboundMaxDelayMs,10,1000);
         var submit=Math.Clamp(config.KeyboundSubmitDelayMs,0,2000);
-        if(DrawKeyboundDelay("Min keystroke delay",ref min,10,1000)){config.KeyboundMinDelayMs=min;SaveConfiguration();}
-        if(DrawKeyboundDelay("Max keystroke delay",ref max,10,1000)){config.KeyboundMaxDelayMs=max;SaveConfiguration();}
-        if(DrawKeyboundDelay("Submit delay",ref submit,0,2000)){config.KeyboundSubmitDelayMs=submit;SaveConfiguration();}
+        if(DrawKeyboundDelay("Min",ref min,10,1000)){config.KeyboundMinDelayMs=min;SaveConfiguration();}
+        if(DrawKeyboundDelay("Max",ref max,10,1000)){config.KeyboundMaxDelayMs=max;SaveConfiguration();}
+        if(DrawKeyboundDelay("Submit",ref submit,0,2000)){config.KeyboundSubmitDelayMs=submit;SaveConfiguration();}
         if(min>max)ImGui.TextDisabled($"Effective keystroke range: {max}–{min} ms");
         if(ImGui.CollapsingHeader("How it works")){
             ImGui.TextWrapped("Optional typing assistance for Keybound Brawler. Keeps spaces and punctuation, uses Up for consecutive repeats, and clears its partial text when a target disappears. Pauses through stuns and no-typing casts.");
-            ImGui.TextWrapped("Keep this game window in the foreground. Other text fields pause assistance. Auto-queue & repeat registers at the nearby Keybound registrar, accepts the match, and returns after results. Start near the registrar in Keybound Square. Stop or disabling the tool ends automation.");
+            ImGui.TextWrapped("Run in background keeps working while you use another app. Input goes directly to this game client. Keep the game running; background frame limits can slow it down. Other in-game text fields pause assistance. Auto-queue & repeat registers at the nearby Keybound registrar, accepts the match, and returns after results. Start near the registrar in Keybound Square. Stop or disabling the tool ends automation.");
         }
     }
     private bool DrawKeyboundDelay(string label,ref int value,int minimum,int maximum)
     {
+        ImGui.SetNextItemWidth(Math.Max(120,ImGui.GetContentRegionAvail().X-ImGui.GetFontSize()*4.5f));
         var changed=ImGui.SliderInt(label,ref value,minimum,maximum,"%d ms");
         if(ImGui.IsItemActive())keyboundTimingEditUntil=DateTimeOffset.UtcNow.AddMilliseconds(250);
         var popup="Exact milliseconds##"+label;
@@ -129,8 +128,9 @@ public sealed partial class Plugin
             if(Objects.LocalPlayer?.StatusList.Any(status=>status.StatusId is 2 or 149 or 1309)==true){
                 keyboundDeadline=now.AddSeconds(2);keyboundStatus="Paused: stunned; resumes automatically";return;
             }
-            using var process=Process.GetCurrentProcess();var window=process.MainWindowHandle;
-            if(window==0||GetForegroundWindow()!=window){keyboundDeadline=now.AddSeconds(2);keyboundStatus="Paused: bring this game window to the foreground";return;}
+            var window=KeyboundGameWindow();
+            if(window==0){keyboundDeadline=now.AddSeconds(2);keyboundStatus="Waiting for game input";return;}
+            if(!config.KeyboundRunInBackground&&GetForegroundWindow()!=window){keyboundDeadline=now.AddSeconds(2);keyboundStatus="Paused: enable Run in background or return to the game";return;}
             var focus=stage->GetFocus();var ownsFocus=editor.Active&&(focus==null||KeyboundContains(&input->UldManager,focus));
             var module=RaptureAtkModule.Instance();if(module==null)return;
             if(!ownsFocus&&module->AtkModule.IsTextInputActive()){keyboundDeadline=now.AddSeconds(2);keyboundStatus="Paused: another text field has focus";return;}
@@ -150,21 +150,20 @@ public sealed partial class Plugin
                 else {
                     if(now<keyboundDeadline)return;
                     if(keyboundRecalling&&actual.Length==0){keyboundAwaiting=keyboundRecalling=false;keyboundSent="";keyboundStatus="Recall unavailable: typing phrase";}
-                    else if(KeyboundPolicy.CanRetryInput(actual,keyboundSent)){
-                        // Retry only unchanged owned text or a game-cleared buffer.
-                        if(keyboundPendingSubmission.Length>0){keyboundWord=keyboundPendingSubmission;keyboundTarget=0;keyboundPendingSubmission="";}
-                        keyboundAwaiting=keyboundRecalling=false;keyboundSent=actual;keyboundNext=now.AddMilliseconds(500);keyboundStatus="Retrying: input was interrupted";return;
+                    else if(KeyboundPolicy.CanRecoverInput(actual,keyboundSent,keyboundExpected,keyboundAwaiting)){
+                        BeginKeyboundRecovery(actual);
                     }
-                    else {keyboundStatus="Paused: unexpected input; clear the field to resume";return;}
+                    else {keyboundStatus="Paused: another input changed the field; clear it to resume";return;}
                 }
             }
             if(!KeyboundPolicy.OwnsInput(actual,keyboundSent)){
                 if(actual.Length==0){keyboundSent=keyboundExpected="";keyboundPendingSubmission="";}
-                else {keyboundStatus="Paused: unexpected text; clear the field to resume";return;}
+                else if(KeyboundPolicy.CanRecoverInput(actual,keyboundSent,keyboundExpected,keyboundAwaiting)){BeginKeyboundRecovery(actual);}
+                else {keyboundStatus="Paused: another input changed the field; clear it to resume";return;}
             }
-            if(keyboundWord.Length>0&&(keyboundClearing||live.Text==null)){
-                if(actual.Length>0){if(!ownsFocus){if(KeyboundEnter(window)){keyboundNext=now.AddMilliseconds(500);keyboundStatus="Reopening input to clear vanished phrase";}return;}if(!KeyboundPolicy.CanClear(ownsFocus,actual,keyboundSent))return;if(!KeyboundClear(window)){StopKeybound("Stopped: input unavailable");return;}KeyboundExpect("",now);keyboundStatus="Clearing vanished phrase";return;}
-                keyboundWord="";keyboundTarget=0;keyboundClearing=false;keyboundSubmitAt=default;
+            if(keyboundClearing||(keyboundWord.Length>0&&live.Text==null)){
+                if(actual.Length>0){if(!ownsFocus){if(KeyboundEnter(window)){keyboundNext=now.AddMilliseconds(500);keyboundStatus="Reopening input to clear vanished phrase";}return;}if(!KeyboundPolicy.CanClear(ownsFocus,actual,keyboundSent))return;if(!KeyboundClear(window)){StopKeybound("Stopped: input unavailable");return;}KeyboundExpect("",now);keyboundStatus="Clearing interrupted phrase";return;}
+                keyboundWord=keyboundSent=keyboundExpected="";keyboundTarget=0;keyboundClearing=false;keyboundSubmitAt=default;
             }
             if(keyboundWord.Length==0){
                 foreach(var old in keyboundRecent.Where(x=>now-x.Value>TimeSpan.FromSeconds(2)).Select(x=>x.Key).ToArray())keyboundRecent.Remove(old);
@@ -186,12 +185,20 @@ public sealed partial class Plugin
                 if(!KeyboundUp(window)){StopKeybound("Stopped: recall unavailable");return;}
                 KeyboundExpect(keyboundWord,now);keyboundRecalling=true;keyboundStatus="Recalling: "+keyboundWord;return;
             }
-            if(!keyboundWord.StartsWith(actual,StringComparison.Ordinal)){StopKeybound("Stopped: phrase changed; existing text kept");return;}
+            if(!keyboundWord.StartsWith(actual,StringComparison.Ordinal)){BeginKeyboundRecovery(actual);return;}
             if(actual.Length<keyboundWord.Length){
                 var letter=keyboundWord[actual.Length];if(!KeyboundSend(window,letter)){StopKeybound("Stopped: input unavailable");return;}
                 KeyboundExpect(actual+letter,now);keyboundNext=now.AddMilliseconds(KeyboundPolicy.TypingDelay(config.KeyboundMinDelayMs,config.KeyboundMaxDelayMs,Random.Shared.NextDouble()));keyboundStatus="Typing: "+keyboundWord;
             }
         }catch(Exception ex){StopKeybound("Stopped: minigame UI unavailable");Log.Warning(ex,"Keybound helper stopped");}
+    }
+    private void BeginKeyboundRecovery(string actual)
+    {
+        // Called only after ownership was established. Drain the owned field
+        // before choosing another target; never use Escape on an empty field.
+        keyboundSent=actual;keyboundExpected="";keyboundAwaiting=keyboundRecalling=false;
+        keyboundPendingSubmission="";keyboundClearing=true;keyboundSubmitAt=default;
+        keyboundStatus="Recovering interrupted phrase";
     }
     private void KeyboundExpect(string expected,DateTimeOffset now){keyboundExpected=expected;keyboundAwaiting=true;keyboundDeadline=now.AddSeconds(2);}
 }
