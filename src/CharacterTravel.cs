@@ -52,7 +52,7 @@ public sealed partial class Plugin
   var relationship=LoginRelationship(character,from,to);
   var action=confirmed?CharacterLoginPolicy.Action(mode,relationship,true,CharacterSwitchConsentCurrent(character,from,to))
    :CharacterLoginPolicy.InitialAction(mode,relationship,from.PersonId.Length>0&&from.AccountId.Length>0);
-  if(action==CharacterLoginAction.IdentifyLogin){StartCurrentLoginIdentification(character);return;}
+  if(CharacterLoginPolicy.IdentifyThroughDataCenter(mode,action)){StartCurrentLoginIdentification(character);return;}
   if(action==CharacterLoginAction.Confirm){characterTravelStatus="Confirm that this character is available on the current Square Enix login. A different login needs its own game client.";return;}
   if(action==CharacterLoginAction.CheckList){StartTitleLoginCheck(character);return;}
   // Prefer the observed game identity over a manually decorated Journal name.
@@ -203,7 +203,7 @@ public sealed partial class Plugin
   if(titleLoginProbe.Active)ImGui.TextWrapped($"Checking the current character list before login. Stops in {Math.Max(0,(int)Math.Ceiling((titleLoginProbe.Deadline-DateTimeOffset.UtcNow).TotalSeconds))}s. Stop check cancels this request.");
   else if(loginMenuReturn.Active)ImGui.TextWrapped("Cancel is returning to the main menu. Stop return cancels this request.");
   else if(switching)ImGui.TextWrapped("A character switch is already requested.");
-  else if(mode==CharacterLoginMode.Title&&!currentKnown&&!same)ImGui.TextWrapped("Opens START and reads this game's character list first. Your verified login continues automatically; an unverified account needs confirmation before any target search or login.");
+  else if(mode==CharacterLoginMode.Title&&!currentKnown&&!same)ImGui.TextWrapped("Opens Data Center, selects the recorded service account and reads this game's character list first. Your verified login continues automatically; an unverified account needs confirmation before any target search or login.");
   else if(mode==CharacterLoginMode.Title&&!same)ImGui.TextWrapped("Shows a warning before sending anything to Lifestream. If you confirm this is the same login, checks the exact character in the game list before requesting login. A different Square Enix login needs its own game client.");
   else if(mode==CharacterLoginMode.Unavailable)ImGui.TextWrapped(Player.IsLoaded?"Unavailable during combat, duties or loading.":"Wait for the title or character-selection screen and enable Lifestream.");
   else if(mode==CharacterLoginMode.CharacterSelect)ImGui.TextWrapped("The character must be in the loaded list. Use the title screen for another world or service account.");

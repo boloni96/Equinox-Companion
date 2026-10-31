@@ -13,8 +13,9 @@ public sealed partial class Plugin
         var mode = ReadCharacterLoginMode(true);
         var from = CurrentCharacterSwitchScope(mode, true);
         var to = CharacterSwitchScope(character.Id);
-        if (CharacterLoginPolicy.InitialAction(mode, LoginRelationship(character, from, to), from.PersonId.Length > 0 && from.AccountId.Length > 0)
-                != CharacterLoginAction.IdentifyLogin || Player.IsLoaded || Client.IsLoggedIn || LifestreamBusy()) return;
+        var action = CharacterLoginPolicy.InitialAction(mode, LoginRelationship(character, from, to), from.PersonId.Length > 0 && from.AccountId.Length > 0);
+        if (!CharacterLoginPolicy.IdentifyThroughDataCenter(mode, action)
+                || Player.IsLoaded || Client.IsLoggedIn || LifestreamBusy()) return;
         var target = TitleLoginTarget(character.Id);
         if (target is null || !titleLoginProbe.Begin(target, config.PairingKey, now))
         { characterTravelStatus = "A paired account and complete character identity are needed."; return; }

@@ -12,6 +12,9 @@ public static class CharacterLoginPolicy
         mode == CharacterLoginMode.Title && !currentLoginKnown && relationship == CharacterLoginRelationship.Unverified
             ? CharacterLoginAction.IdentifyLogin : Action(mode, relationship);
 
+    internal static bool IdentifyThroughDataCenter(CharacterLoginMode mode, CharacterLoginAction action) =>
+        mode == CharacterLoginMode.Title && action is CharacterLoginAction.Proceed or CharacterLoginAction.IdentifyLogin;
+
     // A title-screen list search is already a Lifestream action. An unknown
     // account must receive the same pre-action warning as an in-game switch.
     // Consent permits a bounded list check, never a blind title-screen login.
