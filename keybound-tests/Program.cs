@@ -13,3 +13,8 @@ Check(!KeyboundPolicy.ShouldRecall("","Cura","Phoenix",false),"different phrase 
 Check(!KeyboundPolicy.ShouldRecall("Cu","Cura","Cura",false),"partial text cannot recall");
 Check(!KeyboundPolicy.ShouldRecall("","Cura","Cura",true),"recall attempted only once");
 Check(!KeyboundPolicy.CanSubmit("Cura","Phoenix","Cura"),"wrong recalled history never submitted");
+
+Check(KeyboundPolicy.CanRetryInput("Cu","Cu"),"lost key retries from last observed prefix");
+Check(KeyboundPolicy.CanRetryInput("","Cu"),"game cleared buffer restarts typing");
+Check(!KeyboundPolicy.CanRetryInput("Other","Cu"),"unrelated text cannot be adopted for retry");
+Check(!KeyboundPolicy.CanSubmit("Cura","","Cura"),"cleared buffer never submits");

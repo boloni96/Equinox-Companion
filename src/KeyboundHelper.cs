@@ -47,6 +47,25 @@ public sealed partial class Plugin
         }
         return false;
     }
+    // Unknown input is not an empty buffer. Use the native component's active state.
+    private static unsafe (string? Text,bool Active) ReadKeyboundInput(AtkUnitBase* addon)
+    {
+        if(addon==null||!addon->IsReady||addon->UldManager.NodeList==null)return (null,false);
+        for(var i=0;i<Math.Min((int)addon->UldManager.NodeListCount,1024);i++){
+            var node=addon->UldManager.NodeList[i];
+            if(node==null||node->NodeId!=7||(int)node->Type<1000)continue;
+            var component=node->GetComponent();
+            if(component==null||component->GetComponentType()!=ComponentType.TextInput)return (null,false);
+            var field=(AtkComponentTextInput*)component;
+            var uld=&component->UldManager;if(uld->NodeList==null)return (null,field->IsActive);
+            for(var j=0;j<Math.Min((int)uld->NodeListCount,1024);j++){
+                var child=uld->NodeList[j];
+                if(child!=null&&child->NodeId==16&&child->Type==NodeType.Text)
+                    return (((AtkTextNode*)child)->NodeText.ToString(),field->IsActive);
+            }
+        }
+        return (null,false);
+    }
     private unsafe void UpdateKeybound(IFramework framework)
     {
         if(!keyboundEnabled)return;
@@ -56,13 +75,19 @@ public sealed partial class Plugin
             var stage=AtkStage.Instance();if(stage==null)return;
             var input=stage->RaptureAtkUnitManager->GetAddonByName("KTGInput");
             if(input==null||!input->IsVisible){
+                if(Client.TerritoryType==1359){keyboundDeadline=now.AddSeconds(2);keyboundStatus="Waiting: minigame transition";keyboundNext=now.AddMilliseconds(500);return;}
                 if(keyboundSeen){if(keyboundMissing==default)keyboundMissing=now;if(now-keyboundMissing>TimeSpan.FromSeconds(2))StopKeybound("Stopped: minigame closed");}
                 else{keyboundStatus="Waiting for Keybound Brawler";keyboundNext=now.AddMilliseconds(500);}return;
             }
             keyboundSeen=true;keyboundMissing=default;
+            var editor=ReadKeyboundInput(input);
+            if(editor.Text is null){keyboundDeadline=now.AddSeconds(2);keyboundStatus="Waiting: minigame input is loading";return;}
+            if(Objects.LocalPlayer?.StatusList.Any(status=>status.StatusId is 2 or 149 or 1309)==true){
+                keyboundDeadline=now.AddSeconds(2);keyboundStatus="Paused: stunned; resumes automatically";return;
+            }
             using var process=Process.GetCurrentProcess();var window=process.MainWindowHandle;
             if(window==0||GetForegroundWindow()!=window){keyboundDeadline=now.AddSeconds(2);keyboundStatus="Paused: bring this game window to the foreground";return;}
-            var focus=stage->GetFocus();var ownsFocus=focus!=null&&KeyboundContains(&input->UldManager,focus);
+            var focus=stage->GetFocus();var ownsFocus=editor.Active&&(focus==null||KeyboundContains(&input->UldManager,focus));
             var module=RaptureAtkModule.Instance();if(module==null)return;
             if(!ownsFocus&&module->AtkModule.IsTextInputActive()){keyboundDeadline=now.AddSeconds(2);keyboundStatus="Paused: another text field has focus";return;}
             // Hold throughout these casts, plus their landing animation. No keys,
@@ -70,13 +95,18 @@ public sealed partial class Plugin
             var dangerName=keyboundDangerName??=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Action>().GetRowOrDefault(49529)?.Name.ExtractText()??"Cursed Gaze";
             if(KeyboundUi.Texts("KTGEnemyCastBar").Any(t=>t.NodeId==4&&((dangerName.Length>0&&t.Text.Contains(dangerName,StringComparison.OrdinalIgnoreCase))||t.Text.Contains("Sensory Jammer",StringComparison.OrdinalIgnoreCase))))keyboundHold=now.AddMilliseconds(3500);
             if(now<keyboundHold){keyboundDeadline=now.AddSeconds(2);keyboundStatus="Paused: no-typing cast";return;}
-            var actual=KeyboundUi.Texts("KTGInput").FirstOrDefault(t=>t.NodeId==16).Text??"";
+            var actual=editor.Text;
             if(keyboundAwaiting){
                 if(actual==keyboundExpected){keyboundAwaiting=false;keyboundRecalling=false;keyboundSent=actual;keyboundOpenAttempts=0;if(keyboundPendingSubmission.Length>0){keyboundLastSubmitted=keyboundPendingSubmission;keyboundPendingSubmission="";}}
                 else {
                     if(now<keyboundDeadline)return;
                     if(keyboundRecalling&&actual.Length==0){keyboundAwaiting=keyboundRecalling=false;keyboundSent="";keyboundStatus="Recall unavailable: typing phrase";}
-                    else {StopKeybound("Stopped: input did not match; existing text kept");return;}
+                    else if(KeyboundPolicy.CanRetryInput(actual,keyboundSent)){
+                        // Retry only unchanged owned text or a game-cleared buffer.
+                        if(keyboundPendingSubmission.Length>0){keyboundWord=keyboundPendingSubmission;keyboundTarget=0;keyboundPendingSubmission="";}
+                        keyboundAwaiting=keyboundRecalling=false;keyboundSent=actual;keyboundNext=now.AddMilliseconds(500);keyboundStatus="Retrying: input was interrupted";return;
+                    }
+                    else {keyboundStatus="Paused: unexpected input; clear the field to resume";return;}
                 }
             }
             if(!KeyboundPolicy.OwnsInput(actual,keyboundSent)){if(keyboundSent.Length>0)StopKeybound("Stopped: text was changed; existing text kept");else keyboundStatus="Paused: clear existing text to resume";return;}
@@ -92,7 +122,7 @@ public sealed partial class Plugin
                 if(next.Text==null){keyboundStatus="Waiting for a live phrase";return;}keyboundWord=next.Text;keyboundTarget=next.Key;keyboundRecallTried=false;live=next;
             }
             if(!ownsFocus){
-                if(++keyboundOpenAttempts>3){StopKeybound("Stopped: minigame input could not be focused");return;}
+                if(++keyboundOpenAttempts>3){keyboundOpenAttempts=0;keyboundNext=now.AddSeconds(1);keyboundStatus="Waiting: minigame input is not active yet";return;}
                 if(!KeyboundEnter(window)){StopKeybound("Stopped: input unavailable");return;}keyboundNext=now.AddMilliseconds(300);keyboundStatus="Opening minigame input";return;
             }
             if(KeyboundPolicy.CanSubmit(live.Text??"",actual,keyboundWord)){
