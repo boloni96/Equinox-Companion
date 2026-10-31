@@ -8,7 +8,22 @@ internal sealed class CurrentLoginIdentification
     private DateTimeOffset sampledAt;
     public bool ReturningToTitle { get; private set; }
     public bool ReturnRequested { get; set; }
-    public bool ServiceAccountSelected { get; set; }
+    public bool ServiceAccountSelected => SelectedServiceAccount >= 0;
+    public int SelectedServiceAccount { get; private set; } = -1;
+
+    public static int RecordedIndex(string key, IReadOnlyDictionary<string, int> indices) =>
+        key.Length == 64 && key.All(char.IsAsciiHexDigit)
+            && indices.TryGetValue(key, out var index) && index is >= 0 and <= 15 ? index : -1;
+
+    public void Selected(int index)
+    {
+        if (index is < 0 or > 15 || ServiceAccountSelected)
+            throw new InvalidOperationException("Service account selection is invalid or already sent.");
+        SelectedServiceAccount = index;
+    }
+
+    public bool MatchesSelectedAccount(int index) =>
+        !ServiceAccountSelected || index == SelectedServiceAccount;
 
     public bool Observe(int serviceAccount, IEnumerable<string> contentIds, bool ready, DateTimeOffset now)
     {

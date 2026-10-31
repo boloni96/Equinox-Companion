@@ -1,0 +1,27 @@
+using EquinoxCompanion;
+using System.Runtime.CompilerServices;
+internal static class ServiceAccount337Tests
+{
+ [ModuleInitializer] internal static void Run()
+ {
+  void Check(bool ok,string why){if(!ok)throw new Exception(why);}
+  var key=new string('a',64);var other=new string('b',64);
+  var slots=new Dictionary<string,int>{{key,1}};
+  Check(CurrentLoginIdentification.RecordedIndex(key,slots)==1,"Recorded account two is selected automatically");
+  Check(CurrentLoginIdentification.RecordedIndex(other,slots)==-1,"No default to account one");
+  Check(CurrentLoginIdentification.RecordedIndex("",slots)==-1,"Missing fingerprint is not an account");
+  slots[key]=0;Check(CurrentLoginIdentification.RecordedIndex(key,slots)==0,"Recorded account one supported");
+  slots[key]=16;Check(CurrentLoginIdentification.RecordedIndex(key,slots)==-1,"Out-of-range mapping rejected");
+  var probe=new CurrentLoginIdentification();probe.Selected(1);
+  Check(probe.ServiceAccountSelected&&probe.MatchesSelectedAccount(1),"Selected account accepted");
+  Check(!probe.MatchesSelectedAccount(0),"Other account cannot proceed");
+  var threw=false;try{probe.Selected(1);}catch(InvalidOperationException){threw=true;}
+  Check(threw,"Selection cannot be dispatched twice");
+  var now=DateTimeOffset.UtcNow;
+  Check(!probe.Observe(1,["123"],false,now),"Loading list cannot verify");
+  Check(!probe.Observe(1,["123"],true,now),"First sample cannot verify");
+  Check(probe.Observe(1,["123"],true,now.AddMilliseconds(250)),"Stable ready list verifies");
+  Check(!probe.Observe(1,[],true,now.AddMilliseconds(500)),"Empty world is not verification");
+  Console.WriteLine("PASS automatic recorded service-account selection");
+ }
+}

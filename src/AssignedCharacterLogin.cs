@@ -98,9 +98,9 @@ public sealed partial class Plugin
             if(config.PairingKey!=run.Pairing||now>=run.Deadline)throw new InvalidOperationException("Assigned login expired or pairing changed.");
             if(Player.IsLoaded){if(Player.ContentId==run.From)return;if(Player.ContentId.ToString()!=run.Target.ContentId)throw new InvalidOperationException("An unexpected character logged in.");assignedLogin=null;characterSwitchUntil=default;characterSwitchTarget=null;return;}
             if(LifestreamBusy())return;
+            if(SellerAddon("SelectString")!=null){if(!assignedServiceSent)assignedServiceSent=SelectVerifiedServiceAccount(run.ServiceAccount);return;}
             if(SelectLoginDataCenter(run.World,ref assignedDcSent))return;
             if(SellerAddon("_TitleMenu")!=null&&!assignedDcSent){ClickLoginMenuButton("_TitleMenu",5);return;}
-            if(SellerAddon("SelectString")!=null&&!assignedServiceSent){assignedServiceSent=SelectVerifiedServiceAccount(run.ServiceAccount);return;}
             if(SellerAddon("SelectOk")!=null)throw new InvalidOperationException("The game reported a login message. Review it before continuing.");
             var lobby=AgentLobby.Instance();if(lobby==null||lobby->TemporaryLocked||SellerAddon("_CharaSelectListMenu")==null)return;
             if(lobby->ServiceAccountIndex!=run.ServiceAccount)throw new InvalidOperationException("The selected service account differs from this client's reserved account.");

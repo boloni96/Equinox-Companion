@@ -26,7 +26,7 @@ public sealed partial class Plugin
         characterTravelStatusOwner = character.Id;
         try
         {
-            // Open Data Center explicitly. The user selects the service account; no fallback to account zero.
+            // Open Data Center explicitly, then select the target's recorded account slot.
             if (VisibleFollowAddon("TitleDCWorldMap") || VisibleFollowAddon("TitleConnect") || !ClickLoginMenuButton("_TitleMenu", 5))
             { StopTitleLoginCheck("Wait for the main title menu, then choose Log in as this character again."); return; }
             characterTravelStatus = "Identifying this game's login…";
@@ -99,9 +99,29 @@ public sealed partial class Plugin
                 probe.ReturnRequested = ClickLoginMenuButton("_CharaSelectReturn", 4);
             return;
         }
+        // Handle the service-account popup before the DC map underneath it.
+        if (VisibleFollowAddon("SelectString"))
+        {
+            if (probe.ServiceAccountSelected) return;
+            var scope = CharacterSwitchScope(character.Id);
+            var key = SquareEnixLoginState.TargetAccountKey(config.SharedRoster, character, scope.PersonId, scope.AccountId);
+            var index = CurrentLoginIdentification.RecordedIndex(key, config.ObservedServiceAccountIndices);
+            if (index < 0)
+            {
+                StopTitleLoginCheck("No recorded service-account slot exists for this character. Log into that account once so Companion can learn it.");
+                return;
+            }
+            if (SelectVerifiedServiceAccount(index))
+            {
+                probe.Selected(index);
+                characterTravelStatus = $"Selected recorded service account {index + 1}; verifying its character list…";
+            }
+            return;
+        }
         if(SelectLoginDataCenter(target.World,ref identificationDcSent))return;
-        if(VisibleFollowAddon("SelectString")){characterTravelStatus="Select the service account for this client in the game menu. No account is chosen automatically.";return;}
         var ready = TryReadCurrentLoginCharacters(out var ids);
+        if (ready && !probe.MatchesSelectedAccount(CurrentLoginServiceAccount()))
+        { StopTitleLoginCheck("The game selected a different service account. No character login was requested."); return; }
         if(ready&&ids.Length==0){if(!SelectNextKnownLoginWorld(target.ContentId,target.World,now))StopTitleLoginCheck("No known characters were found on this selected account and data center.");return;}
         if (!probe.Observe(CurrentLoginServiceAccount(), ids.Select(id => id.ToString(CultureInfo.InvariantCulture)), ready, now)) return;
         ObserveLoginAccountList(ids);
