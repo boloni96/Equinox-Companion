@@ -37,6 +37,9 @@ public sealed class KeyboundPurchaseBook
 }
 public static class KeyboundBuyingPolicy
 {
+    private static readonly string[] ShopTabs=["weapons","armor","accessories","others"];
+    public static bool IsShopTab(string label)=>ShopTabs.Contains(MenuName(label));
+    public static bool CompleteShopTabs(IEnumerable<string> labels)=>labels.Select(MenuName).Order().SequenceEqual(ShopTabs.Order());
     public static bool Confirmed(KeyboundPurchaseReceipt intent,uint balance,int held)=>
         intent.Balance>=intent.Cost&&balance==intent.Balance-intent.Cost&&held>=intent.Held+1;
     public static bool ExactCost(uint currency,uint count,int expected,int received,int quantity)=>currency==52322&&count==expected&&expected>0&&received==1&&quantity==1;

@@ -124,3 +124,9 @@ try{
     File.WriteAllText(file,"broken");var rejected=false;try{_ =new KeyboundPurchaseBook(file);}catch{rejected=true;}
     Check(rejected,"corrupt history blocks purchases rather than treating them as unowned");
 }finally{if(Directory.Exists(directory))Directory.Delete(directory,true);}
+
+Check(KeyboundBuyingPolicy.CompleteShopTabs(new[]{"Weapons","Armor","Accessories","Others"}),"four currency-exchange tabs accepted without SpecialShop catalogue");
+Check(KeyboundBuyingPolicy.CompleteShopTabs(new[]{"Others","Accessories","Weapons","Armor"}),"tab order does not depend on starting category");
+Check(!KeyboundBuyingPolicy.CompleteShopTabs(new[]{"Weapons","Armor","Accessories"}),"incomplete category group rejected");
+Check(!KeyboundBuyingPolicy.CompleteShopTabs(new[]{"Weapons","Armor","Accessories","Accessories"}),"duplicate tab is not a complete group");
+Check(!KeyboundBuyingPolicy.IsShopTab("Show All"),"filter button cannot be treated as a category tab");

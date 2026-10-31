@@ -17,7 +17,6 @@ public sealed partial class Plugin
     private sealed record KeyboundOffer(uint Item,string Key,string Name,int Cost);
     private KeyboundPurchaseBook? keyboundPurchases;
     private KeyboundOffer[]? keyboundOffers;
-    private readonly Dictionary<string,HashSet<uint>> keyboundShopCategories=[];
     private bool keyboundBuying,keyboundBuySelected,keyboundBuyConfirmed,keyboundBuyerOpened;
     private ulong keyboundBuyerCharacter,keyboundBuyerObject;
     private uint keyboundBuyerWorld,keyboundBuyerTerritory,keyboundBuyIndex;
@@ -43,15 +42,6 @@ public sealed partial class Plugin
                 offers.Add(new(item.RowId,prize.Key,prize.Name,prize.Cost));
         }
         if(offers.Count!=prizes.Count||offers.Select(o=>o.Key).Distinct().Count()!=prizes.Count)throw new InvalidOperationException("Reward catalogue does not match the current game.");
-        var ids=offers.Select(o=>o.Item).ToHashSet();
-        foreach(var shop in DataManager.GetExcelSheet<Lumina.Excel.Sheets.SpecialShop>()){
-            var matching=new HashSet<uint>();
-            foreach(var row in shop.Item)foreach(var receive in row.ReceiveItems)if(ids.Contains(receive.Item.RowId))matching.Add(receive.Item.RowId);
-            var name=shop.Name.ToString();if(matching.Count==0||string.IsNullOrWhiteSpace(name))continue;
-            if(!keyboundShopCategories.TryGetValue(name,out var set))keyboundShopCategories[name]=set=[];
-            set.UnionWith(matching);
-        }
-        if(keyboundShopCategories.Count==0)throw new InvalidOperationException("Event shop categories are unavailable.");
         LoadArmoireCatalogue();keyboundOffers=offers.ToArray();
     }
     private unsafe void RefreshKeyboundBuyPlan()
@@ -118,7 +108,7 @@ public sealed partial class Plugin
             if((PurchaseShop().Length>0||VisibleFollowAddon("SelectString")||VisibleFollowAddon("Talk"))&&Targets.Target?.GameObjectId!=trader.GameObjectId)throw new InvalidOperationException("Close the other NPC's window first.");
             StopKeybound();keyboundBuying=true;keyboundBuyerCharacter=Player.ContentId;keyboundBuyerWorld=Player.CurrentWorld.RowId;keyboundBuyerTerritory=Client.TerritoryType;keyboundBuyerObject=trader.GameObjectId;
             keyboundBuyRemaining.Clear();keyboundBuyRemaining.UnionWith(keyboundOffers!.Where(o=>keyboundMissingPlan.ContainsKey(o.Key)).Select(o=>o.Item));
-            keyboundBuySelected=keyboundBuyConfirmed=keyboundBuyerOpened=false;keyboundBuyItem=null;keyboundBuyIntent=null;keyboundBought=keyboundGreetingCount=0;
+            keyboundBuySelected=keyboundBuyConfirmed=keyboundBuyerOpened=false;keyboundBuyItem=null;keyboundBuyIntent=null;keyboundBought=keyboundGreetingCount=0;keyboundVisitedTabs.Clear();keyboundTabFingerprint="";keyboundTabStableAt=default;
             keyboundBuyNext=default;keyboundBuyDeadline=DateTimeOffset.UtcNow.AddSeconds(45);keyboundBuyStatus="Buying missing rewards…";
             Targets.Target=trader;
         }catch(Exception e){keyboundBuyStatus=e.Message;}
@@ -130,6 +120,11 @@ public sealed partial class Plugin
         index=0;var addon=KeyboundAddon(shop);if(addon==null||shop is not ("ShopExchangeCurrency" or "ShopExchangeItem"))return null;
         if(!ShopUInt(addon,shop=="ShopExchangeCurrency"?4:3,out var count)||count is <1 or >122||row<0||row>=count||!ShopUInt(addon,1066+row,out var item)||!ShopUInt(addon,1310+row,out index))return null;
         var offer=keyboundOffers!.FirstOrDefault(o=>o.Item==item);if(offer==null)return null;
+        // Reuse the established exchange reader, which verifies the row,
+        // native receive index, quantity, currency identity and visible price.
+        var quote=ReadPurchaseRow(shop,row,1,out var verifiedIndex);
+        if(quote!=null&&verifiedIndex==index&&quote.ItemId==item&&quote.Costs.Length==1&&
+            KeyboundBuyingPolicy.ExactCost(quote.Costs[0].ItemId,(uint)quote.Costs[0].Amount,offer.Cost,1,quote.Quantity))return offer;
         var agent=AgentShop.Instance();if(agent==null||!agent->IsAgentActive()||agent->ItemReceive==null||agent->ItemCost==null||agent->ItemReceiveCount is <1 or >122||index>=agent->ItemReceiveCount||agent->ItemCostCount<index*3+3||agent->ItemCostCount>366)return null;
         var receive=agent->ItemReceive[index];var cost=agent->ItemCost[index*3];
         if(receive.ItemId!=item||!KeyboundBuyingPolicy.ExactCost(cost.ItemId,cost.ItemCount,offer.Cost,(int)receive.ItemCount,1))return null;
@@ -158,13 +153,17 @@ public sealed partial class Plugin
             if(keyboundBuyRemaining.Count==0){StopKeyboundBuying($"Done · {keyboundBought} rewards purchased.");return;}
             var shop=PurchaseShop();
             if(shop.Length>0){
+                if(!KeyboundShopTabReady(shop,now))return;
                 var rows=new List<(KeyboundOffer Offer,uint Index)>();
                 for(var i=0;i<122;i++)if(KeyboundReadOffer(shop,i,out var index) is {} offer)rows.Add((offer,index));
-                if(rows.Count==0)throw new InvalidOperationException("This shop's reward prices could not be verified.");
                 RefreshKeyboundBuyPlan();if(keyboundMissingPlan==null)throw new InvalidOperationException(keyboundPlanError);
                 keyboundBuyRemaining.RemoveWhere(id=>keyboundOwned.Contains(id));
                 var next=rows.FirstOrDefault(r=>keyboundBuyRemaining.Contains(r.Offer.Item));
-                if(next.Offer==null){KeyboundAddon(shop)->Close(true);keyboundBuyerOpened=false;keyboundBuyNext=now.AddSeconds(1);return;}
+                if(next.Offer==null){
+                    if(keyboundBuyRemaining.Count==0){StopKeyboundBuying($"Done · {keyboundBought} rewards purchased.");return;}
+                    if(KeyboundVisibleMissingRow(shop))throw new InvalidOperationException("The visible reward price could not be verified; nothing purchased.");
+                    AdvanceKeyboundShopTab(shop,now);return;
+                }
                 if(rows.Count(r=>r.Offer.Item==next.Offer.Item)!=1)throw new InvalidOperationException("Reward appears more than once in this shop.");
                 if(KeyboundWallet()<next.Offer.Cost||!EventExchangeHasSpace(1))throw new InvalidOperationException("MGC or inventory space changed; buying stopped.");
                 if(keyboundPurchases!.Find(keyboundBuyerCharacter,next.Offer.Item)!=null)throw new InvalidOperationException("Reward already purchased or pending verification.");
@@ -176,13 +175,7 @@ public sealed partial class Plugin
                 helperReplaying=true;try{KeyboundAddon(shop)->FireCallback(shop=="ShopExchangeCurrency"?4u:3u,args,true);}finally{helperReplaying=false;}
                 keyboundBuyStatus="Buying: "+next.Offer.Name;return;
             }
-            var menu=KeyboundAddon("SelectString");
-            if(menu!=null){
-                var choices=TransportChoices(menu);var matches=choices.Select((s,i)=>(s,i)).Where(c=>keyboundShopCategories.Any(k=>k.Value.Overlaps(keyboundBuyRemaining)&&KeyboundBuyingPolicy.CategoryMatches(c.s,k.Key))).ToArray();
-                if(matches.Length==0)throw new InvalidOperationException("No matching MGC reward category was found.");
-                usingSharedTravel=helperReplaying=true;try{SelectTravelChoice(menu,matches[0].i);}finally{usingSharedTravel=helperReplaying=false;}
-                keyboundBuyNext=now.AddSeconds(1);keyboundBuyerOpened=true;return;
-            }
+            if(VisibleFollowAddon("SelectString"))throw new InvalidOperationException("Open the MGC trader's Currency Exchange window, then Buy all missing.");
             if(VisibleFollowAddon("Talk")){
                 if(!keyboundBuyerOpened||++keyboundGreetingCount>8)throw new InvalidOperationException("Continue the vendor greeting, then try buying again.");
                 helperReplaying=true;try{ClickVisibleTalk();}finally{helperReplaying=false;}keyboundBuyNext=now.AddSeconds(1);return;
