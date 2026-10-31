@@ -9,15 +9,21 @@ public sealed partial class Plugin
     private string retrievalBrowseSearch="";private bool retrievalBrowseGroups=true;
     private bool retrievalRefreshPending=true;
     private readonly Dictionary<ulong,Dictionary<ulong,string>> retrievalKnownRetainers=[];
+    private static bool RetainerNameKnown(ulong id,string? name)=>!string.IsNullOrWhiteSpace(name)&&name!=id.ToString()&&name!="Retainer "+id;
+    private static void RememberRetainerName(Dictionary<ulong,string> names,ulong id,string? name,bool authoritative=false)
+    {
+        if(RetainerNameKnown(id,name)&&(authoritative||!names.TryGetValue(id,out var current)||!RetainerNameKnown(id,current)))names[id]=name!;
+    }
+    private static string RetainerDestinationLabel(ulong id,string name)=>RetainerNameKnown(id,name)?name:"Name unavailable · …"+(id>9999?id.ToString()[^4..]:id.ToString());
     private void RefreshRetrievalStock()
     {
         if(!Player.IsLoaded)return;
         var owner=Player.ContentId;var ownerText=owner.ToString();var live=ReadSellerRetainers();
         if(!retrievalKnownRetainers.TryGetValue(owner,out var names))retrievalKnownRetainers[owner]=names=[];
-        foreach(var r in marketLedger.Retainers.Where(r=>r.CharacterId==owner))names[r.Id]=r.Name;
+        foreach(var r in marketLedger.Retainers.Where(r=>r.CharacterId==owner))RememberRetainerName(names,r.Id,r.Name);
         foreach(var r in live)names[r.Id]=r.Name;
         var latest=config.Discoveries.Where(e=>e.Actor.ContentId==ownerText&&e.Storage?.Key.StartsWith("retainer:")==true).GroupBy(e=>e.Storage!.Key).ToDictionary(g=>g.Key,g=>g.MaxBy(e=>e.At)!);
-        foreach(var row in latest.Values){var parts=row.Storage!.Key.Split(':');if(parts.Length==3&&ulong.TryParse(parts[1],out var id)&&int.TryParse(parts[2],out var type)&&type is >=10000 and <=10006 or 12001){var label=row.Storage.Name.Split(" · ")[0];names.TryAdd(id,label.StartsWith("Retainer ")?label[9..]:label);}}
+        foreach(var row in latest.Values.OrderByDescending(e=>e.At)){var parts=row.Storage!.Key.Split(':');if(parts.Length==3&&ulong.TryParse(parts[1],out var id)&&int.TryParse(parts[2],out var type)&&type is >=10000 and <=10006 or 12001){var label=row.Storage.Name.Split(" · ")[0];RememberRetainerName(names,id,label.StartsWith("Retainer ")?label[9..]:label);}}
         var allagan=false;var notice="";var rawById=new Dictionary<ulong,HashSet<ulong[]>>();
         try
         {

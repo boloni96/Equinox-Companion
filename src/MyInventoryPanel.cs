@@ -48,13 +48,17 @@ public sealed partial class Plugin
         if(myInventoryRefresh==default){myInventoryStock=ReadMyInventory();myInventoryRefresh=DateTimeOffset.UtcNow.AddSeconds(1);}
         var rows=myInventoryStock.Where(s=>RetainerRetrieval.AllowsQuality(s.Hq,myInventoryQuality)&&MyInventoryMatches(s.Item)).GroupBy(s=>s.Item).Select(g=>(Id:g.Key,Name:MyInventoryName(g.Key),Quantity:g.Sum(s=>s.Quantity))).OrderBy(x=>x.Name).ToArray();
         if(ImGui.SmallButton("Select all"))foreach(var row in rows)myInventorySelected.TryAdd(row.Id,row.Quantity);ImGui.SameLine();
-        if(ImGui.SmallButton("Clear selection"))myInventorySelected.Clear();ImGui.SameLine();if(ImGui.SmallButton("Refresh"))myInventoryRefresh=default;
+        if(ImGui.SmallButton("Clear selection"))myInventorySelected.Clear();ImGui.SameLine();if(ImGui.SmallButton("Refresh")){myInventoryRefresh=default;retrievalRefreshPending=true;RetrievalTry(RefreshRetrievalStock);}
         var names=retrievalKnownRetainers.GetValueOrDefault(Player.ContentId)??new Dictionary<ulong,string>();
         ImGui.SetNextItemWidth(220);
-        if(ImGui.BeginCombo("Destination",myInventoryDestination==GlamourStorageDestination?"Armoire first / Glamour dresser":myInventoryDestination==StorageAutoRouting.AllRetainers?(config.UseRetainerAssignments.Contains(Player.ContentId)?"Assignments":"All retainers"):names.GetValueOrDefault(myInventoryDestination,"Choose retainer"))){
+        if(ImGui.BeginCombo("Destination",myInventoryDestination==GlamourStorageDestination?"Armoire first / Glamour dresser":myInventoryDestination==StorageAutoRouting.AllRetainers?(config.UseRetainerAssignments.Contains(Player.ContentId)?"Assignments":"All retainers"):(names.TryGetValue(myInventoryDestination,out var destinationName)?RetainerDestinationLabel(myInventoryDestination,destinationName):"Choose retainer"))){
             if(ImGui.Selectable("All retainers / Assignments",myInventoryDestination==StorageAutoRouting.AllRetainers))myInventoryDestination=StorageAutoRouting.AllRetainers;
-            foreach(var row in names)if(ImGui.Selectable(row.Value+"##"+row.Key,myInventoryDestination==row.Key))myInventoryDestination=row.Key;
             if(ImGui.Selectable("Armoire first / Glamour dresser",myInventoryDestination==GlamourStorageDestination)){myInventoryDestination=GlamourStorageDestination;myInventoryRefresh=default;}
+            ImGui.Separator();
+            foreach(var row in names.OrderBy(r=>!RetainerNameKnown(r.Key,r.Value)).ThenBy(r=>r.Value)){
+                if(ImGui.Selectable(RetainerDestinationLabel(row.Key,row.Value)+"##"+row.Key,myInventoryDestination==row.Key))myInventoryDestination=row.Key;
+                if(!RetainerNameKnown(row.Key,row.Value)&&ImGui.IsItemHovered())ImGui.SetTooltip("Retainer ID: "+row.Key+"\nOpen the summoning bell, then Refresh to record this retainer's name.");
+            }
             ImGui.EndCombo();
         }
         if(myInventoryDestination==StorageAutoRouting.AllRetainers){DrawUseRetainerAssignments();ImGui.SameLine();DrawAssignmentEditor();}
