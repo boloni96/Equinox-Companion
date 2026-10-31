@@ -46,9 +46,9 @@ public sealed partial class Plugin
         var stopAtGoal=config.KeyboundStopAtRewardGoal;
         if(ImGui.Checkbox("Stop when enough MGC",ref stopAtGoal)){config.KeyboundStopAtRewardGoal=stopAtGoal;keyboundGoalCheckAt=default;SaveConfiguration();}
         if(ImGui.IsItemHovered())ImGui.SetTooltip("Stop before the next round when you can afford the missing rewards. Turn off to keep farming, including for extra coffers.");
-        if(ImGui.Button("Soft · 80 / 150 / 80 ms")){
-            config.KeyboundMinDelayMs=KeyboundPolicy.SoftMinMs;config.KeyboundMaxDelayMs=KeyboundPolicy.SoftMaxMs;config.KeyboundSubmitDelayMs=KeyboundPolicy.SoftSubmitMs;SaveConfiguration();
-        }
+        DrawKeyboundSpeedPreset("Slow",KeyboundPolicy.SoftMinMs,KeyboundPolicy.SoftMaxMs,KeyboundPolicy.SoftSubmitMs);
+        ImGui.SameLine();DrawKeyboundSpeedPreset("Normal",40,80,60);
+        ImGui.SameLine();DrawKeyboundSpeedPreset("Fast",20,40,40);
         var min=Math.Clamp(config.KeyboundMinDelayMs,10,1000);
         var max=Math.Clamp(config.KeyboundMaxDelayMs,10,1000);
         var submit=Math.Clamp(config.KeyboundSubmitDelayMs,0,2000);
@@ -65,6 +65,15 @@ public sealed partial class Plugin
             ImGui.TextWrapped("Optional typing assistance for Keybound Brawler. Keeps spaces and punctuation, uses Up for consecutive repeats, and clears its partial text when a target disappears. Pauses through stuns and no-typing casts.");
             ImGui.TextWrapped("Background running and anti-AFK are automatic while the tool is running. Stop when enough MGC optionally ends farming before the next registration when your balance covers the missing rewards. Disable it to farm extra coffers. Input goes directly to this game client. Keep the game running; background frame limits can slow it down. Other in-game text fields pause assistance. Auto-queue & repeat registers at the nearby Keybound registrar, accepts the match, and returns after results. Start near the registrar in Keybound Square. Stop or disabling the tool ends automation.");
         }
+    }
+    private void DrawKeyboundSpeedPreset(string label,int min,int max,int submit)
+    {
+        var selected=config.KeyboundMinDelayMs==min&&config.KeyboundMaxDelayMs==max&&config.KeyboundSubmitDelayMs==submit;
+        if(ImGui.Button(selected?label+" ✓":label)){
+            config.KeyboundMinDelayMs=min;config.KeyboundMaxDelayMs=max;config.KeyboundSubmitDelayMs=submit;
+            keyboundTimingEditUntil=DateTimeOffset.UtcNow.AddMilliseconds(250);SaveConfiguration();
+        }
+        if(ImGui.IsItemHovered())ImGui.SetTooltip($"{min}–{max} ms per key · {submit} ms before submit. You can fine-tune the sliders below.");
     }
     private bool DrawKeyboundDelay(string label,ref int value,int minimum,int maximum)
     {
