@@ -45,7 +45,9 @@ public static class KeyboundBuyingPolicy
         var lines=texts.Select(KeyboundShoppingPolicy.Normalize).ToArray();
         return cost>0&&lines.Contains($"exchange {cost} mgc for the following item?")&&lines.Contains(KeyboundShoppingPolicy.Normalize(item));
     }
-    public static bool Resumable(KeyboundPurchaseReceipt receipt,uint balance,int held,bool matchingDialog)=>!receipt.Confirmed&&!receipt.Submitted&&balance==receipt.Balance&&held==receipt.Held&&matchingDialog;
+    public static Dictionary<string,int> ReadyPlan(IReadOnlyDictionary<string,int> missing,ISet<string> held)=>missing.Where(p=>!held.Contains(p.Key)).ToDictionary(p=>p.Key,p=>p.Value);
+    public static bool CanSelect(KeyboundPurchaseReceipt? receipt,uint balance,int held)=>receipt==null||!receipt.Confirmed&&!receipt.Submitted&&balance==receipt.Balance&&held==receipt.Held;
+    public static bool Resumable(KeyboundPurchaseReceipt receipt,uint balance,int held,bool matchingDialog)=>CanSelect(receipt,balance,held)&&matchingDialog;
     public static bool Confirmed(KeyboundPurchaseReceipt intent,uint balance,int held)=>
         intent.Balance>=intent.Cost&&balance==intent.Balance-intent.Cost&&held>=intent.Held+1;
     public static bool ExactCost(uint currency,uint count,int expected,int received,int quantity)=>currency==52322&&count==expected&&expected>0&&received==1&&quantity==1;

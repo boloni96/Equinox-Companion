@@ -152,3 +152,21 @@ try{
     restored.Put(intent with {Submitted=true,Confirmed=true});
     Check(new KeyboundPurchaseBook(file).Find(12,123) is {Confirmed:true},"dispatched purchase can record receipt");
 }finally{if(Directory.Exists(submitDirectory))Directory.Delete(submitDirectory,true);}
+
+// Closed unsubmitted prompts may be selected again, but submission still needs
+// an exact live confirmation and a durable single-dispatch transition.
+Check(KeyboundBuyingPolicy.CanSelect(intent,1000,0),"closed unchanged reservation can reopen");
+Check(!KeyboundBuyingPolicy.CanSelect(intent with {Submitted=true},1000,0),"closed submitted purchase remains held");
+Check(!KeyboundBuyingPolicy.CanSelect(intent with {Confirmed=true},1000,0),"owned receipt never reopened");
+Check(!KeyboundBuyingPolicy.CanSelect(intent,570,0),"charge without delivery remains held");
+Check(!KeyboundBuyingPolicy.CanSelect(intent,1000,1),"delivery without charge remains held");
+Check(KeyboundBuyingPolicy.CanSelect(null,1000,0),"unrelated new reward remains purchasable");
+var missingWithHold=new Dictionary<string,int>{{"brawler-top",1},{"brawler-gloves",1}};
+var heldKeys=new HashSet<string>{"brawler-top"};
+var readyWithHold=KeyboundBuyingPolicy.ReadyPlan(missingWithHold,heldKeys);
+Check(KeyboundShoppingPolicy.Total(missingWithHold)==690,"pending top remains in wishlist MGC target");
+Check(readyWithHold.Count==1&&readyWithHold.ContainsKey("brawler-gloves"),"pending top does not disable other rewards");
+Check(KeyboundShoppingPolicy.Total(readyWithHold)==260,"budget and inventory checks use purchasable subset");
+Check(KeyboundShoppingPolicy.Remaining(KeyboundShoppingPolicy.Total(missingWithHold),500)==190,"still-to-earn retains pending reward cost");
+Check(KeyboundBuyingPolicy.ReadyPlan(missingWithHold,new HashSet<string>(missingWithHold.Keys)).Count==0&&missingWithHold.Count==2,"all held disables buying without erasing counter");
+Check(KeyboundBuyingPolicy.ReadyPlan(missingWithHold,new HashSet<string>()).Count==2,"cleared hold restores full purchasing plan");

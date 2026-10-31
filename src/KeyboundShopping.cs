@@ -33,6 +33,7 @@ public sealed partial class Plugin
             if(keyboundMgcLimit is {} cap&&total>cap)
                 ImGui.TextWrapped("Your list exceeds the wallet cap. Buy rewards along the way and mark Obtained in the Journal.");
         }
+        if(keyboundHeldRewards.Count>0)ImGui.TextWrapped($"{keyboundHeldRewards.Count} reward(s) held for verification · other rewards can be bought.");
         DrawKeyboundBuyButton();
     }
 }
