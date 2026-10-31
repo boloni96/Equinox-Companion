@@ -3,7 +3,7 @@ namespace EquinoxCompanion;
 
 // A durable intent is written before touching the purchase UI. An uncertain
 // purchase stays reserved across Stop, reload and character switches.
-public sealed record KeyboundPurchaseReceipt(ulong Character,uint Item,int Cost,uint Balance,int Held,bool Confirmed=false,bool Submitted=false);
+public sealed record KeyboundPurchaseReceipt(ulong Character,uint Item,int Cost,uint Balance,int Held,bool Confirmed=false,bool Submitted=false,bool EquipmentAccepted=false);
 public sealed class KeyboundPurchaseBook
 {
     private readonly string path;
@@ -26,8 +26,9 @@ public sealed class KeyboundPurchaseBook
         using var gate=new FileStream(path+".lock",FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None);
         var current=ReadEntries();var old=current.FirstOrDefault(e=>e.Character==receipt.Character&&e.Item==receipt.Item);
         var submit=old!=null&&!old.Confirmed&&!old.Submitted&&receipt==(old with {Submitted=true});
+        var equipment=old!=null&&!old.Confirmed&&!old.EquipmentAccepted&&receipt==(old with {EquipmentAccepted=true});
         var confirm=old!=null&&receipt==(old with {Confirmed=true});
-        if(old==null?(receipt.Confirmed||receipt.Submitted):!(submit||confirm))throw new IOException("Purchase receipt does not match its reservation, or is already submitted.");
+        if(old==null?(receipt.Confirmed||receipt.Submitted||receipt.EquipmentAccepted):!(submit||confirm||equipment))throw new IOException("Purchase receipt does not match its reservation, or is already submitted.");
         var next=current.Where(e=>e.Character!=receipt.Character||e.Item!=receipt.Item).Append(receipt).ToList();
         var temp=path+".tmp";
         using(var stream=new FileStream(temp,FileMode.Create,FileAccess.Write,FileShare.None)){
@@ -46,8 +47,11 @@ public static class KeyboundBuyingPolicy
         return cost>0&&lines.Contains($"exchange {cost} mgc for the following item?")&&lines.Contains(KeyboundShoppingPolicy.Normalize(item));
     }
     public static Dictionary<string,int> ReadyPlan(IReadOnlyDictionary<string,int> missing,ISet<string> held)=>missing.Where(p=>!held.Contains(p.Key)).ToDictionary(p=>p.Key,p=>p.Value);
-    public static bool CanSelect(KeyboundPurchaseReceipt? receipt,uint balance,int held)=>receipt==null||!receipt.Confirmed&&!receipt.Submitted&&balance==receipt.Balance&&held==receipt.Held;
-    public static bool Resumable(KeyboundPurchaseReceipt receipt,uint balance,int held,bool matchingDialog)=>CanSelect(receipt,balance,held)&&matchingDialog;
+    public static bool CanSelect(KeyboundPurchaseReceipt? receipt,uint balance,int held)=>receipt==null||!receipt.Confirmed&&!receipt.Submitted&&!receipt.EquipmentAccepted&&balance==receipt.Balance&&held==receipt.Held;
+    public static bool Resumable(KeyboundPurchaseReceipt receipt,uint balance,int held,bool matchingDialog)=>!receipt.Confirmed&&!receipt.Submitted&&balance==receipt.Balance&&held==receipt.Held&&matchingDialog;
+    public static bool EquipmentWarning(string prompt,string check,string accept,string cancel)=>
+        KeyboundShoppingPolicy.Normalize(string.Join(" ",prompt.Split((char[]?)null,StringSplitOptions.RemoveEmptyEntries)))=="you will never be able to equip this item. proceed with the transaction?"&&MenuName(check)=="proceed"&&MenuName(accept)=="ok"&&MenuName(cancel)=="cancel";
+    public static bool ResumeEquipment(KeyboundPurchaseReceipt receipt,uint balance,int held,bool exactWarning)=>!receipt.Confirmed&&!receipt.EquipmentAccepted&&balance==receipt.Balance&&held==receipt.Held&&exactWarning;
     public static bool Confirmed(KeyboundPurchaseReceipt intent,uint balance,int held)=>
         intent.Balance>=intent.Cost&&balance==intent.Balance-intent.Cost&&held>=intent.Held+1;
     public static bool ExactCost(uint currency,uint count,int expected,int received,int quantity)=>currency==52322&&count==expected&&expected>0&&received==1&&quantity==1;

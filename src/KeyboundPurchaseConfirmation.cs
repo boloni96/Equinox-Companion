@@ -55,12 +55,16 @@ public sealed partial class Plugin
     private unsafe bool CanResumeKeyboundPurchase(KeyboundOffer offer,KeyboundPurchaseReceipt receipt,out string shop,out uint index)
     {
         shop="";index=0;
-        if(receipt.Character!=Player.ContentId||!KeyboundIsTrader(Targets.Target)||receipt.Confirmed||receipt.Submitted)return false;
+        if(receipt.Character!=Player.ContentId||!KeyboundIsTrader(Targets.Target)||receipt.Confirmed||receipt.Cost!=offer.Cost)return false;
         var current=PurchaseShop();if(current.Length==0)return false;
         var matches=0;uint selected=0;
         for(var row=0;row<122;row++)if(KeyboundReadOffer(current,row,out var candidate)?.Item==offer.Item){matches++;selected=candidate;}
-        if(matches!=1||!FindKeyboundConfirmation(offer,current,selected,out _,out _))return false;
-        if(!KeyboundBuyingPolicy.Resumable(receipt,KeyboundWallet(),ArmoireInventory(offer.Item).Held,true))return false;
+        if(matches!=1)return false;
+        var agent=AgentShop.Instance();if(agent==null||agent->SelectedItemIndex!=selected)return false;
+        var balance=KeyboundWallet();var held=ArmoireInventory(offer.Item).Held;
+        var normal=FindKeyboundConfirmation(offer,current,selected,out _,out _)&&KeyboundBuyingPolicy.Resumable(receipt,balance,held,true);
+        var equipment=FindKeyboundEquipmentWarning()!=null&&KeyboundBuyingPolicy.ResumeEquipment(receipt,balance,held,true);
+        if(!normal&&!equipment)return false;
         shop=current;index=selected;return true;
     }
 }

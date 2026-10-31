@@ -170,3 +170,30 @@ Check(KeyboundShoppingPolicy.Total(readyWithHold)==260,"budget and inventory che
 Check(KeyboundShoppingPolicy.Remaining(KeyboundShoppingPolicy.Total(missingWithHold),500)==190,"still-to-earn retains pending reward cost");
 Check(KeyboundBuyingPolicy.ReadyPlan(missingWithHold,new HashSet<string>(missingWithHold.Keys)).Count==0&&missingWithHold.Count==2,"all held disables buying without erasing counter");
 Check(KeyboundBuyingPolicy.ReadyPlan(missingWithHold,new HashSet<string>()).Count==2,"cleared hold restores full purchasing plan");
+
+var equipmentText="You will never be able to equip this item.\nProceed with the transaction?";
+Check(KeyboundBuyingPolicy.EquipmentWarning(equipmentText,"Proceed","OK","Cancel"),"exact equipment restriction with checkbox accepted");
+Check(!KeyboundBuyingPolicy.EquipmentWarning("Discard this item?","Proceed","OK","Cancel"),"unrelated checkbox prompt rejected");
+Check(!KeyboundBuyingPolicy.EquipmentWarning(equipmentText,"Delete","OK","Cancel"),"wrong checkbox rejected");
+Check(!KeyboundBuyingPolicy.EquipmentWarning(equipmentText,"Proceed","Yes","No"),"different confirmation controls rejected");
+Check(KeyboundBuyingPolicy.ResumeEquipment(intent,1000,0,true),"equipment warning before price confirmation");
+Check(KeyboundBuyingPolicy.ResumeEquipment(intent with {Submitted=true},1000,0,true),"equipment warning after price confirmation");
+Check(!KeyboundBuyingPolicy.ResumeEquipment(intent with {EquipmentAccepted=true},1000,0,true),"equipment OK never sent twice");
+Check(!KeyboundBuyingPolicy.ResumeEquipment(intent,570,0,true),"changed wallet blocks equipment acknowledgement");
+Check(!KeyboundBuyingPolicy.ResumeEquipment(intent,1000,1,true),"changed holdings block equipment acknowledgement");
+Check(!KeyboundBuyingPolicy.ResumeEquipment(intent,1000,0,false),"unrelated prompt cannot resume submitted purchase");
+Check(!KeyboundBuyingPolicy.CanSelect(intent with {EquipmentAccepted=true},1000,0),"acknowledged equipment reservation cannot reopen blindly");
+Check(KeyboundBuyingPolicy.Resumable(intent with {EquipmentAccepted=true},1000,0,true),"exact remaining price prompt may resume after equipment acknowledgement");
+var equipmentDirectory=Path.Combine(Path.GetTempPath(),Guid.NewGuid().ToString("N"));
+try{
+    var file=Path.Combine(equipmentDirectory,"purchases.json");var book=new KeyboundPurchaseBook(file);
+    book.Put(intent);var acknowledged=intent with {EquipmentAccepted=true};book.Put(acknowledged);
+    var restored=new KeyboundPurchaseBook(file);
+    Check(restored.Find(12,123) is {EquipmentAccepted:true,Submitted:false},"equipment acknowledgement persists independently");
+    var duplicate=false;try{restored.Put(acknowledged);}catch(IOException){duplicate=true;}
+    Check(duplicate,"duplicate equipment dispatch rejected");
+    var submitted=acknowledged with {Submitted=true};restored.Put(submitted);restored.Put(submitted with {Confirmed=true});
+    Check(new KeyboundPurchaseBook(file).Find(12,123) is {Confirmed:true},"equipment then price then delivery recorded");
+    var second=intent with {Character=13};restored.Put(second);second=second with {Submitted=true};restored.Put(second);second=second with {EquipmentAccepted=true};restored.Put(second);restored.Put(second with {Confirmed=true});
+    Check(new KeyboundPurchaseBook(file).Find(13,123) is {Confirmed:true},"price then equipment then delivery recorded");
+}finally{if(Directory.Exists(equipmentDirectory))Directory.Delete(equipmentDirectory,true);}

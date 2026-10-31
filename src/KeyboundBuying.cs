@@ -17,6 +17,7 @@ public sealed partial class Plugin
     private sealed record KeyboundOffer(uint Item,string Key,string Name,int Cost);
     private KeyboundPurchaseBook? keyboundPurchases;
     private KeyboundOffer[]? keyboundOffers;
+    private bool keyboundEquipmentCheckSent;
     private bool keyboundBuying,keyboundBuySelected,keyboundBuyConfirmed,keyboundBuyerOpened;
     private ulong keyboundBuyerCharacter,keyboundBuyerObject;
     private uint keyboundBuyerWorld,keyboundBuyerTerritory,keyboundBuyIndex;
@@ -74,7 +75,7 @@ public sealed partial class Plugin
                 var dresser=MirageManager.Instance();if(!owned&&dresser!=null&&dresser->PrismBoxLoaded)owned=GearInDresser(offer.Item);
                 if(owned)keyboundOwned.Add(offer.Item);
                 if(KeyboundShoppingPolicy.Quantity(plan,offer.Key)>0&&!owned){
-                    if(!KeyboundBuyingPolicy.CanSelect(receipt,KeyboundWallet(),ArmoireInventory(offer.Item).Held))keyboundHeldRewards.Add(offer.Key);
+                    if(!KeyboundBuyingPolicy.CanSelect(receipt,KeyboundWallet(),ArmoireInventory(offer.Item).Held)&&!(receipt!=null&&CanResumeKeyboundPurchase(offer,receipt,out _,out _)))keyboundHeldRewards.Add(offer.Key);
                     if(unlocked==3)throw new InvalidOperationException("Waiting for reward unlock information.");
                     wanted[offer.Key]=1;
                 }
@@ -112,13 +113,13 @@ public sealed partial class Plugin
             if((PurchaseShop().Length>0||VisibleFollowAddon("SelectString")||VisibleFollowAddon("Talk"))&&Targets.Target?.GameObjectId!=trader.GameObjectId)throw new InvalidOperationException("Close the other NPC's window first.");
             StopKeybound();keyboundBuying=true;keyboundBuyerCharacter=Player.ContentId;keyboundBuyerWorld=Player.CurrentWorld.RowId;keyboundBuyerTerritory=Client.TerritoryType;keyboundBuyerObject=trader.GameObjectId;
             keyboundBuyRemaining.Clear();keyboundBuyRemaining.UnionWith(keyboundOffers!.Where(o=>keyboundReadyPlan.ContainsKey(o.Key)).Select(o=>o.Item));
-            keyboundBuySelected=keyboundBuyConfirmed=keyboundBuyerOpened=false;keyboundBuyItem=null;keyboundBuyIntent=null;keyboundBought=keyboundGreetingCount=0;keyboundVisitedTabs.Clear();keyboundTabFingerprint="";keyboundTabStableAt=default;
+            keyboundEquipmentCheckSent=false;keyboundBuySelected=keyboundBuyConfirmed=keyboundBuyerOpened=false;keyboundBuyItem=null;keyboundBuyIntent=null;keyboundBought=keyboundGreetingCount=0;keyboundVisitedTabs.Clear();keyboundTabFingerprint="";keyboundTabStableAt=default;
             keyboundBuyNext=default;keyboundBuyDeadline=DateTimeOffset.UtcNow.AddSeconds(45);keyboundBuyStatus="Buying missing rewards…";
             Targets.Target=trader;
             if(resume!=null){
                 var receipt=keyboundPurchases!.Find(Player.ContentId,resume.Item)!;
                 if(!CanResumeKeyboundPurchase(resume,receipt,out var resumeShop,out var resumeIndex))throw new InvalidOperationException("Pending confirmation changed.");
-                keyboundBuyItem=resume;keyboundBuyIntent=receipt;keyboundBuyShop=resumeShop;keyboundBuyIndex=resumeIndex;keyboundBuySelected=true;
+                keyboundBuyItem=resume;keyboundBuyIntent=receipt;keyboundBuyShop=resumeShop;keyboundBuyIndex=resumeIndex;keyboundBuySelected=true;keyboundBuyConfirmed=receipt.Submitted;
                 keyboundBuyStatus="Resuming confirmation: "+resume.Name;
             }
         }catch(Exception e){StopKeyboundBuying(e.Message);}
@@ -156,9 +157,10 @@ public sealed partial class Plugin
                 keyboundPurchases!.Put(intent with {Confirmed=true});keyboundBuyRemaining.Remove(intent.Item);keyboundBought++;keyboundBuyItem=null;keyboundBuyIntent=null;keyboundBuySelected=keyboundBuyConfirmed=false;keyboundBuyDeadline=now.AddSeconds(45);RequestStorageRefresh();keyboundVisitedTabs.Clear();RefreshKeyboundBuyPlan();keyboundBuyStatus=$"Bought {keyboundBought} · {keyboundBuyRemaining.Count} remaining";return;
             }
             if(now>=keyboundBuyDeadline)throw new InvalidOperationException(keyboundBuyIntent==null?"Shop did not become ready. Buying stopped.":"Purchase was not confirmed. Check inventory; this item will not be retried automatically.");
-            if(keyboundBuyConfirmed)return;
             var trader=Objects.FirstOrDefault(o=>o.GameObjectId==keyboundBuyerObject);var self=Objects.LocalPlayer;
             if(!KeyboundIsTrader(trader)||self==null||Vector3.Distance(self.Position,trader!.Position)>trader.HitboxRadius+4||Targets.Target?.GameObjectId!=keyboundBuyerObject)throw new InvalidOperationException("MGC trader changed or is out of reach.");
+            if(keyboundBuySelected&&TryHandleKeyboundEquipmentWarning())return;
+            if(keyboundBuyConfirmed)return;
             if(keyboundBuySelected){ConfirmKeyboundBuy();return;}
             if(KeyboundPurchaseDialogVisible())return;
             if(keyboundBuyRemaining.Count==0){StopKeyboundBuying(KeyboundBuyFinished());return;}
@@ -185,7 +187,7 @@ public sealed partial class Plugin
                 keyboundBuyItem=next.Offer;keyboundBuyShop=shop;keyboundBuyIndex=next.Index;
                 keyboundBuyIntent=reserved??new(keyboundBuyerCharacter,next.Offer.Item,next.Offer.Cost,KeyboundWallet(),ArmoireInventory(next.Offer.Item).Held);
                 if(reserved==null)keyboundPurchases.Put(keyboundBuyIntent); // Must succeed before the callback.
-                keyboundBuySelected=true;keyboundBuyConfirmed=false;keyboundBuyDeadline=now.AddSeconds(20);
+                keyboundEquipmentCheckSent=false;keyboundBuySelected=true;keyboundBuyConfirmed=false;keyboundBuyDeadline=now.AddSeconds(20);
                 var args=stackalloc AtkValue[4];for(var i=0;i<4;i++)args[i]=new(){Type=AtkValueType.Int,Int=0};args[1].Int=(int)next.Index;args[2].Int=1;
                 helperReplaying=true;try{KeyboundAddon(shop)->FireCallback(shop=="ShopExchangeCurrency"?4u:3u,args,true);}finally{helperReplaying=false;}
                 keyboundBuyStatus="Buying: "+next.Offer.Name;return;
