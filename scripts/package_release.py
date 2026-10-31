@@ -36,7 +36,7 @@ def package(build, output, repository, tag, ref=None):
         raise ValueError("Compiled plugin DLL is missing or invalid")
     output.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(output / "EquinoxCompanion.zip", "w", zipfile.ZIP_DEFLATED) as archive:
-        for name in ("EquinoxCompanion.dll", "EquinoxCompanion.json", "EquinoxCompanion.deps.json", "icon.png", "collection-ids.json"):
+        for name in ("EquinoxCompanion.dll", "EquinoxCompanion.json", "EquinoxCompanion.deps.json", "icon.png", "collection-ids.json", "THIRD-PARTY-KEYBOUND.txt"):
             archive.write(build / name, name)
         for asset in (build / "garden-art").rglob("*"):
             if asset.is_file(): archive.write(asset, asset.relative_to(build))
@@ -65,3 +65,4 @@ if __name__ == "__main__":
     parser.add_argument("--ref", help="Host ZIP from dist/<tag> on this repository ref instead of Releases")
     args = parser.parse_args()
     package(args.build, args.output, args.repository, args.tag, args.ref)
+
