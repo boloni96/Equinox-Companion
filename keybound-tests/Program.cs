@@ -130,3 +130,25 @@ Check(KeyboundBuyingPolicy.CompleteShopTabs(new[]{"Others","Accessories","Weapon
 Check(!KeyboundBuyingPolicy.CompleteShopTabs(new[]{"Weapons","Armor","Accessories"}),"incomplete category group rejected");
 Check(!KeyboundBuyingPolicy.CompleteShopTabs(new[]{"Weapons","Armor","Accessories","Accessories"}),"duplicate tab is not a complete group");
 Check(!KeyboundBuyingPolicy.IsShopTab("Show All"),"filter button cannot be treated as a category tab");
+
+var confirmLines=new[]{"Exchange 430 MGC for the following item?","Avalanche Brawler's Top","1","Yes","No"};
+Check(KeyboundBuyingPolicy.ConfirmationText(confirmLines,"Avalanche Brawler's Top",430),"single-item confirmation without numeric editor");
+Check(!KeyboundBuyingPolicy.ConfirmationText(confirmLines,"Avalanche Leader's Vest",430),"same price different item rejected");
+Check(!KeyboundBuyingPolicy.ConfirmationText(confirmLines,"Avalanche Brawler's Top",260),"wrong confirmation price rejected");
+Check(!KeyboundBuyingPolicy.ConfirmationText(new[]{"Exchange 430 gil for the following item?","Avalanche Brawler's Top"},"Avalanche Brawler's Top",430),"wrong confirmation currency rejected");
+Check(KeyboundBuyingPolicy.Resumable(intent,1000,0,true),"unsubmitted matching dialog can resume");
+Check(!KeyboundBuyingPolicy.Resumable(intent with {Submitted=true},1000,0,true),"already-dispatched confirmation never retried");
+Check(!KeyboundBuyingPolicy.Resumable(intent,570,0,true),"changed wallet blocks recovery");
+Check(!KeyboundBuyingPolicy.Resumable(intent,1000,1,true),"received item blocks recovery");
+Check(!KeyboundBuyingPolicy.Resumable(intent,1000,0,false),"unrelated dialog blocks recovery");
+var submitDirectory=Path.Combine(Path.GetTempPath(),Guid.NewGuid().ToString("N"));
+try{
+    var file=Path.Combine(submitDirectory,"purchases.json");var book=new KeyboundPurchaseBook(file);
+    book.Put(intent);book.Put(intent with {Submitted=true});
+    var restored=new KeyboundPurchaseBook(file);
+    Check(restored.Find(12,123) is {Submitted:true,Confirmed:false},"dispatch marker survives reload");
+    var duplicate=false;try{restored.Put(intent with {Submitted=true});}catch(IOException){duplicate=true;}
+    Check(duplicate,"second confirmation dispatch blocked");
+    restored.Put(intent with {Submitted=true,Confirmed=true});
+    Check(new KeyboundPurchaseBook(file).Find(12,123) is {Confirmed:true},"dispatched purchase can record receipt");
+}finally{if(Directory.Exists(submitDirectory))Directory.Delete(submitDirectory,true);}

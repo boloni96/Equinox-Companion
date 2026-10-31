@@ -72,7 +72,7 @@ public sealed partial class Plugin
                 var dresser=MirageManager.Instance();if(!owned&&dresser!=null&&dresser->PrismBoxLoaded)owned=GearInDresser(offer.Item);
                 if(owned)keyboundOwned.Add(offer.Item);
                 if(KeyboundShoppingPolicy.Quantity(plan,offer.Key)>0&&!owned){
-                    if(receipt!=null&&!receipt.Confirmed)throw new InvalidOperationException("Purchase needs checking: "+offer.Name+". It will not be bought again automatically.");
+                    if(receipt!=null&&!receipt.Confirmed&&!CanResumeKeyboundPurchase(offer,receipt,out _,out _))throw new InvalidOperationException("Purchase needs checking: "+offer.Name+". It will not be bought again automatically.");
                     if(unlocked==3)throw new InvalidOperationException("Waiting for reward unlock information.");
                     wanted[offer.Key]=1;
                 }
@@ -104,14 +104,21 @@ public sealed partial class Plugin
             var trader=Objects.Where(o=>KeyboundIsTrader(o)&&Vector3.Distance(self.Position,o.Position)<=o.HitboxRadius+4).OrderBy(o=>Vector3.DistanceSquared(self.Position,o.Position)).FirstOrDefault()??throw new InvalidOperationException("Move beside the MGC trader, then Buy all missing.");
             if(KeyboundShoppingPolicy.Total(keyboundMissingPlan)>KeyboundWallet())throw new InvalidOperationException("Not enough MGC for all missing rewards in this list.");
             if(!EventExchangeHasSpace(keyboundMissingPlan.Count))throw new InvalidOperationException($"Keep {keyboundMissingPlan.Count} inventory slots free for these rewards.");
-            if(KeyboundPurchaseDialogVisible())throw new InvalidOperationException("Close the existing purchase confirmation first.");
+            var resume=keyboundOffers!.FirstOrDefault(o=>keyboundMissingPlan.ContainsKey(o.Key)&&keyboundPurchases!.Find(Player.ContentId,o.Item) is {} r&&CanResumeKeyboundPurchase(o,r,out _,out _));
+            if(KeyboundPurchaseDialogVisible()&&resume==null)throw new InvalidOperationException("Close the unrelated purchase confirmation first.");
             if((PurchaseShop().Length>0||VisibleFollowAddon("SelectString")||VisibleFollowAddon("Talk"))&&Targets.Target?.GameObjectId!=trader.GameObjectId)throw new InvalidOperationException("Close the other NPC's window first.");
             StopKeybound();keyboundBuying=true;keyboundBuyerCharacter=Player.ContentId;keyboundBuyerWorld=Player.CurrentWorld.RowId;keyboundBuyerTerritory=Client.TerritoryType;keyboundBuyerObject=trader.GameObjectId;
             keyboundBuyRemaining.Clear();keyboundBuyRemaining.UnionWith(keyboundOffers!.Where(o=>keyboundMissingPlan.ContainsKey(o.Key)).Select(o=>o.Item));
             keyboundBuySelected=keyboundBuyConfirmed=keyboundBuyerOpened=false;keyboundBuyItem=null;keyboundBuyIntent=null;keyboundBought=keyboundGreetingCount=0;keyboundVisitedTabs.Clear();keyboundTabFingerprint="";keyboundTabStableAt=default;
             keyboundBuyNext=default;keyboundBuyDeadline=DateTimeOffset.UtcNow.AddSeconds(45);keyboundBuyStatus="Buying missing rewards…";
             Targets.Target=trader;
-        }catch(Exception e){keyboundBuyStatus=e.Message;}
+            if(resume!=null){
+                var receipt=keyboundPurchases!.Find(Player.ContentId,resume.Item)!;
+                if(!CanResumeKeyboundPurchase(resume,receipt,out var resumeShop,out var resumeIndex))throw new InvalidOperationException("Pending confirmation changed.");
+                keyboundBuyItem=resume;keyboundBuyIntent=receipt;keyboundBuyShop=resumeShop;keyboundBuyIndex=resumeIndex;keyboundBuySelected=true;
+                keyboundBuyStatus="Resuming confirmation: "+resume.Name;
+            }
+        }catch(Exception e){StopKeyboundBuying(e.Message);}
     }
     private void StopKeyboundBuying(string reason){keyboundBuying=false;keyboundBuyStatus=reason;keyboundBuyRefresh=default;}
     private bool KeyboundPurchaseDialogVisible()=>new[]{"SelectYesno","ShopExchangeItemDialog","ShopExchangeCurrencyDialog","Request"}.Any(VisibleFollowAddon);
@@ -198,22 +205,14 @@ public sealed partial class Plugin
         var matches=0;for(var i=0;i<122;i++)if(KeyboundReadOffer(keyboundBuyShop,i,out var index)?.Item==item.Item&&index==keyboundBuyIndex)matches++;
         if(matches!=1)throw new InvalidOperationException("Shop selection changed; nothing confirmed.");
         var agent=AgentShop.Instance();if(agent==null||agent->SelectedItemIndex!=keyboundBuyIndex)throw new InvalidOperationException("Selected reward changed.");
-        AtkUnitBase* dialog=null;AtkComponentButton* button=null;
-        if(keyboundBuyShop=="ShopExchangeItem"){
-            var d=(AddonShopExchangeItemDialog*)KeyboundAddon("ShopExchangeItemDialog");if(d==null)return;
-            if(agent->DialogAddonId!=d->Id||agent->SelectedItemStackSize!=1)throw new InvalidOperationException("Exchange confirmation differs.");
-            dialog=(AtkUnitBase*)d;button=d->ExchangeButton;
-        }else{
-            dialog=KeyboundAddon("ShopExchangeCurrencyDialog");if(dialog==null)return;
-            if(dialog->UldManager.NodeList==null||dialog->UldManager.NodeListCount<=8||dialog->UldManager.NodeList[8]==null)return;
-            var input=dialog->UldManager.NodeList[8]->GetAsAtkComponentNumericInput();if(input==null||input->Value!=1)throw new InvalidOperationException("Purchase quantity differs.");
-            button=dialog->GetComponentButtonById(17);
-        }
+        if(!FindKeyboundConfirmation(item,keyboundBuyShop,keyboundBuyIndex,out var dialog,out var button))return;
         if(button==null||!button->IsEnabled||button->AtkComponentBase.OwnerNode==null)return;
         var evt=button->AtkComponentBase.OwnerNode->AtkResNode.AtkEventManager.Event;var n=0;
         while(evt!=null&&n++<32&&evt->State.EventType is not (AtkEventType.ButtonClick or AtkEventType.MouseClick))evt=evt->NextEvent;
         if(evt==null||n>32)return;
-        var click=*evt;var data=new AtkEventData();keyboundBuyConfirmed=true;helperReplaying=true;
+        var click=*evt;var data=new AtkEventData();
+        keyboundBuyIntent=intent with {Submitted=true};keyboundPurchases!.Put(keyboundBuyIntent);
+        keyboundBuyConfirmed=true;helperReplaying=true;
         try{dialog->ReceiveEvent(click.State.EventType,(int)click.Param,&click,&data);}finally{helperReplaying=false;}
     }
 }
