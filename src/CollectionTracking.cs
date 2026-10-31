@@ -12,7 +12,7 @@ public sealed partial class Plugin
     private int nextCollectionGroup;
     private int priorityCollectionTurn;
     private int nextPriorityCollection;
-    private uint keyboundCollectionRefreshItem;
+    private readonly HashSet<uint> keyboundCollectionRefreshItems=[];
     private Dictionary<uint, uint[]>? hairstyleUnlocks;
     private DateTimeOffset collectionReadyAt;
     private ulong collectionCharacter;
@@ -26,7 +26,7 @@ public sealed partial class Plugin
         if (!SyncValidation.ActorReady(actor) || state == null || !state->PlayerState.IsLoaded) return;
         if (collectionCharacter != Player.ContentId)
         {
-            collectionCharacter = Player.ContentId;
+            collectionCharacter = Player.ContentId;keyboundCollectionRefreshItems.Clear();
             collectionReadyAt = now.AddSeconds(15);
             nextCollectionGroup = 0; priorityCollectionTurn = 0; nextPriorityCollection = 0;
             return;
@@ -47,10 +47,10 @@ public sealed partial class Plugin
             nextCollectionGroup--;
             segmentIndex = priority[nextPriorityCollection++ % priority.Length];
         }
-        if(keyboundCollectionRefreshItem!=0){
-            var requested=Array.FindIndex(collectionGroups,g=>g.Any(e=>e.ItemId==keyboundCollectionRefreshItem));
-            keyboundCollectionRefreshItem=0;
-            if(requested>=0)segmentIndex=requested;
+        if(keyboundCollectionRefreshItems.Count>0){
+            var requested=Array.FindIndex(collectionGroups,g=>g.Any(e=>keyboundCollectionRefreshItems.Contains(e.ItemId)));
+            if(requested>=0){segmentIndex=requested;foreach(var entry in collectionGroups[requested])keyboundCollectionRefreshItems.Remove(entry.ItemId);}
+            else keyboundCollectionRefreshItems.Clear();
         }
         var group = collectionGroups[segmentIndex];
         var unlocked = new List<uint>(); var obtained = new List<uint>(); var known = new List<uint>();
