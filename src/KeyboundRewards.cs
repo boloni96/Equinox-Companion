@@ -30,7 +30,7 @@ public sealed partial class Plugin
                 keyboundRoundMgc=results==null?keyboundMgc:null;keyboundLastMgcChange=null;
             }
             keyboundRewardTerritory=Client.TerritoryType;
-            if(keyboundRoundMgc.HasValue&&keyboundMgc>=keyboundRoundMgc)keyboundLastMgcChange=keyboundMgc-keyboundRoundMgc;
+            if(keyboundRoundMgc.HasValue)keyboundLastMgcChange=keyboundMgc>=keyboundRoundMgc?keyboundMgc-keyboundRoundMgc:null;
             if(results!=null){
                 if(keyboundResultsReadyAt==default)keyboundResultsReadyAt=now;
                 keyboundLastResults=KeyboundUi.Texts("KTGResult").Select(t=>t.Text).Where(t=>t.Length>0).Distinct().Take(64).Select(t=>t.Length>256?t[..256]:t).ToArray();

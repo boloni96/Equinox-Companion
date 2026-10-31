@@ -24,6 +24,7 @@ public sealed partial class Plugin
         if(!KeyboundPolicy.LoopTerritory(Client.TerritoryType)){keyboundStatus="Waiting: enter Keybound Square near the registrar";keyboundNext=now.AddMilliseconds(500);return true;}
         if(Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]){keyboundStatus="Waiting: loading";return true;}
         var result=KeyboundAddon("KTGResult");
+        if(result==null)keyboundResultsReadyAt=default;
         if(Client.TerritoryType==1359&&result==null)return false;
         if(now<keyboundLoopNext)return true;
         keyboundLoopNext=now.AddSeconds(1);
