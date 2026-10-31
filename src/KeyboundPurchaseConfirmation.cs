@@ -4,6 +4,7 @@ using FFXIVClientStructs.FFXIV.Component.GUI;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
+    private string keyboundConfirmationDiagnostic="";
     private unsafe bool FindKeyboundConfirmation(KeyboundOffer offer,string shop,uint index,out AtkUnitBase* dialog,out AtkComponentButton* button)
     {
         dialog=null;button=null;
@@ -45,6 +46,7 @@ public sealed partial class Plugin
             }
             Read(&candidate->UldManager,0);
             var localName=ExchangeItemName(offer.Item);
+            keyboundConfirmationDiagnostic=$"{name}: expected {localName} / {offer.Cost} MGC; Yes buttons {yesButtons.Count}; quantities [{string.Join(",",quantities)}]; visible text [{string.Join(" | ",texts)}]";
             if(yesButtons.Count!=1||quantities.Any(q=>q!=1)||!KeyboundBuyingPolicy.ConfirmationText(texts,localName,offer.Cost))continue;
             // The exact single-item prompt plus the still-live quoted row binds
             // this Yes button to our item and MGC price, not a generic dialog.

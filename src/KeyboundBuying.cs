@@ -113,7 +113,7 @@ public sealed partial class Plugin
             if((PurchaseShop().Length>0||VisibleFollowAddon("SelectString")||VisibleFollowAddon("Talk"))&&Targets.Target?.GameObjectId!=trader.GameObjectId)throw new InvalidOperationException("Close the other NPC's window first.");
             StopKeybound();keyboundBuying=true;keyboundBuyerCharacter=Player.ContentId;keyboundBuyerWorld=Player.CurrentWorld.RowId;keyboundBuyerTerritory=Client.TerritoryType;keyboundBuyerObject=trader.GameObjectId;
             keyboundBuyRemaining.Clear();keyboundBuyRemaining.UnionWith(keyboundOffers!.Where(o=>keyboundReadyPlan.ContainsKey(o.Key)).Select(o=>o.Item));
-            keyboundEquipmentCheckSent=false;keyboundBuySelected=keyboundBuyConfirmed=keyboundBuyerOpened=false;keyboundBuyItem=null;keyboundBuyIntent=null;keyboundBought=keyboundGreetingCount=0;keyboundVisitedTabs.Clear();keyboundTabFingerprint="";keyboundTabStableAt=default;
+            keyboundEquipmentCheckSent=false;keyboundBuySelected=keyboundBuyConfirmed=keyboundBuyerOpened=false;keyboundBuyItem=null;keyboundBuyIntent=null;keyboundBought=keyboundGreetingCount=0;keyboundVisitedTabs.Clear();keyboundTabFingerprint="";keyboundTabStableAt=default;keyboundRequestedTab=null;keyboundTabPrimed=false;keyboundRowFingerprint="";
             keyboundBuyNext=default;keyboundBuyDeadline=DateTimeOffset.UtcNow.AddSeconds(45);keyboundBuyStatus="Buying missing rewards…";
             Targets.Target=trader;
             if(resume!=null){

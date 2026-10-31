@@ -42,9 +42,11 @@ public static class KeyboundBuyingPolicy
     private static readonly string[] ShopTabs=["weapons","armor","accessories","others"];
     public static bool IsShopTab(string label)=>ShopTabs.Contains(MenuName(label));
     public static bool CompleteShopTabs(IEnumerable<string> labels)=>labels.Select(MenuName).Order().SequenceEqual(ShopTabs.Order());
+    public static string ConfirmationName(string text)=>KeyboundShoppingPolicy.Normalize(string.Join(" ",text.Split((char[]?)null,StringSplitOptions.RemoveEmptyEntries)));
+    public static bool TabRowsChanged(uint requested,uint selected,string previous,string current)=>requested==selected&&current.Length>0&&(previous.Length==0||previous!=current);
     public static bool ConfirmationText(IEnumerable<string> texts,string item,int cost){
-        var lines=texts.Select(KeyboundShoppingPolicy.Normalize).ToArray();
-        return cost>0&&lines.Contains($"exchange {cost} mgc for the following item?")&&lines.Contains(KeyboundShoppingPolicy.Normalize(item));
+        var lines=texts.Select(ConfirmationName).ToArray();
+        return cost>0&&lines.Contains($"exchange {cost} mgc for the following item?")&&lines.Contains(ConfirmationName(item));
     }
     public static Dictionary<string,int> ReadyPlan(IReadOnlyDictionary<string,int> missing,ISet<string> held)=>missing.Where(p=>!held.Contains(p.Key)).ToDictionary(p=>p.Key,p=>p.Value);
     public static bool CanSelect(KeyboundPurchaseReceipt? receipt,uint balance,int held)=>receipt==null||!receipt.Confirmed&&!receipt.Submitted&&!receipt.EquipmentAccepted&&balance==receipt.Balance&&held==receipt.Held;

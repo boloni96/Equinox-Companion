@@ -197,3 +197,16 @@ try{
     var second=intent with {Character=13};restored.Put(second);second=second with {Submitted=true};restored.Put(second);second=second with {EquipmentAccepted=true};restored.Put(second);restored.Put(second with {Confirmed=true});
     Check(new KeyboundPurchaseBook(file).Find(13,123) is {Confirmed:true},"price then equipment then delivery recorded");
 }finally{if(Directory.Exists(equipmentDirectory))Directory.Delete(equipmentDirectory,true);}
+
+var longReward="Welcome to the Gold Saucer Orchestrion Roll";
+Check(KeyboundBuyingPolicy.ConfirmationText(new[]{"Exchange 190 MGC for the following item?","Welcome to the Gold Saucer Orchestrion\nRoll"},longReward,190),"wrapped orchestrion item name matches exact full name");
+Check(KeyboundBuyingPolicy.ConfirmationText(new[]{"Exchange 190 MGC\r\nfor the following item?","Welcome\u00a0to the Gold Saucer Orchestrion\tRoll"},longReward,190),"native whitespace normalized in price and name");
+Check(!KeyboundBuyingPolicy.ConfirmationText(new[]{"Exchange 190 MGC for the following item?","Welcome to the Gold Saucer Orchestrion"},longReward,190),"truncated name still rejected");
+Check(!KeyboundBuyingPolicy.ConfirmationText(new[]{"Exchange 190 MGC for the following item?","Let the Battles Begin! Orchestrion\nRoll"},longReward,190),"same-price different wrapped reward rejected");
+Check(!KeyboundBuyingPolicy.ConfirmationText(new[]{"Exchange 191 MGC for the following item?","Welcome to the Gold Saucer Orchestrion\nRoll"},longReward,190),"wrapped name does not bypass exact price");
+Check(!KeyboundBuyingPolicy.TabRowsChanged(10,10,"9,101,0,102,1","9,101,0,102,1"),"selected tab alone cannot acknowledge unchanged armor rows");
+Check(!KeyboundBuyingPolicy.TabRowsChanged(10,11,"9,101,0","1,201,0"),"wrong selected tab cannot acknowledge new rows");
+Check(KeyboundBuyingPolicy.TabRowsChanged(10,10,"9,101,0","1,201,0"),"requested tab plus changed rows allows scan");
+Check(KeyboundBuyingPolicy.TabRowsChanged(10,10,"9,101,0","0"),"loaded empty category can be scanned");
+Check(!KeyboundBuyingPolicy.TabRowsChanged(10,10,"9,101,0",""),"missing row observation cannot acknowledge tab");
+Check(KeyboundBuyingPolicy.TabRowsChanged(10,10,"","9,101,0"),"initial explicit category refresh allows existing stable rows");
