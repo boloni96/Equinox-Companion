@@ -70,6 +70,7 @@ public sealed class Configuration : IPluginConfiguration
     public bool CofferMainMap { get; set; } = true;
     public bool FollowAntiAfk { get; set; }
     public bool EnableKeyboundBrawler { get; set; }
+    public bool KeyboundUseJournalWishlist { get; set; } = true;
     public Dictionary<ulong,Dictionary<string,int>> KeyboundShopping { get; set; } = [];
     public Dictionary<ulong,List<uint>> KeyboundRoundEarnings { get; set; } = [];
     public bool KeyboundRunInBackground { get; set; } = true;

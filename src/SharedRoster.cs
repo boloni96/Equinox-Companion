@@ -4,7 +4,7 @@ public sealed record SharedItemLocation(string OwnerId,string OwnerName,string K
 public sealed record SharedVoyage(string FcId, string FcName, DateTimeOffset At, SubmarineDetails[] Submarines, int? Slots = null);
 public sealed record SharedPerson(string Id, string Name, SharedCharacter[] Characters, SharedAccount[]? Accounts = null);
 public sealed record SharedAccount(string Id,string Name);
-public sealed record SharedCharacter(string Id, string Name, string World, string Dc, string Region, string Account, SharedHouse[] Houses, string AccountId = "", bool? NeedsBoost = null, bool? FcMember = null, string FcId = "", bool FcMaster = false, DateTimeOffset? FashionCompletedAt = null, int? FashionScore = null, DateTimeOffset? FashionObservedAt = null, DateTimeOffset? FashionCycle = null, string GameAccountKey = "", string ContentId = "", SharedHousingBid[]? HousingBids = null, int HousingBidsTotal = 0, RetainerMarketDetails? RetainerMarket = null);
+public sealed record SharedCharacter(string Id, string Name, string World, string Dc, string Region, string Account, SharedHouse[] Houses, string AccountId = "", bool? NeedsBoost = null, bool? FcMember = null, string FcId = "", bool FcMaster = false, DateTimeOffset? FashionCompletedAt = null, int? FashionScore = null, DateTimeOffset? FashionObservedAt = null, DateTimeOffset? FashionCycle = null, string GameAccountKey = "", string ContentId = "", SharedHousingBid[]? HousingBids = null, int HousingBidsTotal = 0, RetainerMarketDetails? RetainerMarket = null, SharedRewardWish[]? KeyboundWishlist = null);
 public sealed record SharedHouse(string Id, string GameHouseId, string Type, string Name, string World, string District, int Ward, int Plot, string Size, string OwnerName, string FcName, string FcTag, DateTimeOffset? LastEntry, bool Paused, string FcId = "");
 public sealed record RosterResult(SharedRoster? Roster, string Status, bool NotModified = false, bool Unauthorized = false, string Receipt = "", long? ReceiptRevision = null, long? AppliedCursor = null, string DeliveryError = "");
 
@@ -140,3 +140,5 @@ public static class GardenCareStatus
 }
 
 public sealed record SharedGardenYield(string HouseId, int Batch, string Actual, string Planned, string Seeds);
+
+public sealed record SharedRewardWish(string Name,bool Wanted,bool Obtained);

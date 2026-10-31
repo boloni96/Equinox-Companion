@@ -26,6 +26,20 @@ public static class KeyboundShoppingPolicy
         new("emote","Ballroom Etiquette - Intrepid Inputs",260),
         new("coffer","Keybound Coffer",910)
     ];
+    private static string Normalize(string name)=>string.Join(" ",name.Trim().Replace('’','\'').Replace('–','-').Replace('—','-').ToLowerInvariant().Split(' ',StringSplitOptions.RemoveEmptyEntries));
+    public static string? PrizeKey(string name)=>Prizes.FirstOrDefault(p=>Normalize(p.Name)==Normalize(name))?.Key;
+    public static Dictionary<string,int> WishlistPlan(IEnumerable<(string Name,bool Wanted,bool Obtained)> wishes,out int unmatched)
+    {
+        var result=new Dictionary<string,int>();var unknown=new HashSet<string>();
+        var rows=wishes.ToArray();
+        foreach(var row in rows.Where(x=>x.Wanted&&!x.Obtained)){
+            var key=PrizeKey(row.Name);
+            if(key is null){unknown.Add(Normalize(row.Name));continue;}
+            if(rows.Any(x=>x.Obtained&&PrizeKey(x.Name)==key))continue;
+            result[key]=1;
+        }
+        unmatched=unknown.Count;return result;
+    }
     public static int Quantity(IReadOnlyDictionary<string,int>? plan,string key)=>plan is null?1:Math.Clamp(plan.GetValueOrDefault(key,0),0,999);
     public static long Total(IReadOnlyDictionary<string,int>? plan)=>Prizes.Sum(p=>(long)p.Cost*Quantity(plan,p.Key));
     public static long Remaining(long total,uint balance)=>Math.Max(0,total-balance);

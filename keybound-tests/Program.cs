@@ -73,3 +73,9 @@ earnings.Observe(true,false,9900,10000);earnings.Observe(true,true,10000,10000);
 Check(earnings.Observe(false,false,10000,10000) is null,"capacity-limited round excluded");
 earnings.Observe(true,false,1500,10000);earnings.Observe(true,false,1000,10000);earnings.Observe(true,true,1331,10000);
 Check(earnings.Observe(false,false,1331,10000) is null,"balance reduction invalidates baseline");
+
+var wishes=KeyboundShoppingPolicy.WishlistPlan(new[]{("Wind-up Barret",true,false),("Magitek Scorpion Identification Key",true,true),("Keybound Coffer",false,false),("Unknown custom reward",true,false)},out var unknown);
+Check(KeyboundShoppingPolicy.Total(wishes)==260&&unknown==1,"Journal wanted-not-obtained only, unknown costs flagged");
+var duplicates=KeyboundShoppingPolicy.WishlistPlan(new[]{("Avalanche Brawler’s Top",true,false),("Avalanche Brawler's Top",true,false)},out unknown);
+Check(KeyboundShoppingPolicy.Total(duplicates)==430&&unknown==0,"normalized apostrophe and duplicate wishlist entries");
+Check(KeyboundShoppingPolicy.Total(KeyboundShoppingPolicy.WishlistPlan(Array.Empty<(string,bool,bool)>(),out unknown))==0,"empty synced wishlist never selects everything");
