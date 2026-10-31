@@ -31,9 +31,11 @@ public sealed partial class Plugin
     }
     private void DrawKeyboundHelper()
     {
+        ImGui.BeginDisabled(keyboundBuying);
         if(ImGui.Button(keyboundEnabled?"Stop":"Start")){
             if(keyboundEnabled)StopKeybound();else{StopKeybound();keyboundEnabled=true;keyboundNext=keyboundHold=keyboundMissing=default;keyboundStatus="Waiting for Keybound Brawler";}
         }
+        ImGui.EndDisabled();
         ImGui.SameLine();ImGui.TextUnformatted(keyboundEnabled?"Running":"Stopped");
         ImGui.TextWrapped(keyboundStatus);
         if(keyboundWord.Length>0)ImGui.TextWrapped("Word: "+keyboundWord);
@@ -54,8 +56,10 @@ public sealed partial class Plugin
         if(DrawKeyboundDelay("Max",ref max,10,1000)){config.KeyboundMaxDelayMs=max;SaveConfiguration();}
         if(DrawKeyboundDelay("Submit",ref submit,0,2000)){config.KeyboundSubmitDelayMs=submit;SaveConfiguration();}
         if(min>max)ImGui.TextDisabled($"Effective keystroke range: {max}–{min} ms");
+        ImGui.BeginDisabled(keyboundBuying);
         var journal=config.KeyboundUseJournalWishlist;
-        if(ImGui.Checkbox("Use Journal wishlist",ref journal)){config.KeyboundUseJournalWishlist=journal;SaveConfiguration();}
+        if(ImGui.Checkbox("Use Journal wishlist",ref journal)){config.KeyboundUseJournalWishlist=journal;keyboundBuyRefresh=default;SaveConfiguration();}
+        ImGui.EndDisabled();
         }
         if(ImGui.CollapsingHeader("How it works")){
             ImGui.TextWrapped("Optional typing assistance for Keybound Brawler. Keeps spaces and punctuation, uses Up for consecutive repeats, and clears its partial text when a target disappears. Pauses through stuns and no-typing casts.");
@@ -207,3 +211,4 @@ public sealed partial class Plugin
     }
     private void KeyboundExpect(string expected,DateTimeOffset now){keyboundExpected=expected;keyboundAwaiting=true;keyboundDeadline=now.AddSeconds(2);}
 }
+

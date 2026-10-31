@@ -16,17 +16,12 @@ public sealed partial class Plugin
     {
         var character=Player.ContentId;
         if(!Client.IsLoggedIn||character==0)return;
-        var journal=config.KeyboundUseJournalWishlist;
-        Dictionary<string,int>? plan=null; // Without Journal goals, target one of every reward.
-        var unmatched=0;
-        if(journal){
-            var matches=(config.SharedRoster?.People??[]).SelectMany(p=>p.Characters).Where(c=>c.ContentId==character.ToString()).DistinctBy(c=>c.Id).Take(2).ToArray();
-            if(matches.Length!=1||matches[0].KeyboundWishlist is null){
-                ImGui.TextWrapped("Waiting for Journal wishlist sync.");
-                return;
-            }
-            plan=KeyboundShoppingPolicy.WishlistPlan(matches[0].KeyboundWishlist!.Select(w=>(w.Name,w.Wanted,w.Obtained)),out unmatched);
+        var plan=keyboundMissingPlan;
+        if(plan is null){
+            ImGui.TextWrapped(keyboundPlanError.Length>0?keyboundPlanError:"Checking missing rewards…");
+            DrawKeyboundBuyButton();return;
         }
+        var unmatched=0;
         var total=KeyboundShoppingPolicy.Total(plan);
         ImGui.TextUnformatted($"{(unmatched>0?"Known reward cost":"Target")}: {total:N0} MGC");
         if(unmatched>0)ImGui.TextWrapped($"{unmatched} wanted reward(s) have no matched shop price. Total and estimate cover matched rewards only.");
@@ -40,5 +35,7 @@ public sealed partial class Plugin
             if(keyboundMgcLimit is {} cap&&total>cap)
                 ImGui.TextWrapped("Your list exceeds the wallet cap. Buy rewards along the way and mark Obtained in the Journal.");
         }
+        DrawKeyboundBuyButton();
     }
 }
+

@@ -90,3 +90,30 @@ foreach(var phrase in new[]{"Fight On!","Worth the Weight?","Wait.","Really?!","
     Check(KeyboundPolicy.IsPhrase(phrase),"punctuation accepted: "+phrase);
     Check(KeyboundPolicy.CanSubmit(phrase,phrase,phrase),"punctuation submitted unchanged: "+phrase);
 }
+
+
+Check(KeyboundBuyingPolicy.ExactCost(52322,430,430,1,1),"exact one-item MGC exchange");
+Check(!KeyboundBuyingPolicy.ExactCost(1,430,430,1,1),"reject wrong currency");
+Check(!KeyboundBuyingPolicy.ExactCost(52322,431,430,1,1),"reject changed price");
+Check(!KeyboundBuyingPolicy.ExactCost(52322,430,430,2,1),"reject multi-item bundle");
+Check(!KeyboundBuyingPolicy.ExactCost(52322,430,430,1,2),"reject duplicate quantity");
+var intent=new KeyboundPurchaseReceipt(12,123,430,1000,0);
+Check(KeyboundBuyingPolicy.Confirmed(intent,570,1),"purchase requires exact charge and item receipt");
+Check(!KeyboundBuyingPolicy.Confirmed(intent,570,0),"charge alone is not receipt");
+Check(!KeyboundBuyingPolicy.Confirmed(intent,1000,1),"item alone is not receipt");
+Check(!KeyboundBuyingPolicy.Confirmed(intent,569,1),"unrelated currency change rejected");
+Check(KeyboundBuyingPolicy.CategoryMatches("Weapons","MGC Exchange (Weapons)"),"native category label suffix");
+Check(!KeyboundBuyingPolicy.CategoryMatches("Weapons","Armor"),"unrelated category rejected");
+Check(!KeyboundBuyingPolicy.CategoryMatches("",""),"empty menu rejected");
+var directory=Path.Combine(Path.GetTempPath(),Guid.NewGuid().ToString("N"));
+try{
+    var file=Path.Combine(directory,"purchases.json");var book=new KeyboundPurchaseBook(file);
+    book.Put(intent);var reload=new KeyboundPurchaseBook(file);
+    Check(reload.Find(12,123) is {Confirmed:false},"pending intent survives restart to prevent blind retry");
+    Check(reload.Find(13,123) is null,"another character has independent ownership");
+    reload.Put(intent with {Confirmed=true});
+    Check(new KeyboundPurchaseBook(file).Find(12,123) is {Confirmed:true},"confirmed receipt survives restart");
+    Check(new KeyboundPurchaseBook(file).Entries.Count==1,"receipt transition does not create duplicate entries");
+    File.WriteAllText(file,"broken");var rejected=false;try{_ =new KeyboundPurchaseBook(file);}catch{rejected=true;}
+    Check(rejected,"corrupt history blocks purchases rather than treating them as unowned");
+}finally{if(Directory.Exists(directory))Directory.Delete(directory,true);}
