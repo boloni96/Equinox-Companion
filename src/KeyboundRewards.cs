@@ -43,6 +43,6 @@ public sealed partial class Plugin
         if(!keyboundMgc.HasValue){ImGui.TextDisabled("MGC: waiting for game balance");return;}
         ImGui.TextUnformatted("MGC: "+keyboundMgc.Value.ToString("N0")+(keyboundMgcLimit.HasValue?" / "+keyboundMgcLimit.Value.ToString("N0"):""));
         if(keyboundMgcLimit.HasValue&&keyboundMgc>=keyboundMgcLimit)ImGui.TextWrapped("MGC at capacity. More credits cannot increase this balance.");
-        else if(keyboundLastMgcChange.HasValue)ImGui.TextDisabled("Balance change since round start: +"+keyboundLastMgcChange.Value.ToString("N0")+" MGC");
+        else if(keyboundLastMgcChange.HasValue&&ImGui.IsItemHovered())ImGui.SetTooltip("Balance change since round start: +"+keyboundLastMgcChange.Value.ToString("N0")+" MGC");
     }
 }
