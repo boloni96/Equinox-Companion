@@ -3,6 +3,8 @@ namespace EquinoxCompanion;
 [Serializable]
 public sealed class Configuration : IPluginConfiguration
 {
+    public bool StorageGearSkipDyed { get; set; } = true;
+    public int StorageGearReserve { get; set; } = 2;
     public bool ShowStorageTransfersInChat { get; set; }
     public Dictionary<ulong,List<AssignmentSetup>> RetainerAssignmentSetups { get; set; } = [];
     public Dictionary<ulong,HashSet<uint>> ArmoireExcludedItems { get; set; } = [];

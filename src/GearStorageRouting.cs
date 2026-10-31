@@ -12,7 +12,7 @@ public sealed partial class Plugin
 {
     private const ulong GlamourStorageDestination=ulong.MaxValue-2;
     private bool gearRouting,gearFromRetainers,gearMoveOwned,gearLookupOwned,gearSkipDyed=true;
-    private bool gearContextSent,gearConfirmationSent;
+    private bool gearContextSent,gearConfirmationSent,gearPausePrepared;
     private int gearPhase,gearStored,gearSkipped,gearReserve=2;
     private ulong gearCharacter;
     private uint gearWorld,gearTerritory;
@@ -27,6 +27,7 @@ public sealed partial class Plugin
     private GearStorageDestination gearDestination;
     private string gearStatus="";
     private readonly HashSet<uint> gearSelection=[];
+    private readonly Dictionary<uint,int> gearKeep=[];
     private readonly HashSet<uint> gearKnownDresser=[];
     private SellerAutoRetainerPause? gearPause;
 
@@ -39,26 +40,28 @@ public sealed partial class Plugin
     {
         if(!ImGui.BeginPopup("GearStorageOptions"))return;
         ImGui.BeginDisabled(gearRouting||armoireRunning);
-        ImGui.Checkbox("Skip dyed gear",ref gearSkipDyed);
+        if(ImGui.Checkbox("Skip dyed gear",ref gearSkipDyed)){config.StorageGearSkipDyed=gearSkipDyed;SaveConfiguration();}
         ImGui.TextWrapped("Armoire first when eligible; otherwise glamour dresser. Dyed gear never goes into the armoire. Turning this filter off permits individual dresser storage only; outfit conversion remains protected.");
-        ImGui.SetNextItemWidth(110);ImGui.SliderInt("Leave bag slots free",ref gearReserve,1,10);
+        ImGui.SetNextItemWidth(110);if(ImGui.SliderInt("Leave bag slots free",ref gearReserve,1,10)){config.StorageGearReserve=gearReserve;SaveConfiguration();}
         ImGui.TextWrapped("Uses your selected items and quality/tradability filters. Stores one missing copy of each selected item. Existing storage copies, equipped gear, materia and damaged gear are protected. Saved Keep exclusions in Armoire options apply here too. Retainer deliveries require a bell and dresser in this room; movement between them uses Lifestream.");
         ImGui.EndDisabled();ImGui.EndPopup();
     }
-    private unsafe void StartGearStorage(IEnumerable<uint> selected,bool fromRetainers,RetrievalQuality quality,int tradeFilter=0)
+    private unsafe void StartGearStorage(IEnumerable<uint> selected,bool fromRetainers,RetrievalQuality quality,int tradeFilter=0,bool respectPlan=false)
     {
-        if(gearRouting||armoireRunning||organizeRunning||retrievalRun.Running||chestRunning||retainerGilRunning||sellerRun.Running||TraderRunning||craftingWithdrawalPending)throw new InvalidOperationException("Finish the current storage operation first.");
+        if(gearPause?.RestorePending==true||gearRouting||armoireRunning||organizeRunning||retrievalRun.Running||chestRunning||retainerGilRunning||sellerRun.Running||TraderRunning||craftingWithdrawalPending)throw new InvalidOperationException("Finish the current storage operation first.");
         if(!config.EnableRetriever||!Player.IsLoaded)throw new InvalidOperationException("Enable Organizer and log in first.");
         if(followSession.Armed)throw new InvalidOperationException("Stop following before starting a gear storage route.");
         if(fromRetainers&&Player.CurrentWorld.RowId!=Player.HomeWorld.RowId)throw new InvalidOperationException("Use your retainers on your home world.");
-        LoadArmoireCatalogue();
-        var ids=selected.Distinct().Where(id=>id>0&&DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>().GetRowOrDefault(id)?.EquipSlotCategory.RowId>0&&!ArmoireExclusions().Contains(id)).ToArray();
+        LoadArmoireCatalogue();gearKeep.Clear();
+        var protectedItems=respectPlan?retrievalEntrust?.Protected??[]:Array.Empty<uint>();
+        var ids=selected.Distinct().Where(id=>id>0&&DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>().GetRowOrDefault(id)?.EquipSlotCategory.RowId>0&&!ArmoireExclusions().Contains(id)&&!protectedItems.Contains(id)).ToArray();
+        if(respectPlan&&retrievalEntrust is {} plan)foreach(var id in ids)gearKeep[id]=Math.Max(plan.Keep.GetValueOrDefault(id),plan.CategoryKeep.GetValueOrDefault(OrganizeCategory(id)));
         if(ids.Length==0)throw new InvalidOperationException("Select gear using the existing inventory, retainer or plan selection first.");
         if(GearObject(false)==null||fromRetainers&&GearObject(true)==null)throw new InvalidOperationException("Use an inn room with a glamour dresser and summoning bell loaded nearby.");
         gearCharacter=Player.ContentId;gearWorld=Player.CurrentWorld.RowId;gearTerritory=Client.TerritoryType;
         gearFromRetainers=fromRetainers;gearQuality=quality;gearTradeFilter=tradeFilter;gearStored=gearSkipped=0;gearCopy=null;
         gearSelection.Clear();gearSelection.UnionWith(ids);gearRemaining.Clear();foreach(var id in ids)gearRemaining.Enqueue(id);gearDeliveries.Clear();gearBatch=[];
-        gearPause=new(new SellerAutoRetainerPort());gearRouting=true;gearNext=default;gearMoveOwned=gearLookupOwned=false;GearPhase(0,"Opening dresser / checking destinations");
+        gearPause=new(new SellerAutoRetainerPort());gearPausePrepared=false;gearRouting=true;gearNext=default;gearMoveOwned=gearLookupOwned=false;GearPhase(0,"Opening dresser / checking destinations");
     }
     private void GearPhase(int phase,string status){gearPhase=phase;gearDeadline=DateTimeOffset.UtcNow.AddSeconds(120);gearInteractAt=default;gearStatus=status;}
     private unsafe void StopGearStorage(string reason)
@@ -144,6 +147,12 @@ public sealed partial class Plugin
     private unsafe bool GearSlotAllowed(InventoryItem item,InventoryType container)
     {
         if(!gearSelection.Contains(item.ItemId%1000000)||item.IsSymbolic)return false;
+        if(((uint)container>=10000||!gearFromRetainers)&&gearKeep.GetValueOrDefault(item.ItemId%1000000) is >0 and var keep){
+            var manager=InventoryManager.Instance();if(manager==null)return false;var count=0;
+            var types=(uint)container>=10000?Enumerable.Range(10000,7).Select(i=>(InventoryType)i):ArmoireContainers.Where(t=>t!=InventoryType.EquippedItems);
+            foreach(var type in types){var c=manager->GetInventoryContainer(type);if(c==null||!c->IsLoaded||c->Items==null)return false;for(var i=0;i<c->Size;i++){var slot=c->Items[i];if(!slot.IsSymbolic&&slot.ItemId%1000000==item.ItemId%1000000&&RetainerRetrieval.AllowsQuality((slot.Flags&InventoryItem.ItemFlags.HighQuality)!=0,gearQuality))count+=slot.Quantity;}}
+            if(count<=keep)return false;
+        }
         var materia=false;for(var j=0;j<5;j++)materia|=item.Materia[j]!=0;
         if(!GearStoragePolicy.SafeCopy(item.Quantity,container==InventoryType.EquippedItems,item.Stains[0],item.Stains[1],gearSkipDyed,materia,item.Condition))return false;
         if(!RetainerRetrieval.AllowsQuality((item.Flags&InventoryItem.ItemFlags.HighQuality)!=0,gearQuality)||gearTradeFilter!=0&&!RetrievalAllowsTradeFilter(item,gearTradeFilter))return false;
@@ -177,13 +186,26 @@ public sealed partial class Plugin
             if(FollowMovementKeysHeld())throw new InvalidOperationException("Stopped by your movement input.");
             var inventory=InventoryManager.Instance();if(inventory==null)return;
             if(gearPhase!=3)foreach(var operation in inventory->PendingOperations)if(!operation.IsEmpty)return;
-            if(gearPhase==0){var pause=gearPause!.Acquire(now);if(pause.Error.Length>0)throw new InvalidOperationException(pause.Error);if(!pause.Ready||!GearOpen(false,now)||!GearLoadCabinet())return;RefreshGearDresser();GearPhase(1,"Planning selected gear destinations");return;}
+            var pause=gearPausePrepared?gearPause!.Check(now):gearPause!.Acquire(now);gearPausePrepared=true;if(pause.Error.Length>0)throw new InvalidOperationException(pause.Error);if(!pause.Ready)return;
+            if(gearPhase==0){if(!GearOpen(false,now)||!GearLoadCabinet())return;RefreshGearDresser();GearPhase(1,"Planning selected gear destinations");return;}
             if(gearPhase==1){
                 if(gearRemaining.Count==0){StopGearStorage("Finished");return;}
                 var capacity=gearFromRetainers?GearStoragePolicy.BatchCapacity(ArmoireInventory(0).Free,gearReserve):20;
                 if(capacity==0)throw new InvalidOperationException("No staging space beyond your reserved bag slots.");
                 var batch=new List<uint>();
-                while(gearRemaining.Count>0&&batch.Count<capacity){var id=gearRemaining.Dequeue();if(GearDestination(id,false)==GearStorageDestination.Skip||gearFromRetainers&&ArmoireInventory(id).Held>0){gearSkipped++;continue;}batch.Add(id);}
+                var dresserSlots=MirageManager.Instance()->PrismBoxItemIds.ToArray().Count(id=>id==0);
+                var prisms=InventoryManager.Instance()->GetInventoryItemCount(21800);
+                while(gearRemaining.Count>0&&batch.Count<capacity){
+                    var id=gearRemaining.Dequeue();var destination=GearDestination(id,false);
+                    if(destination==GearStorageDestination.Skip||gearFromRetainers&&ArmoireInventory(id).Held>0){gearSkipped++;continue;}
+                    // Reserve destination resources before withdrawing a batch.
+                    if(destination==GearStorageDestination.Dresser||!gearSkipDyed){
+                        var newSlot=GearNeedsDresserSlot(id);
+                        if(prisms<1||newSlot&&dresserSlots<1){gearSkipped++;continue;}
+                        prisms--;if(newSlot) dresserSlots--;
+                    }
+                    batch.Add(id);
+                }
                 if(batch.Count==0)return;
                 gearBatch=batch.ToArray();
                 if(gearFromRetainers)GearPhase(2,"Going to retainer bell for this batch");
@@ -231,6 +253,13 @@ public sealed partial class Plugin
                 gearKnownDresser.Add(gearItem);gearStored++;gearCopy=null;GearPhase(4,$"{gearStored} stored · delivering batch");
             }
         }catch(Exception e){StopGearStorage("Stopped: "+e.Message);Log.Warning(e,"Gear storage route stopped");}
+    }
+    private unsafe bool GearNeedsDresserSlot(uint item)
+    {
+        var m=MirageManager.Instance();if(m==null||!m->PrismBoxLoaded)return true;
+        var sets=armoireSets!.Where(kv=>kv.Value.Contains(item)).Select(kv=>kv.Key).ToHashSet();
+        foreach(var id in m->PrismBoxItemIds)if(sets.Contains(id%1000000))return false;
+        return true;
     }
     private unsafe bool TryStoreGearOutfit(InventoryItem item,ChestStack copy)
     {
