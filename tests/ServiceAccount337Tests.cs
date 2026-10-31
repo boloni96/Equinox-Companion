@@ -33,6 +33,10 @@ internal static class ServiceAccount337Tests
   var discovery=new CharacterLoginProbe();Check(discovery.Begin(target,key,now),"Discovery begins from explicit login request");
   discovery.AllowAccountDiscovery(now);Check(discovery.Deadline==now.AddMinutes(3),"Service-account discovery has bounded deadline");
   Check(discovery.CheckState(now.AddMinutes(3),key,target,false)==LoginProbeResult.TimedOut,"Discovery expires");
+  Check(CurrentLoginIdentification.WorldMenuIndex(["Sophia","Bismarck","Ravana","Sephirot","Zurvan"],"Sephirot")==3,"Sephirot uses its displayed menu slot, not the restored Sophia slot");
+  Check(CurrentLoginIdentification.WorldMenuIndex(["Sephirot","Sophia"],"Sephirot")==0,"World menu order can change");
+  Check(CurrentLoginIdentification.WorldMenuIndex(["Sophia"],"Sephirot")==-1,"Missing target world cannot select a fallback slot");
+  Check(CurrentLoginIdentification.WorldMenuIndex(["Sephirot","Sephirot"],"Sephirot")==-1,"Ambiguous world menu cannot dispatch");
   Console.WriteLine("PASS automatic recorded service-account selection");
  }
 }

@@ -77,17 +77,30 @@ public sealed partial class Plugin
     private unsafe bool SelectNextKnownLoginWorld(string targetContent,string targetWorld,DateTimeOffset now)
     {
         if(now<loginWorldNext)return true;
-        var lobby=AgentLobby.Instance();var addon=SellerAddon("_CharaSelectWorldServer");
+        var lobby=AgentLobby.Instance();
+        // This addon is loaded but normally hidden until World is clicked.
+        // A ready character list and populated world data authorize selection.
+        var addon=(AtkUnitBase*)GardenGui.GetAddonByName("_CharaSelectWorldServer").Address;
         if(lobby==null||addon==null||lobby->TemporaryLocked||SellerAddon("_CharaSelectListMenu")==null)return true;
         var available=lobby->LobbyData.LobbyUIClient.CurrentDataCenterWorlds;if(available.LongCount is <=0 or >32)return true;
         if(loginWorldPending!=0){if(lobby->WorldId!=loginWorldPending){if(now-loginWorldSentAt>TimeSpan.FromSeconds(15))throw new InvalidOperationException("World list change timed out; no login was requested.");return true;}loginWorldPending=0;loginWorldSample=lobby->WorldId;loginWorldStableAt=now;return true;}
         if(loginWorldSample!=lobby->WorldId){loginWorldSample=lobby->WorldId;loginWorldStableAt=now;return true;}
         if(now-loginWorldStableAt<TimeSpan.FromSeconds(2))return true;
+        var module=FFXIVClientStructs.FFXIV.Client.UI.RaptureAtkModule.Instance();
+        if(module==null||module->AtkArrayDataHolder.StringArrayCount<=1||module->AtkArrayDataHolder.StringArrays==null)return true;
+        var menuStrings=module->AtkArrayDataHolder.StringArrays[1];
+        if(menuStrings==null||menuStrings->StringArray==null||menuStrings->Size<=0)return true;
+        var menuNames=new List<string>();
+        for(var i=0;i<Math.Min(menuStrings->Size,16);i++){
+            var ptr=menuStrings->StringArray[i].Value;if(ptr==null)break;
+            var name=TravelMenuText(ptr);if(name.Length==0)break;menuNames.Add(name);
+        }
+        if(menuNames.Count==0)return true;
         var preferred=(ushort)0;
-        foreach(var c in lobby->LobbyData.LobbyUIClient.CurrentDataCenterCharacters)if(c.ContentId.ToString()==targetContent&&c.DeletedFlag==0)preferred=c.CurrentWorldId;
+        foreach(var c in lobby->LobbyData.LobbyUIClient.CurrentDataCenterCharacters)if(c.ContentId.ToString()==targetContent&&c.DeletedFlag==0&&(c.LoginFlags&CharaSelectCharacterEntryLoginFlags.Locked)==0)preferred=c.CurrentWorldId;
         var known=DeliveryCharacters().GroupBy(x=>x.Character.World).ToDictionary(g=>g.Key,g=>g.Select(x=>x.Person.Id+"/"+x.Character.AccountId).Distinct().Count());
         var worlds=new List<(ushort Id,int Index,string Name,int Priority)>();
-        foreach(var w in available){var name=w.NameString;worlds.Add((w.Id,w.Index,name,w.Id==preferred?1000:name==targetWorld?500:known.GetValueOrDefault(name)*10));}
+        foreach(var w in available){var name=w.NameString;var menuIndex=CurrentLoginIdentification.WorldMenuIndex(menuNames,name);if(menuIndex>=0)worlds.Add((w.Id,menuIndex,name,w.Id==preferred?1000:name==targetWorld?500:known.GetValueOrDefault(name)*10));}
         loginWorldChecked.Add(lobby->WorldId);
         var next=worlds.Where(w=>!loginWorldChecked.Contains(w.Id)).OrderByDescending(w=>w.Priority).ThenBy(w=>w.Index).FirstOrDefault();
         if(next.Id==0)return false;

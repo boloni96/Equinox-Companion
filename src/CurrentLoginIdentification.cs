@@ -15,6 +15,15 @@ internal sealed class CurrentLoginIdentification
         key.Length == 64 && key.All(char.IsAsciiHexDigit)
             && indices.TryGetValue(key, out var index) && index is >= 0 and <= 15 ? index : -1;
 
+    public static int WorldMenuIndex(IReadOnlyList<string> names,string world)
+    {
+        var match=-1;
+        for(var i=0;i<names.Count;i++)if(string.Equals(names[i],world,StringComparison.Ordinal)){
+            if(match>=0)return -1;match=i;
+        }
+        return match;
+    }
+
     public void Selected(int index)
     {
         if (index is < 0 or > 15 || ServiceAccountSelected)

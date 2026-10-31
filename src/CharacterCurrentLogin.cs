@@ -142,6 +142,12 @@ public sealed partial class Plugin
         }
         if(ready&&ids.Length==0){if(!SelectNextKnownLoginWorld(target.ContentId,target.World,now))StopTitleLoginCheck("No known characters were found on this selected account and data center.");return;}
         if (!probe.Observe(CurrentLoginServiceAccount(), ids.Select(id => id.ToString(CultureInfo.InvariantCulture)), ready, now)) return;
+        // Locate the exact requested character before resolving account labels
+        // from whichever world the title screen happened to restore.
+        if(!TryReadReadyLoginList(out var requestedEntries)||requestedEntries.Count(e=>!e.Locked&&CharacterLoginProbe.ExactCharacter(target,e))!=1){
+            if(!SelectNextKnownLoginWorld(target.ContentId,target.World,now))StopTitleLoginCheck("The requested character was not found on this account and data center.");
+            return;
+        }
         foreach(var id in ids)RememberCharacterServiceSlot(id.ToString(CultureInfo.InvariantCulture),CurrentLoginServiceAccount());
         ObserveLoginAccountList(ids);
         characterLoginAccount.Resolve(config.SharedRoster!, config.PairingKey, CurrentLoginServiceAccount(), ids);
