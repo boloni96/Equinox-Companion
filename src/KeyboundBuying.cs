@@ -152,7 +152,7 @@ public sealed partial class Plugin
             if(!KeyboundIsTrader(trader)||self==null||Vector3.Distance(self.Position,trader!.Position)>trader.HitboxRadius+4||Targets.Target?.GameObjectId!=keyboundBuyerObject)throw new InvalidOperationException("MGC trader changed or is out of reach.");
             if(keyboundBuySelected){ConfirmKeyboundBuy();return;}
             if(KeyboundPurchaseDialogVisible())return;
-            if(keyboundBuyRemaining.Count==0){StopKeyboundBuying($"Done · {keyboundBought} rewards purchased. Nothing bought twice.");return;}
+            if(keyboundBuyRemaining.Count==0){StopKeyboundBuying($"Done · {keyboundBought} rewards purchased.");return;}
             var shop=PurchaseShop();
             if(shop.Length>0){
                 var rows=new List<(KeyboundOffer Offer,uint Index)>();
@@ -194,7 +194,11 @@ public sealed partial class Plugin
     private unsafe void ConfirmKeyboundBuy()
     {
         var item=keyboundBuyItem!;var intent=keyboundBuyIntent!;
-        if(KeyboundWallet()!=intent.Balance||ArmoireInventory(item.Item).Held!=intent.Held)throw new InvalidOperationException("Inventory changed during purchase; waiting for manual verification.");
+        if(KeyboundWallet()!=intent.Balance||ArmoireInventory(item.Item).Held!=intent.Held){
+            // Item and wallet notifications can land on different frames. Never
+            // click again after either changes; wait for the paired receipt.
+            keyboundBuyConfirmed=true;return;
+        }
         var matches=0;for(var i=0;i<122;i++)if(KeyboundReadOffer(keyboundBuyShop,i,out var index)?.Item==item.Item&&index==keyboundBuyIndex)matches++;
         if(matches!=1)throw new InvalidOperationException("Shop selection changed; nothing confirmed.");
         var agent=AgentShop.Instance();if(agent==null||agent->SelectedItemIndex!=keyboundBuyIndex)throw new InvalidOperationException("Selected reward changed.");

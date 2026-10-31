@@ -26,7 +26,7 @@ public static class KeyboundShoppingPolicy
         new("emote","Ballroom Etiquette - Intrepid Inputs",260),
         new("coffer","Keybound Coffer",910)
     ];
-    private static string Normalize(string name)=>string.Join(" ",name.Trim().Replace('’','\'').Replace('–','-').Replace('—','-').ToLowerInvariant().Split(' ',StringSplitOptions.RemoveEmptyEntries));
+    public static string Normalize(string name)=>string.Join(" ",name.Trim().Replace('’','\'').Replace('–','-').Replace('—','-').ToLowerInvariant().Split(' ',StringSplitOptions.RemoveEmptyEntries));
     public static string? PrizeKey(string name)=>Prizes.FirstOrDefault(p=>Normalize(p.Name)==Normalize(name))?.Key;
     public static Dictionary<string,int> WishlistPlan(IEnumerable<(string Name,bool Wanted,bool Obtained)> wishes,out int unmatched)
     {
@@ -73,3 +73,4 @@ public sealed class KeyboundRoundEarnings
         return completed;
     }
 }
+
