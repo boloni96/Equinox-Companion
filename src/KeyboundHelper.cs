@@ -134,7 +134,7 @@ public sealed partial class Plugin
                 if(actual.Length==0){keyboundSent=keyboundExpected="";keyboundPendingSubmission="";}
                 else {keyboundStatus="Paused: unexpected text; clear the field to resume";return;}
             }
-            if(keyboundWord.Length>0&&live.Text==null){
+            if(keyboundWord.Length>0&&(keyboundClearing||live.Text==null)){
                 if(actual.Length>0){if(!ownsFocus){if(KeyboundEnter(window)){keyboundNext=now.AddMilliseconds(500);keyboundStatus="Reopening input to clear vanished phrase";}return;}if(!KeyboundSend(window,'\b')){StopKeybound("Stopped: input unavailable");return;}KeyboundExpect(actual[..^1],now);keyboundStatus="Clearing vanished phrase";return;}
                 keyboundWord="";keyboundTarget=0;keyboundClearing=false;keyboundSubmitAt=default;
             }

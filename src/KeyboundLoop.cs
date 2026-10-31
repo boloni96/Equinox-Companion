@@ -16,6 +16,8 @@ public sealed partial class Plugin
         keyboundKeepAliveNext=now.AddSeconds(5);
         var timers=InputTimerModule.Instance();if(timers==null)return;
         timers->AfkTimer=timers->InputTimer=timers->ContentInputTimer=0;
+        foreach(ref var timer in timers->ControllerInputTimers)timer.Timer=0;
+        foreach(ref var timer in timers->MouseInputTimers)timer.Timer=0;
     }
     private static unsafe AtkUnitBase* KeyboundAddon(string name){
         var stage=AtkStage.Instance();if(stage==null)return null;
@@ -47,7 +49,7 @@ public sealed partial class Plugin
         keyboundTarget=0;keyboundSubmitAt=default;keyboundRecent.Clear();
         var confirm=KeyboundAddon("ContentsFinderConfirm");
         if(confirm!=null){
-            if(keyboundQueueOwned||KeyboundUi.Texts("ContentsFinderConfirm").Any(t=>t.Text.Contains("Keybound Brawler",StringComparison.OrdinalIgnoreCase))){
+            if(KeyboundUi.Texts("ContentsFinderConfirm").Any(t=>t.Text.Contains("Keybound Brawler",StringComparison.OrdinalIgnoreCase))){
                 KeyboundCallback(confirm,8);keyboundStatus="Accepting Keybound Brawler match";keyboundLoopNext=now.AddSeconds(3);
             }else keyboundStatus="Waiting: another duty confirmation is open";
             return true;
