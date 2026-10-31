@@ -12,6 +12,8 @@ public sealed partial class Plugin
     private bool keyboundEnabled,keyboundSeen,keyboundAwaiting;
     private string keyboundStatus="Off",keyboundWord="",keyboundSent="",keyboundExpected="";
     private nint keyboundTarget;
+    private string keyboundLastSubmitted="",keyboundPendingSubmission="";
+    private bool keyboundRecallTried,keyboundRecalling;
     private DateTimeOffset keyboundNext,keyboundDeadline,keyboundHold,keyboundMissing;
     private int keyboundOpenAttempts;
     private string? keyboundDangerName;
@@ -20,13 +22,15 @@ public sealed partial class Plugin
     [DllImport("user32.dll",SetLastError=true)] private static extern bool PostMessageW(nint window,uint message,nint value,nint detail);
     private static bool KeyboundSend(nint window,char character)=>PostMessageW(window,0x102,(nint)character,1);
     private static bool KeyboundEnter(nint window)=>PostMessageW(window,0x100,13,0x001c0001)&&PostMessageW(window,0x101,13,unchecked((nint)(int)0xc01c0001));
+    private static bool KeyboundUp(nint window)=>PostMessageW(window,0x100,0x26,0x01480001)&&PostMessageW(window,0x101,0x26,unchecked((nint)(int)0xc1480001));
     private void StopKeybound(string reason="Stopped")
     {
+        keyboundLastSubmitted=keyboundPendingSubmission="";keyboundRecallTried=keyboundRecalling=false;
         keyboundEnabled=false;keyboundSeen=false;keyboundAwaiting=false;keyboundWord=keyboundSent=keyboundExpected="";keyboundTarget=0;keyboundRecent.Clear();keyboundOpenAttempts=0;keyboundStatus=reason;
     }
     private void DrawKeyboundHelper()
     {
-        ImGui.TextWrapped("Optional Keybound Brawler typing helper. Press Start, then enter the minigame. Types live phrases and submits them with Enter. Stop is always available here. It turns off when you leave the minigame or log out.");
+        ImGui.TextWrapped("Optional Keybound Brawler typing helper. Press Start, then enter the minigame. Types live phrases and submits them with Enter. Consecutive repeats use Up-arrow recall after checking the recalled text. Stop is always available here. It turns off when you leave the minigame or log out.");
         ImGui.TextWrapped("Keep this game window in the foreground. Other text fields and no-typing casts pause the helper. Existing text is kept; clear it yourself before starting. No automatic queueing, purchases or Adventure activation.");
         if(ImGui.Button(keyboundEnabled?"Stop typing":"Start typing")){
             if(keyboundEnabled)StopKeybound();else{StopKeybound();keyboundEnabled=true;keyboundNext=keyboundHold=keyboundMissing=default;keyboundStatus="Waiting for Keybound Brawler";}
@@ -68,8 +72,12 @@ public sealed partial class Plugin
             if(now<keyboundHold){keyboundDeadline=now.AddSeconds(2);keyboundStatus="Paused: no-typing cast";return;}
             var actual=KeyboundUi.Texts("KTGInput").FirstOrDefault(t=>t.NodeId==16).Text??"";
             if(keyboundAwaiting){
-                if(actual==keyboundExpected){keyboundAwaiting=false;keyboundSent=actual;keyboundOpenAttempts=0;}
-                else {if(now>=keyboundDeadline)StopKeybound("Stopped: input did not match; existing text kept");return;}
+                if(actual==keyboundExpected){keyboundAwaiting=false;keyboundRecalling=false;keyboundSent=actual;keyboundOpenAttempts=0;if(keyboundPendingSubmission.Length>0){keyboundLastSubmitted=keyboundPendingSubmission;keyboundPendingSubmission="";}}
+                else {
+                    if(now<keyboundDeadline)return;
+                    if(keyboundRecalling&&actual.Length==0){keyboundAwaiting=keyboundRecalling=false;keyboundSent="";keyboundStatus="Recall unavailable: typing phrase";}
+                    else {StopKeybound("Stopped: input did not match; existing text kept");return;}
+                }
             }
             if(!KeyboundPolicy.OwnsInput(actual,keyboundSent)){if(keyboundSent.Length>0)StopKeybound("Stopped: text was changed; existing text kept");else keyboundStatus="Paused: clear existing text to resume";return;}
             var words=KeyboundUi.AllTexts("KTGEWord").Where(t=>(t.LabelVisible&&t.TextVisible||t.Obscured)&&KeyboundPolicy.IsPhrase(t.Text.Trim())).Select(t=>t with{Text=t.Text.Trim()}).ToArray();
@@ -81,7 +89,7 @@ public sealed partial class Plugin
             if(keyboundWord.Length==0){
                 foreach(var old in keyboundRecent.Where(x=>now-x.Value>TimeSpan.FromSeconds(2)).Select(x=>x.Key).ToArray())keyboundRecent.Remove(old);
                 var next=words.Where(t=>!keyboundRecent.ContainsKey(t.Text)).OrderBy(t=>t.Tint==LabelTint.Green?0:t.Tint==LabelTint.Red?1:t.Tint==LabelTint.Gold?2:3).ThenByDescending(t=>t.Y).FirstOrDefault();
-                if(next.Text==null){keyboundStatus="Waiting for a live phrase";return;}keyboundWord=next.Text;keyboundTarget=next.Key;live=next;
+                if(next.Text==null){keyboundStatus="Waiting for a live phrase";return;}keyboundWord=next.Text;keyboundTarget=next.Key;keyboundRecallTried=false;live=next;
             }
             if(!ownsFocus){
                 if(++keyboundOpenAttempts>3){StopKeybound("Stopped: minigame input could not be focused");return;}
@@ -89,7 +97,12 @@ public sealed partial class Plugin
             }
             if(KeyboundPolicy.CanSubmit(live.Text??"",actual,keyboundWord)){
                 if(!KeyboundEnter(window)){StopKeybound("Stopped: submit unavailable");return;}
-                keyboundRecent[keyboundWord]=now;keyboundStatus="Submitted: "+keyboundWord;keyboundWord="";keyboundTarget=0;KeyboundExpect("",now);return;
+                keyboundPendingSubmission=keyboundWord;keyboundRecent[keyboundWord]=now;keyboundStatus="Submitted: "+keyboundWord;keyboundWord="";keyboundTarget=0;KeyboundExpect("",now);return;
+            }
+            if(KeyboundPolicy.ShouldRecall(actual,keyboundWord,keyboundLastSubmitted,keyboundRecallTried)){
+                keyboundRecallTried=true;
+                if(!KeyboundUp(window)){StopKeybound("Stopped: recall unavailable");return;}
+                KeyboundExpect(keyboundWord,now);keyboundRecalling=true;keyboundStatus="Recalling: "+keyboundWord;return;
             }
             if(!keyboundWord.StartsWith(actual,StringComparison.Ordinal)){StopKeybound("Stopped: phrase changed; existing text kept");return;}
             if(actual.Length<keyboundWord.Length){
