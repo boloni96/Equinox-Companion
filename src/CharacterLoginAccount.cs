@@ -75,6 +75,7 @@ public sealed partial class Plugin
         if (native == null || native->ContentId != Player.ContentId) return "";
         var index = CurrentLoginServiceAccount();
         characterLoginAccount.Remember(config.PairingKey, index, native->ContentId);
+        RememberCharacterServiceSlot(native->ContentId.ToString(System.Globalization.CultureInfo.InvariantCulture),index);
         ObserveLoginAccountWitness(native->ContentId);
         if (config.PairingKey.Length != 64 || native->AccountId == 0 || index < 0) return "";
         var identity = $"equinox-account-v1:{native->AccountId}:{index}";
@@ -90,6 +91,25 @@ public sealed partial class Plugin
         }
         ObserveSquareEnixLogin(observedLoginFingerprint);
         return observedLoginFingerprint;
+    }
+
+    private void RememberCharacterServiceSlot(string contentId,int index)
+    {
+        if(LoginPairingScope().Length!=64||!ulong.TryParse(contentId,out var id)||id==0||index is <0 or >15)return;
+        var key=LoginPairingScope()+":"+contentId;
+        if(config.ObservedCharacterServiceAccounts.GetValueOrDefault(key,-1)==index)return;
+        config.ObservedCharacterServiceAccounts[key]=index;SaveConfiguration();
+    }
+
+    private int RecordedCharacterServiceSlot(SharedCharacter target)
+    {
+        var scope=CharacterSwitchScope(target.Id);
+        var key=SquareEnixLoginState.TargetAccountKey(config.SharedRoster,target,scope.PersonId,scope.AccountId);
+        var index=CurrentLoginIdentification.RecordedIndex(key,config.ObservedServiceAccountIndices);
+        if(index>=0)return index;
+        var members=config.SharedRoster?.People.FirstOrDefault(p=>p.Id==scope.PersonId)?.Characters.Where(c=>c.AccountId==scope.AccountId).ToArray()??[];
+        var slots=members.Select(c=>config.ObservedCharacterServiceAccounts.GetValueOrDefault(LoginPairingScope()+":"+c.ContentId,-1)).Where(i=>i is >=0 and <=15).Distinct().Take(2).ToArray();
+        return slots.Length==1?slots[0]:-1;
     }
 
     private static unsafe int CurrentLoginServiceAccount()

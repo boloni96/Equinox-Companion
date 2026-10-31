@@ -23,7 +23,7 @@ public sealed partial class Plugin
         return addon!=null&&addon->IsVisible&&addon->IsReady?addon:null;
     }
     private static unsafe void KeyboundCallback(AtkUnitBase* addon,int command){
-        var value=new AtkValue{Type=FFXIVClientStructs.FFXIV.Component.GUI.ValueType.Int,Int=command};
+        var value=new AtkValue{Type=AtkValueType.Int,Int=command};
         addon->FireCallback(1,&value,true);
     }
     private unsafe bool UpdateKeyboundLoop(DateTimeOffset now)
@@ -38,7 +38,7 @@ public sealed partial class Plugin
         if(process.MainWindowHandle==0||GetForegroundWindow()!=process.MainWindowHandle){keyboundStatus="Paused: bring this game window to the foreground";return true;}
         if(result!=null&&Client.TerritoryType==1359){
             var button=result->GetComponentButtonById(48);
-            if(button!=null&&button->IsEnabled){KeyboundCallback(result,0);keyboundLoopNext=now.AddSeconds(3);keyboundStatus="Returning to Keybound Square";}
+            if(button!=null&&button->IsEnabled){if(!ClickLoginMenuButton("KTGResult",48))return true;keyboundLoopNext=now.AddSeconds(3);keyboundStatus="Returning to Keybound Square";}
             return true;
         }
         // Discard the old round's buffers before the next registration.
@@ -58,7 +58,7 @@ public sealed partial class Plugin
         var registration=KeyboundAddon("KTGEnterDialogue");
         if(registration!=null){
             var button=registration->GetComponentButtonById(9);
-            if(button!=null&&button->IsEnabled){KeyboundCallback(registration,0);keyboundQueueOwned=true;keyboundRegistrarOwned=false;keyboundLoopNext=now.AddSeconds(5);keyboundStatus="Registering for Keybound Brawler";}
+            if(button!=null&&button->IsEnabled){if(!ClickLoginMenuButton("KTGEnterDialogue",9))return true;keyboundQueueOwned=true;keyboundRegistrarOwned=false;keyboundLoopNext=now.AddSeconds(5);keyboundStatus="Registering for Keybound Brawler";}
             return true;
         }
         var talk=KeyboundAddon("Talk");

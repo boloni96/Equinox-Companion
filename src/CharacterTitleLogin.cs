@@ -41,7 +41,7 @@ public sealed partial class Plugin
             { characterTravelStatus = "Wait for the title screen and the current trip to finish."; return; }
             if (!titleLoginProbe.Begin(target, config.PairingKey, DateTimeOffset.UtcNow))
             { characterTravelStatus = "A paired account and complete in-game character name and home world are needed."; return; }
-            currentLoginIdentification = new();identificationDcSent=false;loginWorldChecked.Clear();loginWorldNext=default;loginWorldPending=loginWorldSample=0;
+            ResetServiceAccountDiscovery();currentLoginIdentification = new();identificationDcSent=false;loginWorldChecked.Clear();loginWorldNext=default;loginWorldPending=loginWorldSample=0;
             titleLoginOwnsLifestream = false;
             if(!ClickLoginMenuButton("_TitleMenu",5)){StopTitleLoginCheck("Open Data Center in game, choose this client's service account, then retry.");return;}
             characterSwitchFrom = 0; characterSwitchTarget = character;

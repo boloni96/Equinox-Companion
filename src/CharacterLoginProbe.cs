@@ -45,6 +45,10 @@ internal sealed class CharacterLoginProbe
         return now >= Deadline ? LoginProbeResult.TimedOut : LoginProbeResult.Waiting;
     }
 
+    public static bool DiscoveryContains(LoginProbeTarget target,IEnumerable<ulong> ids,IReadOnlyList<LoginProbeEntry> entries) =>
+        (!string.IsNullOrEmpty(target.ContentId)&&ids.Any(id=>id.ToString(System.Globalization.CultureInfo.InvariantCulture)==target.ContentId))
+        ||entries.Any(e=>!e.Locked&&ExactCharacter(target,e));
+
     public static bool ExactCharacter(LoginProbeTarget target, LoginProbeEntry entry)
     {
         if (!string.Equals(target.Name, entry.Name, StringComparison.OrdinalIgnoreCase)
@@ -53,6 +57,8 @@ internal sealed class CharacterLoginProbe
             ? ulong.TryParse(entry.ContentId, out var id) && id != 0
             : target.ContentId == entry.ContentId;
     }
+
+    public void AllowAccountDiscovery(DateTimeOffset now){if(Active)Deadline=now.AddMinutes(3);}
 
     public void Cancel() { Target = null; pairing = ""; Deadline = default; matchedAt = default; }
 }

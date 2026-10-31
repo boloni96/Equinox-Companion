@@ -6,6 +6,9 @@ namespace EquinoxCompanion;
 
 public sealed partial class Plugin
 {
+    private readonly Queue<int> loginUncheckedAccounts=[];
+    private bool loginDiscoverAccounts,loginReturnForAccount,loginAccountReturnSent;
+    private void ResetServiceAccountDiscovery(){loginUncheckedAccounts.Clear();loginDiscoverAccounts=loginReturnForAccount=loginAccountReturnSent=false;}
     private void StartCurrentLoginIdentification(SharedCharacter character)
     {
         var now = DateTimeOffset.UtcNow;
@@ -20,7 +23,7 @@ public sealed partial class Plugin
         if (target is null || !titleLoginProbe.Begin(target, config.PairingKey, now))
         { characterTravelStatus = "A paired account and complete character identity are needed."; return; }
         titleLoginOwnsLifestream = false;
-        currentLoginIdentification = new();identificationDcSent=false;loginWorldChecked.Clear();loginWorldNext=default;loginWorldPending=loginWorldSample=0;
+        ResetServiceAccountDiscovery();currentLoginIdentification = new();identificationDcSent=false;loginWorldChecked.Clear();loginWorldNext=default;loginWorldPending=loginWorldSample=0;
         queuedLoginConfirmation = "";
         characterSwitchFrom = 0; characterSwitchTarget = character;
         characterSwitchUntil = titleLoginProbe.Deadline; nextTitleLoginCheck = default;
@@ -28,7 +31,7 @@ public sealed partial class Plugin
         try
         {
             // Open Data Center explicitly, then select the target's recorded account slot.
-            if (VisibleFollowAddon("TitleDCWorldMap") || VisibleFollowAddon("TitleConnect") || !ClickLoginMenuButton("_TitleMenu", 5))
+            if (!VisibleFollowAddon("SelectString") && (VisibleFollowAddon("TitleDCWorldMap") || VisibleFollowAddon("TitleConnect") || !ClickLoginMenuButton("_TitleMenu", 5)))
             { StopTitleLoginCheck("Wait for the main title menu, then choose Log in as this character again."); return; }
             characterTravelStatus = "Identifying this game's login…";
         }
@@ -100,22 +103,29 @@ public sealed partial class Plugin
                 probe.ReturnRequested = ClickLoginMenuButton("_CharaSelectReturn", 4);
             return;
         }
+        if(loginReturnForAccount){
+            if(VisibleFollowAddon("_TitleMenu")){
+                if(ClickLoginMenuButton("_TitleMenu",5)){loginReturnForAccount=false;identificationDcSent=false;}
+            }else if(!loginAccountReturnSent&&!VisibleFollowAddon("SelectYesno")&&!VisibleFollowAddon("SelectOk"))
+                loginAccountReturnSent=ClickLoginMenuButton("_CharaSelectReturn",4);
+            return;
+        }
         // Handle the service-account popup before the DC map underneath it.
         if (VisibleFollowAddon("SelectString"))
         {
             if (probe.ServiceAccountSelected) return;
-            var scope = CharacterSwitchScope(character.Id);
-            var key = SquareEnixLoginState.TargetAccountKey(config.SharedRoster, character, scope.PersonId, scope.AccountId);
-            var index = CurrentLoginIdentification.RecordedIndex(key, config.ObservedServiceAccountIndices);
-            if (index < 0)
-            {
-                StopTitleLoginCheck("No recorded service-account slot exists for this character. Log into that account once so Companion can learn it.");
-                return;
+            var index = RecordedCharacterServiceSlot(character);
+            if(index<0||loginDiscoverAccounts){
+                if(!loginDiscoverAccounts){
+                    foreach(var slot in AvailableLoginServiceSlots())loginUncheckedAccounts.Enqueue(slot);
+                    loginDiscoverAccounts=true;titleLoginProbe.AllowAccountDiscovery(now);characterSwitchUntil=titleLoginProbe.Deadline;
+                }
+                if(!loginUncheckedAccounts.TryDequeue(out index)){StopTitleLoginCheck("This character was not found on the available service accounts. No character login was requested.");return;}
             }
             if (SelectVerifiedServiceAccount(index))
             {
                 probe.Selected(index);
-                characterTravelStatus = $"Selected recorded service account {index + 1}; verifying its character list…";
+                characterTravelStatus = $"Checking service account {index + 1} for {target.Name}…";
             }
             return;
         }
@@ -123,8 +133,16 @@ public sealed partial class Plugin
         var ready = TryReadCurrentLoginCharacters(out var ids);
         if (ready && !probe.MatchesSelectedAccount(CurrentLoginServiceAccount()))
         { StopTitleLoginCheck("The game selected a different service account. No character login was requested."); return; }
+        if(ready&&loginDiscoverAccounts&&!CharacterLoginProbe.DiscoveryContains(target,ids,TryReadReadyLoginList(out var discoveryEntries)?discoveryEntries:[])){
+            if(SelectNextKnownLoginWorld(target.ContentId,target.World,now))return;
+            if(loginUncheckedAccounts.Count==0){StopTitleLoginCheck("The requested character was not found on these service accounts. No character login was requested.");return;}
+            currentLoginIdentification=new();loginReturnForAccount=true;loginAccountReturnSent=false;
+            loginWorldChecked.Clear();loginWorldNext=default;loginWorldPending=loginWorldSample=0;
+            characterTravelStatus="Checking the next service account through Data Center…";return;
+        }
         if(ready&&ids.Length==0){if(!SelectNextKnownLoginWorld(target.ContentId,target.World,now))StopTitleLoginCheck("No known characters were found on this selected account and data center.");return;}
         if (!probe.Observe(CurrentLoginServiceAccount(), ids.Select(id => id.ToString(CultureInfo.InvariantCulture)), ready, now)) return;
+        foreach(var id in ids)RememberCharacterServiceSlot(id.ToString(CultureInfo.InvariantCulture),CurrentLoginServiceAccount());
         ObserveLoginAccountList(ids);
         characterLoginAccount.Resolve(config.SharedRoster!, config.PairingKey, CurrentLoginServiceAccount(), ids);
         var source = CurrentCharacterSwitchScope(CharacterLoginMode.Title, true);

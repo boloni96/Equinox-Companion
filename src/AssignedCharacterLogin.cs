@@ -27,7 +27,7 @@ public sealed partial class Plugin
         if(LoginRelationship(target,from,to)==CharacterLoginRelationship.Unverified)return -1;
         if(from.AccountId==to.AccountId)return CurrentLoginServiceAccount();
         var key=SquareEnixLoginState.TargetAccountKey(config.SharedRoster,target,to.PersonId,to.AccountId);
-        return config.ObservedServiceAccountIndices.TryGetValue(key,out var index)&&index is >=0 and <=15?index:-1;
+        return RecordedCharacterServiceSlot(target);
     }
     private bool StartAssignedCharacterSwitch(SharedCharacter target,bool allowLinkedAccounts=false)
     {
@@ -54,6 +54,15 @@ public sealed partial class Plugin
         var row=DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().FirstOrDefault(w=>w.Name.ToString()==world);
         if(row.RowId==0||row.DataCenter.RowId==0)throw new InvalidOperationException("The target data center could not be identified.");
         LoginCallback(map,17,(int)row.DataCenter.RowId);sent=true;return true;
+    }
+    private unsafe int[] AvailableLoginServiceSlots()
+    {
+        var menu=(AddonSelectString*)SellerAddon("SelectString");if(menu==null)return [];
+        var text=menu->GetTextNodeById(2);var expected=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Lobby>().GetRowOrDefault(11)?.Text.ToString();
+        if(text==null||string.IsNullOrWhiteSpace(expected)||TravelMenuText(text->NodeText.StringPtr)!=expected.Trim())return [];
+        var list=menu->PopupMenu.PopupMenu.List;if(list==null||list->ListLength is <=0 or >16||!list->IsItemInteractionEnabled)return [];
+        var slots=new List<int>();for(var i=0;i<list->ListLength;i++)if(!list->GetItemDisabledState(i))slots.Add(i);
+        return slots.ToArray();
     }
     private unsafe bool SelectVerifiedServiceAccount(int index)
     {

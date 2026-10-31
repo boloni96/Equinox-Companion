@@ -55,6 +55,7 @@ public sealed class Configuration : IPluginConfiguration
     public int SubmarineRepairReserve { get; set; } = 10;
     public int SubmarineSpaceReserve { get; set; } = 20;
     public Dictionary<string,int> ObservedServiceAccountIndices { get; set; } = [];
+    public Dictionary<string,int> ObservedCharacterServiceAccounts { get; set; } = [];
     public bool GardenAdventureInspect { get; set; } = true;
     public bool GardenAdventureTend { get; set; } = true;
     public bool GardenAdventurePlant { get; set; }

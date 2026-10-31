@@ -22,6 +22,17 @@ internal static class ServiceAccount337Tests
   Check(!probe.Observe(1,["123"],true,now),"First sample cannot verify");
   Check(probe.Observe(1,["123"],true,now.AddMilliseconds(250)),"Stable ready list verifies");
   Check(!probe.Observe(1,[],true,now.AddMilliseconds(500)),"Empty world is not verification");
+  var target=new LoginProbeTarget("target","sir","main","123","Leonis Verelle","Rafflesia");
+  Check(CharacterLoginProbe.DiscoveryContains(target,[123],[]),"Exact CID discovered on ready data centre list");
+  Check(!CharacterLoginProbe.DiscoveryContains(target,[456],[]),"Other account list cannot match target");
+  Check(!CharacterLoginProbe.DiscoveryContains(target,[],[new("123","Leonis Verelle","Rafflesia",true)]),"Locked character cannot match");
+  Check(!CharacterLoginProbe.DiscoveryContains(target,[],[new("456","Leonis Verelle","Rafflesia",false)]),"Same name cannot replace known CID");
+  var namelessId=target with{ContentId=""};
+  Check(CharacterLoginProbe.DiscoveryContains(namelessId,[],[new("123","Leonis Verelle","Rafflesia",false)]),"Unrecorded CID requires exact name and home world");
+  Check(!CharacterLoginProbe.DiscoveryContains(namelessId,[],[new("123","Leonis Verelle","Sophia",false)]),"Different home world cannot match");
+  var discovery=new CharacterLoginProbe();Check(discovery.Begin(target,key,now),"Discovery begins from explicit login request");
+  discovery.AllowAccountDiscovery(now);Check(discovery.Deadline==now.AddMinutes(3),"Service-account discovery has bounded deadline");
+  Check(discovery.CheckState(now.AddMinutes(3),key,target,false)==LoginProbeResult.TimedOut,"Discovery expires");
   Console.WriteLine("PASS automatic recorded service-account selection");
  }
 }
