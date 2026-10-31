@@ -45,23 +45,32 @@ public sealed partial class Plugin
             if(now>=keyboundUseDeadline)throw new InvalidOperationException("Unlock not confirmed: "+pending.Name+". Use stopped; check inventory and collections.");
             return; // Never send the same use request again while awaiting its result.
         }
-        if(now>=keyboundUseDeadline)throw new InvalidOperationException("Reward use stopped: inventory or character did not become ready.");
+        if(now>=keyboundUseDeadline)throw new InvalidOperationException("Reward use stopped: "+keyboundBuyStatus+". No further item-use request sent.");
         if(KeyboundPurchaseDialogVisible())throw new InvalidOperationException("Close the open confirmation before using rewards.");
         var shop=PurchaseShop();
         if(shop.Length>0){
-            if(keyboundUseShopClosed)return;
+            if(keyboundUseShopClosed){keyboundBuyStatus="Waiting for MGC shop to close";return;}
             if(keyboundBuyerObject==0||Targets.Target?.GameObjectId!=keyboundBuyerObject||!KeyboundIsTrader(Targets.Target))throw new InvalidOperationException("Close the other shop before using rewards.");
             var addon=KeyboundAddon(shop);if(addon==null)return;
             keyboundUseShopClosed=true;helperReplaying=true;
-            try{addon->Close(false);}finally{helperReplaying=false;}
+            keyboundBuyStatus="Closing MGC shop before using rewards";
+            Log.Information("Keybound rewards: closing MGC shop with its close callback");
+            // Notify the shop agent/server as well as closing its window.
+            // Close(false) can leave the NPC event active with no visible shop.
+            try{if(!addon->Close(true))throw new InvalidOperationException("MGC shop did not accept closing; reward use stopped.");}finally{helperReplaying=false;}
             keyboundBuyNext=now.AddSeconds(1);return;
         }
         keyboundUseShopClosed=true;
-        if(VisibleFollowAddon("Talk")||VisibleFollowAddon("SelectString")||Conditions[ConditionFlag.OccupiedInEvent]||Conditions[ConditionFlag.Casting]||Conditions[ConditionFlag.Mounted])return;
+        if(VisibleFollowAddon("Talk")||VisibleFollowAddon("SelectString")||Conditions[ConditionFlag.OccupiedInEvent]||Conditions[ConditionFlag.OccupiedInQuestEvent]){
+            keyboundBuyStatus="Waiting for NPC interaction to finish before using rewards";return;
+        }
+        if(Conditions[ConditionFlag.Casting]||Conditions[ConditionFlag.Mounted]){
+            keyboundBuyStatus="Waiting: finish casting or dismount to use rewards";return;
+        }
         foreach(var id in keyboundUseRemaining.ToArray()){
             var offer=keyboundOffers!.Single(o=>o.Item==id);var held=KeyboundBagCount(id);var unlocked=KeyboundUnlockState(id);
             if(unlocked==1){keyboundUseRemaining.Remove(id);continue;}
-            if(unlocked==3)return;
+            if(unlocked==3){keyboundBuyStatus="Waiting for unlock information: "+offer.Name;return;}
             if(!KeyboundUsePolicy.CanUse(offer.Key,true,unlocked,held)){keyboundUseRemaining.Remove(id);keyboundUseSkipped++;continue;}
             var manager=InventoryManager.Instance();var agent=AgentInventoryContext.Instance();if(manager==null||agent==null)return;
             foreach(var type in KeyboundUseBags){
@@ -72,6 +81,7 @@ public sealed partial class Plugin
                     // Select exactly this known unlock item in a normal bag.
                     // Keep an in-flight request until BOTH consumption and unlock arrive.
                     keyboundUsePending=offer;keyboundUseBefore=held;keyboundUseDeadline=now.AddSeconds(30);keyboundBuyStatus="Using: "+offer.Name;
+                    Log.Information("Keybound rewards: requesting item use {ItemId} from {Inventory} slot {Slot}",id,type,slot);
                     helperReplaying=true;try{agent->UseItem(id,type,(uint)slot);}finally{helperReplaying=false;}
                     return;
                 }
