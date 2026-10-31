@@ -18,3 +18,13 @@ Check(KeyboundPolicy.CanRetryInput("Cu","Cu"),"lost key retries from last observ
 Check(KeyboundPolicy.CanRetryInput("","Cu"),"game cleared buffer restarts typing");
 Check(!KeyboundPolicy.CanRetryInput("Other","Cu"),"unrelated text cannot be adopted for retry");
 Check(!KeyboundPolicy.CanSubmit("Cura","","Cura"),"cleared buffer never submits");
+
+Check(KeyboundPolicy.AbandonMissingTarget(false,"Cur","Cu","Cur"),"vanished target cancels in-flight character acknowledgement");
+Check(KeyboundPolicy.AbandonMissingTarget(false,"Cu","Cu","Cur"),"vanished target cancels lost character wait");
+Check(!KeyboundPolicy.AbandonMissingTarget(true,"Cu","Cu","Cur"),"live target keeps acknowledgement wait");
+Check(!KeyboundPolicy.AbandonMissingTarget(false,"user text","Cu","Cur"),"vanished target cannot erase unrelated text");
+
+Check(KeyboundPolicy.TypingDelay(60,100,0)==60&&KeyboundPolicy.TypingDelay(60,100,1)==100,"configured delay bounds");
+Check(KeyboundPolicy.TypingDelay(0,-10,0.5)==10,"invalid saved delay clamped");
+Check(KeyboundPolicy.TypingDelay(200,100,0.5)==200,"inverted delay bounds normalized");
+Check(KeyboundPolicy.LoopTerritory(1359)&&KeyboundPolicy.LoopTerritory(1360)&&!KeyboundPolicy.LoopTerritory(1),"repeat limited to event territories");

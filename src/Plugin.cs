@@ -233,6 +233,7 @@ public sealed partial class Plugin : IDalamudPlugin
         InitializeBidSearch();
         InitializeAdventures();
         InitializeTesting();
+        InitializeKeybound();
         itemSearchWindow=new ItemSearchWindow(this);windows.AddWindow(itemSearchWindow);
         mainWindow = new CompanionWindow(this); windows.AddWindow(mainWindow);
         welcomeWindow = new WelcomeWindow(this); welcomeWindows.AddWindow(welcomeWindow);
@@ -1056,6 +1057,7 @@ public sealed partial class Plugin : IDalamudPlugin
                 lotteryRefundDiagnostics = lotteryRefundDiagnostic,
                 companyProfileDiagnostics = new { latest = companyProfileDiagnostic, history = companyProfileHistory.ToArray(), status = discoveryStatus },
                 growingAdventure = new { selected=adventureSelected, automaticBoard=gardenTendBoard, currentCharacter=CurrentSharedCharacter()?.Id, eligibleCharacters=gardenAdventureCharacters.ToArray(), status=gardenTendStatus, fresh=adventureFresh, fetched=adventureFetched, boards=adventureBoards.ToArray() },
+                keyboundTyping = new { enabled=keyboundEnabled, available=config.EnableKeyboundBrawler, status=keyboundStatus, word=keyboundWord, sent=keyboundSent, expected=keyboundExpected, awaiting=keyboundAwaiting, clearing=keyboundClearing, recalling=keyboundRecalling },
                 mode = "local-diagnostics", gardeningConfirmed = false, performance = new { maxDrawMs,maxUpdateMs,maxSnapshotMs, configurationError, stages=performanceStages.ToDictionary(x=>x.Key,x=>x.Value), recent=rollingPerformance.Snapshot(PerformanceClock), optionalTools=optionalToolFailures.ToDictionary(x=>x.Key,x=>x.Value) },
                 houseObservations = config.Houses.ToArray(), confirmedTending = config.Tending.ToArray(), confirmedPlanting = config.Planting.ToArray(), observedDetails = config.Discoveries.ToArray(), diagnostics=diagnostics.ToArray()
             };
@@ -1311,6 +1313,7 @@ public sealed partial class Plugin : IDalamudPlugin
         DisposeBidSearch();
         DisposeAdventures();
         DisposeTesting();
+        DisposeKeybound();
         windows.RemoveAllWindows();
         welcomeWindows.RemoveAllWindows();
         fashionWindow.Dispose();

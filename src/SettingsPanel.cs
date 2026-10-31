@@ -134,6 +134,12 @@ public sealed partial class Plugin
         SettingsHelp("Disabled on installation. Red/green coffer icons on the minimap and main map; local to this visit.");
         if(config.EnableCofferMarkers&&ImGui.CollapsingHeader("Coffer appearance & automatic opening")) DrawCofferSettings();
         ImGui.Separator();
+        MessageToggle("Enable Keybound Brawler",config.EnableKeyboundBrawler,v=>{
+            config.EnableKeyboundBrawler=v;if(!v){StopKeybound("Stopped: tool disabled");keyboundWindow.IsOpen=false;}SaveConfiguration();
+        });
+        if(config.EnableKeyboundBrawler&&ImGui.Button("Open Keybound Brawler"))OpenKeybound();
+        SettingsHelp("Optional event tool with its own window. /eqkeybound opens it. Start typing is always explicit; disabling stops it.");
+        ImGui.Separator();
         MessageToggle("Enable Equinox Helper", config.EnableFollowThem, v => {
             config.EnableFollowThem = v;
             if (!v) StopFollowThem("FollowThem disabled.");

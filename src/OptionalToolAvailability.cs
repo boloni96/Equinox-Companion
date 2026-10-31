@@ -9,6 +9,7 @@ public static class OptionalToolAvailability
         "Equinox Organizer" or "Retainer Retriever" => config.EnableRetriever,
         "Gil Trader" => config.EnableGilTrader,
         "QuickLoot" => config.EnableQuickLoot,
+        "Keybound Brawler" => config.EnableKeyboundBrawler,
         "Helper" => config.EnableFollowThem,
         "Camera" => config.EnableCameraTools == true,
         "Coffer markers" => config.EnableCofferMarkers,

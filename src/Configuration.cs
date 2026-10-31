@@ -67,6 +67,10 @@ public sealed class Configuration : IPluginConfiguration
     public bool AutoOpenCoffers { get; set; }
     public int CofferStyle { get; set; }
     public bool CofferMainMap { get; set; } = true;
+    public bool EnableKeyboundBrawler { get; set; }
+    public int KeyboundMinDelayMs { get; set; } = 60;
+    public int KeyboundMaxDelayMs { get; set; } = 100;
+    public int KeyboundSubmitDelayMs { get; set; } = 120;
     public bool EnableFollowThem { get; set; }
     public FollowThemSettings FollowThem { get; set; } = new();
     public QuickLootSettings QuickLoot { get; set; } = new();

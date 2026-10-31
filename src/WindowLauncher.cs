@@ -57,6 +57,7 @@ public sealed partial class Plugin
   }
   Row("Companion","/equinox","characters",()=>{visible=true;mainWindow.IsOpen=true;},mainWindow.IsOpen);
   Row("Testing checklist","/eqtests · /equinox tests","adventure",OpenTesting,testingWindow.IsOpen);
+  Row("Keybound Brawler","/eqkeybound · optional event typing tool","adventure",OpenKeybound,keyboundWindow.IsOpen);
   Row("Adventure","/adventure","adventure",OpenAdventure,adventureWindow.IsOpen);
   Row("Where is it cheapest?","/whereischeap","market-search",()=>OpenMarketSearch(""),marketWindow.IsOpen);
   Row("Equinox Market","/eqmarket · paired listings, history and earnings","market",OpenEquinoxMarket,equinoxMarketWindow.IsOpen);

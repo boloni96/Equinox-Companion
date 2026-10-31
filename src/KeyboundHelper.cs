@@ -10,10 +10,12 @@ namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
     private bool keyboundEnabled,keyboundSeen,keyboundAwaiting;
+    private bool keyboundAutoRepeat;
+    private DateTimeOffset keyboundSubmitAt;
     private string keyboundStatus="Off",keyboundWord="",keyboundSent="",keyboundExpected="";
     private nint keyboundTarget;
     private string keyboundLastSubmitted="",keyboundPendingSubmission="";
-    private bool keyboundRecallTried,keyboundRecalling;
+    private bool keyboundRecallTried,keyboundRecalling,keyboundClearing;
     private DateTimeOffset keyboundNext,keyboundDeadline,keyboundHold,keyboundMissing;
     private int keyboundOpenAttempts;
     private string? keyboundDangerName;
@@ -25,18 +27,29 @@ public sealed partial class Plugin
     private static bool KeyboundUp(nint window)=>PostMessageW(window,0x100,0x26,0x01480001)&&PostMessageW(window,0x101,0x26,unchecked((nint)(int)0xc1480001));
     private void StopKeybound(string reason="Stopped")
     {
-        keyboundLastSubmitted=keyboundPendingSubmission="";keyboundRecallTried=keyboundRecalling=false;
+        keyboundLastSubmitted=keyboundPendingSubmission="";keyboundRecallTried=keyboundRecalling=keyboundClearing=false;
+        keyboundQueueOwned=false;keyboundRegistrarOwned=false;keyboundSubmitAt=default;
         keyboundEnabled=false;keyboundSeen=false;keyboundAwaiting=false;keyboundWord=keyboundSent=keyboundExpected="";keyboundTarget=0;keyboundRecent.Clear();keyboundOpenAttempts=0;keyboundStatus=reason;
     }
     private void DrawKeyboundHelper()
     {
-        ImGui.TextWrapped("Optional Keybound Brawler typing helper. Press Start, then enter the minigame. Types live phrases and submits them with Enter. Consecutive repeats use Up-arrow recall after checking the recalled text. Stop is always available here. It turns off when you leave the minigame or log out.");
-        ImGui.TextWrapped("Keep this game window in the foreground. Other text fields and no-typing casts pause the helper. Existing text is kept; clear it yourself before starting. No automatic queueing, purchases or Adventure activation.");
-        if(ImGui.Button(keyboundEnabled?"Stop typing":"Start typing")){
+        ImGui.TextUnformatted(keyboundWord.Length>0?keyboundWord:"Keybound Brawler");
+        if(ImGui.Button(keyboundEnabled?"Stop":"Start")){
             if(keyboundEnabled)StopKeybound();else{StopKeybound();keyboundEnabled=true;keyboundNext=keyboundHold=keyboundMissing=default;keyboundStatus="Waiting for Keybound Brawler";}
         }
-        ImGui.TextWrapped(keyboundStatus);
-        ImGui.TextDisabled("Initial release: live in-game validation pending.");
+        DrawHelperStatusText(keyboundStatus,stopped:!keyboundEnabled);
+        ImGui.Checkbox("Auto-queue & repeat",ref keyboundAutoRepeat);
+        ImGui.Checkbox("Anti-AFK while running",ref keyboundAntiAfk);
+        var min=Math.Clamp(config.KeyboundMinDelayMs,10,1000);
+        var max=Math.Clamp(config.KeyboundMaxDelayMs,min,1000);
+        var submit=Math.Clamp(config.KeyboundSubmitDelayMs,0,2000);
+        if(ImGui.SliderInt("Min keystroke delay",ref min,10,1000,"%d ms")){config.KeyboundMinDelayMs=min;config.KeyboundMaxDelayMs=Math.Max(min,max);SaveConfiguration();}
+        if(ImGui.SliderInt("Max keystroke delay",ref max,min,1000,"%d ms")){config.KeyboundMaxDelayMs=max;SaveConfiguration();}
+        if(ImGui.SliderInt("Submit delay",ref submit,0,2000,"%d ms")){config.KeyboundSubmitDelayMs=submit;SaveConfiguration();}
+        if(ImGui.CollapsingHeader("How it works")){
+            ImGui.TextWrapped("Optional typing assistance for Keybound Brawler. Keeps spaces and punctuation, uses Up for consecutive repeats, and clears its partial text when a target disappears. Pauses through stuns and no-typing casts.");
+            ImGui.TextWrapped("Keep this game window in the foreground. Other text fields pause assistance. Auto-queue & repeat registers at the nearby Keybound registrar, accepts the match, and returns after results. Start near the registrar in Keybound Square. Stop or disabling the tool ends automation.");
+        }
     }
     private static unsafe bool KeyboundContains(AtkUldManager* uld,AtkResNode* target,int depth=0)
     {
@@ -69,10 +82,13 @@ public sealed partial class Plugin
     private unsafe void UpdateKeybound(IFramework framework)
     {
         if(!keyboundEnabled)return;
-        var now=DateTimeOffset.UtcNow;if(now<keyboundNext)return;keyboundNext=now.AddMilliseconds(80);
+        if(!config.EnableKeyboundBrawler){StopKeybound("Stopped: tool disabled");return;}
+        var now=DateTimeOffset.UtcNow;if(now<keyboundNext)return;keyboundNext=now.AddMilliseconds(10);
         try{
             if(!Client.IsLoggedIn){StopKeybound("Stopped: logged out");return;}
+            KeepKeyboundActive(now);
             var stage=AtkStage.Instance();if(stage==null)return;
+            if(keyboundAutoRepeat&&UpdateKeyboundLoop(now))return;
             var input=stage->RaptureAtkUnitManager->GetAddonByName("KTGInput");
             if(input==null||!input->IsVisible){
                 if(Client.TerritoryType==1359){keyboundDeadline=now.AddSeconds(2);keyboundStatus="Waiting: minigame transition";keyboundNext=now.AddMilliseconds(500);return;}
@@ -96,6 +112,11 @@ public sealed partial class Plugin
             if(KeyboundUi.Texts("KTGEnemyCastBar").Any(t=>t.NodeId==4&&((dangerName.Length>0&&t.Text.Contains(dangerName,StringComparison.OrdinalIgnoreCase))||t.Text.Contains("Sensory Jammer",StringComparison.OrdinalIgnoreCase))))keyboundHold=now.AddMilliseconds(3500);
             if(now<keyboundHold){keyboundDeadline=now.AddSeconds(2);keyboundStatus="Paused: no-typing cast";return;}
             var actual=editor.Text;
+            var words=KeyboundUi.AllTexts("KTGEWord").Where(t=>(t.LabelVisible&&t.TextVisible||t.Obscured)&&KeyboundPolicy.IsPhrase(t.Text.Trim())).Select(t=>t with{Text=t.Text.Trim()}).ToArray();
+            var live=words.FirstOrDefault(t=>t.Key==keyboundTarget&&t.Text==keyboundWord);
+            if(!keyboundClearing&&keyboundWord.Length>0&&keyboundPendingSubmission.Length==0&&KeyboundPolicy.AbandonMissingTarget(live.Text!=null,actual,keyboundSent,keyboundExpected)){
+                keyboundAwaiting=keyboundRecalling=false;keyboundSent=actual;keyboundClearing=true;
+            }
             if(keyboundAwaiting){
                 if(actual==keyboundExpected){keyboundAwaiting=false;keyboundRecalling=false;keyboundSent=actual;keyboundOpenAttempts=0;if(keyboundPendingSubmission.Length>0){keyboundLastSubmitted=keyboundPendingSubmission;keyboundPendingSubmission="";}}
                 else {
@@ -113,22 +134,22 @@ public sealed partial class Plugin
                 if(actual.Length==0){keyboundSent=keyboundExpected="";keyboundPendingSubmission="";}
                 else {keyboundStatus="Paused: unexpected text; clear the field to resume";return;}
             }
-            var words=KeyboundUi.AllTexts("KTGEWord").Where(t=>(t.LabelVisible&&t.TextVisible||t.Obscured)&&KeyboundPolicy.IsPhrase(t.Text.Trim())).Select(t=>t with{Text=t.Text.Trim()}).ToArray();
-            var live=words.FirstOrDefault(t=>t.Key==keyboundTarget&&t.Text==keyboundWord);
             if(keyboundWord.Length>0&&live.Text==null){
-                if(actual.Length>0){if(!ownsFocus)return;if(!KeyboundSend(window,'\b')){StopKeybound("Stopped: input unavailable");return;}KeyboundExpect(actual[..^1],now);return;}
-                keyboundWord="";keyboundTarget=0;
+                if(actual.Length>0){if(!ownsFocus){if(KeyboundEnter(window)){keyboundNext=now.AddMilliseconds(500);keyboundStatus="Reopening input to clear vanished phrase";}return;}if(!KeyboundSend(window,'\b')){StopKeybound("Stopped: input unavailable");return;}KeyboundExpect(actual[..^1],now);keyboundStatus="Clearing vanished phrase";return;}
+                keyboundWord="";keyboundTarget=0;keyboundClearing=false;keyboundSubmitAt=default;
             }
             if(keyboundWord.Length==0){
                 foreach(var old in keyboundRecent.Where(x=>now-x.Value>TimeSpan.FromSeconds(2)).Select(x=>x.Key).ToArray())keyboundRecent.Remove(old);
                 var next=words.Where(t=>!keyboundRecent.ContainsKey(t.Text)).OrderBy(t=>t.Tint==LabelTint.Green?0:t.Tint==LabelTint.Red?1:t.Tint==LabelTint.Gold?2:3).ThenByDescending(t=>t.Y).FirstOrDefault();
-                if(next.Text==null){keyboundStatus="Waiting for a live phrase";return;}keyboundWord=next.Text;keyboundTarget=next.Key;keyboundRecallTried=false;live=next;
+                if(next.Text==null){keyboundStatus="Waiting for a live phrase";return;}keyboundWord=next.Text;keyboundTarget=next.Key;keyboundRecallTried=keyboundClearing=false;keyboundSubmitAt=default;live=next;
             }
             if(!ownsFocus){
                 if(++keyboundOpenAttempts>3){keyboundOpenAttempts=0;keyboundNext=now.AddSeconds(1);keyboundStatus="Waiting: minigame input is not active yet";return;}
                 if(!KeyboundEnter(window)){StopKeybound("Stopped: input unavailable");return;}keyboundNext=now.AddMilliseconds(300);keyboundStatus="Opening minigame input";return;
             }
             if(KeyboundPolicy.CanSubmit(live.Text??"",actual,keyboundWord)){
+                if(keyboundSubmitAt==default)keyboundSubmitAt=now.AddMilliseconds(Math.Clamp(config.KeyboundSubmitDelayMs,0,2000));
+                if(now<keyboundSubmitAt)return;
                 if(!KeyboundEnter(window)){StopKeybound("Stopped: submit unavailable");return;}
                 keyboundPendingSubmission=keyboundWord;keyboundRecent[keyboundWord]=now;keyboundStatus="Submitted: "+keyboundWord;keyboundWord="";keyboundTarget=0;KeyboundExpect("",now);return;
             }
@@ -140,7 +161,7 @@ public sealed partial class Plugin
             if(!keyboundWord.StartsWith(actual,StringComparison.Ordinal)){StopKeybound("Stopped: phrase changed; existing text kept");return;}
             if(actual.Length<keyboundWord.Length){
                 var letter=keyboundWord[actual.Length];if(!KeyboundSend(window,letter)){StopKeybound("Stopped: input unavailable");return;}
-                KeyboundExpect(actual+letter,now);keyboundStatus="Typing: "+keyboundWord;
+                KeyboundExpect(actual+letter,now);keyboundNext=now.AddMilliseconds(KeyboundPolicy.TypingDelay(config.KeyboundMinDelayMs,config.KeyboundMaxDelayMs,Random.Shared.NextDouble()));keyboundStatus="Typing: "+keyboundWord;
             }
         }catch(Exception ex){StopKeybound("Stopped: minigame UI unavailable");Log.Warning(ex,"Keybound helper stopped");}
     }
