@@ -12,7 +12,7 @@ public sealed partial class Plugin
     private DateTimeOffset myInventoryRefresh;
     private ChestStack[] myInventoryStock=[];
     private string MyInventoryName(uint id)=>retrievalCatalog?.Names.GetValueOrDefault(id)??id.ToString();
-    private bool MyInventoryMatches(uint id)=>MyInventoryName(id).Contains(myInventorySearch,StringComparison.OrdinalIgnoreCase)&&(myInventoryAllCategories||myInventoryCategories.Contains(OrganizeCategory(id)));
+    private bool MyInventoryMatches(uint id)=>MyInventoryName(id).Contains(myInventorySearch,StringComparison.OrdinalIgnoreCase)&&(myInventoryAllCategories||myInventoryCategories.Contains(OrganizeCategory(id)))&&(myInventoryDestination!=GlamourStorageDestination||(DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>().GetRowOrDefault(id)?.EquipSlotCategory.RowId>0&&(gearCategories.Count==0||gearCategories.Contains(OrganizeCategory(id)))));
     private unsafe bool InventoryTradeFilterAllows(ChestStack stack,int filter)
     {
         if(filter==0||stack.Item==0)return true;
@@ -39,7 +39,7 @@ public sealed partial class Plugin
         ImGui.BeginDisabled(gearRouting||armoireRunning||craftingWithdrawalPending||retrievalRun.Running||organizeRunning||chestRunning);
         if(ImGui.BeginTable("MyInventoryFilters",2,ImGuiTableFlags.SizingStretchSame)){
             ImGui.TableNextRow();ImGui.TableNextColumn();ImGui.SetNextItemWidth(-1);ImGui.InputTextWithHint("##MyInventorySearch","Search my bags…",ref myInventorySearch,100);
-            ImGui.TableNextColumn();ImGui.SetNextItemWidth(-1);if(DrawStorageCategoryPicker("##MyInventoryCategories",myInventoryCategories,myInventoryAllCategories?"All categories":"None selected"))myInventoryAllCategories=false;
+            ImGui.TableNextColumn();ImGui.SetNextItemWidth(-1);if(DrawStorageCategoryPicker("##MyInventoryCategories",myInventoryCategories,myInventoryAllCategories?"All categories":"None selected",myInventoryDestination==GlamourStorageDestination?GearCategoryGroups(false):null))myInventoryAllCategories=false;
             ImGui.TableNextRow();ImGui.TableNextColumn();var quality=(int)myInventoryQuality;ImGui.SetNextItemWidth(-1);if(ImGui.Combo("##MyInventoryQuality",ref quality,"Any quality\0NQ only\0HQ only\0"))myInventoryQuality=(RetrievalQuality)quality;
             ImGui.TableNextColumn();if(ImGui.SmallButton("Reset filters")){myInventorySearch="";myInventoryCategories.Clear();myInventoryAllCategories=true;myInventoryQuality=RetrievalQuality.Any;myInventoryTradeFilter=0;myInventoryRefresh=default;}
             ImGui.TableNextRow();ImGui.TableNextColumn();ImGui.SetNextItemWidth(-1);if(ImGui.Combo("##MyInventoryTradeFilter",ref myInventoryTradeFilter,"Any items\0Tradable only\0Untradable only\0"))myInventoryRefresh=default;

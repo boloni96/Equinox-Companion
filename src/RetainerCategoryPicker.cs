@@ -4,13 +4,14 @@ public sealed partial class Plugin
 {
     private StorageCategoryGroup[]? storageCategoryGroups;
     private StorageCategoryGroup[] StorageGroups()=>storageCategoryGroups??=StorageCategoryGroups.Build(DataManager.GetExcelSheet<Lumina.Excel.Sheets.ItemUICategory>().Select(c=>new StorageCategory(c.RowId,c.Name.ToString(),c.OrderMajor,c.OrderMinor)));
-    private bool DrawStorageCategoryPicker(string label,HashSet<uint> selected,string empty="None selected")
+    private bool DrawStorageCategoryPicker(string label,HashSet<uint> selected,string empty="None selected",StorageCategoryGroup[]? available=null)
     {
+        var groups=available??StorageGroups();
         var changed=false;
         if(ImGui.BeginCombo(label,selected.Count==0?empty:selected.Count+" subcategories",ImGuiComboFlags.HeightLarge)){
-            if(ImGui.SmallButton("Select all")){foreach(var category in StorageGroups().SelectMany(g=>g.Categories))selected.Add(category.Id);changed=true;}ImGui.SameLine();
+            if(ImGui.SmallButton("Select all")){foreach(var category in groups.SelectMany(g=>g.Categories))selected.Add(category.Id);changed=true;}ImGui.SameLine();
             if(ImGui.SmallButton("Clear all")){selected.Clear();changed=true;}
-            foreach(var group in StorageGroups()){
+            foreach(var group in groups){
                 ImGui.PushID(group.Name);
                 var count=group.Categories.Count(c=>selected.Contains(c.Id));var all=count==group.Categories.Length;
                 if(ImGui.Checkbox("##All",ref all)){StorageCategoryGroups.Select(selected,group,all);changed=true;count=all?group.Categories.Length:0;}

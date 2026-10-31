@@ -27,6 +27,7 @@ public sealed partial class Plugin
     private GearStorageDestination gearDestination;
     private string gearStatus="";
     private readonly HashSet<uint> gearSelection=[];
+    private readonly HashSet<uint> gearCategories=[];
     private readonly Dictionary<uint,int> gearKeep=[];
     private readonly HashSet<uint> gearKnownDresser=[];
     private SellerAutoRetainerPause? gearPause;
@@ -40,6 +41,7 @@ public sealed partial class Plugin
     {
         if(!ImGui.BeginPopup("GearStorageOptions"))return;
         ImGui.BeginDisabled(gearRouting||armoireRunning);
+        DrawGearCategoryPicker("Gear categories",gearCategories,false);
         if(ImGui.Checkbox("Skip dyed gear",ref gearSkipDyed)){config.StorageGearSkipDyed=gearSkipDyed;SaveConfiguration();}
         ImGui.TextWrapped("Armoire first when eligible; otherwise glamour dresser. Dyed gear never goes into the armoire. Turning this filter off permits individual dresser storage only; outfit conversion remains protected.");
         ImGui.SetNextItemWidth(110);if(ImGui.SliderInt("Leave bag slots free",ref gearReserve,1,10)){config.StorageGearReserve=gearReserve;SaveConfiguration();}
@@ -54,7 +56,7 @@ public sealed partial class Plugin
         if(fromRetainers&&Player.CurrentWorld.RowId!=Player.HomeWorld.RowId)throw new InvalidOperationException("Use your retainers on your home world.");
         LoadArmoireCatalogue();gearKeep.Clear();
         var protectedItems=respectPlan?retrievalEntrust?.Protected??[]:Array.Empty<uint>();
-        var ids=selected.Distinct().Where(id=>id>0&&DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>().GetRowOrDefault(id)?.EquipSlotCategory.RowId>0&&!ArmoireExclusions().Contains(id)&&!protectedItems.Contains(id)).ToArray();
+        var ids=selected.Distinct().Where(id=>id>0&&DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>().GetRowOrDefault(id)?.EquipSlotCategory.RowId>0&&!ArmoireExclusions().Contains(id)&&!protectedItems.Contains(id)&&(gearCategories.Count==0||gearCategories.Contains(OrganizeCategory(id)))).ToArray();
         if(respectPlan&&retrievalEntrust is {} plan)foreach(var id in ids)gearKeep[id]=Math.Max(plan.Keep.GetValueOrDefault(id),plan.CategoryKeep.GetValueOrDefault(OrganizeCategory(id)));
         if(ids.Length==0)throw new InvalidOperationException("Select gear using the existing inventory, retainer or plan selection first.");
         if(GearObject(false)==null||fromRetainers&&GearObject(true)==null)throw new InvalidOperationException("Use an inn room with a glamour dresser and summoning bell loaded nearby.");
@@ -146,7 +148,7 @@ public sealed partial class Plugin
     }
     private unsafe bool GearSlotAllowed(InventoryItem item,InventoryType container)
     {
-        if(!gearSelection.Contains(item.ItemId%1000000)||item.IsSymbolic)return false;
+        if(!gearSelection.Contains(item.ItemId%1000000)||item.IsSymbolic||(gearCategories.Count>0&&!gearCategories.Contains(OrganizeCategory(item.ItemId%1000000))))return false;
         if(((uint)container>=10000||!gearFromRetainers)&&gearKeep.GetValueOrDefault(item.ItemId%1000000) is >0 and var keep){
             var manager=InventoryManager.Instance();if(manager==null)return false;var count=0;
             var types=(uint)container>=10000?Enumerable.Range(10000,7).Select(i=>(InventoryType)i):ArmoireContainers.Where(t=>t!=InventoryType.EquippedItems);

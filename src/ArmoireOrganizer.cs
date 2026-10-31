@@ -34,7 +34,7 @@ public sealed partial class Plugin
         ImGui.SameLine();if(ImGui.Button("Dresser → Armoire"))StartArmoireOrganizer();
         if(ImGui.CollapsingHeader("Armoire options")){
             ImGui.TextUnformatted("Dyed gear is always protected (both dye channels).");
-            DrawStorageCategoryPicker("Gear categories",armoireCategories,"All gear categories");
+            DrawGearCategoryPicker("Gear categories",armoireCategories,true);
             ImGui.Checkbox("Individual pieces",ref armoireSinglePieces);ImGui.SameLine();ImGui.Checkbox("Outfit set pieces",ref armoireOutfitPieces);
             if(ImGui.SmallButton("Clear saved item exclusions")){ArmoireExclusions().Clear();SaveConfiguration();}
             ImGui.TextWrapped("Check eligible gear, then tick Keep beside any item you want left in the dresser. Exclusions are saved for this character.");
