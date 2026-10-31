@@ -43,6 +43,9 @@ public sealed partial class Plugin
         DrawKeyboundShopping();
         if(ImGui.CollapsingHeader("Options")){
         ImGui.Checkbox("Auto-repeat",ref keyboundAutoRepeat);
+        var stopAtGoal=config.KeyboundStopAtRewardGoal;
+        if(ImGui.Checkbox("Stop when enough MGC",ref stopAtGoal)){config.KeyboundStopAtRewardGoal=stopAtGoal;keyboundGoalCheckAt=default;SaveConfiguration();}
+        if(ImGui.IsItemHovered())ImGui.SetTooltip("Stop before the next round when you can afford the missing rewards. Turn off to keep farming, including for extra coffers.");
         if(ImGui.Button("Soft · 80 / 150 / 80 ms")){
             config.KeyboundMinDelayMs=KeyboundPolicy.SoftMinMs;config.KeyboundMaxDelayMs=KeyboundPolicy.SoftMaxMs;config.KeyboundSubmitDelayMs=KeyboundPolicy.SoftSubmitMs;SaveConfiguration();
         }
@@ -60,7 +63,7 @@ public sealed partial class Plugin
         }
         if(ImGui.CollapsingHeader("How it works")){
             ImGui.TextWrapped("Optional typing assistance for Keybound Brawler. Keeps spaces and punctuation, uses Up for consecutive repeats, and clears its partial text when a target disappears. Pauses through stuns and no-typing casts.");
-            ImGui.TextWrapped("Background running and anti-AFK are automatic while the tool is running. It stops before the next registration when your MGC covers the missing rewards. Input goes directly to this game client. Keep the game running; background frame limits can slow it down. Other in-game text fields pause assistance. Auto-queue & repeat registers at the nearby Keybound registrar, accepts the match, and returns after results. Start near the registrar in Keybound Square. Stop or disabling the tool ends automation.");
+            ImGui.TextWrapped("Background running and anti-AFK are automatic while the tool is running. Stop when enough MGC optionally ends farming before the next registration when your balance covers the missing rewards. Disable it to farm extra coffers. Input goes directly to this game client. Keep the game running; background frame limits can slow it down. Other in-game text fields pause assistance. Auto-queue & repeat registers at the nearby Keybound registrar, accepts the match, and returns after results. Start near the registrar in Keybound Square. Stop or disabling the tool ends automation.");
         }
     }
     private bool DrawKeyboundDelay(string label,ref int value,int minimum,int maximum)
@@ -121,7 +124,7 @@ public sealed partial class Plugin
             if(!Client.IsLoggedIn){StopKeybound("Stopped: logged out");return;}
             if(now<keyboundTimingEditUntil){keyboundDeadline=now.AddSeconds(2);keyboundStatus="Paused: editing timing";return;}
             var stage=AtkStage.Instance();if(stage==null)return;
-            if(Client.TerritoryType!=1359&&CheckKeyboundGoal(now))return;
+            if(config.KeyboundStopAtRewardGoal&&Client.TerritoryType!=1359&&CheckKeyboundGoal(now))return;
             if(keyboundAutoRepeat&&UpdateKeyboundLoop(now))return;
             var input=stage->RaptureAtkUnitManager->GetAddonByName("KTGInput");
             if(input==null||!input->IsVisible){
