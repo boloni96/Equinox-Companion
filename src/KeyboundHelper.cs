@@ -11,6 +11,7 @@ public sealed partial class Plugin
 {
     private bool keyboundEnabled,keyboundSeen,keyboundAwaiting;
     private bool keyboundAutoRepeat;
+    private int keyboundDelayDraft;
     private DateTimeOffset keyboundSubmitAt;
     private string keyboundStatus="Off",keyboundWord="",keyboundSent="",keyboundExpected="";
     private nint keyboundTarget;
@@ -47,14 +48,32 @@ public sealed partial class Plugin
         var min=Math.Clamp(config.KeyboundMinDelayMs,10,1000);
         var max=Math.Clamp(config.KeyboundMaxDelayMs,10,1000);
         var submit=Math.Clamp(config.KeyboundSubmitDelayMs,0,2000);
-        if(ImGui.SliderInt("Min keystroke delay",ref min,10,1000,"%d ms")){config.KeyboundMinDelayMs=min;SaveConfiguration();}
-        if(ImGui.SliderInt("Max keystroke delay",ref max,10,1000,"%d ms")){config.KeyboundMaxDelayMs=max;SaveConfiguration();}
-        if(ImGui.SliderInt("Submit delay",ref submit,0,2000,"%d ms")){config.KeyboundSubmitDelayMs=submit;SaveConfiguration();}
+        if(DrawKeyboundDelay("Min keystroke delay",ref min,10,1000)){config.KeyboundMinDelayMs=min;SaveConfiguration();}
+        if(DrawKeyboundDelay("Max keystroke delay",ref max,10,1000)){config.KeyboundMaxDelayMs=max;SaveConfiguration();}
+        if(DrawKeyboundDelay("Submit delay",ref submit,0,2000)){config.KeyboundSubmitDelayMs=submit;SaveConfiguration();}
         if(min>max)ImGui.TextDisabled($"Effective keystroke range: {max}–{min} ms");
         if(ImGui.CollapsingHeader("How it works")){
             ImGui.TextWrapped("Optional typing assistance for Keybound Brawler. Keeps spaces and punctuation, uses Up for consecutive repeats, and clears its partial text when a target disappears. Pauses through stuns and no-typing casts.");
             ImGui.TextWrapped("Keep this game window in the foreground. Other text fields pause assistance. Auto-queue & repeat registers at the nearby Keybound registrar, accepts the match, and returns after results. Start near the registrar in Keybound Square. Stop or disabling the tool ends automation.");
         }
+    }
+    private bool DrawKeyboundDelay(string label,ref int value,int minimum,int maximum)
+    {
+        var changed=ImGui.SliderInt(label,ref value,minimum,maximum,"%d ms");
+        var popup="Exact milliseconds##"+label;
+        if(ImGui.IsItemClicked(ImGuiMouseButton.Right)){keyboundDelayDraft=value;ImGui.OpenPopup(popup);}
+        if(ImGui.IsItemHovered())ImGui.SetTooltip("Drag to adjust · right-click to type milliseconds");
+        if(ImGui.BeginPopup(popup)){
+            ImGui.TextUnformatted(label);
+            if(ImGui.IsWindowAppearing())ImGui.SetKeyboardFocusHere();
+            ImGui.SetNextItemWidth(160);
+            var enter=ImGui.InputInt("Milliseconds",ref keyboundDelayDraft,0,0,ImGuiInputTextFlags.EnterReturnsTrue);
+            ImGui.TextDisabled($"{minimum}–{maximum} ms");
+            if(ImGui.Button("Apply")||enter){value=Math.Clamp(keyboundDelayDraft,minimum,maximum);changed=true;ImGui.CloseCurrentPopup();}
+            ImGui.SameLine();if(ImGui.Button("Cancel"))ImGui.CloseCurrentPopup();
+            ImGui.EndPopup();
+        }
+        return changed;
     }
     private static unsafe bool KeyboundContains(AtkUldManager* uld,AtkResNode* target,int depth=0)
     {
