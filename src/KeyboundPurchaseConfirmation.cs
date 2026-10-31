@@ -20,10 +20,17 @@ public sealed partial class Plugin
         foreach(var name in new[]{"ShopExchangeCurrencyDialog","SelectYesno"}){
             var candidate=KeyboundAddon(name);if(candidate==null)continue;
             var texts=new List<string>();var yesButtons=new HashSet<nint>();var quantities=new List<int>();
+            bool Shown(AtkResNode* node){
+                var depth=0;
+                for(var parent=node;parent!=null;parent=parent->ParentNode){
+                    if(++depth>64||!parent->IsVisible()||parent->Alpha_2==0)return false;
+                }
+                return true;
+            }
             void Read(AtkUldManager* uld,int depth){
                 if(uld==null||uld->NodeList==null||depth>6)return;
                 for(var i=0;i<Math.Min((int)uld->NodeListCount,1024);i++){
-                    var node=uld->NodeList[i];if(node==null||!node->IsVisible())continue;
+                    var node=uld->NodeList[i];if(node==null||!Shown(node))continue;
                     if(node->Type==NodeType.Text){texts.Add(TravelMenuText(((AtkTextNode*)node)->NodeText.StringPtr)??"");continue;}
                     if((int)node->Type<1000)continue;
                     var component=node->GetComponent();if(component==null)continue;
