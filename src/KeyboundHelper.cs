@@ -109,7 +109,10 @@ public sealed partial class Plugin
                     else {keyboundStatus="Paused: unexpected input; clear the field to resume";return;}
                 }
             }
-            if(!KeyboundPolicy.OwnsInput(actual,keyboundSent)){if(keyboundSent.Length>0)StopKeybound("Stopped: text was changed; existing text kept");else keyboundStatus="Paused: clear existing text to resume";return;}
+            if(!KeyboundPolicy.OwnsInput(actual,keyboundSent)){
+                if(actual.Length==0){keyboundSent=keyboundExpected="";keyboundPendingSubmission="";}
+                else {keyboundStatus="Paused: unexpected text; clear the field to resume";return;}
+            }
             var words=KeyboundUi.AllTexts("KTGEWord").Where(t=>(t.LabelVisible&&t.TextVisible||t.Obscured)&&KeyboundPolicy.IsPhrase(t.Text.Trim())).Select(t=>t with{Text=t.Text.Trim()}).ToArray();
             var live=words.FirstOrDefault(t=>t.Key==keyboundTarget&&t.Text==keyboundWord);
             if(keyboundWord.Length>0&&live.Text==null){
