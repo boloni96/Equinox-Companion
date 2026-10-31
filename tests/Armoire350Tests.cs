@@ -4,6 +4,18 @@ public static class Armoire350Tests
     public static void Run()
     {
         void Check(bool pass,string name){if(!pass)throw new Exception(name);Console.WriteLine("PASS armoire: "+name);}
+        Check(GearStoragePolicy.Destination(true,false,false,false,true,false)==GearStorageDestination.Armoire,"armoire is first choice for eligible undyed gear");
+        Check(GearStoragePolicy.Destination(false,false,false,false,true,false)==GearStorageDestination.Dresser,"ineligible armoire gear routes to dresser");
+        Check(GearStoragePolicy.Destination(true,false,false,true,true,false)==GearStorageDestination.Skip,"dyed source is filtered before withdrawal");
+        Check(GearStoragePolicy.Destination(true,false,false,true,false,false)==GearStorageDestination.Dresser,"opting into dyed gear never strips it into armoire");
+        Check(GearStoragePolicy.Destination(false,false,true,false,true,false)==GearStorageDestination.Skip,"existing dresser copy stays at source");
+        Check(GearStoragePolicy.Destination(true,true,false,false,true,false)==GearStorageDestination.Skip,"existing armoire copy stays at source");
+        Check(GearStoragePolicy.Destination(true,false,false,false,true,true)==GearStorageDestination.Skip,"saved exclusion blocks all destinations");
+        Check(GearStoragePolicy.BatchCapacity(6,2)==4&&GearStoragePolicy.BatchCapacity(2,2)==0&&GearStoragePolicy.BatchCapacity(100,2)==20,"batches obey available staging space and bound work");
+        Check(!GearStoragePolicy.SafeCopy(1,false,0,7,true,false,30000),"second source dye channel is checked before withdrawal");
+        Check(!GearStoragePolicy.SafeCopy(1,true,0,0,true,false,30000),"equipped copy is not eligible");
+        Check(!GearStoragePolicy.SafeCopy(1,false,0,0,true,true,30000),"materia remains protected");
+        Check(!GearStoragePolicy.DeliveryConfirmed(false,true)&&!GearStoragePolicy.DeliveryConfirmed(true,false),"gear route requires both source and destination receipts");
         var piece=new ArmoirePiece(3,100,100,7,-1,0,0);
         string Block(ArmoirePiece p,bool stored=false,int held=0,int free=2)=>ArmoireTransferPolicy.Blocked(p,stored,held,free);
         Check(Block(piece)=="","eligible undyed piece can use staging space");

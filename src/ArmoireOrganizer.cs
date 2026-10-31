@@ -29,7 +29,7 @@ public sealed partial class Plugin
     private void DrawArmoireOrganizer()
     {
         ImGui.TextWrapped("Move armoire-compatible gear out of the glamour dresser, including individual pieces in outfit sets.");
-        ImGui.BeginDisabled(armoireRunning);
+        ImGui.BeginDisabled(gearRouting||armoireRunning);
         if(ImGui.Button("Check eligible gear"))StartArmoireOrganizer(true);
         ImGui.SameLine();if(ImGui.Button("Dresser → Armoire"))StartArmoireOrganizer();
         if(ImGui.CollapsingHeader("Armoire options")){
@@ -46,7 +46,7 @@ public sealed partial class Plugin
         if(armoirePreview.Length>0&&ImGui.CollapsingHeader($"Eligible gear · {armoirePreview.Length}###ArmoirePreview")){
             ImGui.BeginChild("ArmoireRows",new(0,ImGui.GetTextLineHeightWithSpacing()*10),true);
             var clip=ImGui.ImGuiListClipper();clip.Begin(armoirePreview.Length,ImGui.GetFrameHeightWithSpacing());
-            while(clip.Step())for(var i=clip.DisplayStart;i<clip.DisplayEnd;i++){var r=armoirePreview[i];ImGui.PushID((int)r.Item);ImGui.PushID(i);var keep=ArmoireExclusions().Contains(r.Item);ImGui.BeginDisabled(armoireRunning);if(ImGui.Checkbox("Keep",ref keep)){if(keep)ArmoireExclusions().Add(r.Item);else ArmoireExclusions().Remove(r.Item);SaveConfiguration();}ImGui.EndDisabled();ImGui.SameLine();ImGui.TextUnformatted(r.Name+" · "+(keep?"Excluded":r.Status));ImGui.PopID();ImGui.PopID();}
+            while(clip.Step())for(var i=clip.DisplayStart;i<clip.DisplayEnd;i++){var r=armoirePreview[i];ImGui.PushID((int)r.Item);ImGui.PushID(i);var keep=ArmoireExclusions().Contains(r.Item);ImGui.BeginDisabled(gearRouting||armoireRunning);if(ImGui.Checkbox("Keep",ref keep)){if(keep)ArmoireExclusions().Add(r.Item);else ArmoireExclusions().Remove(r.Item);SaveConfiguration();}ImGui.EndDisabled();ImGui.SameLine();ImGui.TextUnformatted(r.Name+" · "+(keep?"Excluded":r.Status));ImGui.PopID();ImGui.PopID();}
             clip.End();clip.Destroy();ImGui.EndChild();
         }
     }
@@ -133,7 +133,7 @@ public sealed partial class Plugin
     }
     private void StartArmoireOrganizer(bool previewOnly=false)=>RetrievalTry(()=>{
         if(!config.EnableRetriever||!Player.IsLoaded)throw new InvalidOperationException("Enable Organizer and log in first.");
-        if(armoireRunning||organizeRunning||retrievalRun.Running||chestRunning||retainerGilRunning||sellerRun.Running||TraderRunning||craftingWithdrawalPending)throw new InvalidOperationException("Finish the current inventory operation first.");
+        if(gearRouting||armoireRunning||organizeRunning||retrievalRun.Running||chestRunning||retainerGilRunning||sellerRun.Running||TraderRunning||craftingWithdrawalPending)throw new InvalidOperationException("Finish the current inventory operation first.");
         if(!ArmoireDresserReady())throw new InvalidOperationException("Open the glamour dresser first.");
         armoireCharacter=Player.ContentId;armoireTerritory=Client.TerritoryType;armoireMoved=armoireSkipped=0;armoirePending=null;armoireQueue.Clear();
         armoirePreviewOnly=previewOnly;armoireOpenedLookup=false;armoirePhase=0;armoireRunning=true;armoireNext=default;armoireDeadline=DateTimeOffset.UtcNow.AddSeconds(20);armoireStatus="Loading armoire contents…";
@@ -150,7 +150,7 @@ public sealed partial class Plugin
         if(!armoireRunning||now<armoireNext)return;armoireNext=now.AddMilliseconds(250);
         try{
             if(!config.EnableRetriever||!Player.IsLoaded||Player.ContentId!=armoireCharacter||Client.TerritoryType!=armoireTerritory||Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]||HelperInCutscene()) {StopArmoireOrganizer("Stopped: character or location changed");return;}
-            if(organizeRunning||retrievalRun.Running||chestRunning||retainerGilRunning||sellerRun.Running||TraderRunning||craftingWithdrawalPending){StopArmoireOrganizer("Stopped: another inventory operation started");return;}
+            if(gearRouting||organizeRunning||retrievalRun.Running||chestRunning||retainerGilRunning||sellerRun.Running||TraderRunning||craftingWithdrawalPending){StopArmoireOrganizer("Stopped: another inventory operation started");return;}
             if(now>armoireDeadline){StopArmoireOrganizer("Stopped: game did not confirm the transfer in time");return;}
             var state=UIState.Instance();if(state==null)return;
             var inventory=InventoryManager.Instance();if(inventory==null)return;

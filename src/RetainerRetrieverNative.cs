@@ -14,7 +14,7 @@ public sealed partial class Plugin
     private unsafe int RetrievalHeld(uint item,RetrievalQuality quality=RetrievalQuality.Any,int tradeFilter=0){var m=InventoryManager.Instance();if(m==null)return 0;var count=0;foreach(var t in new[]{InventoryType.Inventory1,InventoryType.Inventory2,InventoryType.Inventory3,InventoryType.Inventory4,InventoryType.Crystals}){var c=m->GetInventoryContainer(t);if(c==null||!c->IsLoaded)continue;for(var i=0;i<c->Size;i++)if(c->Items[i].ItemId==item&&(tradeFilter==0||RetrievalAllowsTradeFilter(c->Items[i],tradeFilter))&&RetainerRetrieval.AllowsQuality((c->Items[i].Flags&InventoryItem.ItemFlags.HighQuality)!=0,quality))count=checked(count+c->Items[i].Quantity);}return count;}
     private void UpdateRetriever(DateTimeOffset now)
     {
-        TickArmoireOrganizer(now);TickStorageRefresh(now);TickRetainerTools(now);TickRetainerGil(now);TickChest(now);TickOrganize(now);
+        TickGearStorage(now);TickArmoireOrganizer(now);TickStorageRefresh(now);TickRetainerTools(now);TickRetainerGil(now);TickChest(now);TickOrganize(now);
         if(retrievalPort.Pause.RestorePending)retrievalPort.Pause.Release(now);
         if(!config.EnableRetriever){CancelCraftingWithdrawal("");if(retrievalRun.Running)retrievalRun.Stop("Retriever disabled.");retrieverWindow.IsOpen=false;ForgetOptionalLauncher("Equinox Organizer");return;}
         if(retrievalRun.Running&&retrievalRun.State!=RetrievalRun.Phase.Prepare&&retrievalPort.Pause.Held){var pause=retrievalPort.Pause.Check(now);if(!pause.Ready){retrievalRun.Stop(pause.Error.Length>0?pause.Error:"Another AutoRetainer task started; retrieval stopped.");return;}}
@@ -25,6 +25,7 @@ public sealed partial class Plugin
     {
         private readonly Plugin p;private readonly SellerPort navigation;
         internal readonly SellerAutoRetainerPause Pause=new(new SellerAutoRetainerPort());
+        internal bool GearFilter;
         internal int TradeFilter;internal RetrievalQuality Quality;internal ulong Character;internal uint World;
         private readonly WithdrawalArmouryReceipt armouryReceipt=new();
         private bool captureAfterTransfer;
@@ -100,7 +101,7 @@ public sealed partial class Plugin
                 if(c==null||!c->IsLoaded||c->Items==null){InventoryStatus="Inventory open; waiting for container "+type;return null;}
                 var crystalBags=type==12001?p.ReadChestContainer(2001):Array.Empty<ChestStack>();
                 for(var i=0;i<c->Size;i++){
-                    var s=c->Items[i];if(TradeFilter!=0&&!RetrievalAllowsTradeFilter(s,TradeFilter))continue;var hq=(s.Flags&InventoryItem.ItemFlags.HighQuality)!=0;
+                    var s=c->Items[i];if(GearFilter&&!p.GearSlotAllowed(s,(InventoryType)type))continue;if(TradeFilter!=0&&!RetrievalAllowsTradeFilter(s,TradeFilter))continue;var hq=(s.Flags&InventoryItem.ItemFlags.HighQuality)!=0;
                     var amount=type==12001?Math.Min(s.Quantity,CrystalStorage.Room(s.ItemId,crystalBags)):s.Quantity;
                     if(s.ItemId>0&&amount>0&&RetainerRetrieval.AllowsQuality(hq,Quality))list.Add(new(s.ItemId,amount,type,i,hq));
                 }
@@ -121,12 +122,14 @@ public sealed partial class Plugin
             if(pending is null){
                 if(SellerAddon("ContextMenu")!=null||SellerAddon("InputNumeric")!=null)throw new InvalidOperationException("Close the existing item menu before withdrawing.");
                 var stock=Read(id);if(stock is null||!stock.Contains(slot))throw new InvalidOperationException("Retainer stock changed; rebuild the preview.");
+                if(GearFilter&&InventoryManager.Instance()->GetEmptySlotsInBag()<=p.gearReserve)throw new InvalidOperationException("Reserved staging space changed.");
                 if(InventoryManager.Instance()->GetEmptySlotsInBag()==0)throw new InvalidOperationException("Free a bag slot before withdrawing.");
                 pending=slot;quantity=amount;contextSent=numericSent=false;openedAt=DateTimeOffset.UtcNow;
                 AgentInventoryContext.Instance()->OpenForItemSlot((InventoryType)slot.Container,slot.Slot,0,AgentRetainer.Instance()->GetAddonId());return false;
             }
             if(pending!=slot)throw new InvalidOperationException("Withdrawal target changed.");
             var target=AgentInventoryContext.Instance();if(target==null||(int)target->TargetInventoryId!=slot.Container||target->TargetInventorySlotId!=slot.Slot||target->TargetInventorySlot==null||target->TargetInventorySlot->ItemId!=slot.ItemId)throw new InvalidOperationException("Item menu target changed; retrieval stopped.");
+            if(GearFilter&&!p.GearSlotAllowed(*target->TargetInventorySlot,(InventoryType)slot.Container))throw new InvalidOperationException("Gear filters changed before withdrawal.");
             if(!contextSent){
                 var menu=SellerAddon("ContextMenu");if(menu==null)return false;
                 var text=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Addon>().GetRow(slot.Quantity==1||slot.ItemId<=19?98u:773u).Text.ToString();

@@ -6,7 +6,7 @@ public sealed partial class Plugin
     private string myInventorySearch="";
     private readonly HashSet<uint> myInventoryCategories=[];
     private readonly Dictionary<uint,int> myInventorySelected=[];
-    private bool myInventoryAllCategories=true;
+    private bool myInventoryAllCategories=true,myInventoryArmoury;
     private RetrievalQuality myInventoryQuality;private int myInventoryTradeFilter;
     private ulong myInventoryCharacter,myInventoryDestination=StorageAutoRouting.AllRetainers;
     private DateTimeOffset myInventoryRefresh;
@@ -22,10 +22,11 @@ public sealed partial class Plugin
         var slot=container->Items[stack.Slot];
         return slot.ItemId==stack.Item&&RetrievalAllowsTradeFilter(slot,filter);
     }
-    private unsafe ChestStack[] ReadMyInventory()=>OrganizerInventory(false,false).Concat(OrganizerInventory(false,true)).Where(s=>s.Item>0&&s.Quantity>0&&InventoryTradeFilterAllows(s,myInventoryTradeFilter)).ToArray();
+    private unsafe ChestStack[] ReadMyInventory()=>OrganizerInventory(false,false).Concat(OrganizerInventory(false,true)).Concat(myInventoryDestination==GlamourStorageDestination&&myInventoryArmoury?ReadGearArmoury():Array.Empty<ChestStack>()).Where(s=>s.Item>0&&s.Quantity>0&&InventoryTradeFilterAllows(s,myInventoryTradeFilter)).ToArray();
     private Dictionary<uint,int> MyInventoryAmounts(IEnumerable<ChestStack> stock)=>TemporaryInventorySelection.Amounts(stock,myInventorySelected,myInventoryQuality,MyInventoryMatches);
     private unsafe void EntrustMyInventory()
     {
+        if(myInventoryDestination==GlamourStorageDestination){StartGearStorage(ReadMyInventory().Where(s=>myInventorySelected.ContainsKey(s.Item)&&MyInventoryMatches(s.Item)&&RetainerRetrieval.AllowsQuality(s.Hq,myInventoryQuality)).Select(s=>s.Item),false,myInventoryQuality,myInventoryTradeFilter);return;}
         var amounts=MyInventoryAmounts(ReadMyInventory());
         if(amounts.Count==0)throw new InvalidOperationException("Select matching items from your current inventory first.");
         StartStorageRouting([new(StorageRouting.Bags,myInventoryDestination,[],amounts.Keys.ToArray(),Quality:myInventoryQuality,Amounts:amounts)],true,true,myInventoryTradeFilter);
@@ -35,7 +36,7 @@ public sealed partial class Plugin
         if(!Player.IsLoaded){ImGui.TextDisabled("Log in to see your inventory.");return;}
         if(myInventoryCharacter!=Player.ContentId){myInventoryCharacter=Player.ContentId;myInventorySelected.Clear();myInventoryStock=[];myInventoryRefresh=default;myInventoryDestination=StorageAutoRouting.AllRetainers;}
         if(DateTimeOffset.UtcNow>=myInventoryRefresh){myInventoryStock=ReadMyInventory();myInventoryRefresh=DateTimeOffset.UtcNow.AddSeconds(1);myInventorySelected.Keys.Where(id=>!myInventoryStock.Any(s=>s.Item==id)).ToList().ForEach(id=>myInventorySelected.Remove(id));}
-        ImGui.BeginDisabled(craftingWithdrawalPending||retrievalRun.Running||organizeRunning||chestRunning);
+        ImGui.BeginDisabled(gearRouting||armoireRunning||craftingWithdrawalPending||retrievalRun.Running||organizeRunning||chestRunning);
         if(ImGui.BeginTable("MyInventoryFilters",2,ImGuiTableFlags.SizingStretchSame)){
             ImGui.TableNextRow();ImGui.TableNextColumn();ImGui.SetNextItemWidth(-1);ImGui.InputTextWithHint("##MyInventorySearch","Search my bags…",ref myInventorySearch,100);
             ImGui.TableNextColumn();ImGui.SetNextItemWidth(-1);if(DrawStorageCategoryPicker("##MyInventoryCategories",myInventoryCategories,myInventoryAllCategories?"All categories":"None selected"))myInventoryAllCategories=false;
@@ -50,21 +51,23 @@ public sealed partial class Plugin
         if(ImGui.SmallButton("Clear selection"))myInventorySelected.Clear();ImGui.SameLine();if(ImGui.SmallButton("Refresh"))myInventoryRefresh=default;
         var names=retrievalKnownRetainers.GetValueOrDefault(Player.ContentId)??new Dictionary<ulong,string>();
         ImGui.SetNextItemWidth(220);
-        if(ImGui.BeginCombo("To retainer",myInventoryDestination==StorageAutoRouting.AllRetainers?(config.UseRetainerAssignments.Contains(Player.ContentId)?"Assignments":"All retainers"):names.GetValueOrDefault(myInventoryDestination,"Choose retainer"))){
+        if(ImGui.BeginCombo("Destination",myInventoryDestination==GlamourStorageDestination?"Armoire first / Glamour dresser":myInventoryDestination==StorageAutoRouting.AllRetainers?(config.UseRetainerAssignments.Contains(Player.ContentId)?"Assignments":"All retainers"):names.GetValueOrDefault(myInventoryDestination,"Choose retainer"))){
             if(ImGui.Selectable("All retainers / Assignments",myInventoryDestination==StorageAutoRouting.AllRetainers))myInventoryDestination=StorageAutoRouting.AllRetainers;
             foreach(var row in names)if(ImGui.Selectable(row.Value+"##"+row.Key,myInventoryDestination==row.Key))myInventoryDestination=row.Key;
+            if(ImGui.Selectable("Armoire first / Glamour dresser",myInventoryDestination==GlamourStorageDestination)){myInventoryDestination=GlamourStorageDestination;myInventoryRefresh=default;}
             ImGui.EndCombo();
         }
         if(myInventoryDestination==StorageAutoRouting.AllRetainers){DrawUseRetainerAssignments();ImGui.SameLine();DrawAssignmentEditor();}
-        var amounts=MyInventoryAmounts(myInventoryStock);
-        ImGui.BeginDisabled(amounts.Count==0);if(ImGui.SmallButton("Entrust selected"))RetrievalTry(EntrustMyInventory);ImGui.SameLine();
+        if(myInventoryDestination==GlamourStorageDestination&&ImGui.Checkbox("Include Armoury Chest",ref myInventoryArmoury))myInventoryRefresh=default;
+        var amounts=myInventoryDestination==GlamourStorageDestination?myInventoryStock.Where(s=>myInventorySelected.ContainsKey(s.Item)&&MyInventoryMatches(s.Item)&&RetainerRetrieval.AllowsQuality(s.Hq,myInventoryQuality)).Select(s=>s.Item).Distinct().ToDictionary(id=>id,id=>1):MyInventoryAmounts(myInventoryStock);
+        ImGui.BeginDisabled(amounts.Count==0);if(ImGui.SmallButton(myInventoryDestination==GlamourStorageDestination?"Store selected gear":"Entrust selected"))RetrievalTry(EntrustMyInventory);ImGui.SameLine();
         if(ImGui.SmallButton("Add selected to plan"))RetrievalTry(()=>AddRetrieval(amounts.Select(x=>new RetrievalEntry(x.Key,MyInventoryName(x.Key),x.Value)).ToArray()));ImGui.EndDisabled();
-        ImGui.TextDisabled($"{amounts.Count} selected matching items · bags + crystals · temporary selection");
+        ImGui.TextDisabled($"{amounts.Count} selected matching items · temporary selection");
         MarketHelp("Entrust selected uses only checked items matching these filters and their quantities. Assignments choose destinations only. Your loaded plan is unchanged. Open the summoning bell to entrust. Shift-hover selects; Alt-hover removes.");
         ImGui.EndDisabled();
         if(organizeRunning&&ImGui.Button("Stop entrust"))StopOrganize("Stopped by you; an already-sent move may still complete.");
         if(organizeMoves.Length>0||organizeRunning)ImGui.TextWrapped(organizeStatus);
-        ImGui.BeginDisabled(craftingWithdrawalPending||retrievalRun.Running||organizeRunning||chestRunning);
+        ImGui.BeginDisabled(gearRouting||armoireRunning||craftingWithdrawalPending||retrievalRun.Running||organizeRunning||chestRunning);
         if(ImGui.BeginChild("MyInventoryRows",new(0,Math.Max(80,ImGui.GetContentRegionAvail().Y-8)),false)){
             if(ImGui.BeginTable("MyInventoryItems",3,ImGuiTableFlags.RowBg|ImGuiTableFlags.SizingStretchProp)){
                 ImGui.TableSetupColumn("Item",ImGuiTableColumnFlags.WidthStretch,3);ImGui.TableSetupColumn("In bags");ImGui.TableSetupColumn("Entrust quantity");ImGui.TableHeadersRow();
@@ -84,4 +87,3 @@ public sealed partial class Plugin
         ImGui.EndDisabled();
     }
 }
-

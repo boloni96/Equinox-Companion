@@ -67,6 +67,7 @@ public sealed partial class Plugin
         ImGui.BeginDisabled(browseSelected.Count==0);
         if(ImGui.SmallButton("Withdraw now"))RetrievalTry(()=>UseBrowseSelection(false));ImGui.SameLine();
         if(ImGui.SmallButton("Entrust now"))RetrievalTry(()=>UseBrowseSelection(true));
+        ImGui.SameLine();if(ImGui.SmallButton("Store glamour"))RetrievalTry(()=>StartGearStorage(browseSelected.Intersect(browseMatchedRows.Select(r=>r.Item)),true,retrievalQuality,RetrievalTradeFilter));
         MarketHelp("Use selected items immediately without saving a plan. Entrust moves matching bag quantities to all retainers; Withdraw uses Quantity each or All available and the current quality setting. Your previous list can be restored.");
         ImGui.SameLine();if(ImGui.SmallButton("Plan…"))ImGui.OpenPopup("BrowsePlanActions");
         if(ImGui.BeginPopup("BrowsePlanActions")){
@@ -109,5 +110,3 @@ public sealed partial class Plugin
         clip.End();clip.Destroy();ImGui.EndTable();
     }
 }
-
-
