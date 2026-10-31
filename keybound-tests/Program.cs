@@ -49,3 +49,27 @@ Check(!KeyboundPolicy.CanRecoverInput("C","Cu","Cur",false),"stale expected text
 Check(KeyboundPolicy.CanRecoverInput("Cura","Cura","",true),"interrupted submission can clear owned complete word");
 Check(KeyboundPolicy.CanRecoverInput("","","Cur",true),"game-cleared field recovers without Escape");
 Check(!KeyboundPolicy.CanRecoverInput("Phoenix","","Cura",true),"unexpected history phrase is preserved");
+
+Check(KeyboundShoppingPolicy.Total(null)==6380,"official twenty-item total");
+Check(KeyboundShoppingPolicy.Total(new Dictionary<string,int>())==0,"empty custom plan excludes every reward");
+var plan=new Dictionary<string,int>{{"scorpion",1},{"coffer",3},{"not-a-prize",999}};
+Check(KeyboundShoppingPolicy.Total(plan)==3160,"selected quantities and unknown keys");
+plan["scorpion"]=0;
+Check(KeyboundShoppingPolicy.Total(plan)==2730,"owned reward excluded");
+Check(KeyboundShoppingPolicy.Remaining(6380,1281)==5099,"live wallet reduces required earnings");
+Check(KeyboundShoppingPolicy.Remaining(430,600)==0,"surplus balance never produces negative target");
+Check(KeyboundShoppingPolicy.Rounds(5099,new uint[]{331,340})==16,"round estimate rounds up actual average");
+Check(KeyboundShoppingPolicy.Rounds(100,Array.Empty<uint>()) is null,"unknown earnings do not invent an estimate");
+Check(KeyboundShoppingPolicy.Rounds(100,new uint[]{0}) is null,"zero rewards do not divide by zero");
+var earnings=new KeyboundRoundEarnings();
+Check(earnings.Observe(true,false,950,10000) is null,"round start does not count");
+Check(earnings.Observe(true,true,1281,10000) is null,"results wait for round exit");
+Check(earnings.Observe(true,true,1281,10000) is null,"repeated results polls do not count again");
+Check(earnings.Observe(false,false,1281,10000)==331,"completed observed round yields actual earnings");
+Check(earnings.Observe(false,false,1281,10000) is null,"round counted once");
+earnings.Observe(true,true,1600,10000);
+Check(earnings.Observe(false,false,1600,10000) is null,"joining at results cannot invent baseline");
+earnings.Observe(true,false,9900,10000);earnings.Observe(true,true,10000,10000);
+Check(earnings.Observe(false,false,10000,10000) is null,"capacity-limited round excluded");
+earnings.Observe(true,false,1500,10000);earnings.Observe(true,false,1000,10000);earnings.Observe(true,true,1331,10000);
+Check(earnings.Observe(false,false,1331,10000) is null,"balance reduction invalidates baseline");

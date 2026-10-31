@@ -17,7 +17,7 @@ public sealed partial class Plugin
         var character=Player.ContentId;
         if(!Client.IsLoggedIn||character==0||character!=keyboundMgcCharacter){
             keyboundMgc=keyboundMgcLimit=keyboundRoundMgc=keyboundLastMgcChange=null;
-            keyboundResultsReadyAt=default;keyboundRewardTerritory=0;keyboundLastResults=[];keyboundMgcCharacter=character;
+            keyboundResultsReadyAt=default;keyboundRewardTerritory=0;keyboundLastResults=[];keyboundMgcCharacter=character;keyboundEarnings=new();
             if(!Client.IsLoggedIn||character==0)return;
         }
         try{
@@ -35,6 +35,7 @@ public sealed partial class Plugin
                 if(keyboundResultsReadyAt==default)keyboundResultsReadyAt=now;
                 keyboundLastResults=KeyboundUi.Texts("KTGResult").Select(t=>t.Text).Where(t=>t.Length>0).Distinct().Take(64).Select(t=>t.Length>256?t[..256]:t).ToArray();
             }else keyboundResultsReadyAt=default;
+            ObserveKeyboundShopping(results!=null);
         }catch(Exception ex){keyboundMgc=keyboundMgcLimit=null;keyboundMgcPollAt=now.AddSeconds(10);Log.Warning(ex,"Could not read Keybound MGC");}
     }
     private void DrawKeyboundRewards()

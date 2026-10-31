@@ -42,6 +42,7 @@ public sealed partial class Plugin
         var background=config.KeyboundRunInBackground;
         if(ImGui.Checkbox("Run in background",ref background)){config.KeyboundRunInBackground=background;SaveConfiguration();}
         DrawKeyboundRewards();
+        DrawKeyboundShopping();
         if(ImGui.Button("Soft · 80 / 150 / 80 ms")){
             config.KeyboundMinDelayMs=KeyboundPolicy.SoftMinMs;config.KeyboundMaxDelayMs=KeyboundPolicy.SoftMaxMs;config.KeyboundSubmitDelayMs=KeyboundPolicy.SoftSubmitMs;SaveConfiguration();
         }
