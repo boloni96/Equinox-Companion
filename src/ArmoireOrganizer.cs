@@ -7,7 +7,7 @@ namespace EquinoxCompanion;
 
 public sealed partial class Plugin
 {
-    private bool armoireRunning,armoireOpenedLookup;
+    private bool armoireRunning,armoireOpenedLookup,armoirePreviewOnly;
     private readonly HashSet<uint> armoireCategories=[];
     private bool armoireSinglePieces=true,armoireOutfitPieces=true;
     private HashSet<uint> ArmoireExclusions()=>config.ArmoireExcludedItems.TryGetValue(Player.ContentId,out var set)?set:config.ArmoireExcludedItems[Player.ContentId]=[];
@@ -30,7 +30,7 @@ public sealed partial class Plugin
     {
         ImGui.TextWrapped("Move armoire-compatible gear out of the glamour dresser, including individual pieces in outfit sets.");
         ImGui.BeginDisabled(armoireRunning);
-        if(ImGui.Button("Check eligible gear"))RetrievalTry(()=>ScanArmoire(false));
+        if(ImGui.Button("Check eligible gear"))StartArmoireOrganizer(true);
         ImGui.SameLine();if(ImGui.Button("Dresser → Armoire"))StartArmoireOrganizer();
         if(ImGui.CollapsingHeader("Armoire options")){
             ImGui.TextUnformatted("Dyed gear is always protected (both dye channels).");
@@ -45,7 +45,7 @@ public sealed partial class Plugin
         ImGui.TextWrapped(armoireStatus);
         if(armoirePreview.Length>0&&ImGui.CollapsingHeader($"Eligible gear · {armoirePreview.Length}###ArmoirePreview")){
             ImGui.BeginChild("ArmoireRows",new(0,ImGui.GetTextLineHeightWithSpacing()*10),true);
-            var clip=ImGui.ImGuiListClipper();clip.Begin(armoirePreview.Length,ImGui.GetTextLineHeightWithSpacing());
+            var clip=ImGui.ImGuiListClipper();clip.Begin(armoirePreview.Length,ImGui.GetFrameHeightWithSpacing());
             while(clip.Step())for(var i=clip.DisplayStart;i<clip.DisplayEnd;i++){var r=armoirePreview[i];ImGui.PushID((int)r.Item);ImGui.PushID(i);var keep=ArmoireExclusions().Contains(r.Item);ImGui.BeginDisabled(armoireRunning);if(ImGui.Checkbox("Keep",ref keep)){if(keep)ArmoireExclusions().Add(r.Item);else ArmoireExclusions().Remove(r.Item);SaveConfiguration();}ImGui.EndDisabled();ImGui.SameLine();ImGui.TextUnformatted(r.Name+" · "+(keep?"Excluded":r.Status));ImGui.PopID();ImGui.PopID();}
             clip.End();clip.Destroy();ImGui.EndChild();
         }
@@ -53,7 +53,7 @@ public sealed partial class Plugin
     private void LoadArmoireCatalogue()
     {
         armoireRows??=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Cabinet>().Where(r=>r.Item.RowId>0).GroupBy(r=>r.Item.RowId).ToDictionary(g=>g.Key,g=>g.First().RowId);
-        armoireSets??=DataManager.GetExcelSheet<Lumina.Excel.Sheets.MirageStoreSetItem>().ToDictionary(r=>r.RowId,r=>r.Items.Select(i=>i.RowId).ToArray());
+        armoireSets??=DataManager.GetExcelSheet<Lumina.Excel.Sheets.MirageStoreSetItem>().ToDictionary(r=>r.RowId,r=>new[]{r.MainHand.RowId,r.OffHand.RowId,r.Head.RowId,r.Body.RowId,r.Hands.RowId,r.Legs.RowId,r.Feet.RowId,r.Earrings.RowId,r.Necklace.RowId,r.Bracelets.RowId,r.Ring.RowId});
     }
     private static unsafe bool ArmoireDresserReady()
     {
@@ -100,6 +100,7 @@ public sealed partial class Plugin
             previews.Add((p.ItemId,DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>().GetRowOrDefault(p.ItemId)?.Name.ExtractText()??p.ItemId.ToString(),reason.Length==0?"Ready":reason));
             if(queue&&reason.Length==0)armoireQueue.Enqueue(p);
         }
+        if(queue)armoireSkipped=pieces.Count-armoireQueue.Count;
         armoirePreview=previews.ToArray();armoireStatus=$"{planned.Count} ready · {pieces.Count-planned.Count} skipped";
     }
     private string ArmoireFilter(ArmoirePiece p)
@@ -130,12 +131,12 @@ public sealed partial class Plugin
         }
         return count==1;
     }
-    private void StartArmoireOrganizer()=>RetrievalTry(()=>{
+    private void StartArmoireOrganizer(bool previewOnly=false)=>RetrievalTry(()=>{
         if(!config.EnableRetriever||!Player.IsLoaded)throw new InvalidOperationException("Enable Organizer and log in first.");
         if(armoireRunning||organizeRunning||retrievalRun.Running||chestRunning||retainerGilRunning||sellerRun.Running||TraderRunning||craftingWithdrawalPending)throw new InvalidOperationException("Finish the current inventory operation first.");
         if(!ArmoireDresserReady())throw new InvalidOperationException("Open the glamour dresser first.");
         armoireCharacter=Player.ContentId;armoireTerritory=Client.TerritoryType;armoireMoved=armoireSkipped=0;armoirePending=null;armoireQueue.Clear();
-        armoireOpenedLookup=false;armoirePhase=0;armoireRunning=true;armoireNext=default;armoireDeadline=DateTimeOffset.UtcNow.AddSeconds(20);armoireStatus="Loading armoire contents…";
+        armoirePreviewOnly=previewOnly;armoireOpenedLookup=false;armoirePhase=0;armoireRunning=true;armoireNext=default;armoireDeadline=DateTimeOffset.UtcNow.AddSeconds(20);armoireStatus="Loading armoire contents…";
     });
     private unsafe void StopArmoireOrganizer(string reason)
     {
@@ -159,7 +160,7 @@ public sealed partial class Plugin
                     if(!armoireOpenedLookup){var a=AgentCabinetWithdraw.Instance();if(a==null)return;if(a->IsAgentActive())throw new InvalidOperationException("Close the existing armoire window before starting.");a->Show();armoireOpenedLookup=true;}return;
                 }
                 if(armoireOpenedLookup){var a=AgentCabinetWithdraw.Instance();if(a!=null)a->Hide();armoireOpenedLookup=false;}
-                ScanArmoire(true);armoirePhase=1;armoireDeadline=now.AddSeconds(20);return;
+                ScanArmoire(!armoirePreviewOnly);if(armoirePreviewOnly){armoireRunning=false;return;}armoirePhase=1;armoireDeadline=now.AddSeconds(20);return;
             }
             if(!ArmoireDresserReady()||!state->Cabinet.IsCabinetLoaded()){StopArmoireOrganizer("Stopped: dresser closed or storage data unavailable");return;}
             if(armoirePhase==1){
