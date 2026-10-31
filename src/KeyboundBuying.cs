@@ -49,7 +49,7 @@ public sealed partial class Plugin
     }
     private unsafe void RefreshKeyboundBuyPlan()
     {
-        keyboundMissingPlan=null;keyboundReadyPlan=null;keyboundPlanError="";keyboundHeldRewards.Clear();
+        keyboundUseCandidates.Clear();keyboundUseReady=0;keyboundMissingPlan=null;keyboundReadyPlan=null;keyboundPlanError="";keyboundHeldRewards.Clear();
         try{
             if(!Client.IsLoggedIn||!Player.IsLoaded||Player.ContentId==0)return;
             LoadKeyboundOffers();keyboundPurchases!.Reload();var character=Player.ContentId;keyboundOwned.Clear();
@@ -74,6 +74,11 @@ public sealed partial class Plugin
                 if(!owned&&armoireRows!.TryGetValue(offer.Item,out var cabinet)&&state->Cabinet.IsCabinetLoaded())owned=state->Cabinet.IsItemInCabinet(cabinet);
                 var dresser=MirageManager.Instance();if(!owned&&dresser!=null&&dresser->PrismBoxLoaded)owned=GearInDresser(offer.Item);
                 if(owned)keyboundOwned.Add(offer.Item);
+                var selectedForUse=!config.KeyboundUseJournalWishlist||wishes!.Any(w=>w.Wanted&&KeyboundShoppingPolicy.PrizeKey(w.Name)==offer.Key);
+                if(selectedForUse&&KeyboundUsePolicy.IsUnlock(offer.Key)){
+                    keyboundUseCandidates.Add(offer.Item);
+                    if(KeyboundUsePolicy.CanUse(offer.Key,true,(int)unlocked,KeyboundBagCount(offer.Item)))keyboundUseReady++;
+                }
                 if(KeyboundShoppingPolicy.Quantity(plan,offer.Key)>0&&!owned){
                     if(!KeyboundBuyingPolicy.CanSelect(receipt,KeyboundWallet(),ArmoireInventory(offer.Item).Held)&&!(receipt!=null&&CanResumeKeyboundPurchase(offer,receipt,out _,out _)))keyboundHeldRewards.Add(offer.Key);
                     if(unlocked==3)throw new InvalidOperationException("Waiting for reward unlock information.");
@@ -86,36 +91,44 @@ public sealed partial class Plugin
     }
     private void DrawKeyboundBuyButton()
     {
-        if(keyboundBuying){if(ImGui.Button("Stop buying"))StopKeyboundBuying("Stopped; confirmed purchases are saved.");}
+        if(keyboundBuying){if(ImGui.Button(keyboundUsingRewards?"Stop using rewards":"Stop buying"))StopKeyboundBuying("Stopped; confirmed purchases are saved.");}
         else{
             ImGui.BeginDisabled(keyboundReadyPlan==null||keyboundReadyPlan.Count==0);
             if(ImGui.Button("Buy all missing"))StartKeyboundBuying();
             ImGui.EndDisabled();
             if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))ImGui.SetTooltip("At the MGC trader: buy one of each missing reward, or your Journal wishlist when enabled. Checks this character's inventory, unlocks, recorded storage and saved purchases. Visit storage to refresh older holdings. No reward list is added to this window.");
+            ImGui.SameLine();
+            ImGui.BeginDisabled(keyboundReadyPlan==null||(keyboundReadyPlan.Count==0&&keyboundUseReady==0));
+            if(ImGui.Button("Buy all & use"))StartKeyboundBuying(true);
+            ImGui.EndDisabled();
+            if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))ImGui.SetTooltip("Buy missing selected rewards, then use their unlearned unlock items in your bags: orchestrion rolls, emote, minion, mount, personal effect and framer's kit. Includes rewards already bought. Clothing and coffers stay untouched.");
         }
         if(keyboundBuyStatus.Length>0)ImGui.TextWrapped(keyboundBuyStatus);
     }
     private unsafe uint KeyboundWallet(){var c=CurrencyManager.Instance();if(c==null||!c->HasItem(52322))throw new InvalidOperationException("MGC wallet is not loaded.");return c->GetItemCount(52322);}
     private bool KeyboundIsTrader(Dalamud.Game.ClientState.Objects.Types.IGameObject? obj)=>obj!=null&&obj.ObjectKind==ObjectKind.EventNpc&&string.Equals(DataManager.GetExcelSheet<Lumina.Excel.Sheets.ENpcResident>(Dalamud.Game.ClientLanguage.English).GetRowOrDefault(obj.BaseId)?.Singular.ToString(),"MGC trader",StringComparison.OrdinalIgnoreCase);
-    private unsafe void StartKeyboundBuying()
+    private unsafe void StartKeyboundBuying(bool useRewards=false)
     {
         try{
             RefreshKeyboundBuyPlan();if(keyboundReadyPlan==null)throw new InvalidOperationException(keyboundPlanError);
-            if(keyboundReadyPlan.Count==0)throw new InvalidOperationException(keyboundHeldRewards.Count>0?"Remaining purchases need verification; duplicate purchases are held.":"All selected rewards are already obtained.");
+            if(keyboundReadyPlan.Count==0&&(!useRewards||keyboundUseReady==0))throw new InvalidOperationException(keyboundHeldRewards.Count>0?"Remaining purchases need verification; duplicate purchases are held.":"All selected rewards are already obtained.");
             if(!config.EnableKeyboundBrawler||Client.TerritoryType==1359||Conditions[ConditionFlag.InDutyQueue]||Conditions[ConditionFlag.WaitingForDuty])throw new InvalidOperationException("Finish the round / leave the queue before buying.");
             if(followSession.Armed||purchasePending!=null||helperExchangePending!=null||gearRouting||armoireRunning||retrievalRun.Running||organizeRunning||sellerRun.Running||TraderRunning)throw new InvalidOperationException("Finish the other helper or storage operation first.");
             var self=Objects.LocalPlayer??throw new InvalidOperationException("Character unavailable.");
-            var trader=Objects.Where(o=>KeyboundIsTrader(o)&&Vector3.Distance(self.Position,o.Position)<=o.HitboxRadius+4).OrderBy(o=>Vector3.DistanceSquared(self.Position,o.Position)).FirstOrDefault()??throw new InvalidOperationException("Move beside the MGC trader, then Buy all missing.");
+            var trader=Objects.Where(o=>KeyboundIsTrader(o)&&Vector3.Distance(self.Position,o.Position)<=o.HitboxRadius+4).OrderBy(o=>Vector3.DistanceSquared(self.Position,o.Position)).FirstOrDefault();
+            if(trader==null&&keyboundReadyPlan.Count>0)throw new InvalidOperationException("Move beside the MGC trader, then Buy all missing.");
             if(KeyboundShoppingPolicy.Total(keyboundReadyPlan)>KeyboundWallet())throw new InvalidOperationException("Not enough MGC for all missing rewards in this list.");
             if(!EventExchangeHasSpace(keyboundReadyPlan.Count))throw new InvalidOperationException($"Keep {keyboundReadyPlan.Count} inventory slots free for these rewards.");
             var resume=keyboundOffers!.FirstOrDefault(o=>keyboundReadyPlan.ContainsKey(o.Key)&&keyboundPurchases!.Find(Player.ContentId,o.Item) is {} r&&CanResumeKeyboundPurchase(o,r,out _,out _));
             if(KeyboundPurchaseDialogVisible()&&resume==null)throw new InvalidOperationException("Close the unrelated purchase confirmation first.");
-            if((PurchaseShop().Length>0||VisibleFollowAddon("SelectString")||VisibleFollowAddon("Talk"))&&Targets.Target?.GameObjectId!=trader.GameObjectId)throw new InvalidOperationException("Close the other NPC's window first.");
-            StopKeybound();keyboundBuying=true;keyboundBuyerCharacter=Player.ContentId;keyboundBuyerWorld=Player.CurrentWorld.RowId;keyboundBuyerTerritory=Client.TerritoryType;keyboundBuyerObject=trader.GameObjectId;
+            if((PurchaseShop().Length>0||VisibleFollowAddon("SelectString")||VisibleFollowAddon("Talk"))&&(trader==null||Targets.Target?.GameObjectId!=trader.GameObjectId))throw new InvalidOperationException("Close the other NPC's window first.");
+            StopKeybound();keyboundBuying=true;keyboundBuyerCharacter=Player.ContentId;keyboundBuyerWorld=Player.CurrentWorld.RowId;keyboundBuyerTerritory=Client.TerritoryType;keyboundBuyerObject=trader?.GameObjectId??0;
+            keyboundBuyAndUse=useRewards;keyboundUsingRewards=false;keyboundUseRemaining.Clear();keyboundUseRemaining.UnionWith(keyboundUseCandidates);keyboundUsed=0;keyboundUseSkipped=0;keyboundUsePending=null;
             keyboundBuyRemaining.Clear();keyboundBuyRemaining.UnionWith(keyboundOffers!.Where(o=>keyboundReadyPlan.ContainsKey(o.Key)).Select(o=>o.Item));
             keyboundEquipmentCheckSent=false;keyboundBuySelected=keyboundBuyConfirmed=keyboundBuyerOpened=false;keyboundBuyItem=null;keyboundBuyIntent=null;keyboundBought=keyboundGreetingCount=0;keyboundVisitedTabs.Clear();keyboundTabFingerprint="";keyboundTabStableAt=default;keyboundRequestedTab=null;keyboundTabPrimed=false;keyboundRowFingerprint="";
             keyboundBuyNext=default;keyboundBuyDeadline=DateTimeOffset.UtcNow.AddSeconds(45);keyboundBuyStatus="Buying missing rewards…";
-            Targets.Target=trader;
+            if(trader!=null)Targets.Target=trader;
+            if(keyboundBuyRemaining.Count==0){FinishKeyboundBuying();return;}
             if(resume!=null){
                 var receipt=keyboundPurchases!.Find(Player.ContentId,resume.Item)!;
                 if(!CanResumeKeyboundPurchase(resume,receipt,out var resumeShop,out var resumeIndex))throw new InvalidOperationException("Pending confirmation changed.");
@@ -125,7 +138,7 @@ public sealed partial class Plugin
         }catch(Exception e){StopKeyboundBuying(e.Message);}
     }
     private string KeyboundBuyFinished()=>$"Bought {keyboundBought} rewards"+(keyboundHeldRewards.Count>0?$" · {keyboundHeldRewards.Count} held for verification.":" · Done.");
-    private void StopKeyboundBuying(string reason){keyboundBuying=false;keyboundBuyStatus=reason;keyboundBuyRefresh=default;}
+    private void StopKeyboundBuying(string reason){keyboundBuying=false;keyboundUsingRewards=false;keyboundBuyAndUse=false;keyboundBuyStatus=reason;keyboundBuyRefresh=default;}
     private bool KeyboundPurchaseDialogVisible()=>new[]{"SelectYesno","ShopExchangeItemDialog","ShopExchangeCurrencyDialog","Request"}.Any(VisibleFollowAddon);
     private unsafe KeyboundOffer? KeyboundReadOffer(string shop,int row,out uint index)
     {
@@ -152,6 +165,7 @@ public sealed partial class Plugin
         if(now<keyboundBuyNext)return;keyboundBuyNext=now.AddMilliseconds(350);
         try{
             if(!config.EnableKeyboundBrawler||!Player.IsLoaded||Player.ContentId!=keyboundBuyerCharacter||Player.CurrentWorld.RowId!=keyboundBuyerWorld||Client.TerritoryType!=keyboundBuyerTerritory||Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]||Conditions[ConditionFlag.InCombat]||followSession.Armed||purchasePending!=null||helperExchangePending!=null)throw new InvalidOperationException("Buying stopped: character, location or active helper changed.");
+            if(keyboundUsingRewards){UpdateKeyboundRewardUse(now);return;}
             var held=keyboundBuyItem==null?0:ArmoireInventory(keyboundBuyItem.Item).Held;
             if(keyboundBuyIntent is {} intent&&KeyboundBuyingPolicy.Confirmed(intent,KeyboundWallet(),held)){
                 keyboundPurchases!.Put(intent with {Confirmed=true});keyboundBuyRemaining.Remove(intent.Item);keyboundBought++;keyboundBuyItem=null;keyboundBuyIntent=null;keyboundBuySelected=keyboundBuyConfirmed=false;keyboundBuyDeadline=now.AddSeconds(45);RequestStorageRefresh();keyboundVisitedTabs.Clear();RefreshKeyboundBuyPlan();keyboundBuyStatus=$"Bought {keyboundBought} · {keyboundBuyRemaining.Count} remaining";return;
@@ -163,7 +177,7 @@ public sealed partial class Plugin
             if(keyboundBuyConfirmed)return;
             if(keyboundBuySelected){ConfirmKeyboundBuy();return;}
             if(KeyboundPurchaseDialogVisible())return;
-            if(keyboundBuyRemaining.Count==0){StopKeyboundBuying(KeyboundBuyFinished());return;}
+            if(keyboundBuyRemaining.Count==0){FinishKeyboundBuying();return;}
             var shop=PurchaseShop();
             if(shop.Length>0){
                 if(!KeyboundShopTabReady(shop,now))return;
@@ -176,7 +190,7 @@ public sealed partial class Plugin
                 var recovery=keyboundOffers!.FirstOrDefault(o=>keyboundBuyRemaining.Contains(o.Item)&&keyboundPurchases!.Find(keyboundBuyerCharacter,o.Item)!=null);
                 var next=rows.FirstOrDefault(r=>keyboundBuyRemaining.Contains(r.Offer.Item)&&(recovery==null||r.Offer.Item==recovery.Item));
                 if(next.Offer==null){
-                    if(keyboundBuyRemaining.Count==0){StopKeyboundBuying(KeyboundBuyFinished());return;}
+                    if(keyboundBuyRemaining.Count==0){FinishKeyboundBuying();return;}
                     if(recovery==null&&KeyboundVisibleMissingRow(shop))throw new InvalidOperationException("The visible reward price could not be verified; nothing purchased.");
                     AdvanceKeyboundShopTab(shop,now);return;
                 }

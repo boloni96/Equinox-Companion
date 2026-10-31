@@ -210,3 +210,18 @@ Check(KeyboundBuyingPolicy.TabRowsChanged(10,10,"9,101,0","1,201,0"),"requested 
 Check(KeyboundBuyingPolicy.TabRowsChanged(10,10,"9,101,0","0"),"loaded empty category can be scanned");
 Check(!KeyboundBuyingPolicy.TabRowsChanged(10,10,"9,101,0",""),"missing row observation cannot acknowledge tab");
 Check(KeyboundBuyingPolicy.TabRowsChanged(10,10,"","9,101,0"),"initial explicit category refresh allows existing stable rows");
+
+Check(KeyboundShoppingPolicy.Prizes.Count(p=>KeyboundUsePolicy.IsUnlock(p.Key))==8,"exactly eight supported event unlock items");
+foreach(var key in new[]{"gold-saucer-roll","battles-roll","fight-roll","emote","barret","scorpion","gatling","framer"})
+    Check(KeyboundUsePolicy.CanUse(key,true,2,1),"selected unlearned reward in bags can be used: "+key);
+Check(!KeyboundUsePolicy.CanUse("coffer",true,2,1),"coffers are never opened by buy-and-use");
+Check(!KeyboundUsePolicy.CanUse("brawler-top",true,2,1),"clothing is never used");
+Check(!KeyboundUsePolicy.CanUse("barret",false,2,1),"unselected wishlist reward stays untouched");
+Check(!KeyboundUsePolicy.CanUse("barret",true,1,1),"already learned reward is not consumed again");
+Check(!KeyboundUsePolicy.CanUse("barret",true,3,1),"unknown unlock state never authorizes use");
+Check(!KeyboundUsePolicy.CanUse("barret",true,4,1),"unsupported item action never authorizes use");
+Check(!KeyboundUsePolicy.CanUse("barret",true,2,0),"recorded storage ownership does not authorize missing bag item use");
+Check(KeyboundUsePolicy.Confirmed(1,0,1),"consume plus learned state confirms unlock");
+Check(!KeyboundUsePolicy.Confirmed(1,0,2),"consumption alone is not successful unlock");
+Check(!KeyboundUsePolicy.Confirmed(1,1,1),"unlock alone is not consumption confirmation");
+Check(!KeyboundUsePolicy.Confirmed(1,0,3),"wait for unlock state to load after consumption");
