@@ -84,3 +84,9 @@ Check(KeyboundPolicy.IsPhrase("Worth the Weight?"),"wave two boss question phras
 Check(KeyboundPolicy.CanSubmit("Worth the Weight?","Worth the Weight?","Worth the Weight?"),"boss question mark is preserved on submission");
 Check(!KeyboundPolicy.CanSubmit("Worth the Weight?","Worth the Weight","Worth the Weight?"),"boss phrase requires its final punctuation");
 Check(!KeyboundPolicy.IsPhrase("???")&&!KeyboundPolicy.IsPhrase("***"),"placeholder-only labels stay excluded");
+
+foreach(var phrase in new[]{"Fight On!","Worth the Weight?","Wait.","Really?!","Ready..."})
+{
+    Check(KeyboundPolicy.IsPhrase(phrase),"punctuation accepted: "+phrase);
+    Check(KeyboundPolicy.CanSubmit(phrase,phrase,phrase),"punctuation submitted unchanged: "+phrase);
+}
