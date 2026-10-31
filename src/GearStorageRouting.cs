@@ -42,6 +42,7 @@ public sealed partial class Plugin
         if(!ImGui.BeginPopup("GearStorageOptions"))return;
         ImGui.BeginDisabled(gearRouting||armoireRunning);
         DrawGearCategoryPicker("Gear categories",gearCategories,false);
+        DrawGearSourcePicker();
         if(ImGui.Checkbox("Skip dyed gear",ref gearSkipDyed)){config.StorageGearSkipDyed=gearSkipDyed;SaveConfiguration();}
         ImGui.TextWrapped("Armoire first when eligible; otherwise glamour dresser. Dyed gear never goes into the armoire. Turning this filter off permits individual dresser storage only; outfit conversion remains protected.");
         ImGui.SetNextItemWidth(110);if(ImGui.SliderInt("Leave bag slots free",ref gearReserve,1,10)){config.StorageGearReserve=gearReserve;SaveConfiguration();}
@@ -56,7 +57,7 @@ public sealed partial class Plugin
         if(fromRetainers&&Player.CurrentWorld.RowId!=Player.HomeWorld.RowId)throw new InvalidOperationException("Use your retainers on your home world.");
         LoadArmoireCatalogue();gearKeep.Clear();
         var protectedItems=respectPlan?retrievalEntrust?.Protected??[]:Array.Empty<uint>();
-        var ids=selected.Distinct().Where(id=>id>0&&DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>().GetRowOrDefault(id)?.EquipSlotCategory.RowId>0&&!ArmoireExclusions().Contains(id)&&!protectedItems.Contains(id)&&(gearCategories.Count==0||gearCategories.Contains(OrganizeCategory(id)))).ToArray();
+        var ids=selected.Distinct().Where(id=>id>0&&GearStorageItemAllowed(id)&&!ArmoireExclusions().Contains(id)&&!protectedItems.Contains(id)&&(gearCategories.Count==0||gearCategories.Contains(OrganizeCategory(id)))&&GearSourceAllowed(id)).ToArray();
         if(respectPlan&&retrievalEntrust is {} plan)foreach(var id in ids)gearKeep[id]=Math.Max(plan.Keep.GetValueOrDefault(id),plan.CategoryKeep.GetValueOrDefault(OrganizeCategory(id)));
         if(ids.Length==0)throw new InvalidOperationException("Select gear using the existing inventory, retainer or plan selection first.");
         if(GearObject(false)==null||fromRetainers&&GearObject(true)==null)throw new InvalidOperationException("Use an inn room with a glamour dresser and summoning bell loaded nearby.");

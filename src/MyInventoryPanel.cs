@@ -12,7 +12,7 @@ public sealed partial class Plugin
     private DateTimeOffset myInventoryRefresh;
     private ChestStack[] myInventoryStock=[];
     private string MyInventoryName(uint id)=>retrievalCatalog?.Names.GetValueOrDefault(id)??id.ToString();
-    private bool MyInventoryMatches(uint id)=>MyInventoryName(id).Contains(myInventorySearch,StringComparison.OrdinalIgnoreCase)&&(myInventoryAllCategories||myInventoryCategories.Contains(OrganizeCategory(id)))&&(myInventoryDestination!=GlamourStorageDestination||(DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>().GetRowOrDefault(id)?.EquipSlotCategory.RowId>0&&(gearCategories.Count==0||gearCategories.Contains(OrganizeCategory(id)))));
+    private bool MyInventoryMatches(uint id)=>MyInventoryName(id).Contains(myInventorySearch,StringComparison.OrdinalIgnoreCase)&&(myInventoryAllCategories||myInventoryCategories.Contains(OrganizeCategory(id)))&&(myInventoryDestination!=GlamourStorageDestination||(GearStorageItemAllowed(id)&&GearSourceAllowed(id)&&(gearCategories.Count==0||gearCategories.Contains(OrganizeCategory(id)))));
     private unsafe bool InventoryTradeFilterAllows(ChestStack stack,int filter)
     {
         if(filter==0||stack.Item==0)return true;

@@ -11,7 +11,7 @@ public sealed partial class Plugin
         // Build from item eligibility, not general inventory groups such as food,
         // furniture or crafting materials. Cabinet rows are authoritative for armoire.
         var categories=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>()
-            .Where(item=>armoire?armoireRows!.ContainsKey(item.RowId):item.EquipSlotCategory.RowId>0)
+            .Where(item=>armoire?armoireRows!.ContainsKey(item.RowId):item.IsGlamorous&&item.EquipSlotCategory.RowId>0)
             .Select(item=>item.ItemUICategory.RowId).Where(id=>id>0).ToHashSet();
         var groups=StorageCategoryGroups.Build(DataManager.GetExcelSheet<Lumina.Excel.Sheets.ItemUICategory>()
             .Where(c=>categories.Contains(c.RowId))

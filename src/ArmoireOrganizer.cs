@@ -34,7 +34,8 @@ public sealed partial class Plugin
         ImGui.SameLine();if(ImGui.Button("Dresser → Armoire"))StartArmoireOrganizer();
         if(ImGui.CollapsingHeader("Armoire options")){
             ImGui.TextUnformatted("Dyed gear is always protected (both dye channels).");
-            DrawGearCategoryPicker("Gear categories",armoireCategories,true);
+            DrawGearCategoryPicker("Equipment slots",armoireCategories,true);
+            DrawArmoireSourcePicker();
             ImGui.Checkbox("Individual pieces",ref armoireSinglePieces);ImGui.SameLine();ImGui.Checkbox("Outfit set pieces",ref armoireOutfitPieces);
             if(ImGui.SmallButton("Clear saved item exclusions")){ArmoireExclusions().Clear();SaveConfiguration();}
             ImGui.TextWrapped("Check eligible gear, then tick Keep beside any item you want left in the dresser. Exclusions are saved for this character.");
@@ -105,6 +106,7 @@ public sealed partial class Plugin
     }
     private string ArmoireFilter(ArmoirePiece p)
     {
+        if(!ArmoireSourceAllowed(p.ItemId))return "Armoire group filtered";
         if(ArmoireExclusions().Contains(p.ItemId))return "Excluded";
         if(p.SetColumn<0?!armoireSinglePieces:!armoireOutfitPieces)return "Source filtered";
         if(armoireCategories.Count>0&&!armoireCategories.Contains(OrganizeCategory(p.ItemId)))return "Category filtered";
