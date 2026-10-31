@@ -244,6 +244,7 @@ public sealed partial class Plugin : IDalamudPlugin
         Pi.UiBuilder.OpenMainUi += Open;
         Pi.UiBuilder.OpenConfigUi += OpenSettings;
         Framework.Update += Update;
+        Framework.Update += UpdateKeyboundRewards;
         Framework.Update += UpdateKeybound;
         Framework.Update += UpdateActivityKeepAlive;
         Client.Login += OnGardenNoticeLogin;
@@ -1058,6 +1059,7 @@ public sealed partial class Plugin : IDalamudPlugin
                 lotteryRefundDiagnostics = lotteryRefundDiagnostic,
                 companyProfileDiagnostics = new { latest = companyProfileDiagnostic, history = companyProfileHistory.ToArray(), status = discoveryStatus },
                 growingAdventure = new { selected=adventureSelected, automaticBoard=gardenTendBoard, currentCharacter=CurrentSharedCharacter()?.Id, eligibleCharacters=gardenAdventureCharacters.ToArray(), status=gardenTendStatus, fresh=adventureFresh, fetched=adventureFetched, boards=adventureBoards.ToArray() },
+                keyboundRewards = new { balance=keyboundMgc, capacity=keyboundMgcLimit, beforeRound=keyboundRoundMgc, balanceChange=keyboundLastMgcChange, results=keyboundLastResults },
                 activityKeepAlive = new { status=activityStatus, lastPulse=activityLastPulse, pulses=activityPulseCount, followerOption=config.FollowAntiAfk, following=followSession.Armed, eventOption=keyboundAntiAfk, eventRunning=keyboundEnabled, territory=Client.TerritoryType },
                 keyboundTyping = new { enabled=keyboundEnabled, available=config.EnableKeyboundBrawler, status=keyboundStatus, word=keyboundWord, sent=keyboundSent, expected=keyboundExpected, awaiting=keyboundAwaiting, clearing=keyboundClearing, recalling=keyboundRecalling },
                 mode = "local-diagnostics", gardeningConfirmed = false, performance = new { maxDrawMs,maxUpdateMs,maxSnapshotMs, configurationError, stages=performanceStages.ToDictionary(x=>x.Key,x=>x.Value), recent=rollingPerformance.Snapshot(PerformanceClock), optionalTools=optionalToolFailures.ToDictionary(x=>x.Key,x=>x.Value) },
@@ -1300,6 +1302,7 @@ public sealed partial class Plugin : IDalamudPlugin
         Chat.ChatMessage -= OnGardenChat;
         foreach (var menuEvent in MenuEvents) Addons.UnregisterListener(menuEvent, GardenMenus, OnGardenMenu);
         Framework.Update -= Update;
+        Framework.Update -= UpdateKeyboundRewards;
         Framework.Update -= UpdateKeybound;
         Framework.Update -= UpdateActivityKeepAlive;
         StopKeybound();

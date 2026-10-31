@@ -30,6 +30,8 @@ public sealed partial class Plugin
         using var process=Process.GetCurrentProcess();
         if(process.MainWindowHandle==0||GetForegroundWindow()!=process.MainWindowHandle){keyboundStatus="Paused: bring this game window to the foreground";return true;}
         if(result!=null&&Client.TerritoryType==1359){
+            if(keyboundResultsReadyAt==default)keyboundResultsReadyAt=now;
+            if(now-keyboundResultsReadyAt<TimeSpan.FromSeconds(5)){keyboundStatus="Waiting for results and reward balance";return true;}
             var button=result->GetComponentButtonById(48);
             if(button!=null&&button->IsEnabled){if(!ClickLoginMenuButton("KTGResult",48))return true;keyboundLoopNext=now.AddSeconds(3);keyboundStatus="Returning to Keybound Square";}
             return true;

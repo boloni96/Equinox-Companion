@@ -43,6 +43,7 @@ public sealed partial class Plugin
         DrawHelperStatusText(keyboundStatus,stopped:!keyboundEnabled);
         ImGui.Checkbox("Auto-queue & repeat",ref keyboundAutoRepeat);
         ImGui.Checkbox("Anti-AFK while running",ref keyboundAntiAfk);
+        DrawKeyboundRewards();
         if(ImGui.Button("Soft · 80 / 150 / 80 ms")){
             config.KeyboundMinDelayMs=KeyboundPolicy.SoftMinMs;config.KeyboundMaxDelayMs=KeyboundPolicy.SoftMaxMs;config.KeyboundSubmitDelayMs=KeyboundPolicy.SoftSubmitMs;SaveConfiguration();
         }
