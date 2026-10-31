@@ -31,7 +31,7 @@ namespace EquinoxCompanion.Keybound;
 // Obscured: the label's noise overlay (#10) is up, so the label is hidden but its word is live and typeable.
 public readonly record struct UiText(
     string Addon, uint NodeId, string Text, float X, float Y, byte FontSize, uint Color, int Depth,
-    nint Key, bool LabelVisible, bool TextVisible, LabelTint Tint = LabelTint.None, bool Obscured = false);
+    nint Key, bool LabelVisible, bool TextVisible, LabelTint Tint = LabelTint.None, bool Obscured = false, bool ContainerVisible = true);
 
 // Colour of a KTGEWord label, read from the AddRGB tint on its background (node #26).
 public enum LabelTint { None, Blue, Gray, Red, Gold, Green }
@@ -57,7 +57,7 @@ public static unsafe class KeyboundUi
 
     // Visible text only.
     public static List<UiText> Texts(string addonName) =>
-        AllTexts(addonName).FindAll(t => t.LabelVisible && t.TextVisible && !string.IsNullOrWhiteSpace(t.Text));
+        AllTexts(addonName).FindAll(t => t.ContainerVisible && t.LabelVisible && t.TextVisible && !string.IsNullOrWhiteSpace(t.Text));
 
     // Every text node, hidden and empty ones included, so a word the boss hides or blanks keeps its slot.
     public static List<UiText> AllTexts(string addonName)
@@ -154,9 +154,9 @@ public static unsafe class KeyboundUi
         return LabelTint.None;
     }
 
-    private static void Walk(string addon, AtkUldManager* uld, int depth, List<UiText> result, LabelTint tint, bool obscured = false)
+    private static void Walk(string addon, AtkUldManager* uld, int depth, List<UiText> result, LabelTint tint, bool obscured = false, bool ancestorsVisible = true)
     {
-        if (depth > 8) return;
+        if (depth > 8 || uld == null || uld->NodeList == null) return;
         for (var i = 0; i < Math.Min((int)uld->NodeListCount,1024); i++)
         {
             var node = uld->NodeList[i];
@@ -168,13 +168,13 @@ public static unsafe class KeyboundUi
                 var c = text->TextColor;
                 result.Add(new UiText(addon, node->NodeId, text->NodeText.ToString(), node->ScreenX, node->ScreenY, text->FontSize,
                     (uint)(c.R << 24 | c.G << 16 | c.B << 8 | c.A), depth,
-                    (nint)node, IsReallyVisible(node->ParentNode), node->IsVisible() && node->Alpha_2 != 0, tint, obscured));
+                    (nint)node, IsReallyVisible(node->ParentNode), node->IsVisible() && node->Alpha_2 != 0, tint, obscured, ancestorsVisible));
             }
             else if ((ushort)node->Type >= 1000)
             {
                 var component = ((AtkComponentNode*)node)->Component;
                 if (component != null)
-                    Walk(addon, &component->UldManager, depth + 1, result, TintOf(&component->UldManager), IsObscured(&component->UldManager));
+                    Walk(addon, &component->UldManager, depth + 1, result, TintOf(&component->UldManager), IsObscured(&component->UldManager), ancestorsVisible && IsReallyVisible(node));
             }
         }
     }

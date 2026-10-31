@@ -26,5 +26,16 @@ Check(!KeyboundPolicy.AbandonMissingTarget(false,"user text","Cu","Cur"),"vanish
 
 Check(KeyboundPolicy.TypingDelay(60,100,0)==60&&KeyboundPolicy.TypingDelay(60,100,1)==100,"configured delay bounds");
 Check(KeyboundPolicy.TypingDelay(0,-10,0.5)==10,"invalid saved delay clamped");
-Check(KeyboundPolicy.TypingDelay(200,100,0.5)==200,"inverted delay bounds normalized");
+Check(KeyboundPolicy.TypingDelay(200,100,0.5)==150,"inverted delay bounds normalized");
 Check(KeyboundPolicy.LoopTerritory(1359)&&KeyboundPolicy.LoopTerritory(1360)&&!KeyboundPolicy.LoopTerritory(1),"repeat limited to event territories");
+
+Check(KeyboundPolicy.SoftMinMs==80&&KeyboundPolicy.SoftMaxMs==150&&KeyboundPolicy.SoftSubmitMs==80,"Soft preset matches requested timings");
+Check(!KeyboundPolicy.LiveWord(false,true,true,true),"hidden component cannot retain stale live word even with leftover noise overlay");
+Check(KeyboundPolicy.LiveWord(true,false,false,true),"visible component with obscuring overlay remains live");
+Check(!KeyboundPolicy.LiveWord(true,false,false,false),"disappeared label is not live");
+Check(KeyboundPolicy.LiveWord(true,true,true,false),"normal visible word remains live");
+Check(KeyboundPolicy.CanClear(true,"Cur","Cur"),"owned nonempty active input can use Escape clear");
+Check(!KeyboundPolicy.CanClear(true,"",""),"never Escape an empty input and quit");
+Check(!KeyboundPolicy.CanClear(false,"Cur","Cur"),"never Escape inactive input");
+Check(!KeyboundPolicy.CanClear(true,"my text","Cur"),"never clear someone else's text");
+Check(KeyboundPolicy.TypingDelay(200,100,0)==100&&KeyboundPolicy.TypingDelay(200,100,1)==200,"independent crossed sliders produce bounded sorted timing");

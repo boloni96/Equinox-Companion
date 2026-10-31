@@ -69,9 +69,9 @@ public sealed class Configuration : IPluginConfiguration
     public int CofferStyle { get; set; }
     public bool CofferMainMap { get; set; } = true;
     public bool EnableKeyboundBrawler { get; set; }
-    public int KeyboundMinDelayMs { get; set; } = 60;
-    public int KeyboundMaxDelayMs { get; set; } = 100;
-    public int KeyboundSubmitDelayMs { get; set; } = 120;
+    public int KeyboundMinDelayMs { get; set; } = KeyboundPolicy.SoftMinMs;
+    public int KeyboundMaxDelayMs { get; set; } = KeyboundPolicy.SoftMaxMs;
+    public int KeyboundSubmitDelayMs { get; set; } = KeyboundPolicy.SoftSubmitMs;
     public bool EnableFollowThem { get; set; }
     public FollowThemSettings FollowThem { get; set; } = new();
     public QuickLootSettings QuickLoot { get; set; } = new();
