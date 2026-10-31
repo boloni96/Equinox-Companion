@@ -67,7 +67,7 @@ public sealed partial class Plugin
             ImGui.TextUnformatted(label);
             if(ImGui.IsWindowAppearing())ImGui.SetKeyboardFocusHere();
             ImGui.SetNextItemWidth(160);
-            var enter=ImGui.InputInt("Milliseconds",ref keyboundDelayDraft,0,0,ImGuiInputTextFlags.EnterReturnsTrue);
+            var enter=ImGui.InputInt("Milliseconds",ref keyboundDelayDraft,0,0,"%d",ImGuiInputTextFlags.EnterReturnsTrue);
             ImGui.TextDisabled($"{minimum}–{maximum} ms");
             if(ImGui.Button("Apply")||enter){value=Math.Clamp(keyboundDelayDraft,minimum,maximum);changed=true;ImGui.CloseCurrentPopup();}
             ImGui.SameLine();if(ImGui.Button("Cancel"))ImGui.CloseCurrentPopup();
