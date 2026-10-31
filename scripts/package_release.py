@@ -31,12 +31,18 @@ def package(build, output, repository, tag, ref=None):
         raise ValueError("Incomplete collection catalogue, including hairstyles")
     if len({(x["category"],x["id"]) for x in catalogue}) != len(catalogue):
         raise ValueError("Duplicate collection identity")
+    duties = json.loads((build / "gear-duty-sources.json").read_text(encoding="utf-8"))
+    if not duties or len({r["Id"] for r in duties}) != len(duties):
+        raise ValueError("Missing or duplicate duty source records")
+    for row in duties:
+        if row["Id"] <= 0 or not row["Name"] or not row["Items"] or any(i <= 0 for i in row["Items"]) or len(set(row["Items"])) != len(row["Items"]):
+            raise ValueError("Invalid duty source record")
     dll = build / "EquinoxCompanion.dll"
     if not dll.is_file() or dll.read_bytes()[:2] != b"MZ":
         raise ValueError("Compiled plugin DLL is missing or invalid")
     output.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(output / "EquinoxCompanion.zip", "w", zipfile.ZIP_DEFLATED) as archive:
-        for name in ("EquinoxCompanion.dll", "EquinoxCompanion.json", "EquinoxCompanion.deps.json", "icon.png", "collection-ids.json", "THIRD-PARTY-KEYBOUND.txt"):
+        for name in ("EquinoxCompanion.dll", "EquinoxCompanion.json", "EquinoxCompanion.deps.json", "icon.png", "collection-ids.json", "THIRD-PARTY-KEYBOUND.txt", "gear-duty-sources.json", "THIRD-PARTY-GEAR-SOURCES.txt"):
             archive.write(build / name, name)
         for asset in (build / "garden-art").rglob("*"):
             if asset.is_file(): archive.write(asset, asset.relative_to(build))

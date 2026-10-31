@@ -32,10 +32,11 @@ public sealed partial class Plugin
         LoadCabinetSources();
         return cabinetSourceItems!.TryGetValue(id,out var source)&&(group==0||source.Group==group)&&(subgroup==0||source.Subgroup==subgroup);
     }
-    private bool ArmoireSourceAllowed(uint id)=>CabinetSourceAllowed(id,armoireSourceGroup,armoireSourceSubgroup);
+    private bool ArmoireSourceAllowed(uint id)=>CabinetSourceAllowed(id,armoireSourceGroup,armoireSourceSubgroup)&&GearOriginAllowed(id,armoireOrigin);
     private bool GearSourceAllowed(uint id)
     {
         LoadCabinetSources();
+        if(!GearOriginAllowed(id,gearOrigin))return false;
         if(!CabinetSourceAllowed(id,gearSourceGroup,gearSourceSubgroup))return false;
         return gearStorageKind switch {
             1=>armoireRows!.ContainsKey(id),
@@ -67,12 +68,12 @@ public sealed partial class Plugin
         MarketHelp("Uses the current game's Armoire groups and sets, including dungeon names, jobs and events. Selecting a group or set matches only items listed in the Armoire catalogue.");
         ImGui.PopID();
     }
-    private void DrawArmoireSourcePicker()=>DrawCabinetSourcePicker("ArmoireSources",ref armoireSourceGroup,ref armoireSourceSubgroup);
+    private void DrawArmoireSourcePicker(){DrawCabinetSourcePicker("ArmoireSources",ref armoireSourceGroup,ref armoireSourceSubgroup);DrawGearOriginPicker("ArmoireOrigin",ref armoireOrigin);}
     private void DrawGearSourcePicker()
     {
         ImGui.SetNextItemWidth(240);
         ImGui.Combo("Storage eligibility",ref gearStorageKind,"All supported gear\0Armoire eligible\0Dresser only\0Outfit set pieces\0");
         DrawCabinetSourcePicker("GearSources",ref gearSourceGroup,ref gearSourceSubgroup);
-        ImGui.TextWrapped("All groups includes dresser gear outside the Armoire catalogue. Specific Armoire groups limit the selection to that catalogue; they are not a complete source list for older dungeon or raid drops.");
+        DrawGearOriginPicker("GearOrigin",ref gearOrigin);
     }
 }

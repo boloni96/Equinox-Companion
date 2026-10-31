@@ -43,6 +43,27 @@ public sealed partial class Plugin
     }
     private IEnumerable<bool> ReadMarketSources()
     {
+        foreach(var step in ReadGearDutySources())yield return step;
+        // The current Cabinet catalogue supplements newer dungeon gear which
+        // upstream drop reports may not yet include.
+        foreach(var row in DataManager.GetExcelSheet<Cabinet>()) {
+            if(row.Item.RowId>0&&row.Category.RowId==12)
+                AddMarketSource(row.Item.RowId,"Dungeon","Armoire dungeon gear · "+row.SubCategory.Value.Name.ExtractText());
+            yield return true;
+        }
+        foreach(var q in DataManager.GetExcelSheet<Quest>()) {
+            var rewards=q.OptionalItemReward.Select(x=>x.RowId).ToList();
+            if(q.ItemRewardType is 1 or 3 or 5)rewards.AddRange(q.Reward.Select(x=>x.RowId));
+            foreach(var id in rewards.Where(id=>id>0).Distinct()) {
+                AddMarketSource(id,"Quest","Quest · "+q.Name.ExtractText());
+                if(q.Festival.RowId>0)AddMarketSource(id,"Seasonal event","Seasonal event · "+q.Festival.Value.Name.ExtractText());
+            }
+            yield return true;
+        }
+        foreach(var achievement in DataManager.GetExcelSheet<Achievement>()) {
+            if(achievement.Item.RowId>0)AddMarketSource(achievement.Item.RowId,"Achievement","Achievement · "+achievement.Name.ExtractText());
+            yield return true;
+        }
         foreach(var group in DataManager.GetSubrowExcelSheet<GilShopItem>())
             foreach(var row in group)
             { AddMarketSource(row.Item.RowId, "Vendor", "Vendor · gil shop (stock may require quest progress)"); yield return true; }
