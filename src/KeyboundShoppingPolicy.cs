@@ -42,6 +42,7 @@ public static class KeyboundShoppingPolicy
     }
     public static int Quantity(IReadOnlyDictionary<string,int>? plan,string key)=>plan is null?1:Math.Clamp(plan.GetValueOrDefault(key,0),0,999);
     public static long Total(IReadOnlyDictionary<string,int>? plan)=>Prizes.Sum(p=>(long)p.Cost*Quantity(plan,p.Key));
+    public static bool GoalReached(bool planKnown,long total,uint? balance)=>planKnown&&balance.HasValue&&total>=0&&balance.Value>=total;
     public static long Remaining(long total,uint balance)=>Math.Max(0,total-balance);
     public static long? Rounds(long remaining,IReadOnlyCollection<uint> earnings)
     {

@@ -8,6 +8,8 @@ public sealed partial class Plugin
     private KeyboundToolWindow keyboundWindow=null!;
     private bool keyboundCommandRegistered;
     private void InitializeKeybound(){
+        if(!config.KeyboundGoalDefaultsApplied){config.KeyboundUseJournalWishlist=true;config.KeyboundGoalDefaultsApplied=true;SaveConfiguration();}
+        config.KeyboundRunInBackground=true;
         keyboundWindow=new KeyboundToolWindow(this);windows.AddWindow(keyboundWindow);
         Framework.Update+=UpdateKeyboundBuying;
         keyboundCommandRegistered=Commands.AddHandler("/eqkeybound",new CommandInfo((_,_)=>OpenKeybound()){HelpMessage="Open the optional Keybound Brawler typing tool."});

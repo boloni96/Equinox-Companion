@@ -225,3 +225,11 @@ Check(KeyboundUsePolicy.Confirmed(1,0,1),"consume plus learned state confirms un
 Check(!KeyboundUsePolicy.Confirmed(1,0,2),"consumption alone is not successful unlock");
 Check(!KeyboundUsePolicy.Confirmed(1,1,1),"unlock alone is not consumption confirmation");
 Check(!KeyboundUsePolicy.Confirmed(1,0,3),"wait for unlock state to load after consumption");
+
+Check(!KeyboundShoppingPolicy.GoalReached(false,0,500),"unsynced wishlist cannot complete the goal");
+Check(!KeyboundShoppingPolicy.GoalReached(true,430,null),"unknown wallet cannot complete the goal");
+Check(!KeyboundShoppingPolicy.GoalReached(true,430,429),"one MGC short keeps farming");
+Check(KeyboundShoppingPolicy.GoalReached(true,430,430),"exact target stops farming");
+Check(KeyboundShoppingPolicy.GoalReached(true,430,500),"over target stops farming");
+Check(KeyboundShoppingPolicy.GoalReached(true,0,0),"confirmed empty list stops farming");
+Check(!KeyboundShoppingPolicy.GoalReached(true,11000,10000),"wallet cap alone is not the full reward target");

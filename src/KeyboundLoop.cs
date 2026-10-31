@@ -7,7 +7,8 @@ using EquinoxCompanion.Keybound;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
-    private bool keyboundQueueOwned,keyboundRegistrarOwned,keyboundAntiAfk=true;
+    private bool keyboundQueueOwned,keyboundRegistrarOwned;
+    private const bool keyboundAntiAfk=true;
     private DateTimeOffset keyboundLoopNext;
     private static unsafe AtkUnitBase* KeyboundAddon(string name){
         var stage=AtkStage.Instance();if(stage==null)return null;
@@ -27,7 +28,6 @@ public sealed partial class Plugin
         if(Client.TerritoryType==1359&&result==null)return false;
         if(now<keyboundLoopNext)return true;
         keyboundLoopNext=now.AddSeconds(1);
-        if(!config.KeyboundRunInBackground&&GetForegroundWindow()!=KeyboundGameWindow()){keyboundStatus="Paused: enable Run in background or return to the game";return true;}
         if(result!=null&&Client.TerritoryType==1359){
             if(keyboundResultsReadyAt==default)keyboundResultsReadyAt=now;
             if(now-keyboundResultsReadyAt<TimeSpan.FromSeconds(5)){keyboundStatus="Waiting for results and reward balance";return true;}

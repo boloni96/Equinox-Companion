@@ -33,7 +33,7 @@ public sealed partial class Plugin
     {
         ImGui.BeginDisabled(keyboundBuying);
         if(ImGui.Button(keyboundEnabled?"Stop":"Start")){
-            if(keyboundEnabled)StopKeybound();else{StopKeybound();keyboundEnabled=true;keyboundNext=keyboundHold=keyboundMissing=default;keyboundStatus="Waiting for Keybound Brawler";}
+            if(keyboundEnabled)StopKeybound();else{StopKeybound();keyboundGoalCheckAt=default;keyboundEnabled=true;keyboundNext=keyboundHold=keyboundMissing=default;keyboundStatus="Waiting for Keybound Brawler";}
         }
         ImGui.EndDisabled();
         ImGui.SameLine();ImGui.TextUnformatted(keyboundEnabled?"Running":"Stopped");
@@ -43,9 +43,6 @@ public sealed partial class Plugin
         DrawKeyboundShopping();
         if(ImGui.CollapsingHeader("Options")){
         ImGui.Checkbox("Auto-repeat",ref keyboundAutoRepeat);
-        ImGui.SameLine();ImGui.Checkbox("Anti-AFK",ref keyboundAntiAfk);
-        var background=config.KeyboundRunInBackground;
-        if(ImGui.Checkbox("Run in background",ref background)){config.KeyboundRunInBackground=background;SaveConfiguration();}
         if(ImGui.Button("Soft · 80 / 150 / 80 ms")){
             config.KeyboundMinDelayMs=KeyboundPolicy.SoftMinMs;config.KeyboundMaxDelayMs=KeyboundPolicy.SoftMaxMs;config.KeyboundSubmitDelayMs=KeyboundPolicy.SoftSubmitMs;SaveConfiguration();
         }
@@ -63,7 +60,7 @@ public sealed partial class Plugin
         }
         if(ImGui.CollapsingHeader("How it works")){
             ImGui.TextWrapped("Optional typing assistance for Keybound Brawler. Keeps spaces and punctuation, uses Up for consecutive repeats, and clears its partial text when a target disappears. Pauses through stuns and no-typing casts.");
-            ImGui.TextWrapped("Run in background keeps working while you use another app. Input goes directly to this game client. Keep the game running; background frame limits can slow it down. Other in-game text fields pause assistance. Auto-queue & repeat registers at the nearby Keybound registrar, accepts the match, and returns after results. Start near the registrar in Keybound Square. Stop or disabling the tool ends automation.");
+            ImGui.TextWrapped("Background running and anti-AFK are automatic while the tool is running. It stops before the next registration when your MGC covers the missing rewards. Input goes directly to this game client. Keep the game running; background frame limits can slow it down. Other in-game text fields pause assistance. Auto-queue & repeat registers at the nearby Keybound registrar, accepts the match, and returns after results. Start near the registrar in Keybound Square. Stop or disabling the tool ends automation.");
         }
     }
     private bool DrawKeyboundDelay(string label,ref int value,int minimum,int maximum)
@@ -124,6 +121,7 @@ public sealed partial class Plugin
             if(!Client.IsLoggedIn){StopKeybound("Stopped: logged out");return;}
             if(now<keyboundTimingEditUntil){keyboundDeadline=now.AddSeconds(2);keyboundStatus="Paused: editing timing";return;}
             var stage=AtkStage.Instance();if(stage==null)return;
+            if(Client.TerritoryType!=1359&&CheckKeyboundGoal(now))return;
             if(keyboundAutoRepeat&&UpdateKeyboundLoop(now))return;
             var input=stage->RaptureAtkUnitManager->GetAddonByName("KTGInput");
             if(input==null||!input->IsVisible){
@@ -139,7 +137,6 @@ public sealed partial class Plugin
             }
             var window=KeyboundGameWindow();
             if(window==0){keyboundDeadline=now.AddSeconds(2);keyboundStatus="Waiting for game input";return;}
-            if(!config.KeyboundRunInBackground&&GetForegroundWindow()!=window){keyboundDeadline=now.AddSeconds(2);keyboundStatus="Paused: enable Run in background or return to the game";return;}
             var focus=stage->GetFocus();var ownsFocus=editor.Active&&(focus==null||KeyboundContains(&input->UldManager,focus));
             var module=RaptureAtkModule.Instance();if(module==null)return;
             if(!ownsFocus&&module->AtkModule.IsTextInputActive()){keyboundDeadline=now.AddSeconds(2);keyboundStatus="Paused: another text field has focus";return;}
