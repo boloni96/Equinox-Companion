@@ -8,6 +8,7 @@ public sealed partial class Plugin
 {
     private bool keyboundBuyAndUse,keyboundUsingRewards,keyboundUseShopClosed;
     private readonly HashSet<uint> keyboundUseCandidates=[],keyboundUseRemaining=[];
+    private int keyboundCoffersOpened;
     private int keyboundUseReady,keyboundUsed,keyboundUseSkipped,keyboundUseBefore;
     private KeyboundOffer? keyboundUsePending;
     private DateTimeOffset keyboundUseDeadline;
@@ -27,7 +28,7 @@ public sealed partial class Plugin
     {
         if(!keyboundBuyAndUse){StopKeyboundBuying(KeyboundBuyFinished());return;}
         keyboundUsingRewards=true;keyboundUseShopClosed=false;keyboundUseDeadline=DateTimeOffset.UtcNow.AddSeconds(30);keyboundBuyNext=default;
-        keyboundBuyStatus="Purchases finished · preparing reward unlocks…";
+        keyboundBuyStatus="Purchases finished · preparing reward use…";
     }
     private unsafe int KeyboundUnlockState(uint item)
     {
@@ -38,11 +39,21 @@ public sealed partial class Plugin
     {
         if(gearRouting||armoireRunning||retrievalRun.Running||organizeRunning||sellerRun.Running||TraderRunning)throw new InvalidOperationException("Reward use stopped: another inventory operation started.");
         if(keyboundUsePending is {} pending){
-            if(KeyboundUsePolicy.Confirmed(keyboundUseBefore,KeyboundBagCount(pending.Item),KeyboundUnlockState(pending.Item))){
+            if(KeyboundUsePolicy.IsEventCoffer(pending.Key)){
+                var remaining=KeyboundBagCount(pending.Item);
+                if(KeyboundUsePolicy.CofferConsumed(keyboundUseBefore,remaining)){
+                    keyboundCoffersOpened++;keyboundUsePending=null;
+                    if(remaining==0)keyboundUseRemaining.Remove(pending.Item);
+                    keyboundUseDeadline=now.AddSeconds(30);keyboundBuyNext=now.AddSeconds(1);RequestStorageRefresh();
+                    keyboundBuyStatus=$"Opened {keyboundCoffersOpened} Keybound Coffer(s) · {remaining} left";
+                    return;
+                }
+            }
+            else if(KeyboundUsePolicy.Confirmed(keyboundUseBefore,KeyboundBagCount(pending.Item),KeyboundUnlockState(pending.Item))){
                 keyboundCollectionRefreshItems.Add(pending.Item);keyboundUsed++;keyboundUseRemaining.Remove(pending.Item);keyboundUsePending=null;keyboundUseDeadline=now.AddSeconds(30);RequestStorageRefresh();
                 keyboundBuyStatus="Unlocked: "+pending.Name;keyboundBuyNext=now.AddSeconds(1);return;
             }
-            if(now>=keyboundUseDeadline)throw new InvalidOperationException("Unlock not confirmed: "+pending.Name+". Use stopped; check inventory and collections.");
+            if(now>=keyboundUseDeadline)throw new InvalidOperationException("Item use not confirmed: "+pending.Name+". Use stopped; check inventory and collections.");
             return; // Never send the same use request again while awaiting its result.
         }
         if(now>=keyboundUseDeadline)throw new InvalidOperationException("Reward use stopped: "+keyboundBuyStatus+". No further item-use request sent.");
@@ -67,20 +78,28 @@ public sealed partial class Plugin
         if(Conditions[ConditionFlag.Casting]||Conditions[ConditionFlag.Mounted]){
             keyboundBuyStatus="Waiting: finish casting or dismount to use rewards";return;
         }
-        foreach(var id in keyboundUseRemaining.ToArray()){
-            var offer=keyboundOffers!.Single(o=>o.Item==id);var held=KeyboundBagCount(id);var unlocked=KeyboundUnlockState(id);
-            if(unlocked==1){keyboundUseRemaining.Remove(id);continue;}
-            if(unlocked==3){keyboundBuyStatus="Waiting for unlock information: "+offer.Name;return;}
-            if(!KeyboundUsePolicy.CanUse(offer.Key,true,unlocked,held)){keyboundUseRemaining.Remove(id);keyboundUseSkipped++;continue;}
+        foreach(var id in keyboundUseRemaining.OrderBy(id=>keyboundOffers!.Single(o=>o.Item==id).Key=="coffer"?1:0).ToArray()){
+            var offer=keyboundOffers!.Single(o=>o.Item==id);var held=KeyboundBagCount(id);
+            var coffer=KeyboundUsePolicy.IsEventCoffer(offer.Key);
+            if(coffer){
+                if(held==0){keyboundUseRemaining.Remove(id);continue;}
+                if(!KeyboundUsePolicy.CanOpenCoffer(offer.Key,held,EventExchangeHasSpace(1)))
+                    throw new InvalidOperationException($"Coffers paused: free an inventory slot, then Buy all & use again. Opened {keyboundCoffersOpened}; {held} left.");
+            }else{
+                var unlocked=KeyboundUnlockState(id);
+                if(unlocked==1){keyboundUseRemaining.Remove(id);continue;}
+                if(unlocked==3){keyboundBuyStatus="Waiting for unlock information: "+offer.Name;return;}
+                if(!KeyboundUsePolicy.CanUse(offer.Key,true,unlocked,held)){keyboundUseRemaining.Remove(id);keyboundUseSkipped++;continue;}
+            }
             var manager=InventoryManager.Instance();var agent=AgentInventoryContext.Instance();if(manager==null||agent==null)return;
             foreach(var type in KeyboundUseBags){
                 var bag=manager->GetInventoryContainer(type);
                 if(bag==null||!bag->IsLoaded||bag->Items==null)throw new InvalidOperationException("Inventory changed before reward use.");
                 for(var slot=0;slot<bag->Size;slot++){
                     if(bag->Items[slot].ItemId!=id||bag->Items[slot].Quantity==0)continue;
-                    // Select exactly this known unlock item in a normal bag.
-                    // Keep an in-flight request until BOTH consumption and unlock arrive.
-                    keyboundUsePending=offer;keyboundUseBefore=held;keyboundUseDeadline=now.AddSeconds(30);keyboundBuyStatus="Using: "+offer.Name;
+                    // Only catalogue-approved unlocks and the exact event coffer.
+                    // One request stays in flight until its consumption is confirmed.
+                    keyboundUsePending=offer;keyboundUseBefore=held;keyboundUseDeadline=now.AddSeconds(30);keyboundBuyStatus=coffer?$"Opening Keybound Coffer · {held} left":"Using: "+offer.Name;
                     Log.Information("Keybound rewards: requesting item use {ItemId} from {Inventory} slot {Slot}",id,type,slot);
                     helperReplaying=true;try{agent->UseItem(id,type,(uint)slot);}finally{helperReplaying=false;}
                     return;
@@ -88,6 +107,6 @@ public sealed partial class Plugin
             }
             throw new InvalidOperationException("Reward moved before it could be used.");
         }
-        StopKeyboundBuying($"Bought {keyboundBought} · unlocked {keyboundUsed}"+(keyboundUseSkipped>0?$" · {keyboundUseSkipped} unavailable in bags or unsupported.":" · Done.")+(keyboundHeldRewards.Count>0?$" {keyboundHeldRewards.Count} purchases held for verification.":""));
+        StopKeyboundBuying($"Bought {keyboundBought} · unlocked {keyboundUsed}"+(keyboundCoffersOpened>0?$" · coffers opened {keyboundCoffersOpened}":"")+(keyboundUseSkipped>0?$" · {keyboundUseSkipped} unavailable in bags or unsupported.":" · Done.")+(keyboundHeldRewards.Count>0?$" {keyboundHeldRewards.Count} purchases held for verification.":""));
     }
 }

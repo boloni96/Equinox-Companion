@@ -214,7 +214,7 @@ Check(KeyboundBuyingPolicy.TabRowsChanged(10,10,"","9,101,0"),"initial explicit 
 Check(KeyboundShoppingPolicy.Prizes.Count(p=>KeyboundUsePolicy.IsUnlock(p.Key))==8,"exactly eight supported event unlock items");
 foreach(var key in new[]{"gold-saucer-roll","battles-roll","fight-roll","emote","barret","scorpion","gatling","framer"})
     Check(KeyboundUsePolicy.CanUse(key,true,2,1),"selected unlearned reward in bags can be used: "+key);
-Check(!KeyboundUsePolicy.CanUse("coffer",true,2,1),"coffers are never opened by buy-and-use");
+Check(!KeyboundUsePolicy.CanUse("coffer",true,2,1),"coffers are not treated as learned unlocks");
 Check(!KeyboundUsePolicy.CanUse("brawler-top",true,2,1),"clothing is never used");
 Check(!KeyboundUsePolicy.CanUse("barret",false,2,1),"unselected wishlist reward stays untouched");
 Check(!KeyboundUsePolicy.CanUse("barret",true,1,1),"already learned reward is not consumed again");
@@ -233,3 +233,19 @@ Check(KeyboundShoppingPolicy.GoalReached(true,430,430),"exact target stops farmi
 Check(KeyboundShoppingPolicy.GoalReached(true,430,500),"over target stops farming");
 Check(KeyboundShoppingPolicy.GoalReached(true,0,0),"confirmed empty list stops farming");
 Check(!KeyboundShoppingPolicy.GoalReached(true,11000,10000),"wallet cap alone is not the full reward target");
+
+Check(KeyboundUsePolicy.CanOpenCoffer("coffer",17,true),"event coffer stack is eligible");
+Check(!KeyboundUsePolicy.CanOpenCoffer("other-coffer",17,true),"other coffers never eligible");
+Check(!KeyboundUsePolicy.CanOpenCoffer("brawler-top",1,true),"gear never treated as a coffer");
+Check(!KeyboundUsePolicy.CanOpenCoffer("coffer",17,false),"full bags stop coffer use");
+Check(!KeyboundUsePolicy.CanOpenCoffer("coffer",0,true),"empty coffer stack is finished");
+Check(!KeyboundUsePolicy.CofferConsumed(17,17),"wait without repeating an unconfirmed use");
+Check(!KeyboundUsePolicy.CofferConsumed(17,18),"inventory increase is not consumption");
+Check(!KeyboundUsePolicy.CofferConsumed(17,15),"unexpected multi-item removal is not one confirmed use");
+var coffers=17;var opened=0;
+while(KeyboundUsePolicy.CanOpenCoffer("coffer",coffers,true)){
+    var after=coffers-1;
+    Check(KeyboundUsePolicy.CofferConsumed(coffers,after),"confirm each individual coffer");
+    coffers=after;opened++;
+}
+Check(opened==17&&coffers==0,"all seventeen event coffers consumed one at a time");
