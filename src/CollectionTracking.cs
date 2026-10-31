@@ -12,6 +12,7 @@ public sealed partial class Plugin
     private int nextCollectionGroup;
     private int priorityCollectionTurn;
     private int nextPriorityCollection;
+    private uint keyboundCollectionRefreshItem;
     private Dictionary<uint, uint[]>? hairstyleUnlocks;
     private DateTimeOffset collectionReadyAt;
     private ulong collectionCharacter;
@@ -40,11 +41,16 @@ public sealed partial class Plugin
             .Where(t => t.Rule?.Kind == "event").SelectMany(t => t.Rule?.Quests ?? [])
             .Append(71004u).ToHashSet(); // All Saints' Wake 2026 final quest, game sheet.
         var priority = collectionGroups.Select((g, i) => (g, i))
-            .Where(x => x.g.Any(e => e.Category == "quest" && watched.Contains(e.Id))).Select(x => x.i).ToArray();
+            .Where(x => x.g.Any(e => e.Category == "quest" && watched.Contains(e.Id) || e.Category == "framerkit" && e.ItemId == 51997)).Select(x => x.i).ToArray();
         if (priority.Length > 0 && priorityCollectionTurn++ % 2 == 0)
         {
             nextCollectionGroup--;
             segmentIndex = priority[nextPriorityCollection++ % priority.Length];
+        }
+        if(keyboundCollectionRefreshItem!=0){
+            var requested=Array.FindIndex(collectionGroups,g=>g.Any(e=>e.ItemId==keyboundCollectionRefreshItem));
+            keyboundCollectionRefreshItem=0;
+            if(requested>=0)segmentIndex=requested;
         }
         var group = collectionGroups[segmentIndex];
         var unlocked = new List<uint>(); var obtained = new List<uint>(); var known = new List<uint>();
@@ -70,7 +76,7 @@ public sealed partial class Plugin
                 "barding" => state->Buddy.CompanionInfo.IsBuddyEquipUnlocked(entry.Id),
                 "card" => state->IsTripleTriadCardUnlocked((ushort)entry.Id),
                 "ornament" => state->PlayerState.IsOrnamentUnlocked(entry.Id),
-                "framerkit" => state->PlayerState.IsFramersKitUnlocked(entry.Id),
+                "framerkit" => state->PlayerState.IsFramersKitUnlocked(entry.Id) || entry.ItemId>0 && KeyboundUnlockState(entry.ItemId)==1,
                 "quest" => QuestManager.IsQuestComplete(entry.Id),
                 _ => false
             };
@@ -137,3 +143,4 @@ public sealed partial class Plugin
     }
 
 }
+

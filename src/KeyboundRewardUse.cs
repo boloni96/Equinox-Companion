@@ -39,7 +39,7 @@ public sealed partial class Plugin
         if(gearRouting||armoireRunning||retrievalRun.Running||organizeRunning||sellerRun.Running||TraderRunning)throw new InvalidOperationException("Reward use stopped: another inventory operation started.");
         if(keyboundUsePending is {} pending){
             if(KeyboundUsePolicy.Confirmed(keyboundUseBefore,KeyboundBagCount(pending.Item),KeyboundUnlockState(pending.Item))){
-                keyboundUsed++;keyboundUseRemaining.Remove(pending.Item);keyboundUsePending=null;keyboundUseDeadline=now.AddSeconds(30);RequestStorageRefresh();
+                keyboundCollectionRefreshItem=pending.Item;keyboundUsed++;keyboundUseRemaining.Remove(pending.Item);keyboundUsePending=null;keyboundUseDeadline=now.AddSeconds(30);RequestStorageRefresh();
                 keyboundBuyStatus="Unlocked: "+pending.Name;keyboundBuyNext=now.AddSeconds(1);return;
             }
             if(now>=keyboundUseDeadline)throw new InvalidOperationException("Unlock not confirmed: "+pending.Name+". Use stopped; check inventory and collections.");
