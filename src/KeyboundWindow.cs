@@ -20,8 +20,9 @@ public sealed partial class Plugin
     {
         private readonly Plugin plugin;
         public KeyboundToolWindow(Plugin plugin):base("Keybound Brawler · Equinox"){
-            this.plugin=plugin;Flags=ImGuiWindowFlags.AlwaysAutoResize;
-            SizeConstraints=new WindowSizeConstraints{MinimumSize=new Vector2(360,0),MaximumSize=new Vector2(360,float.MaxValue)};
+            this.plugin=plugin;
+            Size=new Vector2(360,320);SizeCondition=ImGuiCond.FirstUseEver;
+            SizeConstraints=new WindowSizeConstraints{MinimumSize=new Vector2(360,260),MaximumSize=new Vector2(float.MaxValue,float.MaxValue)};
             RespectCloseHotkey=false;
         }
         public override void Draw()=>plugin.DrawKeyboundHelper();

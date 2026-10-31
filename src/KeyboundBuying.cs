@@ -103,7 +103,6 @@ public sealed partial class Plugin
             ImGui.EndDisabled();
             if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))ImGui.SetTooltip("Buy missing selected rewards, then use their unlearned unlock items in your bags: orchestrion rolls, emote, minion, mount, personal effect and framer's kit. Includes rewards already bought. Clothing and coffers stay untouched.");
         }
-        if(keyboundBuyStatus.Length>0)ImGui.TextWrapped(keyboundBuyStatus);
     }
     private unsafe uint KeyboundWallet(){var c=CurrencyManager.Instance();if(c==null||!c->HasItem(52322))throw new InvalidOperationException("MGC wallet is not loaded.");return c->GetItemCount(52322);}
     private bool KeyboundIsTrader(Dalamud.Game.ClientState.Objects.Types.IGameObject? obj)=>obj!=null&&obj.ObjectKind==ObjectKind.EventNpc&&string.Equals(DataManager.GetExcelSheet<Lumina.Excel.Sheets.ENpcResident>(Dalamud.Game.ClientLanguage.English).GetRowOrDefault(obj.BaseId)?.Singular.ToString(),"MGC trader",StringComparison.OrdinalIgnoreCase);

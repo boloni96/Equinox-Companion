@@ -33,14 +33,23 @@ public sealed partial class Plugin
     {
         ImGui.BeginDisabled(keyboundBuying);
         if(ImGui.Button(keyboundEnabled?"Stop":"Start")){
-            if(keyboundEnabled)StopKeybound();else{StopKeybound();keyboundGoalCheckAt=default;keyboundEnabled=true;keyboundNext=keyboundHold=keyboundMissing=default;keyboundStatus="Waiting for Keybound Brawler";}
+            if(keyboundEnabled)StopKeybound();else{StopKeybound();keyboundBuyStatus="";keyboundGoalCheckAt=default;keyboundEnabled=true;keyboundNext=keyboundHold=keyboundMissing=default;keyboundStatus="Waiting for Keybound Brawler";}
         }
         ImGui.EndDisabled();
-        ImGui.SameLine();ImGui.TextUnformatted(keyboundEnabled?"Running":"Stopped");
-        ImGui.TextWrapped(keyboundStatus);
-        if(keyboundWord.Length>0)ImGui.TextWrapped("Word: "+keyboundWord);
+        ImGui.SameLine();ImGui.TextUnformatted(keyboundBuying?(keyboundUsingRewards?"Using rewards":"Buying rewards"):keyboundEnabled?"Running":"Stopped");
+        // Reserve the same space for short phrases and long waiting/error text.
+        // Content scrolls here; neither the window nor the controls below jump.
+        if(ImGui.BeginChild("Keybound running status",new System.Numerics.Vector2(0,ImGui.GetTextLineHeightWithSpacing()*4.5f),ImGuiChildFlags.Borders)){
+            var status=(keyboundBuying||!keyboundEnabled)&&keyboundBuyStatus.Length>0?keyboundBuyStatus:keyboundStatus;
+            ImGui.TextWrapped(status);
+            if(keyboundEnabled&&keyboundWord.Length>0&&!status.Contains(keyboundWord,StringComparison.Ordinal))
+                ImGui.TextWrapped("Target: "+keyboundWord);
+        }
+        ImGui.EndChild();
+        ImGui.Separator();
         DrawKeyboundRewards();
         DrawKeyboundShopping();
+        ImGui.Separator();
         if(ImGui.CollapsingHeader("Options")){
         ImGui.Checkbox("Auto-repeat",ref keyboundAutoRepeat);
         var stopAtGoal=config.KeyboundStopAtRewardGoal;
@@ -69,7 +78,7 @@ public sealed partial class Plugin
     private void DrawKeyboundSpeedPreset(string label,int min,int max,int submit)
     {
         var selected=config.KeyboundMinDelayMs==min&&config.KeyboundMaxDelayMs==max&&config.KeyboundSubmitDelayMs==submit;
-        if(ImGui.Button(selected?label+" ✓":label)){
+        if(ImGui.Button((selected?label+" ✓":label)+"##KeyboundPreset"+label)){
             config.KeyboundMinDelayMs=min;config.KeyboundMaxDelayMs=max;config.KeyboundSubmitDelayMs=submit;
             keyboundTimingEditUntil=DateTimeOffset.UtcNow.AddMilliseconds(250);SaveConfiguration();
         }
