@@ -13,6 +13,7 @@ public sealed partial class Plugin
     private static void RememberRetainerName(Dictionary<ulong,string> names,ulong id,string? name,bool authoritative=false)
     {
         if(RetainerNameKnown(id,name)&&(authoritative||!names.TryGetValue(id,out var current)||!RetainerNameKnown(id,current)))names[id]=name!;
+        else names.TryAdd(id,"Retainer "+id);
     }
     private static string RetainerDestinationLabel(ulong id,string name)=>RetainerNameKnown(id,name)?name:"Name unavailable · …"+(id>9999?id.ToString()[^4..]:id.ToString());
     private void RefreshRetrievalStock()
