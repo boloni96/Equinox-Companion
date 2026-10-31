@@ -76,7 +76,7 @@ public sealed partial class Plugin
                 "barding" => state->Buddy.CompanionInfo.IsBuddyEquipUnlocked(entry.Id),
                 "card" => state->IsTripleTriadCardUnlocked((ushort)entry.Id),
                 "ornament" => state->PlayerState.IsOrnamentUnlocked(entry.Id),
-                "framerkit" => state->PlayerState.IsFramersKitUnlocked(entry.Id) || entry.ItemId>0 && KeyboundUnlockState(entry.ItemId)==1,
+                "framerkit" => state->PlayerState.IsFramersKitUnlocked(entry.Id) || entry.ItemId==51997 && KeyboundUnlockState(entry.ItemId)==1,
                 "quest" => QuestManager.IsQuestComplete(entry.Id),
                 _ => false
             };
