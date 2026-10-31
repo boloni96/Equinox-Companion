@@ -114,6 +114,13 @@ try{
     reload.Put(intent with {Confirmed=true});
     Check(new KeyboundPurchaseBook(file).Find(12,123) is {Confirmed:true},"confirmed receipt survives restart");
     Check(new KeyboundPurchaseBook(file).Entries.Count==1,"receipt transition does not create duplicate entries");
+    var otherClient=new KeyboundPurchaseBook(file);
+    var beforeOtherClient=new KeyboundPurchaseBook(file);
+    otherClient.Put(intent with {Character=13});
+    beforeOtherClient.Put(intent with {Character=14});
+    Check(new KeyboundPurchaseBook(file).Entries.Count==3,"separate clients merge receipts without losing another character");
+    var duplicateRejected=false;try{beforeOtherClient.Put(intent with {Character=13});}catch(IOException){duplicateRejected=true;}
+    Check(duplicateRejected,"stale second client cannot reserve the same reward twice");
     File.WriteAllText(file,"broken");var rejected=false;try{_ =new KeyboundPurchaseBook(file);}catch{rejected=true;}
     Check(rejected,"corrupt history blocks purchases rather than treating them as unowned");
 }finally{if(Directory.Exists(directory))Directory.Delete(directory,true);}

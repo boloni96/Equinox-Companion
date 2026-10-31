@@ -10,14 +10,24 @@ public sealed class KeyboundPurchaseBook
     public List<KeyboundPurchaseReceipt> Entries { get; private set; }
     public KeyboundPurchaseBook(string path){
         this.path=path;
-        Entries=File.Exists(path)?JsonSerializer.Deserialize<List<KeyboundPurchaseReceipt>>(File.ReadAllText(path))??throw new IOException("Empty purchase history."):[];
-        if(Entries.Any(e=>e.Character==0||e.Item==0||e.Cost<=0)||Entries.GroupBy(e=>(e.Character,e.Item)).Any(g=>g.Count()>1))throw new IOException("Invalid purchase history.");
+        Entries=ReadEntries();
+    }
+    public void Reload(){Entries=ReadEntries();}
+    private List<KeyboundPurchaseReceipt> ReadEntries(){
+        var rows=File.Exists(path)?JsonSerializer.Deserialize<List<KeyboundPurchaseReceipt>>(File.ReadAllText(path))??throw new IOException("Empty purchase history."):new List<KeyboundPurchaseReceipt>();
+        if(rows.Any(e=>e.Character==0||e.Item==0||e.Cost<=0)||rows.GroupBy(e=>(e.Character,e.Item)).Any(g=>g.Count()>1))throw new IOException("Invalid purchase history.");
+        return rows;
     }
     public KeyboundPurchaseReceipt? Find(ulong character,uint item)=>Entries.FirstOrDefault(e=>e.Character==character&&e.Item==item);
     public void Put(KeyboundPurchaseReceipt receipt){
         if(receipt.Character==0||receipt.Item==0||receipt.Cost<=0)throw new ArgumentException("Invalid receipt.");
-        var next=Entries.Where(e=>e.Character!=receipt.Character||e.Item!=receipt.Item).Append(receipt).ToList();
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        // Multiple game clients can share the same plugin configuration folder.
+        using var gate=new FileStream(path+".lock",FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None);
+        var current=ReadEntries();var old=current.FirstOrDefault(e=>e.Character==receipt.Character&&e.Item==receipt.Item);
+        if(!receipt.Confirmed&&old!=null)throw new IOException("This reward already has a purchase reservation.");
+        if(receipt.Confirmed&&(old==null||(old with {Confirmed=true})!=receipt))throw new IOException("Purchase receipt does not match its reservation.");
+        var next=current.Where(e=>e.Character!=receipt.Character||e.Item!=receipt.Item).Append(receipt).ToList();
         var temp=path+".tmp";
         using(var stream=new FileStream(temp,FileMode.Create,FileAccess.Write,FileShare.None)){
             JsonSerializer.Serialize(stream,next);stream.Flush(true);

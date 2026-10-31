@@ -46,7 +46,7 @@ public sealed partial class Plugin
         var ids=offers.Select(o=>o.Item).ToHashSet();
         foreach(var shop in DataManager.GetExcelSheet<Lumina.Excel.Sheets.SpecialShop>()){
             var matching=new HashSet<uint>();
-            foreach(var row in shop.Item)foreach(var item in row.Item)if(ids.Contains(item.RowId))matching.Add(item.RowId);
+            foreach(var row in shop.Item)foreach(var receive in row.ReceiveItems)if(ids.Contains(receive.Item.RowId))matching.Add(receive.Item.RowId);
             var name=shop.Name.ToString();if(matching.Count==0||string.IsNullOrWhiteSpace(name))continue;
             if(!keyboundShopCategories.TryGetValue(name,out var set))keyboundShopCategories[name]=set=[];
             set.UnionWith(matching);
@@ -59,7 +59,7 @@ public sealed partial class Plugin
         keyboundMissingPlan=null;keyboundPlanError="";
         try{
             if(!Client.IsLoggedIn||!Player.IsLoaded||Player.ContentId==0)return;
-            LoadKeyboundOffers();var character=Player.ContentId;keyboundOwned.Clear();
+            LoadKeyboundOffers();keyboundPurchases!.Reload();var character=Player.ContentId;keyboundOwned.Clear();
             var roster=(config.SharedRoster?.People??[]).SelectMany(p=>p.Characters).Where(c=>c.ContentId==character.ToString()).DistinctBy(c=>c.Id).Take(2).ToArray();
             var wishes=roster.Length==1?roster[0].KeyboundWishlist:null;
             if(config.KeyboundUseJournalWishlist&&wishes==null)throw new InvalidOperationException("Waiting for Journal wishlist sync.");
@@ -69,6 +69,9 @@ public sealed partial class Plugin
             // Positive storage observations also protect items moved into storage
             // that is not currently open. Never borrow another character's stock.
             var observed=DiscoveryReads().Kind("storage.observed").Where(e=>e.Actor.ContentId==character.ToString()&&e.Storage!=null&&(e.Storage.Key.StartsWith("bag:")||e.Storage.Key.StartsWith("retainer:")||e.Storage.Key is "armoire" or "dresser")).SelectMany(e=>e.Storage!.Items).ToHashSet();
+            if(roster.Length==1)observed.UnionWith((config.SharedRoster?.ItemLocations??[])
+                .Where(l=>l.OwnerId==roster[0].Id&&(l.Key.StartsWith("bag:")||l.Key.StartsWith("retainer:")||l.Key is "armoire" or "dresser"))
+                .SelectMany(l=>l.Items));
             var wanted=new Dictionary<string,int>();
             foreach(var offer in keyboundOffers!){
                 var receipt=keyboundPurchases!.Find(character,offer.Item);

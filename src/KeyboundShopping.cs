@@ -21,13 +21,11 @@ public sealed partial class Plugin
             ImGui.TextWrapped(keyboundPlanError.Length>0?keyboundPlanError:"Checking missing rewards…");
             DrawKeyboundBuyButton();return;
         }
-        var unmatched=0;
         var total=KeyboundShoppingPolicy.Total(plan);
-        ImGui.TextUnformatted($"{(unmatched>0?"Known reward cost":"Target")}: {total:N0} MGC");
-        if(unmatched>0)ImGui.TextWrapped($"{unmatched} wanted reward(s) have no matched shop price. Total and estimate cover matched rewards only.");
+        ImGui.TextUnformatted($"Missing rewards: {total:N0} MGC");
         if(keyboundMgc is {} balance&&keyboundMgcCharacter==character){
             var remaining=KeyboundShoppingPolicy.Remaining(total,balance);
-            ImGui.TextUnformatted(total==0&&unmatched==0?"No pending rewards in this list":remaining==0?(unmatched>0?"Enough MGC for matched rewards":"Enough MGC for your list"):$"Still to earn: {remaining:N0} MGC");
+            ImGui.TextUnformatted(total==0?"No pending rewards in this list":remaining==0?"Enough MGC for your list":$"Still to earn: {remaining:N0} MGC");
             if(config.KeyboundRoundEarnings.TryGetValue(character,out var samples)&&samples.Count>0){
                 var rounds=KeyboundShoppingPolicy.Rounds(remaining,samples);
                 if(rounds.HasValue&&ImGui.IsItemHovered())ImGui.SetTooltip($"~{rounds:N0} rounds · average {samples.Average(x=>(double)x):N0} MGC from {samples.Count} observed rounds. Earnings vary.");
