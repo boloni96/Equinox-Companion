@@ -37,12 +37,13 @@ public sealed partial class Plugin
         ImGui.SameLine();ImGui.TextUnformatted(keyboundEnabled?"Running":"Stopped");
         ImGui.TextWrapped(keyboundStatus);
         if(keyboundWord.Length>0)ImGui.TextWrapped("Word: "+keyboundWord);
+        DrawKeyboundRewards();
+        DrawKeyboundShopping();
+        if(ImGui.CollapsingHeader("Options")){
         ImGui.Checkbox("Auto-repeat",ref keyboundAutoRepeat);
         ImGui.SameLine();ImGui.Checkbox("Anti-AFK",ref keyboundAntiAfk);
         var background=config.KeyboundRunInBackground;
         if(ImGui.Checkbox("Run in background",ref background)){config.KeyboundRunInBackground=background;SaveConfiguration();}
-        DrawKeyboundRewards();
-        DrawKeyboundShopping();
         if(ImGui.Button("Soft · 80 / 150 / 80 ms")){
             config.KeyboundMinDelayMs=KeyboundPolicy.SoftMinMs;config.KeyboundMaxDelayMs=KeyboundPolicy.SoftMaxMs;config.KeyboundSubmitDelayMs=KeyboundPolicy.SoftSubmitMs;SaveConfiguration();
         }
@@ -53,6 +54,9 @@ public sealed partial class Plugin
         if(DrawKeyboundDelay("Max",ref max,10,1000)){config.KeyboundMaxDelayMs=max;SaveConfiguration();}
         if(DrawKeyboundDelay("Submit",ref submit,0,2000)){config.KeyboundSubmitDelayMs=submit;SaveConfiguration();}
         if(min>max)ImGui.TextDisabled($"Effective keystroke range: {max}–{min} ms");
+        var journal=config.KeyboundUseJournalWishlist;
+        if(ImGui.Checkbox("Use Journal wishlist",ref journal)){config.KeyboundUseJournalWishlist=journal;SaveConfiguration();}
+        }
         if(ImGui.CollapsingHeader("How it works")){
             ImGui.TextWrapped("Optional typing assistance for Keybound Brawler. Keeps spaces and punctuation, uses Up for consecutive repeats, and clears its partial text when a target disappears. Pauses through stuns and no-typing casts.");
             ImGui.TextWrapped("Run in background keeps working while you use another app. Input goes directly to this game client. Keep the game running; background frame limits can slow it down. Other in-game text fields pause assistance. Auto-queue & repeat registers at the nearby Keybound registrar, accepts the match, and returns after results. Start near the registrar in Keybound Square. Stop or disabling the tool ends automation.");

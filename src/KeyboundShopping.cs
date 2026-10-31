@@ -18,13 +18,12 @@ public sealed partial class Plugin
         var character=Player.ContentId;
         if(!Client.IsLoggedIn||character==0)return;
         var journal=config.KeyboundUseJournalWishlist;
-        if(ImGui.Checkbox("Use Journal wishlist",ref journal)){config.KeyboundUseJournalWishlist=journal;SaveConfiguration();}
         config.KeyboundShopping.TryGetValue(character,out var plan);
         var unmatched=0;
         if(journal){
             var matches=(config.SharedRoster?.People??[]).SelectMany(p=>p.Characters).Where(c=>c.ContentId==character.ToString()).DistinctBy(c=>c.Id).Take(2).ToArray();
             if(matches.Length!=1||matches[0].KeyboundWishlist is null){
-                ImGui.TextWrapped("Waiting for this character's Journal wishlist. Deploy Journal 7.11.275 and let Companion sync.");
+                ImGui.TextWrapped("Waiting for Journal wishlist sync.");
                 if(ImGui.SmallButton("Open Journal"))Dalamud.Utility.Util.OpenLink("https://equinoxjournal.pages.dev/");
                 return;
             }
