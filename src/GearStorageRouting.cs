@@ -288,6 +288,9 @@ public sealed partial class Plugin
         }
         if(GearInDresser(gearItem)&&ArmoireInventory(gearItem).Held==0){GearPhase(6,"Checking dresser receipt");return;}
         var confirm=SellerAddon("SelectYesno");if(confirm==null||gearConfirmationSent)return;
+        var dresser=AgentMiragePrismPrismBox.Instance();
+        if(dresser==null||dresser->Data==null||dresser->ContextAddonId!=confirm->Id||dresser->Data->CrystallizeSelectedItem.Inventory!=(InventoryType)copy.Container||dresser->Data->CrystallizeSelectedItem.Slot!=copy.Slot||dresser->Data->CrystallizeSelectedItem.ItemId%1000000!=copy.Item)
+            throw new InvalidOperationException("The confirmation is not owned by the selected dresser operation.");
         var name=SearchItemName(gearItem);var matches=false;
         for(var i=0;i<Math.Min(20,(int)confirm->AtkValuesCount);i++)if(confirm->AtkValues[i].Type==AtkValueType.String&&(TravelMenuText(confirm->AtkValues[i].String)??"").Contains(name,StringComparison.Ordinal))matches=true;
         if(!matches||GearLiveCopy(copy)==null)throw new InvalidOperationException("Dresser confirmation does not match the selected item.");
