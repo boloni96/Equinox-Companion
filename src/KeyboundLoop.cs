@@ -9,16 +9,7 @@ namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
     private bool keyboundQueueOwned,keyboundRegistrarOwned,keyboundAntiAfk=true;
-    private DateTimeOffset keyboundLoopNext,keyboundKeepAliveNext;
-    private unsafe void KeepKeyboundActive(DateTimeOffset now)
-    {
-        if(!keyboundAntiAfk||!KeyboundPolicy.LoopTerritory(Client.TerritoryType)||now<keyboundKeepAliveNext)return;
-        keyboundKeepAliveNext=now.AddSeconds(5);
-        var timers=InputTimerModule.Instance();if(timers==null)return;
-        timers->AfkTimer=timers->InputTimer=timers->ContentInputTimer=0;
-        foreach(ref var timer in timers->ControllerInputTimers)timer.Timer=0;
-        foreach(ref var timer in timers->MouseInputTimers)timer.Timer=0;
-    }
+    private DateTimeOffset keyboundLoopNext;
     private static unsafe AtkUnitBase* KeyboundAddon(string name){
         var stage=AtkStage.Instance();if(stage==null)return null;
         var addon=stage->RaptureAtkUnitManager->GetAddonByName(name);

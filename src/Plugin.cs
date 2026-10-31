@@ -245,6 +245,7 @@ public sealed partial class Plugin : IDalamudPlugin
         Pi.UiBuilder.OpenConfigUi += OpenSettings;
         Framework.Update += Update;
         Framework.Update += UpdateKeybound;
+        Framework.Update += UpdateActivityKeepAlive;
         Client.Login += OnGardenNoticeLogin;
         InitializeLottery();InitializeSaddleTracking();
         Client.Login += ResetMaintenanceLogin;
@@ -1057,6 +1058,7 @@ public sealed partial class Plugin : IDalamudPlugin
                 lotteryRefundDiagnostics = lotteryRefundDiagnostic,
                 companyProfileDiagnostics = new { latest = companyProfileDiagnostic, history = companyProfileHistory.ToArray(), status = discoveryStatus },
                 growingAdventure = new { selected=adventureSelected, automaticBoard=gardenTendBoard, currentCharacter=CurrentSharedCharacter()?.Id, eligibleCharacters=gardenAdventureCharacters.ToArray(), status=gardenTendStatus, fresh=adventureFresh, fetched=adventureFetched, boards=adventureBoards.ToArray() },
+                activityKeepAlive = new { status=activityStatus, lastPulse=activityLastPulse, pulses=activityPulseCount, followerOption=config.FollowAntiAfk, following=followSession.Armed, eventOption=keyboundAntiAfk, eventRunning=keyboundEnabled, territory=Client.TerritoryType },
                 keyboundTyping = new { enabled=keyboundEnabled, available=config.EnableKeyboundBrawler, status=keyboundStatus, word=keyboundWord, sent=keyboundSent, expected=keyboundExpected, awaiting=keyboundAwaiting, clearing=keyboundClearing, recalling=keyboundRecalling },
                 mode = "local-diagnostics", gardeningConfirmed = false, performance = new { maxDrawMs,maxUpdateMs,maxSnapshotMs, configurationError, stages=performanceStages.ToDictionary(x=>x.Key,x=>x.Value), recent=rollingPerformance.Snapshot(PerformanceClock), optionalTools=optionalToolFailures.ToDictionary(x=>x.Key,x=>x.Value) },
                 houseObservations = config.Houses.ToArray(), confirmedTending = config.Tending.ToArray(), confirmedPlanting = config.Planting.ToArray(), observedDetails = config.Discoveries.ToArray(), diagnostics=diagnostics.ToArray()
@@ -1299,6 +1301,7 @@ public sealed partial class Plugin : IDalamudPlugin
         foreach (var menuEvent in MenuEvents) Addons.UnregisterListener(menuEvent, GardenMenus, OnGardenMenu);
         Framework.Update -= Update;
         Framework.Update -= UpdateKeybound;
+        Framework.Update -= UpdateActivityKeepAlive;
         StopKeybound();
         Client.Login -= OnGardenNoticeLogin;
         DisposeLottery();Addons.UnregisterListener(ObserveSaddleAddon);

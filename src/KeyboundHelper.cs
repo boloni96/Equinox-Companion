@@ -113,7 +113,6 @@ public sealed partial class Plugin
         var now=DateTimeOffset.UtcNow;if(now<keyboundNext)return;keyboundNext=now.AddMilliseconds(10);
         try{
             if(!Client.IsLoggedIn){StopKeybound("Stopped: logged out");return;}
-            KeepKeyboundActive(now);
             if(now<keyboundTimingEditUntil){keyboundDeadline=now.AddSeconds(2);keyboundStatus="Paused: editing timing";return;}
             var stage=AtkStage.Instance();if(stage==null)return;
             if(keyboundAutoRepeat&&UpdateKeyboundLoop(now))return;

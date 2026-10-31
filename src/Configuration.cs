@@ -68,6 +68,7 @@ public sealed class Configuration : IPluginConfiguration
     public bool AutoOpenCoffers { get; set; }
     public int CofferStyle { get; set; }
     public bool CofferMainMap { get; set; } = true;
+    public bool FollowAntiAfk { get; set; }
     public bool EnableKeyboundBrawler { get; set; }
     public int KeyboundMinDelayMs { get; set; } = KeyboundPolicy.SoftMinMs;
     public int KeyboundMaxDelayMs { get; set; } = KeyboundPolicy.SoftMaxMs;
