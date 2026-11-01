@@ -244,10 +244,9 @@ public sealed partial class Plugin
                 if(gearDestination==GearStorageDestination.Skip){gearSkipped++;gearCopy=null;return;}
                 if(InventoryManager.Instance()->GetInventoryItemCount(21800)<1)throw new InvalidOperationException("A glamour prism is needed for dresser storage.");
                 if(TryStoreGearOutfit(*live,gearCopy)){GearPhase(6,"Waiting for dresser receipt");return;}
-                // Ask the current game's own item menu for individual storage;
-                // never substitute a guessed callback or an outfit that strips dye.
+                // Individual gear is selected from the dresser's crystallize list,
+                // not the generic inventory context menu.
                 if(SellerAddon("ContextMenu")!=null||SellerAddon("SelectYesno")!=null)throw new InvalidOperationException("Close the existing item menu or confirmation.");
-                AgentInventoryContext.Instance()->OpenForItemSlot((InventoryType)gearCopy.Container,gearCopy.Slot,0,AgentMiragePrismPrismBox.Instance()->GetAddonId());
                 gearContextSent=gearConfirmationSent=false;GearPhase(5,"Storing individual glamour");return;
             }
             if(gearPhase==5){if(!ArmoireDresserReady())throw new InvalidOperationException("Dresser closed.");GearStoreIndividual();return;}
@@ -281,15 +280,32 @@ public sealed partial class Plugin
     private unsafe void GearStoreIndividual()
     {
         if(gearCopy is not {} copy)throw new InvalidOperationException("Missing selected gear copy.");
-        var agent=AgentInventoryContext.Instance();
         if(!gearContextSent){
-            if(GearLiveCopy(copy)==null||agent==null||(uint)agent->TargetInventoryId!=copy.Container||agent->TargetInventorySlotId!=copy.Slot)throw new InvalidOperationException("Selected item menu changed.");
-            var menu=SellerAddon("ContextMenu");if(menu==null)return;
-            var english=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Addon>(Dalamud.Game.ClientLanguage.English);
-            var labels=english.Where(r=>{var text=r.Text.ExtractText();return text.Contains("glamour dresser",StringComparison.OrdinalIgnoreCase)&&(text.Contains("store",StringComparison.OrdinalIgnoreCase)||text.Contains("convert",StringComparison.OrdinalIgnoreCase));}).Select(r=>DataManager.GetExcelSheet<Lumina.Excel.Sheets.Addon>().GetRow(r.RowId).Text.ExtractText()).ToHashSet();
-            var index=0;var found=-1;foreach(var value in agent->EventParams){if(value.Type!=AtkValueType.String)continue;if(labels.Contains(TravelMenuText(value.String)??"")&&!agent->IsContextItemDisabled(index))found=index;index++;}
-            if(found<0)throw new InvalidOperationException("The game did not offer individual dresser storage for this copy; item kept.");
-            var values=stackalloc AtkValue[5];for(var i=0;i<5;i++){values[i]=default;values[i].Type=AtkValueType.Int;}values[1].Int=found;menu->FireCallback(5,values,true);gearContextSent=true;return;
+            if(GearLiveCopy(copy)==null)throw new InvalidOperationException("Selected gear copy changed.");
+            var owner=AgentMiragePrismPrismBox.Instance();
+            var list=SellerAddon("MiragePrismPrismBoxCrystallize");
+            if(owner==null||owner->Data==null||list==null||owner->CrystalizeAddonId!=list->Id)
+                throw new InvalidOperationException("Open the dresser's item-storage list, then retry Store selected gear.");
+            var data=owner->Data;
+            if(data->IsPopulatingList||!data->IsPopulatingComplete)return;
+            var count=Math.Min((int)data->CrystallizeItemCount,data->CrystallizeItems.Length);
+            var found=-1;
+            for(var i=0;i<count;i++){
+                var row=data->CrystallizeItems[i];
+                if(GearDresserSelection.Matches(copy.Container,copy.Slot,copy.Item,(uint)row.Inventory,row.Slot,row.ItemId)){found=i;break;}
+            }
+            if(found<0){
+                gearSkipped++;gearCopy=null;
+                GearPhase(4,"Skipped "+SearchItemName(copy.Item)+" · not offered in the dresser item list; item kept");
+                return;
+            }
+            // Native crystallize callback 0 selects a row and opens its confirmation.
+            // Match the selected inventory copy before sending, and verify ownership
+            // and that same copy again before confirming below.
+            var values=stackalloc AtkValue[2];
+            values[0]=new AtkValue{Type=AtkValueType.Int,Int=0};
+            values[1]=new AtkValue{Type=AtkValueType.Int,Int=found};
+            list->FireCallback(2,values,true);gearContextSent=true;return;
         }
         if(GearInDresser(gearItem)&&ArmoireInventory(gearItem).Held==0){GearPhase(6,"Checking dresser receipt");return;}
         var confirm=SellerAddon("SelectYesno");if(confirm==null||gearConfirmationSent)return;
