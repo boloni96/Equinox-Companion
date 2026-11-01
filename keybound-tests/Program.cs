@@ -249,3 +249,13 @@ while(KeyboundUsePolicy.CanOpenCoffer("coffer",coffers,true)){
     coffers=after;opened++;
 }
 Check(opened==17&&coffers==0,"all seventeen event coffers consumed one at a time");
+
+Check(KeyboundPolicy.CanRegister(0,0,10,0),"solo player may register");
+Check(KeyboundPolicy.CanRegister(1,0,10,0),"solo list entry may register");
+Check(KeyboundPolicy.CanRegister(4,42,10,10),"party leader may register");
+Check(!KeyboundPolicy.CanRegister(4,42,10,20),"party follower waits for leader");
+Check(!KeyboundPolicy.CanRegister(4,42,10,0),"unresolved party leader waits");
+Check(!KeyboundPolicy.CanRegister(0,42,10,0),"temporarily empty party list waits");
+Check(!KeyboundPolicy.CanRegister(0,0,0,0),"missing local identity waits");
+Check(!KeyboundPolicy.CanRegister(4,42,10,20)&&KeyboundPolicy.CanRegister(4,42,10,10),"promotion permits next registration");
+Check(KeyboundPolicy.CanRegister(4,42,10,10)&&!KeyboundPolicy.CanRegister(4,42,10,20),"demotion blocks next registration");

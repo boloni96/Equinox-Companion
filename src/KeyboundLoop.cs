@@ -49,6 +49,15 @@ public sealed partial class Plugin
         if(Conditions[ConditionFlag.InDutyQueue]||Conditions[ConditionFlag.WaitingForDuty]||Conditions[ConditionFlag.WaitingForDutyFinder]||Conditions[ConditionFlag.WaitingForRaceOrMatch]||Conditions[ConditionFlag.RegisteringForRaceOrMatch]){
             keyboundStatus="Queued: waiting for Keybound Brawler";return true;
         }
+        // Only solo players and the current party leader may register. Keep this
+        // below duty acceptance/results, but above every registrar interaction.
+        var leaderIndex=FollowParty.PartyLeaderIndex;
+        var leader=leaderIndex<(uint)FollowParty.Length?FollowParty[(int)leaderIndex]:null;
+        if(!KeyboundPolicy.CanRegister(FollowParty.Length,FollowParty.PartyId,Player.ContentId,leader?.ContentId??0)){
+            keyboundQueueOwned=keyboundRegistrarOwned=false;
+            keyboundStatus="Waiting for party leader to queue";
+            return true;
+        }
         var registration=KeyboundAddon("KTGEnterDialogue");
         if(registration!=null){
             var button=registration->GetComponentButtonById(9);

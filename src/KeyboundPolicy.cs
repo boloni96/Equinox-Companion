@@ -1,6 +1,9 @@
 namespace EquinoxCompanion;
 public static class KeyboundPolicy
 {
+    // Unknown party identity must wait rather than registering as a follower.
+    public static bool CanRegister(int members,long partyId,ulong localId,ulong leaderId)=>
+        localId!=0&&((members<=1&&partyId==0)||(leaderId!=0&&localId==leaderId));
     public const int SoftMinMs=80,SoftMaxMs=150,SoftSubmitMs=80;
     public static int TypingDelay(int min,int max,double fraction){min=Math.Clamp(min,10,1000);max=Math.Clamp(max,10,1000);var low=Math.Min(min,max);var high=Math.Max(min,max);return low+(int)((high-low)*Math.Clamp(fraction,0,1));}
     public static bool LiveWord(bool containerVisible,bool labelVisible,bool textVisible,bool obscured)=>containerVisible&&((labelVisible&&textVisible)||obscured);
