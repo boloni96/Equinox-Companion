@@ -191,6 +191,7 @@ public sealed partial class Plugin
     }
     private unsafe void TickGearStorage(DateTimeOffset now)
     {
+        if(gearOrigin.Length>0||armoireOrigin.Length>0)PumpMarketSources();
         if(!gearRouting&&gearPause?.RestorePending==true)gearPause.Release(now);
         if(!gearRouting||now<gearNext)return;gearNext=now.AddMilliseconds(250);
         try{
