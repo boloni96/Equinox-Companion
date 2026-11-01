@@ -67,28 +67,42 @@ public sealed partial class Plugin
   if(!navigation.WrapActions)ImGui.SameLine();
   var selected=board.Stops.ElementAtOrDefault(board.Index);
   DrawBringCharacter(ready,selected?.World??world,selected?.World==world?house:"");
-  if(!adventureFollow){adventureFollowSession.Reset();return;}
-  // Observe loading even while a request is running; consume a move only when it can be sent.
-  if(!ready){adventureFollowSession.Reset();return;}
-  if(!adventureFresh||AdventureSaving||adventureRequest is not null)return;
-  var observation=adventureFollowSession.Observe(true,$"{board.Id}:{board.Generation}:{config.PairingKey}:{Player.ContentId}:{Player.CurrentWorld.RowId}:{Client.TerritoryType}",house,DateTimeOffset.UtcNow);
-  if(!observation.Changed)return;
-  if(target is not null&&house.Length>0)adventureFocusHouse=house;
-  int? next=target;
-  if(observation.ContextChanged){
-   var actorId=Player.ContentId.ToString(System.Globalization.CultureInfo.InvariantCulture);
-   var matches=(config.SharedRoster?.People??[]).SelectMany(p=>p.Characters).Where(c=>c.ContentId==actorId).Take(2).ToArray();
-   if(board.TravelGrouping&&board.Kind=="multi"&&matches.Length==1&&world.Length>0&&board.Stops.Any(s=>s.CharacterIds?.Contains(matches[0].Id)==true)){
-    adventureMutation=true;adventureRequestKey=config.PairingKey;
-    adventureRequest=adventureSync.Travel(config.PairingKey,board,matches[0].Id,world,CurrentAdventureArea(),Client.TerritoryType,house);
-    if(target is {} houseIndex&&houseIndex!=board.Index&&board.Stops.Any(s=>s.World==world&&s.CharacterIds?.Contains(matches[0].Id)==true))
-     AdventureAction(board,houseIndex);
-    adventurePrompt=null;return;
-   }
-   next??=AdventurePolicy.FollowIndex(board,matches.Length==1?matches[0].Id:"",world);
+  if(!adventureFollow){adventureFollowSession.Reset();ClearAdventureFollowIntent();return;}
+  if(!ready){adventureFollowSession.Reset();ClearAdventureFollowIntent();return;}
+  // Local page following must not wait for a cloud read, checkmark or presence upload.
+  var cid=CurrentSharedCharacter()?.Id??"";
+  var observation=adventureFollowSession.Observe(true,$"{board.Id}:{board.Generation}:{config.PairingKey}:{Player.ContentId}:{cid}:{Player.CurrentWorld.RowId}:{Client.TerritoryType}",house,DateTimeOffset.UtcNow);
+  if(observation.Changed){
+   var next=AdventureFollowSelection.Index(board,cid,world,house);
+   if(target is not null&&house.Length>0)adventureFocusHouse=house;
+   if(next is {} n&&n!=board.Index)AdventureAction(board,n);
+   if(observation.ContextChanged&&board.TravelGrouping&&board.Kind=="multi"&&cid.Length>0&&board.Stops.Any(s=>s.CharacterIds?.Contains(cid)==true))
+    adventurePendingTravel=new(board.Id,board.Generation,Player.ContentId,cid,world,house,CurrentAdventureArea(),Client.TerritoryType);
   }
-  if(next is {} n&&n!=board.Index){adventurePrompt=null;AdventureAction(board,n);}
+  SendAdventureFollowTravel(board,world,house);
+ }
+ private sealed record AdventureFollowIntent(string Board,string Generation,ulong Actor,string Character,string World,string House,string Area,uint Territory);
+ private AdventureFollowIntent? adventurePendingTravel,adventureFollowReply;
+ private void ClearAdventureFollowIntent(){adventurePendingTravel=null;adventureFollowReply=null;}
+ private bool AdventureFollowIntentCurrent(AdventureFollowIntent intent)=>adventureFollow&&Player.IsLoaded&&Player.ContentId==intent.Actor&&adventureSelected==intent.Board&&PublicAdventureWorld()==intent.World&&Client.TerritoryType==intent.Territory;
+ private void SendAdventureFollowTravel(AdventureBoard board,string world,string house)
+ {
+  if(adventurePendingTravel is not {} intent)return;
+  if(!AdventureFollowIntentCurrent(intent)||intent.Generation!=board.Generation||intent.World!=world||intent.House!=house){adventurePendingTravel=null;return;}
+  if(!adventureFresh||AdventureSaving||adventureRequest is not null)return;
+  adventurePendingTravel=null;adventureFollowReply=intent;
+  adventureMutation=true;adventureRequestKey=config.PairingKey;
+  adventureRequest=adventureSync.Travel(config.PairingKey,board,intent.Character,intent.World,intent.Area,intent.Territory,intent.House);
+ }
+ private void ApplyAdventureFollowReply()
+ {
+  if(adventureFollowReply is not {} intent)return;adventureFollowReply=null;
+  if(!AdventureFollowIntentCurrent(intent))return;
+  var board=adventureBoards.FirstOrDefault(b=>b.Id==intent.Board&&b.Generation==intent.Generation);if(board is null)return;
+  var house=AdventurePolicy.CurrentHouse(currentAddress,Player.CurrentWorld.RowId,(config.SharedRoster?.People??[]).SelectMany(p=>p.Characters).SelectMany(c=>c.Houses));
+  if(house!=intent.House)return;
+  var index=AdventureFollowSelection.Index(board,intent.Character,intent.World,intent.House);
+  if(index is not {} n)return;
+  var local=adventureView.Move(board,n);adventureBoards=adventureBoards.Select(b=>b.Id==local.Id?local:b).ToArray();adventurePrompt=null;
  }
 }
-
-

@@ -1814,3 +1814,5 @@ GearCategory366Tests.Run();
 OrganizerStorage368Tests.Run();
 
 AdventureNavigation370Tests.Run();
+
+AdventureFollow371Tests.Run();

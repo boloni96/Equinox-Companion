@@ -28,6 +28,7 @@ public sealed partial class Plugin
  private void AdventureAction(AdventureBoard b,int? index=null,AdventureTask? task=null,bool value=false)
  {
   if(index is {} localIndex){
+   ClearAdventureFollowIntent();
    var current=adventureBoards.FirstOrDefault(x=>x.Id==b.Id&&x.Generation==b.Generation);
    if(current is null)return;
    var local=adventureView.Move(current,localIndex);
@@ -47,14 +48,14 @@ public sealed partial class Plugin
  private void UpdateAdventureCore()
  {
   var now=DateTimeOffset.UtcNow;
-  if(adventureConnectionKey!=config.PairingKey){adventureConnectionKey=config.PairingKey;adventureView.Clear();adventureQueuedAction=null;adventureBoards=[];adventureSelected="";adventurePerson="";adventureAccount="";adventureCompletion.Clear();adventurePrompt=null;adventureFresh=false;adventureNext=default;
+  if(adventureConnectionKey!=config.PairingKey){adventureConnectionKey=config.PairingKey;adventureView.Clear();ClearAdventureFollowIntent();adventureQueuedAction=null;adventureBoards=[];adventureSelected="";adventurePerson="";adventureAccount="";adventureCompletion.Clear();adventurePrompt=null;adventureFresh=false;adventureNext=default;
    var hash=Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(config.PairingKey)));
    if(config.AdventurePairingHash==hash){adventureBoards=config.CachedAdventures.Where(AdventurePolicy.Valid).Select(adventureView.Apply).ToArray();adventureSelected=config.SelectedAdventure;}
   }
   if(adventureRequest?.IsCompleted==true){
    var reply=adventureRequest.IsCompletedSuccessfully?adventureRequest.Result:new AdventureReply(null,"Adventure request failed.");
    if(adventureRequest.IsFaulted)_=adventureRequest.Exception;
-   if(adventureRequestKey==config.PairingKey){adventureMessage=reply.Status;adventureFresh=reply.Boards is not null;if(reply.Boards is null){adventureFollowSession.Reset();adventurePresenceSession.Reset();}if(reply.Boards is {} boards){adventureBoards=AdventurePolicy.Reconcile(adventureBoards,boards,adventureMutation).Select(adventureView.Apply).ToArray();adventureFetched=now;CacheAdventures();}
+   if(adventureRequestKey==config.PairingKey){adventureMessage=reply.Status;adventureFresh=reply.Boards is not null;if(reply.Boards is null){if(adventureFollowReply is {} retryFollow)adventurePendingTravel=retryFollow;adventureFollowReply=null;adventurePresenceSession.Reset();}if(reply.Boards is {} boards){adventureBoards=AdventurePolicy.Reconcile(adventureBoards,boards,adventureMutation).Select(adventureView.Apply).ToArray();adventureFetched=now;ApplyAdventureFollowReply();CacheAdventures();}
     adventureNext=now.AddSeconds(AdventurePollPolicy.Seconds(adventureWindow.IsOpen,gardenTendRoute!=null,reply.Boards is null));
    }adventureRequest=null;adventureMutation=false;
   }
@@ -278,6 +279,7 @@ public sealed partial class Plugin
   }
  }
 }
+
 
 
 
