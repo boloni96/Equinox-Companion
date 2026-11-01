@@ -3,6 +3,7 @@ namespace EquinoxCompanion;
 [Serializable]
 public sealed class Configuration : IPluginConfiguration
 {
+    public Dictionary<ulong,OrganizerDresserSnapshot> OrganizerDresserSnapshots { get; set; } = [];
     public bool ProtectOrganizerGearSets { get; set; } = true;
     public bool StorageGearSkipDyed { get; set; } = true;
     public int StorageGearReserve { get; set; } = 2;
@@ -142,6 +143,7 @@ public sealed class Configuration : IPluginConfiguration
     public List<TendingRecord> Tending { get; set; } = [];
     public List<HouseObservation> Houses { get; set; } = [];
 }
+
 
 
 

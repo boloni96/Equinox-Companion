@@ -13,7 +13,7 @@ public sealed partial class Plugin
     private const ulong GlamourStorageDestination=ulong.MaxValue-2;
     private bool gearRouting,gearFromRetainers,gearMoveOwned,gearLookupOwned,gearSkipDyed=true;
     private bool gearContextSent,gearConfirmationSent,gearPausePrepared;
-    private int gearPhase,gearStored,gearSkipped,gearReserve=2;
+    private int gearPhase,gearStored,gearSkipped,gearRechecks,gearOpenRetries,gearReserve=2;
     private ulong gearCharacter;
     private uint gearWorld,gearTerritory;
     private DateTimeOffset gearNext,gearDeadline,gearInteractAt;
@@ -39,10 +39,10 @@ public sealed partial class Plugin
     }
     private void DrawGearStorageOptionsPopup()
     {
+        ImGui.SetNextWindowSizeConstraints(new(280,0),new(450,600));
         if(!ImGui.BeginPopup("GearStorageOptions"))return;
         ImGui.BeginDisabled(gearRouting||armoireRunning);
-        DrawGearCategoryPicker("Gear categories",gearCategories,false);
-        DrawGearSourcePicker();
+        ImGui.TextWrapped("Item filters are shown beside the item list. Storage options apply to each selected copy.");
         if(ImGui.Checkbox("Skip dyed gear",ref gearSkipDyed)){config.StorageGearSkipDyed=gearSkipDyed;SaveConfiguration();}
         ImGui.TextWrapped("Armoire first when eligible; otherwise glamour dresser. Dyed gear never goes into the armoire. Turning this filter off permits individual dresser storage only; outfit conversion remains protected.");
         ImGui.SetNextItemWidth(110);if(ImGui.SliderInt("Leave bag slots free",ref gearReserve,1,10)){config.StorageGearReserve=gearReserve;SaveConfiguration();}
@@ -58,7 +58,7 @@ public sealed partial class Plugin
         RefreshGearSetProtection();
         LoadArmoireCatalogue();gearKeep.Clear();
         var protectedItems=respectPlan?retrievalEntrust?.Protected??[]:Array.Empty<uint>();
-        var ids=selected.Distinct().Where(id=>id>0&&!OrganizerGearProtected(id)&&GearStorageItemAllowed(id)&&!ArmoireExclusions().Contains(id)&&!protectedItems.Contains(id)&&GearCategoryMatches(id,gearCategories)&&GearSourceAllowed(id)).ToArray();
+        var ids=selected.Distinct().Where(id=>id>0&&!OrganizerGearProtected(id)&&GearStorageItemAllowed(id)&&!ArmoireExclusions().Contains(id)&&!protectedItems.Contains(id)&&(!fromRetainers||GearCategoryMatches(id,gearCategories))&&GearSourceAllowed(id)).ToArray();
         if(respectPlan&&retrievalEntrust is {} plan)foreach(var id in ids)gearKeep[id]=Math.Max(plan.Keep.GetValueOrDefault(id),plan.CategoryKeep.GetValueOrDefault(OrganizeCategory(id)));
         if(ids.Length==0)throw new InvalidOperationException("Select gear using the existing inventory, retainer or plan selection first.");
         if(GearObject(false)==null||fromRetainers&&GearObject(true)==null)throw new InvalidOperationException("Use an inn room with a glamour dresser and summoning bell loaded nearby.");
@@ -67,10 +67,12 @@ public sealed partial class Plugin
         gearSelection.Clear();gearSelection.UnionWith(ids);gearRemaining.Clear();foreach(var id in ids)gearRemaining.Enqueue(id);gearDeliveries.Clear();gearBatch=[];
         gearPause=new(new SellerAutoRetainerPort());gearPausePrepared=false;gearRouting=true;gearNext=default;gearMoveOwned=gearLookupOwned=false;GearPhase(0,"Opening dresser / checking destinations");
     }
-    private void GearPhase(int phase,string status){gearPhase=phase;gearDeadline=DateTimeOffset.UtcNow.AddSeconds(120);gearInteractAt=default;gearStatus=status;}
+    private void GearPhase(int phase,string status){gearPhase=phase;gearRechecks=gearOpenRetries=0;gearDeadline=DateTimeOffset.UtcNow.AddSeconds(30);gearInteractAt=default;gearStatus=status+(gearCopy is {} copy?" · "+SearchItemName(copy.Item):"");StorageTrace("gear","step",gearCopy?.Item??0,gearStatus);}
+    private void GearSkip(uint item,string reason){gearSkipped++;gearStatus="Skipped "+SearchItemName(item)+" · "+reason;StorageTrace("gear","skipped",item,reason);}
     private unsafe void StopGearStorage(string reason)
     {
         if(!gearRouting)return;
+        StorageTrace("gear","stopped",gearCopy?.Item??0,reason+" · phase "+gearPhase);
         gearRouting=false;
         if(retrievalRun.Running)retrievalRun.Stop("Gear storage route stopped.");
         retrievalPort.GearFilter=false;gearPause?.Release(DateTimeOffset.UtcNow);
@@ -89,7 +91,14 @@ public sealed partial class Plugin
     private unsafe bool GearOpen(bool bell,DateTimeOffset now)
     {
         if(bell?RetainerToolsContext()&&SellerAddon("RetainerList")!=null:ArmoireDresserReady())return true;
-        if(gearInteractAt!=default)return false;
+        if(gearInteractAt!=default){
+            gearStatus="Waiting for "+(bell?"retainer bell":"glamour dresser")+" to open · attempt "+(gearOpenRetries+1)+"/3";
+            if(now-gearInteractAt<TimeSpan.FromSeconds(8))return false;
+            // Retry only opening a nearby object, never an item move or a confirmation.
+            if(SellerAddon("SelectYesno")!=null||SellerAddon("Talk")!=null||SellerAddon("SelectString")!=null)return false;
+            if(gearOpenRetries>=2)throw new InvalidOperationException("Storage window did not open after three attempts.");
+            gearOpenRetries++;gearInteractAt=default;
+        }
         if(Conditions[ConditionFlag.OccupiedSummoningBell]){var id=CurrentRetainerIdentity();if(RetrieverActive(id)){retrievalPort.Close(id);return false;}CloseSellerAddon("RetainerList");return false;}
         if(bell&&ArmoireDresserReady()){CloseSellerAddon("MiragePrismPrismBoxCrystallize");CloseSellerAddon("MiragePrismPrismBox");return false;}
         var obj=GearObject(bell)??throw new InvalidOperationException("Storage object is no longer nearby.");
@@ -150,7 +159,7 @@ public sealed partial class Plugin
     }
     private unsafe bool GearSlotAllowed(InventoryItem item,InventoryType container)
     {
-        if(OrganizerGearProtected(item.ItemId)||!gearSelection.Contains(item.ItemId%1000000)||item.IsSymbolic||!GearCategoryMatches(item.ItemId%1000000,gearCategories))return false;
+        if(OrganizerGearProtected(item.ItemId)||!gearSelection.Contains(item.ItemId%1000000)||item.IsSymbolic||gearFromRetainers&&!GearCategoryMatches(item.ItemId%1000000,gearCategories))return false;
         if(((uint)container>=10000||!gearFromRetainers)&&gearKeep.GetValueOrDefault(item.ItemId%1000000) is >0 and var keep){
             var manager=InventoryManager.Instance();if(manager==null)return false;var count=0;
             var types=(uint)container>=10000?Enumerable.Range(10000,7).Select(i=>(InventoryType)i):ArmoireContainers.Where(t=>t!=InventoryType.EquippedItems);
@@ -187,11 +196,15 @@ public sealed partial class Plugin
         try{
             RefreshGearSetProtection();
             if(!config.EnableRetriever||!Player.IsLoaded||Player.ContentId!=gearCharacter||Player.CurrentWorld.RowId!=gearWorld||Client.TerritoryType!=gearTerritory||Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]||HelperInCutscene()||followSession.Armed||sellerRun.Running||TraderRunning||organizeRunning||chestRunning||retainerGilRunning||armoireRunning||craftingWithdrawalPending)throw new InvalidOperationException("Character, location or active operation changed.");
-            if(now>gearDeadline)throw new InvalidOperationException("Game did not confirm the current storage step in time.");
+            if(now>gearDeadline){
+                if(!OrganizerStoragePolicy.ExtendWait(gearRechecks))throw new InvalidOperationException("Timed out at "+gearStatus+"; sent item actions were not repeated.");
+                gearRechecks++;gearDeadline=now.AddSeconds(30);
+                StorageTrace("gear","recheck",gearCopy?.Item??0,gearStatus);
+            }
             if(FollowMovementKeysHeld())throw new InvalidOperationException("Stopped by your movement input.");
             var inventory=InventoryManager.Instance();if(inventory==null)return;
-            if(gearPhase!=3)foreach(var operation in inventory->PendingOperations)if(!operation.IsEmpty)return;
-            var pause=gearPausePrepared?gearPause!.Check(now):gearPause!.Acquire(now);gearPausePrepared=true;if(pause.Error.Length>0)throw new InvalidOperationException(pause.Error);if(!pause.Ready)return;
+            if(gearPhase!=3)foreach(var operation in inventory->PendingOperations)if(!operation.IsEmpty){gearStatus="Waiting for inventory operation · "+(gearCopy is {} waiting?SearchItemName(waiting.Item):"storage")+" · recheck "+gearRechecks+"/2";return;}
+            var pause=gearPausePrepared?gearPause!.Check(now):gearPause!.Acquire(now);gearPausePrepared=true;if(pause.Error.Length>0)throw new InvalidOperationException(pause.Error);if(!pause.Ready){gearStatus="Waiting for AutoRetainer to pause";return;}
             if(gearPhase==0){if(!GearOpen(false,now)||!GearLoadCabinet())return;RefreshGearDresser();GearPhase(1,"Planning selected gear destinations");return;}
             if(gearPhase==1){
                 if(gearRemaining.Count==0){StopGearStorage("Finished");return;}
@@ -202,11 +215,11 @@ public sealed partial class Plugin
                 var prisms=InventoryManager.Instance()->GetInventoryItemCount(21800);
                 while(gearRemaining.Count>0&&batch.Count<capacity){
                     var id=gearRemaining.Dequeue();var destination=GearDestination(id,false);
-                    if(destination==GearStorageDestination.Skip||gearFromRetainers&&ArmoireInventory(id).Held>0){gearSkipped++;continue;}
+                    if(destination==GearStorageDestination.Skip||gearFromRetainers&&ArmoireInventory(id).Held>0){GearSkip(id,"Already stored or another copy is held");continue;}
                     // Reserve destination resources before withdrawing a batch.
                     if(destination==GearStorageDestination.Dresser||!gearSkipDyed){
                         var newSlot=GearNeedsDresserSlot(id);
-                        if(prisms<1||newSlot&&dresserSlots<1){gearSkipped++;continue;}
+                        if(prisms<1||newSlot&&dresserSlots<1){GearSkip(id,prisms<1?"No glamour prism":"Dresser has no free slot");continue;}
                         prisms--;if(newSlot) dresserSlots--;
                     }
                     batch.Add(id);
@@ -227,21 +240,21 @@ public sealed partial class Plugin
                 if(retrievalRun.Running){gearStatus=retrievalRun.Status;gearDeadline=now.AddSeconds(120);return;}
                 retrievalPort.GearFilter=false;
                 if(retrievalRun.Status.StartsWith("Stopped",StringComparison.Ordinal))throw new InvalidOperationException(retrievalRun.Status);
-                foreach(var id in gearBatch){if(GearFindCopy(id)!=null)gearDeliveries.Enqueue(id);else gearSkipped++;}
+                foreach(var id in gearBatch){if(GearFindCopy(id)!=null)gearDeliveries.Enqueue(id);else GearSkip(id,"No single safe copy found after withdrawal");}
                 GearPhase(4,"Delivering batch to glamour storage");return;
             }
             if(gearPhase==4){
                 if(!GearOpen(false,now)||!GearLoadCabinet())return;
                 if(gearDeliveries.Count==0){GearPhase(1,"Reusing free inventory space for the next batch");return;}
                 RefreshGearDresser();gearItem=gearDeliveries.Dequeue();gearCopy=GearFindCopy(gearItem);
-                if(gearCopy==null){gearSkipped++;return;}
-                var live=GearLiveCopy(gearCopy);if(live==null){gearSkipped++;gearCopy=null;return;}
+                if(gearCopy==null){GearSkip(gearItem,"No single eligible copy: check dyes, condition, materia, duplicates and gear-set protection");return;}
+                var live=GearLiveCopy(gearCopy);if(live==null){GearSkip(gearItem,"Selected copy changed or became protected");gearCopy=null;return;}
                 gearDestination=GearDestination(gearItem,live->Stains[0]!=0||live->Stains[1]!=0);
                 if(gearDestination==GearStorageDestination.Armoire){
                     if(!UIState.Instance()->Cabinet.StoreCabinetItem(armoireRows![gearItem]))throw new InvalidOperationException("Game declined armoire storage; current item kept.");
                     GearPhase(6,"Waiting for armoire receipt");return;
                 }
-                if(gearDestination==GearStorageDestination.Skip){gearSkipped++;gearCopy=null;return;}
+                if(gearDestination==GearStorageDestination.Skip){GearSkip(gearItem,"Destination already contains the item or protection applies");gearCopy=null;return;}
                 if(InventoryManager.Instance()->GetInventoryItemCount(21800)<1)throw new InvalidOperationException("A glamour prism is needed for dresser storage.");
                 if(TryStoreGearOutfit(*live,gearCopy)){GearPhase(6,"Waiting for dresser receipt");return;}
                 // Individual gear is selected from the dresser's crystallize list,
@@ -253,8 +266,8 @@ public sealed partial class Plugin
             if(gearPhase==6){
                 if(!ArmoireDresserReady())throw new InvalidOperationException("Dresser closed before confirming storage.");
                 var present=gearDestination==GearStorageDestination.Armoire?UIState.Instance()->Cabinet.IsItemInCabinet(armoireRows![gearItem]):GearInDresser(gearItem);
-                if(!GearStoragePolicy.DeliveryConfirmed(ArmoireInventory(gearItem).Held==0,present))return;
-                gearKnownDresser.Add(gearItem);gearStored++;gearCopy=null;GearPhase(4,$"{gearStored} stored · delivering batch");
+                if(!GearStoragePolicy.DeliveryConfirmed(ArmoireInventory(gearItem).Held==0,present)){gearStatus="Waiting for "+gearDestination+" receipt · "+SearchItemName(gearItem)+" · recheck "+gearRechecks+"/2";return;}
+                StorageTrace("gear","confirmed",gearItem,gearDestination.ToString());gearKnownDresser.Add(gearItem);gearStored++;gearCopy=null;GearPhase(4,$"{gearStored} stored · delivering batch");
             }
         }catch(Exception e){StopGearStorage("Stopped: "+e.Message);Log.Warning(e,"Gear storage route stopped");}
     }
@@ -318,3 +331,4 @@ public sealed partial class Plugin
         var yes=new AtkValue{Type=AtkValueType.Int,Int=0};confirm->FireCallback(1,&yes,true);gearConfirmationSent=true;GearPhase(6,"Waiting for individual dresser receipt");
     }
 }
+

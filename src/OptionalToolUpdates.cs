@@ -7,7 +7,7 @@ public sealed partial class Plugin
     private bool OptionalToolHasWork(string name)=>name switch
     {
         "Equinox Market"=>true,
-        "Equinox Organizer"=>config.EnableRetriever||retainerGilRunning||retainerGilPort?.Pause.RestorePending==true||retrievalRun.Running||chestRunning||organizeRunning||organizePort?.Pause.RestorePending==true||retrievalPort.Pause.RestorePending,
+        "Equinox Organizer"=>gearRouting||armoireRunning||gearPause?.RestorePending==true||config.EnableRetriever||retainerGilRunning||retainerGilPort?.Pause.RestorePending==true||retrievalRun.Running||chestRunning||organizeRunning||organizePort?.Pause.RestorePending==true||retrievalPort.Pause.RestorePending,
         "Gil Trader"=>TraderRunning,
         "Trade item shortcut"=>pendingTradeItemShortcut is not null||tradeItemMenuCleanup is not null||tradeItemOfferWatch is not null,
         "Camera"=>OptionalToolAvailable("Camera")&&config.RememberCameraHeight||cameraHeightDefaultPending,
@@ -38,7 +38,13 @@ public sealed partial class Plugin
         try{optionalToolUpdates[name](now);optionalToolRetry.Remove(name);optionalToolFailures.Remove(name);}
         catch(Exception ex)
         {
-            optionalToolFailures[name]=ex.GetType().Name+" · retrying in 5 seconds";
+            optionalToolFailures[name]=ex.GetType().Name+" · "+ex.Message+" · retrying in 5 seconds";
+            if(name=="Equinox Organizer"){
+                var message="Paused: "+ex.Message+" · retrying in 5 seconds";
+                if(armoireRunning)armoireStatus=message;
+                else if(gearRouting)gearStatus=message;
+                StorageTrace(armoireRunning?"armoire":"gear","update deferred",armoirePending?.ItemId??gearItem,message);
+            }
             optionalToolRetry[name]=now.AddSeconds(5);
             errorJournal.Record("optional-"+name,"Optional tool update deferred; gameplay tracking continues.",exceptionType:ex.GetType().Name);
         }
@@ -54,4 +60,5 @@ public sealed partial class Plugin
         UpdateFollowPortalRelay(now);
     }
 }
+
 

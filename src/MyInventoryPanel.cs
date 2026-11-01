@@ -12,7 +12,7 @@ public sealed partial class Plugin
     private DateTimeOffset myInventoryRefresh;
     private ChestStack[] myInventoryStock=[];
     private string MyInventoryName(uint id)=>retrievalCatalog?.Names.GetValueOrDefault(id)??id.ToString();
-    private bool MyInventoryMatches(uint id)=>MyInventoryName(id).Contains(myInventorySearch,StringComparison.OrdinalIgnoreCase)&&(myInventoryAllCategories||(myInventoryDestination==GlamourStorageDestination?GearCategoryMatches(id,myInventoryCategories,false):myInventoryCategories.Contains(OrganizeCategory(id))))&&(myInventoryDestination!=GlamourStorageDestination||(GearStorageItemAllowed(id)&&GearSourceAllowed(id)&&GearCategoryMatches(id,gearCategories)));
+    private bool MyInventoryMatches(uint id)=>MyInventoryName(id).Contains(myInventorySearch,StringComparison.OrdinalIgnoreCase)&&(myInventoryAllCategories||(myInventoryDestination==GlamourStorageDestination?GearCategoryMatches(id,myInventoryCategories,false):myInventoryCategories.Contains(OrganizeCategory(id))))&&(myInventoryDestination!=GlamourStorageDestination||(GearStorageItemAllowed(id)&&GearSourceAllowed(id)));
     private unsafe bool InventoryTradeFilterAllows(ChestStack stack,int filter)
     {
         if(filter==0||stack.Item==0)return true;
@@ -42,10 +42,11 @@ public sealed partial class Plugin
             ImGui.TableNextRow();ImGui.TableNextColumn();ImGui.SetNextItemWidth(-1);ImGui.InputTextWithHint("##MyInventorySearch","Search my bags…",ref myInventorySearch,100);
             ImGui.TableNextColumn();ImGui.SetNextItemWidth(-1);if(DrawStorageCategoryPicker("##MyInventoryCategories",myInventoryCategories,myInventoryAllCategories?"All categories":"None selected",myInventoryDestination==GlamourStorageDestination?GearCategoryGroups(false):null))myInventoryAllCategories=false;
             ImGui.TableNextRow();ImGui.TableNextColumn();var quality=(int)myInventoryQuality;ImGui.SetNextItemWidth(-1);if(ImGui.Combo("##MyInventoryQuality",ref quality,"Any quality\0NQ only\0HQ only\0"))myInventoryQuality=(RetrievalQuality)quality;
-            ImGui.TableNextColumn();if(ImGui.SmallButton("Reset filters")){myInventorySearch="";myInventoryCategories.Clear();myInventoryAllCategories=true;myInventoryQuality=RetrievalQuality.Any;myInventoryTradeFilter=0;myInventoryRefresh=default;}
+            ImGui.TableNextColumn();if(ImGui.SmallButton("Reset filters")){myInventorySearch="";myInventoryCategories.Clear();myInventoryAllCategories=true;myInventoryQuality=RetrievalQuality.Any;myInventoryTradeFilter=0;gearStorageKind=gearAppearance=0;gearSourceGroup=gearSourceSubgroup=0;gearOrigin="";myInventoryRefresh=default;}
             ImGui.TableNextRow();ImGui.TableNextColumn();ImGui.SetNextItemWidth(-1);if(ImGui.Combo("##MyInventoryTradeFilter",ref myInventoryTradeFilter,"Any items\0Tradable only\0Untradable only\0"))myInventoryRefresh=default;
             MarketHelp("Filters actual copies, including bound gear and collectibles. Entrust selected uses this filter too.");ImGui.EndTable();
         }
+        if(myInventoryDestination==GlamourStorageDestination){DrawGearAppearancePicker(ref gearAppearance);if(ImGui.CollapsingHeader("Storage eligibility / source filters"+((gearStorageKind!=0||gearSourceGroup!=0||gearSourceSubgroup!=0||gearOrigin.Length>0)?" · active":"")))DrawGearSourcePicker(false);}
         if(myInventoryRefresh==default){myInventoryStock=ReadMyInventory();myInventoryRefresh=DateTimeOffset.UtcNow.AddSeconds(1);}
         var rows=myInventoryStock.Where(s=>RetainerRetrieval.AllowsQuality(s.Hq,myInventoryQuality)&&MyInventoryMatches(s.Item)).GroupBy(s=>s.Item).Select(g=>(Id:g.Key,Name:MyInventoryName(g.Key),Quantity:g.Sum(s=>s.Quantity))).OrderBy(x=>x.Name).ToArray();
         if(ImGui.SmallButton("Select all"))foreach(var row in rows.Where(r=>!OrganizerGearProtected(r.Id)))myInventorySelected.TryAdd(row.Id,row.Quantity);ImGui.SameLine();
@@ -94,3 +95,4 @@ public sealed partial class Plugin
         ImGui.EndDisabled();
     }
 }
+

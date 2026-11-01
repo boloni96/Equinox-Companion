@@ -83,7 +83,7 @@ public sealed partial class Plugin
     private void DrawRetriever()
     {
         PollInventoryReviewExport();
-        if(gearRouting||gearStatus.Length>0){ImGui.TextWrapped(gearStatus);if(gearRouting&&ImGui.SmallButton("Stop gear storage"))StopGearStorage("Stopped by you");}
+        if(!armoireRunning&&(gearRouting||organizerLastStorageRoute=="gear"&&organizerLastStorageCharacter==Player.ContentId)){ImGui.TextWrapped(gearStatus);if(gearRouting&&ImGui.SmallButton("Stop gear storage"))StopGearStorage("Stopped by you");}
         DrawGearSetProtectionOption();
         DrawGearStorageOptions();DrawGearStorageOptionsPopup();
         if(!retrievalRun.Running&&retrievalPreviewOwner!=Player.ContentId){retrievalPreviewOwner=Player.ContentId;retrievalRefreshPending=true;retrievalStock=[];retrievalStockComplete=false;retrievalPreview=[];retrievalPlan=[];retrievalPreviewDirty=true;}
@@ -91,7 +91,7 @@ public sealed partial class Plugin
         if(retrievalCatalogTask?.IsCompleted==true){try{retrievalCatalog=retrievalCatalogTask.GetAwaiter().GetResult();}catch(Exception e){retrievalError="Item catalogue: "+e.Message;}retrievalCatalogTask=null;}
         if(retrievalCatalog!=null&&!retrievalArtisanRequested)LoadRetrievalArtisan();
         if(retrievalArtisanTask?.IsCompleted==true){try{var read=retrievalArtisanTask.GetAwaiter().GetResult();retrievalArtisan=read.Lists;retrievalArtisanNotice=read.Lists.Length+" saved lists"+(read.Warnings.Length>0?" · "+string.Join("; ",read.Warnings):read.Lists.Length==0?" · Save a list in Artisan, then Refresh.":"");}catch(Exception e){retrievalArtisanNotice=e.Message;}retrievalArtisanTask=null;}
-        windowStatus=organizeRunning?organizeStatus:chestRunning?chestStatus:retrievalRun.Running?retrievalRun.Status:retrievalError.Length>0?retrievalError:retrievalRun.Status;
+        windowStatus=OrganizerStorageStatus().Length>0?OrganizerStorageStatus():organizeRunning?organizeStatus:chestRunning?chestStatus:retrievalRun.Running?retrievalRun.Status:retrievalError.Length>0?retrievalError:retrievalRun.Status;
         if(organizeRunning){ImGui.TextWrapped(organizeStatus);if(ImGui.SmallButton("Stop##OrganiserGlobal"))StopOrganize("Stopped by you; an already-sent move may still complete.");}
         if(retrievalRun.Running){ImGui.TextUnformatted(retrievalRun.Status);if(ImGui.Button("Stop retrieval"))retrievalRun.Stop("Stopped by you.");ImGui.Separator();}
         if(retrievalCatalog==null){ImGui.TextWrapped(retrievalCatalogTask!=null?"Loading item and crafting catalogues…":"Item catalogue unavailable.");if(retrievalCatalogTask==null&&ImGui.Button("Retry"))LoadRetrievalCatalog();return;}
@@ -125,7 +125,7 @@ public sealed partial class Plugin
                 if(retrievalPlansView==0)DrawRetrievalSources();else DrawRetrievalPresets();
                 ImGui.EndDisabled();ImGui.EndTabItem();
             }
-            if(ImGui.BeginTabItem("Transfer",retrievalShowList?ImGuiTabItemFlags.SetSelected:ImGuiTabItemFlags.None)){retrievalShowList=false;ImGui.BeginDisabled(gearRouting||armoireRunning||craftingWithdrawalPending||retrievalRun.Running||organizeRunning||chestRunning);DrawRetrievalList();ImGui.EndDisabled();ImGui.EndTabItem();}
+            if(ImGui.BeginTabItem("Transfer",retrievalShowList?ImGuiTabItemFlags.SetSelected:ImGuiTabItemFlags.None)){retrievalShowList=false;ImGui.BeginDisabled(gearRouting||armoireRunning||craftingWithdrawalPending||retrievalRun.Running||organizeRunning||chestRunning);if(ImGui.CollapsingHeader("Gear storage filters")){DrawGearCategoryPicker("Equipment slots",gearCategories,false);DrawGearSourcePicker();}DrawRetrievalList();ImGui.EndDisabled();ImGui.EndTabItem();}
             if(ImGui.BeginTabItem("Organize###Organize retainers")){if(!organizerTabWasVisible)InvalidateOrganizePreview();organizerTabWasVisible=true;DrawRetainerOrganizer();ImGui.EndTabItem();}else organizerTabWasVisible=false;
             if(ImGui.BeginTabItem("Armoire")){DrawArmoireOrganizer();ImGui.EndTabItem();}
             if(ImGui.BeginTabItem("FC chest")){DrawRetrievalChest();ImGui.EndTabItem();}
@@ -303,6 +303,7 @@ public sealed partial class Plugin
         ImGui.EndTabBar();
     }
 }
+
 
 
 

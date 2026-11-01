@@ -6,7 +6,20 @@ public sealed partial class Plugin
     private CabinetSource[]? cabinetSources;
     private Dictionary<uint,CabinetSource>? cabinetSourceItems;
     private uint armoireSourceGroup,armoireSourceSubgroup,gearSourceGroup,gearSourceSubgroup;
-    private int gearStorageKind;
+    private int gearStorageKind,gearAppearance,armoireAppearance;
+    private readonly Dictionary<uint,bool> cosmeticGearCache=[];
+    private bool CosmeticGear(uint id)
+    {
+        if(cosmeticGearCache.TryGetValue(id,out var cached))return cached;
+        var item=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>().GetRowOrDefault(id);
+        return cosmeticGearCache[id]=item is {} r&&r.EquipSlotCategory.RowId>0&&OrganizerStoragePolicy.Cosmetic(r.LevelEquip,r.LevelItem.RowId,r.BaseParamValue.Any(v=>v>0));
+    }
+    private bool GearAppearanceAllowed(uint id,int filter)=>filter==0||(filter==1?CosmeticGear(id):!CosmeticGear(id));
+    private void DrawGearAppearancePicker(ref int filter)
+    {
+        ImGui.SetNextItemWidth(240);ImGui.Combo("Gear type",ref filter,"All gear\0Glamour / cosmetic gear\0Other gear\0");
+        MarketHelp("Cosmetic filter: equip level 1, item level 1, and no attribute bonuses. Independent of equipment slot or dresser outfit-set format.");
+    }
     private HashSet<uint>? gearOutfitItems;
     private void LoadCabinetSources()
     {
@@ -32,11 +45,11 @@ public sealed partial class Plugin
         LoadCabinetSources();
         return cabinetSourceItems!.TryGetValue(id,out var source)&&(group==0||source.Group==group)&&(subgroup==0||source.Subgroup==subgroup);
     }
-    private bool ArmoireSourceAllowed(uint id)=>CabinetSourceAllowed(id,armoireSourceGroup,armoireSourceSubgroup)&&GearOriginAllowed(id,armoireOrigin);
+    private bool ArmoireSourceAllowed(uint id)=>GearAppearanceAllowed(id,armoireAppearance)&&CabinetSourceAllowed(id,armoireSourceGroup,armoireSourceSubgroup)&&GearOriginAllowed(id,armoireOrigin);
     private bool GearSourceAllowed(uint id)
     {
         LoadCabinetSources();
-        if(!GearOriginAllowed(id,gearOrigin))return false;
+        if(!GearAppearanceAllowed(id,gearAppearance)||!GearOriginAllowed(id,gearOrigin))return false;
         if(!CabinetSourceAllowed(id,gearSourceGroup,gearSourceSubgroup))return false;
         return gearStorageKind switch {
             1=>armoireRows!.ContainsKey(id),
@@ -68,12 +81,14 @@ public sealed partial class Plugin
         MarketHelp("Uses the current game's Armoire groups and sets, including dungeon names, jobs and events. Selecting a group or set matches only items listed in the Armoire catalogue.");
         ImGui.PopID();
     }
-    private void DrawArmoireSourcePicker(){DrawCabinetSourcePicker("ArmoireSources",ref armoireSourceGroup,ref armoireSourceSubgroup);DrawGearOriginPicker("ArmoireOrigin",ref armoireOrigin);}
-    private void DrawGearSourcePicker()
+    private void DrawArmoireSourcePicker(){DrawGearAppearancePicker(ref armoireAppearance);DrawCabinetSourcePicker("ArmoireSources",ref armoireSourceGroup,ref armoireSourceSubgroup);DrawGearOriginPicker("ArmoireOrigin",ref armoireOrigin);}
+    private void DrawGearSourcePicker(bool appearance=true)
     {
+        if(appearance)DrawGearAppearancePicker(ref gearAppearance);
         ImGui.SetNextItemWidth(240);
         ImGui.Combo("Storage eligibility",ref gearStorageKind,"All supported gear\0Armoire eligible\0Dresser only\0Outfit set pieces\0");
         DrawCabinetSourcePicker("GearSources",ref gearSourceGroup,ref gearSourceSubgroup);
         DrawGearOriginPicker("GearOrigin",ref gearOrigin);
     }
 }
+
