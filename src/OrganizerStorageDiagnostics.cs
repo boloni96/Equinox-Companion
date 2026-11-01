@@ -14,5 +14,6 @@ public sealed partial class Plugin
     private object GearStorageDiagnostics()=>new {
         armoire=new {running=armoireRunning,phase=armoirePhase,status=armoireStatus,moved=armoireMoved,skipped=armoireSkipped,pending=armoirePending,remaining=armoireQueue.Count,rechecks=armoireRechecks,deadline=armoireDeadline,preview=armoirePreview.Select(p=>new {item=p.Item,name=p.Name,status=p.Status}).ToArray()},
         gear=new {running=gearRouting,phase=gearPhase,status=gearStatus,item=gearItem,destination=gearDestination.ToString(),stored=gearStored,skipped=gearSkipped,remaining=gearRemaining.Count,deliveries=gearDeliveries.Count,rechecks=gearRechecks,deadline=gearDeadline},
+        sourceIndex=new {ready=marketSourcesReady,failed=marketSourcesFailed,dutyFailed=dutySourcesFailed,warnings=marketSourceWarnings.ToArray()},
         snapshot=config.OrganizerDresserSnapshots.GetValueOrDefault(Player.ContentId),history=gearStorageHistory.ToArray()};
 }

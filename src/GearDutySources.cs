@@ -36,8 +36,11 @@ public sealed partial class Plugin
             ImGui.EndCombo();
         }
         if(!marketSourcesReady)ImGui.TextDisabled(marketSourcesFailed?"Source index unavailable; source-filtered moves are blocked.":"Loading source filters…");
+        if(marketSourceWarnings.Count>0){ImGui.TextDisabled("Some source data is unavailable; only verified matches are included.");MarketHelp(string.Join("\n",marketSourceWarnings));}
+        if((marketSourcesFailed||marketSourceWarnings.Count>0||dutySourcesFailed)&&ImGui.SmallButton("Retry source index")){marketSourceReader?.Dispose();marketSourceReader=null;marketSources.Clear();marketSourceWarnings.Clear();marketSourcesReady=marketSourcesFailed=dutySourcesFailed=false;}
         if(dutySourcesFailed)ImGui.TextWrapped("Duty source data unavailable. Dungeon/trial/raid filters cannot be used.");
         MarketHelp("An item can match several sources. Duty sources use bundled Teamcraft data; other sources use game sheets. Missing data remains unclassified, not assumed to be dungeon gear. Armoire group, source and equipment filters combine.");
         ImGui.PopID();
     }
 }
+

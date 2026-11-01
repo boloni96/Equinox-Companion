@@ -41,9 +41,27 @@ public sealed partial class Plugin
             Log.Warning(ex, "Item source index unavailable");
         }
     }
+    private readonly List<string> marketSourceWarnings=[];
     private IEnumerable<bool> ReadMarketSources()
     {
+        var stages=new (string Name,Func<IEnumerable<bool>> Read)[]{("Duty drops",ReadMarketSourceStage0),("Armoire sources",ReadMarketSourceStage1),("Quest rewards",ReadMarketSourceStage2),("Achievements",ReadMarketSourceStage3),("Gil vendors",ReadMarketSourceStage4),("Exchange vendors",ReadMarketSourceStage5),("Grand Company vendors",ReadMarketSourceStage6),("Recipes",ReadMarketSourceStage7),("Gathering",ReadMarketSourceStage8),("Fishing",ReadMarketSourceStage9),("Retainer ventures",ReadMarketSourceStage10)};
+        foreach(var stage in stages){
+            using var reader=stage.Read().GetEnumerator();
+            while(true){
+                bool next;
+                try{next=reader.MoveNext();}
+                catch(Exception e){marketSourceWarnings.Add(stage.Name+": "+e.Message);Log.Warning(e,"Item source stage unavailable: {Stage}",stage.Name);break;}
+                if(!next)break;
+                yield return true;
+            }
+        }
+    }
+    private IEnumerable<bool> ReadMarketSourceStage0()
+    {
         foreach(var step in ReadGearDutySources())yield return step;
+    }
+    private IEnumerable<bool> ReadMarketSourceStage1()
+    {
         // The current Cabinet catalogue supplements newer dungeon gear which
         // upstream drop reports may not yet include.
         foreach(var row in DataManager.GetExcelSheet<Cabinet>()) {
@@ -51,6 +69,9 @@ public sealed partial class Plugin
                 AddMarketSource(row.Item.RowId,"Dungeon","Armoire dungeon gear · "+row.SubCategory.Value.Name.ExtractText());
             yield return true;
         }
+    }
+    private IEnumerable<bool> ReadMarketSourceStage2()
+    {
         foreach(var q in DataManager.GetExcelSheet<Quest>()) {
             var rewards=q.OptionalItemReward.Select(x=>x.RowId).ToList();
             if(q.ItemRewardType is 1 or 3 or 5)rewards.AddRange(q.Reward.Select(x=>x.RowId));
@@ -60,13 +81,22 @@ public sealed partial class Plugin
             }
             yield return true;
         }
+    }
+    private IEnumerable<bool> ReadMarketSourceStage3()
+    {
         foreach(var achievement in DataManager.GetExcelSheet<Achievement>()) {
             if(achievement.Item.RowId>0)AddMarketSource(achievement.Item.RowId,"Achievement","Achievement · "+achievement.Name.ExtractText());
             yield return true;
         }
+    }
+    private IEnumerable<bool> ReadMarketSourceStage4()
+    {
         foreach(var group in DataManager.GetSubrowExcelSheet<GilShopItem>())
             foreach(var row in group)
             { AddMarketSource(row.Item.RowId, "Vendor", "Vendor · gil shop (stock may require quest progress)"); yield return true; }
+    }
+    private IEnumerable<bool> ReadMarketSourceStage5()
+    {
         foreach(var shop in DataManager.GetExcelSheet<SpecialShop>())
         {
             var name = shop.Name.ToString();
@@ -77,14 +107,23 @@ public sealed partial class Plugin
                 yield return true;
             }
         }
+    }
+    private IEnumerable<bool> ReadMarketSourceStage6()
+    {
         foreach(var group in DataManager.GetSubrowExcelSheet<GCScripShopItem>())
             foreach(var row in group)
             { AddMarketSource(row.Item.RowId, "Vendor", $"Grand Company vendor · {row.CostGCSeals:N0} seals · rank requirements apply"); yield return true; }
+    }
+    private IEnumerable<bool> ReadMarketSourceStage7()
+    {
         foreach(var row in DataManager.GetExcelSheet<Recipe>())
         {
             AddMarketSource(row.ItemResult.RowId, "Crafted", $"Crafted · {row.CraftType.Value.Name} · level {row.RecipeLevelTable.Value.ClassJobLevel}");
             yield return true;
         }
+    }
+    private IEnumerable<bool> ReadMarketSourceStage8()
+    {
         var gathering = new Dictionary<uint, uint>();
         foreach(var row in DataManager.GetExcelSheet<GatheringItem>())
         {
@@ -108,6 +147,9 @@ public sealed partial class Plugin
             }
             yield return true;
         }
+    }
+    private IEnumerable<bool> ReadMarketSourceStage9()
+    {
         foreach(var spot in DataManager.GetExcelSheet<FishingSpot>())
         {
             var zone = spot.TerritoryType.Value.PlaceName.Value.Name.ToString();
@@ -115,6 +157,9 @@ public sealed partial class Plugin
                 AddMarketSource(item.RowId, "Fishing", $"Fishing · {zone} / {spot.PlaceName.Value.Name}");
             yield return true;
         }
+    }
+    private IEnumerable<bool> ReadMarketSourceStage10()
+    {
         foreach(var task in DataManager.GetExcelSheet<RetainerTaskNormal>())
         {
             if(task.Item.RowId != 0)
@@ -147,3 +192,4 @@ public sealed partial class Plugin
         }
     }
 }
+
