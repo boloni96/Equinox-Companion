@@ -16,6 +16,7 @@ public sealed partial class Plugin
  private AdventureWindow adventureWindow=null!;private readonly AdventureSync adventureSync=new();private bool adventureCommand;
  private Task<AdventureReply>? adventureRequest;private bool adventureMutation;private string adventureRequestKey="",adventureConnectionKey="",adventureMessage="Checking your paired Journal…";
  private string adventurePerson="",adventureAccount="";
+ private readonly AdventureViewState adventureView=new();
  private AdventureBoard[] adventureBoards=[];private string adventureSelected="";private DateTimeOffset adventureNext,adventureFetched;private bool adventureFresh;
  private readonly Dictionary<string,bool> adventureCompletion=[];private string? adventurePrompt;private bool adventureFollow=true;private readonly AdventureLocationSession adventureFollowSession=new();
  private static string AdventureText(string value)=>value.Replace("##","");
@@ -26,10 +27,17 @@ public sealed partial class Plugin
  private bool AdventureSaving=>adventureMutation||adventureQueuedAction is not null;
  private void AdventureAction(AdventureBoard b,int? index=null,AdventureTask? task=null,bool value=false)
  {
+  if(index is {} localIndex){
+   var current=adventureBoards.FirstOrDefault(x=>x.Id==b.Id&&x.Generation==b.Generation);
+   if(current is null)return;
+   var local=adventureView.Move(current,localIndex);
+   adventureBoards=adventureBoards.Select(x=>x.Id==local.Id?local:x).ToArray();
+   adventurePrompt=null;CacheAdventures();return;
+  }
   if(AdventureSaving||!adventureFresh)return;
   if(adventureRequest is not null){adventureQueuedAction=(b.Id,b.Generation,index,task?.Id,value);return;}
   adventureMutation=true;adventureRequestKey=config.PairingKey;
-  adventureRequest=index is {} n?adventureSync.Move(config.PairingKey,b,n):adventureSync.Check(config.PairingKey,b,task!.Id,value);
+  adventureRequest=adventureSync.Check(config.PairingKey,b,task!.Id,value);
  }
  private void UpdateAdventure()
  {
@@ -39,14 +47,14 @@ public sealed partial class Plugin
  private void UpdateAdventureCore()
  {
   var now=DateTimeOffset.UtcNow;
-  if(adventureConnectionKey!=config.PairingKey){adventureConnectionKey=config.PairingKey;adventureQueuedAction=null;adventureBoards=[];adventureSelected="";adventurePerson="";adventureAccount="";adventureCompletion.Clear();adventurePrompt=null;adventureFresh=false;adventureNext=default;
+  if(adventureConnectionKey!=config.PairingKey){adventureConnectionKey=config.PairingKey;adventureView.Clear();adventureQueuedAction=null;adventureBoards=[];adventureSelected="";adventurePerson="";adventureAccount="";adventureCompletion.Clear();adventurePrompt=null;adventureFresh=false;adventureNext=default;
    var hash=Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(config.PairingKey)));
-   if(config.AdventurePairingHash==hash){adventureBoards=config.CachedAdventures.Where(AdventurePolicy.Valid).ToArray();adventureSelected=config.SelectedAdventure;}
+   if(config.AdventurePairingHash==hash){adventureBoards=config.CachedAdventures.Where(AdventurePolicy.Valid).Select(adventureView.Apply).ToArray();adventureSelected=config.SelectedAdventure;}
   }
   if(adventureRequest?.IsCompleted==true){
    var reply=adventureRequest.IsCompletedSuccessfully?adventureRequest.Result:new AdventureReply(null,"Adventure request failed.");
    if(adventureRequest.IsFaulted)_=adventureRequest.Exception;
-   if(adventureRequestKey==config.PairingKey){adventureMessage=reply.Status;adventureFresh=reply.Boards is not null;if(reply.Boards is null){adventureFollowSession.Reset();adventurePresenceSession.Reset();}if(reply.Boards is {} boards){adventureBoards=AdventurePolicy.Reconcile(adventureBoards,boards,adventureMutation);adventureFetched=now;CacheAdventures();}
+   if(adventureRequestKey==config.PairingKey){adventureMessage=reply.Status;adventureFresh=reply.Boards is not null;if(reply.Boards is null){adventureFollowSession.Reset();adventurePresenceSession.Reset();}if(reply.Boards is {} boards){adventureBoards=AdventurePolicy.Reconcile(adventureBoards,boards,adventureMutation).Select(adventureView.Apply).ToArray();adventureFetched=now;CacheAdventures();}
     adventureNext=now.AddSeconds(AdventurePollPolicy.Seconds(adventureWindow.IsOpen,gardenTendRoute!=null,reply.Boards is null));
    }adventureRequest=null;adventureMutation=false;
   }
@@ -64,7 +72,7 @@ public sealed partial class Plugin
  {
   var hash=Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(config.PairingKey)));
   var old=config.CachedAdventures;
-  if(config.AdventurePairingHash==hash&&old.Length==adventureBoards.Length&&old.Zip(adventureBoards).All(x=>x.First.Id==x.Second.Id&&x.First.Revision==x.Second.Revision)&&config.SelectedAdventure==adventureSelected)return;
+  if(config.AdventurePairingHash==hash&&old.Length==adventureBoards.Length&&old.Zip(adventureBoards).All(x=>x.First.Id==x.Second.Id&&x.First.Revision==x.Second.Revision&&x.First.Index==x.Second.Index)&&config.SelectedAdventure==adventureSelected)return;
   config.AdventurePairingHash=hash;config.CachedAdventures=adventureBoards;config.SelectedAdventure=adventureSelected;SaveConfiguration();
  }
  private readonly UiProjectionCache<AdventureProgress> adventureProgress=new(maxAgeMs:0);
@@ -203,7 +211,7 @@ public sealed partial class Plugin
   var board=adventureBoards.FirstOrDefault(b=>b.Id==adventureSelected);
   if(board is null){
    ImGui.BeginChild("AdventureChoices",new Vector2(0,0),false);
-   ImGui.TextWrapped("Current adventures from your Journal. Build or resume a Character & Multi Adventure there to share it here. Both windows share the current stop. Saved adventures update from Companion while the browser is closed. A connection to the paired service is required to save progress.");
+   ImGui.TextWrapped("Current adventures from your Journal. Build or resume a Character & Multi Adventure there to share it here. Each game client keeps its own current stop; task progress is shared. Saved adventures update from Companion while the browser is closed. A connection to the paired service is required to save progress.");
    if(!adventureBoards.Any(AdventureInScope))ImGui.TextWrapped("No shared adventures yet. Open Adventure in the updated Journal and start or resume a route.");
    foreach(var b in adventureBoards.Where(AdventureInScope).OrderBy(b=>b.Kind).ThenBy(b=>b.Title)){
     ImGui.PushID(b.Id);ImGui.Spacing();ImGui.Separator();DrawAdventureHeading(b.Kind=="garden"?"gardening":"adventure",b.Title);
@@ -257,19 +265,20 @@ public sealed partial class Plugin
   if(adventurePrompt==visibleStopKey&&!ImGui.IsPopupOpen("All done"))ImGui.OpenPopup("All done");
   windowStatus=bringMessage.Length>0?bringMessage:adventureMessage;
   windowFooter=()=>{
-  ImGui.BeginDisabled(AdventureSaving||!adventureFresh||board.Index<=0);if(ImGui.Button("← Previous"))AdventureAction(board,Math.Max(0,board.Index-1));ImGui.EndDisabled();ImGui.SameLine();
-  ImGui.BeginDisabled(AdventureSaving||!adventureFresh||board.Index>=board.Stops.Length);if(ImGui.Button(board.Index==board.Stops.Length-1?"Review round":"Next stop →"))AdventureAction(board,board.Index+1);ImGui.EndDisabled();
-  if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))ImGui.SetTooltip("Navigation never marks tasks complete.");
+  ImGui.BeginDisabled(board.Index<=0);if(ImGui.Button("← Previous"))AdventureAction(board,Math.Max(0,board.Index-1));ImGui.EndDisabled();ImGui.SameLine();
+  ImGui.BeginDisabled(board.Index>=board.Stops.Length);if(ImGui.Button(board.Index==board.Stops.Length-1?"Review round":"Next stop →"))AdventureAction(board,board.Index+1);ImGui.EndDisabled();
+  if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))ImGui.SetTooltip("Navigation changes only this game client’s page. Task progress remains shared.");
   };
   if(ImGui.BeginPopupModal("All done",ImGuiWindowFlags.AlwaysAutoResize)){
    ImGui.TextUnformatted("All done here. Go to the next stop?");
    if(ImGui.Button("Stay here")){adventurePrompt=null;ImGui.CloseCurrentPopup();}ImGui.SameLine();
    var currentKey=board.Id+"|"+board.Generation+"|"+board.Index;
-   ImGui.BeginDisabled(AdventureSaving||!adventureFresh||adventurePrompt!=currentKey||board.Index>=board.Stops.Length||!AdventurePolicy.Complete(board.Stops[board.Index]));
+   ImGui.BeginDisabled(adventurePrompt!=currentKey||board.Index>=board.Stops.Length||!AdventurePolicy.Complete(board.Stops[board.Index]));
    if(ImGui.Button("Next stop")){AdventureAction(board,board.Index+1);adventurePrompt=null;ImGui.CloseCurrentPopup();}ImGui.EndDisabled();ImGui.EndPopup();
   }
  }
 }
+
 
 
 

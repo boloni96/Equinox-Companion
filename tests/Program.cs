@@ -1812,3 +1812,5 @@ GearSetProtection365Tests.Run();
 
 GearCategory366Tests.Run();
 OrganizerStorage368Tests.Run();
+
+AdventureNavigation370Tests.Run();

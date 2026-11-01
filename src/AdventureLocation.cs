@@ -57,13 +57,13 @@ public sealed partial class Plugin
   if(ImGui.Checkbox("Follow character",ref adventureFollow))adventureFollowSession.Reset();
   if(ImGui.IsItemHovered())ImGui.SetTooltip("Follow my character / world / house. Automatically open the matching stop when my location changes.");
   if(ready&&target is not null){
-  ImGui.BeginDisabled(AdventureSaving||!adventureFresh);
+  ImGui.BeginDisabled(false);
   if(ImGui.SmallButton("Open current house")&&target is {} index){adventureFocusHouse=house;if(index!=board.Index){adventurePrompt=null;AdventureAction(board,index);}}
   ImGui.EndDisabled();
-  if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))ImGui.SetTooltip(target is null?"Your current house must be identified and included in this adventure.":"Open this house’s stop in the active adventure. This shares navigation with the Journal and does not mark tasks complete.");
+  if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))ImGui.SetTooltip(target is null?"Your current house must be identified and included in this adventure.":"Open this house’s stop in the active adventure. This changes only this game client’s page and does not mark tasks complete.");
   }
   var navigation=CompactLayout.Navigation(ImGui.GetContentRegionAvail().X,BringControlsWidth,ImGui.GetStyle().ItemSpacing.X,ImGui.GetFontSize());
-  ImGui.BeginDisabled(AdventureSaving||!adventureFresh);DrawAdventureNavigation(board,navigation.SelectorWidth);ImGui.EndDisabled();
+  DrawAdventureNavigation(board,navigation.SelectorWidth);
   if(!navigation.WrapActions)ImGui.SameLine();
   var selected=board.Stops.ElementAtOrDefault(board.Index);
   DrawBringCharacter(ready,selected?.World??world,selected?.World==world?house:"");
@@ -82,7 +82,7 @@ public sealed partial class Plugin
     adventureMutation=true;adventureRequestKey=config.PairingKey;
     adventureRequest=adventureSync.Travel(config.PairingKey,board,matches[0].Id,world,CurrentAdventureArea(),Client.TerritoryType,house);
     if(target is {} houseIndex&&houseIndex!=board.Index&&board.Stops.Any(s=>s.World==world&&s.CharacterIds?.Contains(matches[0].Id)==true))
-     adventureQueuedAction=(board.Id,board.Generation,houseIndex,null,false);
+     AdventureAction(board,houseIndex);
     adventurePrompt=null;return;
    }
    next??=AdventurePolicy.FollowIndex(board,matches.Length==1?matches[0].Id:"",world);
@@ -90,4 +90,5 @@ public sealed partial class Plugin
   if(next is {} n&&n!=board.Index){adventurePrompt=null;AdventureAction(board,n);}
  }
 }
+
 
