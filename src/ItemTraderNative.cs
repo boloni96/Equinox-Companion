@@ -17,6 +17,8 @@ public sealed partial class Plugin
     private nint itemTradeMenu;
     private TradeItemMenuSelection? itemTradeMenuSelection;
     private long itemTradeOfferedBefore;
+    private DateTimeOffset itemTradeQuantityActionAt;
+    private string itemTradeQuantityTrace="";
     private unsafe TradeBagSlot[] ReadItemTradeBags()
     {
         var inv=InventoryManager.Instance();if(inv==null)throw new InvalidOperationException("Inventory unavailable.");
@@ -92,7 +94,7 @@ public sealed partial class Plugin
         var current=ReadItemTradeBags().SingleOrDefault(x=>x.Container==slot.Source.Container&&x.Slot==slot.Source.Slot);
         if(current!=slot.Source||!current.Tradable||slot.Quantity<=0||slot.Quantity>current.Quantity)throw new InvalidOperationException("Selected bag slot changed.");
         itemTradeOfferedBefore=ReadItemTradeOffer(false).Where(x=>x.Key==slot.Source.Key).Sum(x=>(long)x.Quantity);
-        itemTradePending=slot;itemTradeOfferAt=now;itemTradeMenuSelected=itemTradeQuantitySent=false;itemTradeMenu=0;itemTradeMenuSelection=null;
+        itemTradePending=slot;itemTradeOfferAt=now;itemTradeQuantityActionAt=now;itemTradeQuantityTrace="";itemTradeMenuSelected=itemTradeQuantitySent=false;itemTradeMenu=0;itemTradeMenuSelection=null;
         agent->OpenForItemSlot((InventoryType)slot.Source.Container,slot.Source.Slot,0,trade->Id);
     }
     private unsafe void CaptureItemTradeMenu(AddonArgs args)
@@ -125,11 +127,16 @@ public sealed partial class Plugin
         if(now-itemTradeOfferAt>TimeSpan.FromSeconds(8))throw new InvalidOperationException("Timed out adding an item; no retry was sent.");
         if(!f.TradeReady||f.SyncPending)return;
         var observed=frame.Local.Where(x=>x.Key==slot.Source.Key).Sum(x=>(long)x.Quantity);
-        if(observed==itemTradeOfferedBefore+slot.Quantity){
+        var numeric=SellerAddon("InputNumeric");
+        var quantityState=$"Item {slot.Source.Item}: requested {slot.Quantity}, offered {observed-itemTradeOfferedBefore}, bag stack {slot.Source.Quantity}, quantity dialog {numeric!=null}, submitted {itemTradeQuantitySent}";
+        if(quantityState!=itemTradeQuantityTrace){itemTradeQuantityTrace=quantityState;TraceGilTrade(quantityState);}
+        var decision=ItemOfferQuantityPolicy.Decide(itemTradeOfferedBefore,observed,slot.Quantity,slot.Source.Quantity,
+            itemTradeMenuSelected,numeric!=null,itemTradeQuantitySent,(now-itemTradeQuantityActionAt).TotalMilliseconds);
+        if(decision==ItemOfferQuantityDecision.Complete){
             var oldMenu=SellerAddon("ContextMenu");if(oldMenu!=null&&(nint)oldMenu==itemTradeMenu&&SellerAddon("InputNumeric")==null)oldMenu->Hide(false,true,0);
             itemTradePending=null;return;
         }
-        if(observed!=itemTradeOfferedBefore)throw new InvalidOperationException("Unexpected item quantity in trade offer.");
+        if(decision==ItemOfferQuantityDecision.Reject)throw new InvalidOperationException($"Item {slot.Source.Item}: requested {slot.Quantity}, but the offer contains {observed-itemTradeOfferedBefore}. Trade cancelled before acceptance.");
         var agent=AgentInventoryContext.Instance();
         if(agent==null||(uint)agent->TargetInventoryId!=slot.Source.Container||agent->TargetInventorySlotId!=slot.Source.Slot||
             !TradeItemShortcutNative.CaptureItem(InventoryManager.Instance()->GetInventorySlot((InventoryType)slot.Source.Container,slot.Source.Slot),agent->TargetInventorySlot,(InventoryType)slot.Source.Container,slot.Source.Slot,out var target)||
@@ -150,12 +157,21 @@ public sealed partial class Plugin
                 TraceGilTrade(TradeItemMenuDiagnostic());
                 throw new InvalidOperationException("Could not verify Trade menu setup for the selected item. See Details.");
             }
-            itemTradeMenuSelected=true;itemTradeMenuSelection=null;
+            itemTradeMenuSelected=true;itemTradeQuantityActionAt=now;itemTradeMenuSelection=null;
             ((AddonContextMenu*)menu)->OnMenuSelected(selection.Index,0);return;
         }
-        var numeric=SellerAddon("InputNumeric");
-        if(numeric!=null&&!itemTradeQuantitySent){
-            var value=new AtkValue{Type=AtkValueType.Int,Int=slot.Quantity};itemTradeQuantitySent=true;numeric->FireCallback(1,&value,true);
+        if(decision==ItemOfferQuantityDecision.EnterQuantity){
+            // The popup must belong to this still-verified item context and
+            // expose bounds compatible with its stack. Never submit a clamp.
+            if(numeric==null||!numeric->IsReady||numeric->AtkValuesCount<4)return;
+            var min=numeric->AtkValues[2];var max=numeric->AtkValues[3];
+            if(min.Type!=AtkValueType.UInt||max.Type!=AtkValueType.UInt||min.UInt>1||
+                max.UInt>(uint)slot.Source.Quantity||slot.Quantity<min.UInt||slot.Quantity>max.UInt)
+                throw new InvalidOperationException("The quantity dialog does not match the selected stack.");
+            var value=new AtkValue{Type=AtkValueType.Int,Int=slot.Quantity};
+            itemTradeQuantitySent=true;itemTradeQuantityActionAt=now;
+            TraceGilTrade($"Submitting item {slot.Source.Item} quantity {slot.Quantity}.");
+            numeric->FireCallback(1,&value,true);
         }
     }
     private unsafe void UpdateItemTrader(DateTimeOffset now)

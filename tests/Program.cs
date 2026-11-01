@@ -1816,3 +1816,5 @@ OrganizerStorage368Tests.Run();
 AdventureNavigation370Tests.Run();
 
 AdventureFollow371Tests.Run();
+
+ItemQuantity372Tests.Run();
