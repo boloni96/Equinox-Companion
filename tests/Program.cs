@@ -1809,3 +1809,5 @@ GardenCare312Tests.Run();
 Armoire350Tests.Run();
 
 GearSetProtection365Tests.Run();
+
+GearCategory366Tests.Run();

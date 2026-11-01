@@ -58,7 +58,7 @@ public sealed partial class Plugin
         RefreshGearSetProtection();
         LoadArmoireCatalogue();gearKeep.Clear();
         var protectedItems=respectPlan?retrievalEntrust?.Protected??[]:Array.Empty<uint>();
-        var ids=selected.Distinct().Where(id=>id>0&&!OrganizerGearProtected(id)&&GearStorageItemAllowed(id)&&!ArmoireExclusions().Contains(id)&&!protectedItems.Contains(id)&&(gearCategories.Count==0||gearCategories.Contains(OrganizeCategory(id)))&&GearSourceAllowed(id)).ToArray();
+        var ids=selected.Distinct().Where(id=>id>0&&!OrganizerGearProtected(id)&&GearStorageItemAllowed(id)&&!ArmoireExclusions().Contains(id)&&!protectedItems.Contains(id)&&GearCategoryMatches(id,gearCategories)&&GearSourceAllowed(id)).ToArray();
         if(respectPlan&&retrievalEntrust is {} plan)foreach(var id in ids)gearKeep[id]=Math.Max(plan.Keep.GetValueOrDefault(id),plan.CategoryKeep.GetValueOrDefault(OrganizeCategory(id)));
         if(ids.Length==0)throw new InvalidOperationException("Select gear using the existing inventory, retainer or plan selection first.");
         if(GearObject(false)==null||fromRetainers&&GearObject(true)==null)throw new InvalidOperationException("Use an inn room with a glamour dresser and summoning bell loaded nearby.");
@@ -150,7 +150,7 @@ public sealed partial class Plugin
     }
     private unsafe bool GearSlotAllowed(InventoryItem item,InventoryType container)
     {
-        if(OrganizerGearProtected(item.ItemId)||!gearSelection.Contains(item.ItemId%1000000)||item.IsSymbolic||(gearCategories.Count>0&&!gearCategories.Contains(OrganizeCategory(item.ItemId%1000000))))return false;
+        if(OrganizerGearProtected(item.ItemId)||!gearSelection.Contains(item.ItemId%1000000)||item.IsSymbolic||!GearCategoryMatches(item.ItemId%1000000,gearCategories))return false;
         if(((uint)container>=10000||!gearFromRetainers)&&gearKeep.GetValueOrDefault(item.ItemId%1000000) is >0 and var keep){
             var manager=InventoryManager.Instance();if(manager==null)return false;var count=0;
             var types=(uint)container>=10000?Enumerable.Range(10000,7).Select(i=>(InventoryType)i):ArmoireContainers.Where(t=>t!=InventoryType.EquippedItems);

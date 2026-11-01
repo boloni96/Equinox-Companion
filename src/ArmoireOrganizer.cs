@@ -111,7 +111,7 @@ public sealed partial class Plugin
         if(!ArmoireSourceAllowed(p.ItemId))return "Armoire group filtered";
         if(ArmoireExclusions().Contains(p.ItemId))return "Excluded";
         if(p.SetColumn<0?!armoireSinglePieces:!armoireOutfitPieces)return "Source filtered";
-        if(armoireCategories.Count>0&&!armoireCategories.Contains(OrganizeCategory(p.ItemId)))return "Category filtered";
+        if(!GearCategoryMatches(p.ItemId,armoireCategories))return "Category filtered";
         return "";
     }
     private static unsafe bool ArmoireLiveDyed(ArmoirePiece p)
