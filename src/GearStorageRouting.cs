@@ -55,9 +55,10 @@ public sealed partial class Plugin
         if(!config.EnableRetriever||!Player.IsLoaded)throw new InvalidOperationException("Enable Organizer and log in first.");
         if(followSession.Armed)throw new InvalidOperationException("Stop following before starting a gear storage route.");
         if(fromRetainers&&Player.CurrentWorld.RowId!=Player.HomeWorld.RowId)throw new InvalidOperationException("Use your retainers on your home world.");
+        RefreshGearSetProtection();
         LoadArmoireCatalogue();gearKeep.Clear();
         var protectedItems=respectPlan?retrievalEntrust?.Protected??[]:Array.Empty<uint>();
-        var ids=selected.Distinct().Where(id=>id>0&&GearStorageItemAllowed(id)&&!ArmoireExclusions().Contains(id)&&!protectedItems.Contains(id)&&(gearCategories.Count==0||gearCategories.Contains(OrganizeCategory(id)))&&GearSourceAllowed(id)).ToArray();
+        var ids=selected.Distinct().Where(id=>id>0&&!OrganizerGearProtected(id)&&GearStorageItemAllowed(id)&&!ArmoireExclusions().Contains(id)&&!protectedItems.Contains(id)&&(gearCategories.Count==0||gearCategories.Contains(OrganizeCategory(id)))&&GearSourceAllowed(id)).ToArray();
         if(respectPlan&&retrievalEntrust is {} plan)foreach(var id in ids)gearKeep[id]=Math.Max(plan.Keep.GetValueOrDefault(id),plan.CategoryKeep.GetValueOrDefault(OrganizeCategory(id)));
         if(ids.Length==0)throw new InvalidOperationException("Select gear using the existing inventory, retainer or plan selection first.");
         if(GearObject(false)==null||fromRetainers&&GearObject(true)==null)throw new InvalidOperationException("Use an inn room with a glamour dresser and summoning bell loaded nearby.");
@@ -149,7 +150,7 @@ public sealed partial class Plugin
     }
     private unsafe bool GearSlotAllowed(InventoryItem item,InventoryType container)
     {
-        if(!gearSelection.Contains(item.ItemId%1000000)||item.IsSymbolic||(gearCategories.Count>0&&!gearCategories.Contains(OrganizeCategory(item.ItemId%1000000))))return false;
+        if(OrganizerGearProtected(item.ItemId)||!gearSelection.Contains(item.ItemId%1000000)||item.IsSymbolic||(gearCategories.Count>0&&!gearCategories.Contains(OrganizeCategory(item.ItemId%1000000))))return false;
         if(((uint)container>=10000||!gearFromRetainers)&&gearKeep.GetValueOrDefault(item.ItemId%1000000) is >0 and var keep){
             var manager=InventoryManager.Instance();if(manager==null)return false;var count=0;
             var types=(uint)container>=10000?Enumerable.Range(10000,7).Select(i=>(InventoryType)i):ArmoireContainers.Where(t=>t!=InventoryType.EquippedItems);
@@ -184,6 +185,7 @@ public sealed partial class Plugin
         if(!gearRouting&&gearPause?.RestorePending==true)gearPause.Release(now);
         if(!gearRouting||now<gearNext)return;gearNext=now.AddMilliseconds(250);
         try{
+            RefreshGearSetProtection();
             if(!config.EnableRetriever||!Player.IsLoaded||Player.ContentId!=gearCharacter||Player.CurrentWorld.RowId!=gearWorld||Client.TerritoryType!=gearTerritory||Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]||HelperInCutscene()||followSession.Armed||sellerRun.Running||TraderRunning||organizeRunning||chestRunning||retainerGilRunning||armoireRunning||craftingWithdrawalPending)throw new InvalidOperationException("Character, location or active operation changed.");
             if(now>gearDeadline)throw new InvalidOperationException("Game did not confirm the current storage step in time.");
             if(FollowMovementKeysHeld())throw new InvalidOperationException("Stopped by your movement input.");

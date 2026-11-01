@@ -108,7 +108,9 @@ public sealed partial class Plugin
                 ReportStorageTransfer(pending.Source.Container<10000?"Entrusted":pending.Destination.Container<10000?"Withdrew":"Moved within chest",pending.Source.Item,pending.Source.Hq,pending.Quantity,"FC chest");
                 if(chestMode==4)chestGoals[pending.Source.Item]-=pending.Quantity;chestPending=null;chestMoves++;chestStatus=$"{chestMoves} transfers confirmed";
             }
-            var next=chestMode switch{0=>ChestTransferPlanner.Withdraw(chest,bags,chestGoals,chestQuality),1=>ChestTransferPlanner.Duplicates(chest,bags,chestKeep),3=>ChestTransferPlanner.Transfer(chest,destination,chestGoals.Keys.ToHashSet(),chestQuality),4=>ChestTransferPlanner.Send(bags,chest,chestGoals,chestQuality),_=>ChestTransferPlanner.Merge(chest)};
+            RefreshGearSetProtection();
+            var depositBags=bags.Where(s=>!OrganizerGearProtected(s.Item)).ToArray();
+            var next=chestMode switch{0=>ChestTransferPlanner.Withdraw(chest,bags,chestGoals,chestQuality),1=>ChestTransferPlanner.Duplicates(chest,depositBags,chestKeep),3=>ChestTransferPlanner.Transfer(chest,destination,chestGoals.Keys.ToHashSet(),chestQuality),4=>ChestTransferPlanner.Send(depositBags,chest,chestGoals,chestQuality),_=>ChestTransferPlanner.Merge(chest)};
             if(next==null){
                 if(chestMode==3)chestUnmoved+=chest.Where(x=>chestGoals.ContainsKey(x.Item)&&RetainerRetrieval.AllowsQuality(x.Hq,chestQuality)).Sum(x=>x.Quantity);
                 if(++chestPageIndex<chestPages.Length){BeginChestPage(now);return;}

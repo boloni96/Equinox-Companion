@@ -1807,3 +1807,5 @@ OptionalTools257Tests.Run();
 GardenCare312Tests.Run();
 
 Armoire350Tests.Run();
+
+GearSetProtection365Tests.Run();

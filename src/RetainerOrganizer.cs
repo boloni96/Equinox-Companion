@@ -131,6 +131,11 @@ public sealed partial class Plugin
                 case 6:
                     var action=organizeMoves[organizeMoveIndex];var move=action.Move;
                     if(!PlanItemScope.Allows(action,organizeActiveRules,organizeBagsOnly,organizerEntrusted)){StopOrganize("Stopped: movement is outside the selected plan or its remaining quantity.");return;}
+                    RefreshGearSetProtection();
+                    if(OrganizerGearProtected(move.Source.Item)){
+                        RememberOrganizerInventory(organizeActiveRetainer,OrganizerInventory(true,false).Concat(OrganizerInventory(true,true)).ToArray());
+                        BeginStorageCalculation();break;
+                    }
                     var src=ReadChestContainer(move.Source.Container).First(s=>s.Slot==move.Source.Slot);var dst=ReadChestContainer(move.Destination.Container).First(s=>s.Slot==move.Destination.Slot);
                     if(!OrganizerSlotMatches(move.Source,src)||!OrganizerSlotMatches(move.Destination,dst)){StopOrganize("Inventory changed after the space check. Stopped before moving another item; Check again.");return;}
                     if(organizeBagsOnly&&!InventoryTradeFilterAllows(src,organizeBagTradeFilter)){StopOrganize("Stopped: item no longer matches the selected tradability filter.");return;}
@@ -161,6 +166,8 @@ public sealed partial class Plugin
                     if(organizeNoPlan)organizeActiveRules=PlanItemScope.FromRetainers(organizeActiveRules,snapshot,OrganizeCategory);
                     var rules=organizeActiveRules.Select(r=>r.Amounts==null?r:r with{Amounts=r.Amounts.ToDictionary(x=>x.Key,x=>Math.Max(0,x.Value-organizerEntrusted.GetValueOrDefault(x.Key)))}).ToArray();
                     if(config.UseRetainerAssignments.Contains(Player.ContentId))rules=StorageAssignments.Apply(rules,(config.RetainerAssignments.GetValueOrDefault(Player.ContentId)??[]).ToArray(),snapshot,id=>categories.GetValueOrDefault(id),config.RetrievalPresets);
+                    RefreshGearSetProtection();
+                    rules=ProtectGearSetRoutes(rules,snapshot);
                     var routingPlan=new StorageRoutingPlan("Current movements",Player.ContentId,rules,organizeReserve);var bagsOnly=organizeBagsOnly;
                     organizeRoutingTask=Task.Run(()=>StorageRouting.Build(routingPlan,snapshot,id=>categories.GetValueOrDefault(id),bagsOnly,bagsOnly));OrganizeStage(9);
     }

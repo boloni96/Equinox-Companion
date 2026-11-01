@@ -84,6 +84,7 @@ public sealed partial class Plugin
     {
         PollInventoryReviewExport();
         if(gearRouting||gearStatus.Length>0){ImGui.TextWrapped(gearStatus);if(gearRouting&&ImGui.SmallButton("Stop gear storage"))StopGearStorage("Stopped by you");}
+        DrawGearSetProtectionOption();
         DrawGearStorageOptions();DrawGearStorageOptionsPopup();
         if(!retrievalRun.Running&&retrievalPreviewOwner!=Player.ContentId){retrievalPreviewOwner=Player.ContentId;retrievalRefreshPending=true;retrievalStock=[];retrievalStockComplete=false;retrievalPreview=[];retrievalPlan=[];retrievalPreviewDirty=true;}
 

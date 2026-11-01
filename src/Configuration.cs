@@ -3,6 +3,7 @@ namespace EquinoxCompanion;
 [Serializable]
 public sealed class Configuration : IPluginConfiguration
 {
+    public bool ProtectOrganizerGearSets { get; set; } = true;
     public bool StorageGearSkipDyed { get; set; } = true;
     public int StorageGearReserve { get; set; } = 2;
     public bool ShowStorageTransfersInChat { get; set; }

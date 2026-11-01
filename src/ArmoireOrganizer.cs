@@ -83,6 +83,7 @@ public sealed partial class Plugin
     }
     private unsafe void ScanArmoire(bool queue)
     {
+        RefreshGearSetProtection();
         if(!ArmoireDresserReady())throw new InvalidOperationException("Open the glamour dresser and wait for it to load.");
         var state=UIState.Instance();if(state==null||!state->Cabinet.IsCabinetLoaded())throw new InvalidOperationException("Armoire contents are not loaded yet. Dresser → Armoire loads them automatically.");
         LoadArmoireCatalogue();var m=MirageManager.Instance();var previews=new List<(uint,string,string)>();var pieces=new List<ArmoirePiece>();
@@ -106,6 +107,7 @@ public sealed partial class Plugin
     }
     private string ArmoireFilter(ArmoirePiece p)
     {
+        if(OrganizerGearProtected(p.ItemId))return OrganizerGearProtectionLabel(p.ItemId);
         if(!ArmoireSourceAllowed(p.ItemId))return "Armoire group filtered";
         if(ArmoireExclusions().Contains(p.ItemId))return "Excluded";
         if(p.SetColumn<0?!armoireSinglePieces:!armoireOutfitPieces)return "Source filtered";
@@ -151,6 +153,7 @@ public sealed partial class Plugin
     {
         if(!armoireRunning||now<armoireNext)return;armoireNext=now.AddMilliseconds(250);
         try{
+            RefreshGearSetProtection();
             if(!config.EnableRetriever||!Player.IsLoaded||Player.ContentId!=armoireCharacter||Client.TerritoryType!=armoireTerritory||Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]||HelperInCutscene()) {StopArmoireOrganizer("Stopped: character or location changed");return;}
             if(gearRouting||organizeRunning||retrievalRun.Running||chestRunning||retainerGilRunning||sellerRun.Running||TraderRunning||craftingWithdrawalPending){StopArmoireOrganizer("Stopped: another inventory operation started");return;}
             if(now>armoireDeadline){StopArmoireOrganizer("Stopped: game did not confirm the transfer in time");return;}
@@ -181,6 +184,10 @@ public sealed partial class Plugin
             var held=ArmoireInventory(pending.ItemId).Held;
             if(armoirePhase==2){
                 if(!ArmoireTransferPolicy.RestoreConfirmed(ArmoireSourcePresent(pending),held))return;
+                if(OrganizerGearProtected(pending.ItemId)){
+                    armoireSkipped++;armoirePending=null;armoirePhase=1;armoireDeadline=now.AddSeconds(20);
+                    armoireStatus="Skipped gear-set item; restored piece stays in your inventory.";return;
+                }
                 // Only the newly restored copy exists; never let the native armoire
                 // operation consume a pre-existing equipped/armoury/bag copy.
                 if(!ArmoireRestoredSafe(pending.ItemId))throw new InvalidOperationException("Restored item changed, is equipped, dyed, damaged or has materia; kept in inventory.");

@@ -35,6 +35,7 @@ public sealed partial class Plugin
         if(NoOrganizerPlan)rules=PlanItemScope.FromRetainers(rules,cached,OrganizeCategory);
         cached[StorageRouting.Bags]=OrganizerInventory(false,false).Concat(OrganizerInventory(false,true)).ToArray();
         if(config.UseRetainerAssignments.Contains(Player.ContentId))rules=StorageAssignments.Apply(rules,(config.RetainerAssignments.GetValueOrDefault(Player.ContentId)??[]).ToArray(),cached,OrganizeCategory,config.RetrievalPresets);
+        RefreshGearSetProtection();rules=ProtectGearSetRoutes(rules,cached);
         var categories=cached.Values.SelectMany(x=>x).Where(x=>x.Item>0).Select(x=>x.Item).Distinct().ToDictionary(x=>x,OrganizeCategory);
         var plan=new StorageRoutingPlan("Preview",Player.ContentId,rules,organizeReserve);var version=organizePreviewVersion;var owner=Player.ContentId;
         organizePreviewMessage="Calculating movements and available space…";
