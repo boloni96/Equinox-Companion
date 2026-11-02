@@ -78,7 +78,7 @@ public sealed partial class Plugin
     private static object RecorderPoint(Vector3 p)=>new {x=p.X,y=p.Y,z=p.Z};
     private void StartQuestRecording(){
         if(!Player.IsLoaded){questRecorderStatus="Log into the character first.";return;}
-        if(questionableOwnedQuest!=0||eventAccountActive||QuestToolsOtherOperation()){questRecorderStatus="Stop automation before recording a manual quest.";return;}
+        if(questChainActive||questionableOwnedQuest!=0||eventAccountActive||QuestToolsOtherOperation()){questRecorderStatus="Stop automation before recording a manual quest.";return;}
         if(questRecorderWrite!=null){questRecorderStatus="Wait for the previous export to finish.";return;}
         questRecorded.Clear();questRecordedWindows.Clear();questRecordedIds.Clear();
         questRecorderCharacter=Player.ContentId;questRecorderStarted=DateTimeOffset.UtcNow;

@@ -32,6 +32,7 @@ public sealed partial class Plugin
     }
     private void DisposeQuestTools()
     {
+        StopQuestChain("Plugin unloaded");
         StopEventAccount("Plugin unloaded");
         StopQuestionableQuest("Plugin unloaded");
         StopQuestRecording("Plugin unloaded");
@@ -49,6 +50,7 @@ public sealed partial class Plugin
         {
             id=QuestToolsPolicy.ShortId(id);
             if(!Player.IsLoaded||QuestManager.Instance()==null)throw new InvalidOperationException("Log into the intended character first.");
+            if(Conditions[Dalamud.Game.ClientState.Conditions.ConditionFlag.BoundByDuty]||Conditions[Dalamud.Game.ClientState.Conditions.ConditionFlag.InDutyQueue])throw new InvalidOperationException("Leave the current duty or queue first.");
             if(QuestToolsOtherOperation())throw new InvalidOperationException("Stop the other helper or inventory operation first.");
             if(questRecorderActive)throw new InvalidOperationException("Stop manual recording before starting quest automation.");
             if(QuestManager.IsQuestComplete(id)){questToolsStatus="Quest already complete. Reward progress is checked separately.";return true;}
@@ -100,6 +102,7 @@ public sealed partial class Plugin
                 else questToolsStatus=QuestTitle(questionableOwnedQuest)+" · quest sequence "+QuestManager.GetQuestSequence(questionableOwnedQuest)+" · Questionable running";
             }catch(Exception e){StopQuestionableQuest("Questionable unavailable: "+e.Message);}
         }
+        UpdateQuestChain(now);
         UpdateEventAccount(now);
     }
     private void FilterQuestCatalogue()=>questSearchRows=questCatalogue.Where(q=>questSearch.Length==0||
@@ -111,6 +114,7 @@ public sealed partial class Plugin
                 ImGui.TextWrapped("Uses your installed Questionable and its requirements. Starts only the quest you choose; does not replace your priority list.");
                 ImGui.TextDisabled($"{questCatalogue.Length:N0} indexed quests · source snapshot 2 Nov 2026");
                 if(ImGui.InputTextWithHint("##QuestSearch","Quest name, ID, expansion or category",ref questSearch,160))FilterQuestCatalogue();
+                DrawQuestChainOptions();
                 ImGui.TextWrapped(questToolsStatus);
                 if(questionableOwnedQuest!=0&&ImGui.Button("Stop quest"))StopQuestionableQuest("Stopped by you.");
                 if(ImGui.CollapsingHeader("Questionable setup")){
@@ -119,8 +123,8 @@ public sealed partial class Plugin
                 }
                 if(ImGui.BeginChild("QuestCatalogue",Vector2.Zero,true)){
                     foreach(var q in questSearchRows){
-                        ImGui.PushID((int)q.Id);ImGui.BeginDisabled(questionableOwnedQuest!=0||eventAccountActive||questRecorderActive);
-                        if(ImGui.SmallButton("Start"))StartQuestionableQuest(q.Id);
+                        ImGui.PushID((int)q.Id);ImGui.BeginDisabled(questChainActive||questionableOwnedQuest!=0||eventAccountActive||questRecorderActive);
+                        if(ImGui.SmallButton("Start"))BeginQuestChain(q.Id);
                         ImGui.EndDisabled();ImGui.SameLine();ImGui.TextUnformatted(q.Name+" · "+q.Id);
                         if(ImGui.IsItemHovered())ImGui.SetTooltip(q.Group);
                         ImGui.PopID();

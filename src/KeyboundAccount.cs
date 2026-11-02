@@ -58,7 +58,7 @@ public sealed partial class Plugin
     private void StartEventAccount(SharedCharacter[] characters){
         try{
             if(!config.EnableKeyboundBrawler||!Player.IsLoaded||characters.Length==0)throw new InvalidOperationException("Enable the event tool and log in first.");
-            if(questRecorderActive||questionableOwnedQuest!=0||QuestToolsOtherOperation()||assignedLogin!=null)throw new InvalidOperationException("Stop other automation before starting the account routine.");
+            if(questChainActive||questRecorderActive||questionableOwnedQuest!=0||QuestToolsOtherOperation()||assignedLogin!=null)throw new InvalidOperationException("Stop other automation before starting the account routine.");
             if(Conditions[ConditionFlag.BoundByDuty]||Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.InDutyQueue])throw new InvalidOperationException("Leave the duty, queue or combat first.");
             var current=CurrentSharedCharacter()??throw new InvalidOperationException("Waiting for this character's Journal identity.");
             var scope=CharacterSwitchScope(current.Id);

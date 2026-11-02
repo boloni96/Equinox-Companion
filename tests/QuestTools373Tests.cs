@@ -15,6 +15,11 @@ internal static class QuestTools373Tests
             Check("private input excluded: "+name,!QuestToolsPolicy.RecordWindow(name));
         foreach(var name in new[]{"KTGEnterDialogue","KTGResult","JournalAccept","JournalResult","Talk","SelectString","UnknownEventWindow"})
             Check("event windows captured: "+name,QuestToolsPolicy.RecordWindow(name));
+        Check("duty route deferred",QuestRoutePolicy.Review("{\"QuestSequence\":[{\"Steps\":[{\"InteractionType\":\"Duty\"}]}]}").Duty);
+        Check("solo duty deferred",QuestRoutePolicy.Review("{\"QuestSequence\":[{\"Steps\":[{\"InteractionType\":\"SinglePlayerDuty\"}]}]}").Duty);
+        Check("unverified route blocked",!QuestRoutePolicy.Review("{}").Readable);
+        var route=QuestRoutePolicy.Review("{\"QuestSequence\":[{\"Steps\":[{\"InteractionType\":\"CompleteQuest\",\"NextQuestId\":5467}]}]}");
+        Check("explicit quest line successor",route.Readable&&!route.Duty&&route.Next.SequenceEqual(new uint[]{5467}));
         Console.WriteLine("Quest tools 373 tests passed.");
     }
 }
