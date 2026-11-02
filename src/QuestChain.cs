@@ -20,6 +20,12 @@ public sealed partial class Plugin
         ImGui.Checkbox("Then do other accepted quests",ref questNextAccepted);
         ImGui.EndDisabled();
         ImGui.TextDisabled("Duty / solo-duty routes stay pending. No AutoDuty required.");
+        ImGui.BeginDisabled(questChainActive||eventAccountActive||questionableOwnedQuest!=0);
+        if(ImGui.Button("Work on accepted quests")){
+            questChainVisited.Clear();var id=NextAcceptedQuest();
+            if(id!=0)BeginQuestChain(id);else questChainStatus="No indexed accepted quests were found on this character.";
+        }
+        ImGui.EndDisabled();
         if(questChainStatus.Length>0)ImGui.TextWrapped(questChainStatus);
         if(questChainActive&&ImGui.Button("Stop quest routine"))StopQuestChain("Stopped by you.");
         if(questChainDeferred.Count>0&&ImGui.CollapsingHeader("Quests left pending")){

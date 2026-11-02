@@ -94,7 +94,8 @@ public sealed partial class Plugin
                 if(!Player.IsLoaded||Player.ContentId!=questionableOwnedCharacter){StopQuestionableQuest("Quest stopped: character changed or logged out.");}
                 else if(QuestToolsOtherOperation()){StopQuestionableQuest("Quest stopped: another helper started.");}
                 else if(QuestProviderCurrent() is {} current&&current!=questionableOwnedQuest.ToString()){
-                    questionableOwnedQuest=0;questToolsStatus="Questionable switched quests outside this routine; assistance stopped.";
+                    if(now-questionableStarted<TimeSpan.FromSeconds(5))questToolsStatus="Waiting for Questionable to load the selected quest";
+                    else{questionableOwnedQuest=0;questToolsStatus="Questionable switched quests outside this routine; assistance stopped.";}
                 }
                 else if(QuestManager.IsQuestComplete(questionableOwnedQuest)){StopQuestionableQuest("Quest completed; reward collection is separate.");}
                 else if(!QuestProviderRunning()&&now-questionableStarted>TimeSpan.FromSeconds(5)){questionableOwnedQuest=0;questToolsStatus="Questionable stopped before quest completion. Check its status; no restart was sent.";}
@@ -111,7 +112,7 @@ public sealed partial class Plugin
     {
         if(ImGui.BeginTabBar("QuestToolsTabs")){
             if(ImGui.BeginTabItem("Quest library")){
-                ImGui.TextWrapped("Uses your installed Questionable and its requirements. Starts only the quest you choose; does not replace your priority list.");
+                ImGui.TextWrapped("Uses your installed Questionable and its requirements. Runs one quest at a time with the continuation options below; does not replace your priority list.");
                 ImGui.TextDisabled($"{questCatalogue.Length:N0} indexed quests · source snapshot 2 Nov 2026");
                 if(ImGui.InputTextWithHint("##QuestSearch","Quest name, ID, expansion or category",ref questSearch,160))FilterQuestCatalogue();
                 DrawQuestChainOptions();

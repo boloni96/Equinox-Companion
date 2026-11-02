@@ -31,12 +31,12 @@ public sealed partial class Plugin
     }
     private void DrawKeyboundHelper()
     {
-        ImGui.BeginDisabled(keyboundBuying);
+        ImGui.BeginDisabled(keyboundBuying&&!eventAccountActive);
         if(ImGui.Button(eventAccountActive||keyboundEnabled?"Stop":"Start")){
             if(eventAccountActive)StopEventAccount("Stopped by you.");else if(keyboundEnabled)StopKeybound();else{StopKeybound();keyboundBuyStatus="";keyboundGoalCheckAt=default;keyboundEnabled=true;keyboundNext=keyboundHold=keyboundMissing=default;keyboundStatus="Waiting for Keybound Brawler";}
         }
         ImGui.EndDisabled();
-        ImGui.SameLine();ImGui.TextUnformatted(keyboundBuying?(keyboundUsingRewards?"Using rewards":"Buying rewards"):keyboundEnabled?"Running":"Stopped");
+        ImGui.SameLine();ImGui.TextUnformatted(eventAccountActive?"Account routine":keyboundBuying?(keyboundUsingRewards?"Using rewards":"Buying rewards"):keyboundEnabled?"Running":"Stopped");
         // Reserve the same space for short phrases and long waiting/error text.
         // Content scrolls here; neither the window nor the controls below jump.
         if(ImGui.BeginChild("Keybound running status",new System.Numerics.Vector2(0,ImGui.GetTextLineHeightWithSpacing()*4.5f),true)){
