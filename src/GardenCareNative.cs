@@ -113,7 +113,7 @@ public sealed partial class Plugin
         if(gardenCareRun==null||gardenCareRun.Status.Length==0)return;
         if(gardenCareRun.Running){
             if(ImGui.SmallButton("Stop garden care")){gardenHousePlant=null;gardenHousePlantStatus="";gardenAutoPlantPlan=null;gardenHouseHarvest=null;StopTendAdventure("Stopped by you.");gardenCareRun.Stop("Stopped by you · an already-sent action may still finish.");}
-            ImGui.SameLine();ImGui.ProgressBar((float)gardenCareRun.Completed/Math.Max(1,gardenCareRun.Total),new Vector2(Math.Max(100,ImGui.GetContentRegionAvail().X),ImGui.GetFrameHeight()),gardenCareRun.Status);
+            ImGui.SameLine();ImGui.ProgressBar((float)(gardenCareRun.Completed+gardenCareRun.Skipped)/Math.Max(1,gardenCareRun.Total),new Vector2(Math.Max(100,ImGui.GetContentRegionAvail().X),ImGui.GetFrameHeight()),gardenCareRun.Status);
         }else ImGui.TextWrapped(gardenCareRun.Status);
     }
     private void StartScopedGardenCare(SharedGardenPlan plan,GardenCareAction action,DateTimeOffset now,bool tendAll=false)

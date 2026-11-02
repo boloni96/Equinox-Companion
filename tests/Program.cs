@@ -934,9 +934,9 @@ Check("tend wets this bed",GardenVisualState.SoilArtwork(cared39,false,artNow),"
 Check("neighbor soil stays independent",GardenVisualState.SoilArtwork(wateredPlan.Beds[1],false,artNow),"normal");
 Check("soil stays wet before twelve hours",GardenVisualState.SoilArtwork(cared39,false,artNow.AddHours(11.99)),"wet");
 Check("soil dries at twelve hours",GardenVisualState.SoilArtwork(cared39,false,artNow.AddHours(12)),"normal");
-Check("tend prompt returns at twelve hours",GardenVisualState.NeedsWater(cared39,false,artNow.AddHours(12)).ToString(),"True");
+Check("mature estimate suppresses tend artwork after buffer",GardenVisualState.NeedsWater(cared39,false,artNow.AddHours(12)).ToString(),"False");
 Check("ready observation keeps wet soil",GardenVisualState.SoilArtwork(cared39 with {Ready=true},false,artNow.AddMinutes(1)),"wet");
-Check("estimated maturity keeps growing artwork",GardenVisualState.CropArtwork(staleMature with {Ready=false},false,artNow),"plantGrowing");
+Check("estimated maturity uses mature artwork after buffer",GardenVisualState.CropArtwork(staleMature with {Ready=false},false,artNow),"plantMature");
 Check("confirmed maturity uses mature artwork",GardenVisualState.CropArtwork(staleMature,false,artNow),"plantMature");
 Check("planting alone is not wet soil",GardenVisualState.SoilArtwork(cared39 with {Planted=artNow,Watered=artNow},false,artNow),"normal");
 
