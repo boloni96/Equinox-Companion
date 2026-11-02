@@ -55,17 +55,6 @@ public sealed partial class Plugin
         DrawKeyboundShopping();
         ImGui.Separator();
         if(ImGui.CollapsingHeader("Options")){
-        var repeat=config.KeyboundAutoRepeat;
-        if(ImGui.Checkbox("Auto-repeat",ref repeat)){config.KeyboundAutoRepeat=repeat;SaveConfiguration();}
-        var routines=config.KeyboundUseRoutines;
-        if(ImGui.Checkbox("Use routines",ref routines)){
-            config.KeyboundUseRoutines=routines;SaveConfiguration();
-            if(!routines&&eventAccountActive)StopEventAccount("Stopped: account routines disabled.");
-        }
-        if(ImGui.IsItemHovered())ImGui.SetTooltip("Show the account event routine below. Enabling this does not start it; choose characters and press Start selected characters.");
-        var stopAtGoal=config.KeyboundStopAtRewardGoal;
-        if(ImGui.Checkbox("Stop when enough MGC",ref stopAtGoal)){config.KeyboundStopAtRewardGoal=stopAtGoal;keyboundGoalCheckAt=default;SaveConfiguration();}
-        if(ImGui.IsItemHovered())ImGui.SetTooltip("Stop before the next round when you can afford the missing rewards. Turn off to keep farming, including for extra coffers.");
         DrawKeyboundSpeedPreset("Slow",KeyboundPolicy.SoftMinMs,KeyboundPolicy.SoftMaxMs,KeyboundPolicy.SoftSubmitMs);
         ImGui.SameLine();DrawKeyboundSpeedPreset("Normal",40,80,60);
         ImGui.SameLine();DrawKeyboundSpeedPreset("Fast",20,40,40);
@@ -76,10 +65,21 @@ public sealed partial class Plugin
         if(DrawKeyboundDelay("Max",ref max,10,1000)){config.KeyboundMaxDelayMs=max;SaveConfiguration();}
         if(DrawKeyboundDelay("Submit",ref submit,0,2000)){config.KeyboundSubmitDelayMs=submit;SaveConfiguration();}
         if(min>max)ImGui.TextDisabled($"Effective keystroke range: {max}–{min} ms");
+        var repeat=config.KeyboundAutoRepeat;
+        if(ImGui.Checkbox("Auto-repeat",ref repeat)){config.KeyboundAutoRepeat=repeat;SaveConfiguration();}
+        var stopAtGoal=config.KeyboundStopAtRewardGoal;
+        if(ImGui.Checkbox("Stop when enough MGC",ref stopAtGoal)){config.KeyboundStopAtRewardGoal=stopAtGoal;keyboundGoalCheckAt=default;SaveConfiguration();}
+        if(ImGui.IsItemHovered())ImGui.SetTooltip("Stop before the next round when you can afford the missing rewards. Turn off to keep farming, including for extra coffers.");
         ImGui.BeginDisabled(keyboundBuying);
         var journal=config.KeyboundUseJournalWishlist;
         if(ImGui.Checkbox("Use Journal wishlist",ref journal)){config.KeyboundUseJournalWishlist=journal;keyboundBuyRefresh=default;SaveConfiguration();}
         ImGui.EndDisabled();
+        var routines=config.KeyboundUseRoutines;
+        if(ImGui.Checkbox("Use routines",ref routines)){
+            config.KeyboundUseRoutines=routines;SaveConfiguration();
+            if(!routines&&eventAccountActive)StopEventAccount("Stopped: account routines disabled.");
+        }
+        if(ImGui.IsItemHovered())ImGui.SetTooltip("Show the account event routine below. Enabling this does not start it; choose characters and press Start selected characters.");
         }
         if(config.KeyboundUseRoutines)DrawEventAccount();
     }

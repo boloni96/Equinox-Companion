@@ -48,11 +48,15 @@ public sealed partial class Plugin
         independentQuestId=0;independentRoute=null;independentScene=false;independentDeferred=deferred;
         StopIndependentWalk(reason);CancelIndependentQuestTravel();questToolsStatus=reason;
     }
-    private void ResetIndependentStep(DateTimeOffset now)
+    private void ResetIndependentStep(DateTimeOffset now,bool preserveScene=false)
     {
-        ResetQuestCutscene();independentQuestSceneIdentity="";
+        // Acceptance may advance the sequence before its dialogue/cutscene ends.
+        var owned=preserveScene&&independentScene;
+        var sceneIdentity=independentQuestSceneIdentity;var sceneNpc=independentNpc;var actionAt=independentActionAt;
+        if(!owned){ResetQuestCutscene();independentQuestSceneIdentity="";}
         StopIndependentWalk();independentStepSent=independentScene=independentSceneSeen=false;
         independentTravelSent=independentAethernetSent=false;independentNpc=0;independentStepSince=now;independentActionAt=default;independentWorkBefore="";
+        if(owned){independentScene=independentSceneSeen=true;independentQuestSceneIdentity=sceneIdentity;independentNpc=sceneNpc;independentActionAt=actionAt;}
     }
     private unsafe byte[] IndependentWork()
     {
@@ -84,7 +88,7 @@ public sealed partial class Plugin
             if(Conditions[ConditionFlag.BoundByDuty]||Conditions[ConditionFlag.InDutyQueue]){StopIndependentQuest("Duty left for manual play.",true);return;}
             if(QuestManager.IsQuestComplete(independentQuestId)){StopIndependentQuest("Quest completion confirmed.");return;}
             var sequence=QuestManager.GetQuestSequence(independentQuestId);
-            if(sequence!=independentSequence){independentSequence=sequence;independentStep=0;ResetIndependentStep(now);}
+            if(sequence!=independentSequence){independentSequence=sequence;independentStep=0;ResetIndependentStep(now,HelperInCutscene()||QuestConversationVisible());}
             var sequences=independentRoute!.Definition.GetProperty("QuestSequence").EnumerateArray().Where(s=>IndependentStepPolicy.Number(s,"Sequence",999)==sequence).ToArray();
             if(sequences.Length!=1){StopIndependentQuest("No unique route for current quest sequence "+sequence,true);return;}
             if(!sequences[0].TryGetProperty("Steps",out var steps)){StopIndependentQuest("Sequence has no executable steps; continue manually.",true);return;}
