@@ -24,8 +24,10 @@ public sealed partial class Plugin
     private unsafe byte IndependentForward(nint input,int id)
     {
         var original=independentForwardHook!.Original(input,id);
-        if(id!=(int)InputId.MOVE_FORE||input!=(nint)UIInputData.Instance())return original;
+        // Movement is consumed by the game control input manager, not UIInputData.
+        if(input!=(nint)InputManager.Instance())return original;
         independentInputReads++;
+        if(id!=(int)InputCode.MOVE_FORE)return original;
         try{
             if(independentMoving&&DateTimeOffset.UtcNow<independentPulseUntil&&Player.IsLoaded&&Player.ContentId==independentCharacter&&Client.TerritoryType==independentTerritory&&
                !FollowMovementKeysHeld()&&!FollowStopTextEntryActive()&&!IndependentMovementWindow()&&!Conditions[ConditionFlag.OccupiedInEvent]&&!Conditions[ConditionFlag.BetweenAreas]&&!Conditions[ConditionFlag.BetweenAreas51]&&!Conditions[ConditionFlag.InCombat]&&!Conditions[ConditionFlag.Casting]&&!Conditions[ConditionFlag.OccupiedInQuestEvent]&&!Conditions[ConditionFlag.WatchingCutscene]&&!Conditions[ConditionFlag.WatchingCutscene78]){independentInputOverrides++;return 1;}
@@ -91,6 +93,7 @@ public sealed partial class Plugin
             if(checkCollision){independentCollisionAt=now.AddMilliseconds(150);independentCheckedWaypoint=independentWaypoint;}
             if(now-independentProgressAt>TimeSpan.FromSeconds(4)||checkCollision&&!independentCollision.Traverse(self.Position,target)){
                 independentMoving=false;independentForwardHook?.Disable();
+                if(independentInputOverrides==0&&now-independentProgressAt>TimeSpan.FromSeconds(4))throw new InvalidOperationException($"Movement input was not delivered (control reads {independentInputReads}); stopped before repeating the route.");
                 if(++independentReplans>2)throw new InvalidOperationException("Movement blocked after two route checks; stopped.");
                 independentSearch=new(independentCollision,self.Position,independentGoal,independentRange);independentPath=null;independentProgressAt=now;
                 TraceKeyboundRun(independentNavigationRun,"route-replan",$"Attempt {independentReplans}; input reads {independentInputReads}, overrides {independentInputOverrides}","companion-navigation",false);
@@ -102,7 +105,7 @@ public sealed partial class Plugin
             var delta=target-self.Position;var yaw=MathF.Atan2(delta.X,delta.Z);
             ((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)self.Address)->SetRotation(yaw);
             camera->DirH=yaw-MathF.PI;
-            independentForwardHook??=Interop.HookFromAddress<FollowInputRead>(InputData.MemberFunctionPointers.IsInputIdDown,IndependentForward);
+            independentForwardHook??=Interop.HookFromAddress<FollowInputRead>(InputManager.MemberFunctionPointers.GetInputStatus,IndependentForward);
             independentMoving=true;independentPulseUntil=now.AddMilliseconds(180);
             if(!independentForwardHook.IsEnabled)independentForwardHook.Enable();
             independentWalkStatus=$"Walking · point {independentWaypoint}/{independentPath.Length-1}";independentPrevious=self.Position;
