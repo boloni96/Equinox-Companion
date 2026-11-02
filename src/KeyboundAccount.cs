@@ -13,6 +13,8 @@ public sealed partial class Plugin
     private readonly HashSet<string> eventAccountSelected=[];
     private SharedCharacter[] eventAccountCharacters=[];
     private int eventAccountIndex,eventAccountCompleted,eventAccountSkipped;
+    private ulong eventAccountLoadedCharacter;
+    private DateTimeOffset eventAccountReadyAt;
     private DateTimeOffset eventAccountNext,eventAccountStageAt,eventAccountActionAt,eventAccountDeadline;
     private Task<List<Vector3>>? eventAccountPath;
     private CancellationTokenSource? eventAccountPathCancel;
@@ -63,7 +65,7 @@ public sealed partial class Plugin
             if(scope.PersonId.Length==0||scope.AccountId.Length==0||CurrentLoginServiceAccount()<0)throw new InvalidOperationException("Verify this client's service account first.");
             if(characters.Any(c=>c.AccountId!=current.AccountId||!EventAccountCandidates().Any(v=>v.Id==c.Id)))throw new InvalidOperationException("Selected characters no longer belong to this account.");
             if(LifestreamBusy()||QuestProviderRunning()||Pi.GetIpcSubscriber<bool>("vnavmesh.Path.IsRunning").InvokeFunc())throw new InvalidOperationException("A travel or quest plugin is busy.");
-            eventAccountCompleted=eventAccountSkipped=0;eventAccountCharacters=characters.OrderBy(c=>c.Id==current.Id?0:1).ToArray();eventAccountIndex=0;
+            eventAccountLoadedCharacter=0;eventAccountCompleted=eventAccountSkipped=0;eventAccountCharacters=characters.OrderBy(c=>c.Id==current.Id?0:1).ToArray();eventAccountIndex=0;
             eventAccountPairing=config.PairingKey;eventAccountPerson=scope.PersonId;eventAccountId=scope.AccountId;
             eventAccountActive=true;eventAccountDeadline=DateTimeOffset.UtcNow.AddHours(12);eventAccountNext=default;eventAccountStage="";
             eventAccountBuyingStarted=eventAccountFarmStarted=false;EventAccountStage("character","Checking selected character");
@@ -172,6 +174,12 @@ public sealed partial class Plugin
                 if(!StartAssignedCharacterSwitch(target))throw new InvalidOperationException(characterTravelStatus);
                 return;
             }
+            if(eventAccountLoadedCharacter!=Player.ContentId){
+                eventAccountLoadedCharacter=Player.ContentId;eventAccountReadyAt=now.AddSeconds(5);
+                eventAccountStatus="Waiting for "+target.Name+"'s quest and inventory data";return;
+            }
+            var liveState=UIState.Instance();
+            if(now<eventAccountReadyAt||liveState==null||!liveState->PlayerState.IsLoaded||QuestManager.Instance()==null)return;
             if(followSession.Armed||TraderRunning||gardenCareRun?.Running==true||gearRouting||armoireRunning||organizeRunning||retrievalRun.Running||sellerRun.Running)
                 throw new InvalidOperationException("Another helper or inventory operation started.");
             if(FollowMovementKeysHeld()){StopEventAccount("Stopped by your movement; progress and purchases are kept.");return;}
@@ -204,7 +212,7 @@ public sealed partial class Plugin
             }
             if(questionableOwnedQuest!=0)return;
             if(Client.TerritoryType==1359||Conditions[ConditionFlag.InDutyQueue]||Conditions[ConditionFlag.WaitingForDuty]||
-                Conditions[ConditionFlag.WaitingForRaceOrMatch]||Conditions[ConditionFlag.RegisteringForRaceOrMatch]){
+                Conditions[ConditionFlag.WaitingForRaceOrMatch]||Conditions[ConditionFlag.RegisteringForRaceOrMatch]||Conditions[ConditionFlag.WaitingForDutyFinder]||VisibleFollowAddon("ContentsFinderConfirm")){
                 eventAccountStatus="Finishing the current event round";return;
             }
             if(keyboundBuying){eventAccountStatus=keyboundBuyStatus;return;}

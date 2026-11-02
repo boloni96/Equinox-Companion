@@ -90,12 +90,14 @@ public sealed partial class Plugin
             questionableNext=now.AddSeconds(1);
             try{
                 if(!Player.IsLoaded||Player.ContentId!=questionableOwnedCharacter){StopQuestionableQuest("Quest stopped: character changed or logged out.");}
+                else if(QuestToolsOtherOperation()){StopQuestionableQuest("Quest stopped: another helper started.");}
                 else if(QuestProviderCurrent() is {} current&&current!=questionableOwnedQuest.ToString()){
                     questionableOwnedQuest=0;questToolsStatus="Questionable switched quests outside this routine; assistance stopped.";
                 }
                 else if(QuestManager.IsQuestComplete(questionableOwnedQuest)){StopQuestionableQuest("Quest completed; reward collection is separate.");}
                 else if(!QuestProviderRunning()&&now-questionableStarted>TimeSpan.FromSeconds(5)){questionableOwnedQuest=0;questToolsStatus="Questionable stopped before quest completion. Check its status; no restart was sent.";}
                 else if(now-questionableStarted>TimeSpan.FromHours(2)){StopQuestionableQuest("Quest session timed out.");}
+                else questToolsStatus=QuestTitle(questionableOwnedQuest)+" · quest sequence "+QuestManager.GetQuestSequence(questionableOwnedQuest)+" · Questionable running";
             }catch(Exception e){StopQuestionableQuest("Questionable unavailable: "+e.Message);}
         }
         UpdateEventAccount(now);
