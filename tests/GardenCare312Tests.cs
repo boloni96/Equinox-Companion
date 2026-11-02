@@ -32,6 +32,10 @@ internal static class GardenCare312Tests
         Check(saved.Steps.Length==8&&saved.Steps[0].ReplantOrder==9&&saved.Steps[0].StarterSoil=="Potting Soil","Existing favourite preserves the temporary starter and replacement");
         Check(saved.Steps.All(b=>b.Soil=="Grade 3 Thanalan Topsoil")&&saved.Steps[1].Crop=="Krakka Root","Favourite retains exact cross soil and alternating seeds");
         Check(GardenAutoPlant.Next(applied)==(1,GardenCareAction.Plant),"Auto plant accepts an existing favourite applied to an empty batch");
+        Check(GardenCarePolicy.TargetAllowed(10,0,false,null,true),"Closing skipped mature bed permits game-cleared target");
+        Check(!GardenCarePolicy.TargetAllowed(10,11,false,null,true),"Closing never accepts another selected object");
+        Check(GardenCarePolicy.TargetAllowed(10,0,true,GardenCareAction.Inspect),"Inspection receipt permits cleared target");
+        Check(!GardenCarePolicy.TargetAllowed(10,0,false,GardenCareAction.Inspect),"Inspection still needs verified receipt");
         Check(GardenCarePolicy.TargetAllowed(10,0,true,GardenCareAction.Harvest),"Game-cleared target is allowed after harvest was sent");
         Check(GardenCarePolicy.TargetAllowed(10,0,true,GardenCareAction.RemoveStarter),"Starter removal can clear target");
         Check(!GardenCarePolicy.TargetAllowed(10,11,true,GardenCareAction.Harvest),"Different selected target still stops");

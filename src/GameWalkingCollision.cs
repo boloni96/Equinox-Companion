@@ -10,6 +10,7 @@ internal sealed class GameWalkingCollision:IWalkingCollision
     internal GameWalkingCollision(bool cacheGround=false){if(cacheGround)groundCache=new();}
     private const float Radius=.45f,Height=1.85f;
     private readonly Dictionary<Vector3,float> wallCache=[];
+    private readonly Dictionary<(Vector3 Origin,Vector3 Direction,float Distance),(bool Found,RaycastHit Hit)> rayCache=[];
     public float WallPenalty(Vector3 point){
         if(groundCache!=null&&wallCache.TryGetValue(point,out var cached))return cached;
         Ready();const float preferred=3.5f;var nearest=preferred;
@@ -24,7 +25,7 @@ internal sealed class GameWalkingCollision:IWalkingCollision
     public bool ComfortableTraverse(Vector3 from,Vector3 to)=>Traverse(from,to)&&WalkingClearance.PreservesRoom(from,to,WallPenalty);
     internal Vector3? LastBlockedAt { get; private set; }
     private bool Reject(Vector3 point){LastBlockedAt=point;return false;}
-    private static bool Blocked(Vector3 a,Vector3 b){var delta=b-a;var length=delta.Length();return length>.001f&&Hit(a,delta/length,length,out _);}
+    private bool Blocked(Vector3 a,Vector3 b){var delta=b-a;var length=delta.Length();return length>.001f&&Hit(a,delta/length,length,out _);}
     internal static unsafe bool Available(){
         var f=GameFramework.Instance();var c=f==null?null:f->BGCollisionModule;
         return c!=null&&!c->ShuttingDown&&c->LoadInProgressCounter==0;
@@ -34,7 +35,14 @@ internal sealed class GameWalkingCollision:IWalkingCollision
         var f=GameFramework.Instance();var c=f==null?null:f->BGCollisionModule;
         if(c==null||c->ShuttingDown||c->LoadInProgressCounter>0)throw new InvalidOperationException("Waiting for collision geometry to finish loading.");
     }
-    private static bool Hit(Vector3 origin,Vector3 direction,float distance,out RaycastHit hit)=>BGCollisionModule.RaycastMaterialFilter(origin,direction,out hit,distance);
+    private bool Hit(Vector3 origin,Vector3 direction,float distance,out RaycastHit hit)
+    {
+        var key=(origin,direction,distance);
+        if(groundCache!=null&&rayCache.TryGetValue(key,out var saved)){hit=saved.Hit;return saved.Found;}
+        var found=BGCollisionModule.RaycastMaterialFilter(origin,direction,out hit,distance);
+        if(groundCache!=null&&rayCache.Count<65536)rayCache[key]=(found,hit);
+        return found;
+    }
     public bool Ground(Vector3 near,out Vector3 ground)
     {
         if(groundCache!=null&&groundCache.TryGetValue(near,out var cached)){ground=cached.Ground;return cached.Found;}
@@ -57,7 +65,7 @@ internal sealed class GameWalkingCollision:IWalkingCollision
     public bool Traverse(Vector3 from,Vector3 to)
     {
         Ready();LastBlockedAt=null;var horizontal=CollisionRouteSearch.Horizontal(from,to);
-        if(horizontal>2.9f||MathF.Abs(from.Y-to.Y)>.65f)return Reject(to);
+        if(horizontal>2.9f||MathF.Abs(from.Y-to.Y)>1.2f)return Reject(to);
         var steps=Math.Max(1,(int)MathF.Ceiling(horizontal/.3f));var previous=from;
         var delta=to-from;var side=horizontal>.01f?new Vector3(-delta.Z,0,delta.X)/horizontal*Radius:Vector3.UnitX*Radius;
         for(var i=1;i<=steps;i++)

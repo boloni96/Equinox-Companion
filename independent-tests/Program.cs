@@ -117,6 +117,30 @@ Check(QuestRewardPolicy.Choose(rewardOffers)?.ItemId==11,"gil first over gear an
 Check(QuestRewardPolicy.Choose(rewardOffers.Where(x=>!x.Gil))?.ItemId==10,"usable gear upgrade before vendor fallback");
 Check(QuestRewardPolicy.Choose(rewardOffers.Select(x=>x with {Gil=false,Upgrade=0}))?.ItemId==12,"highest total vendor value fallback");
 Check(QuestRewardPolicy.Choose(rewardOffers.Select(x=>x with {UniqueOwned=true}))==null,"owned unique rewards excluded");
+foreach(var (quest,sequence) in new[]{(162,2),(5490,1),(1556,1),(2560,1)}){
+ var imported=book.Find(quest.ToString()).Single().Definition.GetProperty("QuestSequence").EnumerateArray().Single(q=>q.GetProperty("Sequence").GetInt32()==sequence).GetProperty("Steps")[0];
+ Check(IndependentStepPolicy.Review(imported)=="",$"reported quest {quest} sequence {sequence} is supported");
+}
+using(var skipDoc=System.Text.Json.JsonDocument.Parse("""
+{"TerritoryId":133,"InteractionType":"Interact","SkipConditions":{"AetheryteShortcutIf":{"InTerritory":[132,133]},"StepIf":{"NearPosition":{"TerritoryId":133,"Position":{"X":2,"Y":0,"Z":0},"MaximumDistance":3}}}}
+""")){
+ var step=skipDoc.RootElement;
+ Check(IndependentStepPolicy.Review(step)=="","known skip groups are supported");
+ Check(IndependentSkipPolicy.Matches(step,"AetheryteShortcutIf",132,Vector3.Zero,new byte[6],_=>false,_=>false),"city teleport skip applies in either city zone");
+ Check(!IndependentSkipPolicy.Matches(step,"StepIf",132,Vector3.Zero,new byte[6],_=>false,_=>false),"nearby coordinate in wrong territory does not skip quest step");
+ Check(IndependentSkipPolicy.Matches(step,"StepIf",133,Vector3.Zero,new byte[6],_=>false,_=>false),"nearby matching territory skips step");
+}
+using(var unknown=System.Text.Json.JsonDocument.Parse("""{"InteractionType":"Interact","SkipConditions":{"StepIf":{"UnknownCondition":true}}}"""))
+ Check(IndependentStepPolicy.Review(unknown.RootElement).Length>0,"unknown skip condition remains blocked");
+using(var flight=System.Text.Json.JsonDocument.Parse("""{"InteractionType":"Interact","Fly":true}"""))
+ Check(IndependentStepPolicy.Review(flight.RootElement)=="","flight preference permits verified ground route");
+var longRoute=new CollisionRouteSearch(new OpenCollision(),Vector3.Zero,new(240,0,0),2.5f);
+for(var i=0;i<100&&!longRoute.Finished;i++)longRoute.Advance(100,10000);
+Check(longRoute.Path!=null&&longRoute.Path.Length>160,"ground route spans former short search radius");
+sealed class OpenCollision:IWalkingCollision {
+ public bool Ground(Vector3 p,out Vector3 ground){ground=p;return true;}
+ public bool Traverse(Vector3 a,Vector3 b)=>Vector3.Distance(a,b)<2;
+}
 sealed class WallPreferenceCollision(bool narrow):IWalkingCollision
 {
     public bool Ground(Vector3 near,out Vector3 ground){ground=near;return near.X>=0&&near.X<=7&&near.Z>=0&&near.Z<=(narrow?0:3);}

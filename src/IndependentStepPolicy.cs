@@ -2,11 +2,12 @@ using System.Text.Json;
 namespace EquinoxCompanion;
 public static class IndependentStepPolicy
 {
-    public static readonly HashSet<string> Actions=["AcceptQuest","CompleteQuest","Interact","WalkTo","None","WaitForNpcAtPosition","UseItem","Emote","Say"];
-    private static readonly HashSet<string> Fields=["DataId","Position","TerritoryId","InteractionType","StopDistance","Comment","$","Disabled","DelaySecondsAtStart","AetheryteShortcut","AethernetShortcut","TargetTerritoryId","DialogueChoices","CompletionQuestVariablesFlags","NextQuestId","ItemId","Emote","ChatMessage"];
+    public static readonly HashSet<string> Actions=["AcceptQuest","CompleteQuest","Interact","WalkTo","None","WaitForNpcAtPosition","EquipRecommended","UseItem","Emote","Say"];
+    private static readonly HashSet<string> Fields=["DataId","Position","TerritoryId","InteractionType","StopDistance","Comment","$","Disabled","DelaySecondsAtStart","AetheryteShortcut","AethernetShortcut","TargetTerritoryId","DialogueChoices","CompletionQuestVariablesFlags","NextQuestId","ItemId","Emote","ChatMessage","SkipConditions","Fly"];
     public static string Review(JsonElement step)
     {
         var type=Text(step,"InteractionType");
+        if(step.TryGetProperty("SkipConditions",out var skip)){var review=IndependentSkipPolicy.Review(skip);if(review.Length>0)return review;}
         if(type.Contains("Leve",StringComparison.OrdinalIgnoreCase))return "Levequest left for manual play.";
         if(type is "Combat" or "Duty" or "SinglePlayerDuty")return "Combat / duty left for manual play.";
         if(!Actions.Contains(type))return "Step requires manual play: "+type;

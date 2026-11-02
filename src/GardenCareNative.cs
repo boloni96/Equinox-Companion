@@ -193,7 +193,7 @@ public sealed partial class Plugin
         private readonly bool postPlantTend,tendAll,visitorTend,mappedInspection;private readonly Plugin p;private readonly SharedGardenPlan original;private readonly ulong owner;private readonly uint world;private Vector3 origin;private bool walking;private int walkedBed;
         private readonly GardenWalkProgress walkProgress=new();
         private readonly GardenWalkRecovery walkRecovery=new();
-        private ulong targetId;private int openedBed;private DateTimeOffset opened,actionAt,next;private bool menuSent,itemOpened,itemSent;private InventoryType fertilizerBag;private int fertilizerSlot;private uint fertilizerId;private bool confirmationSent;private uint plantSeed,plantSoil;private GardenCareAction? issuedAction;
+        private ulong targetId;private int openedBed;private DateTimeOffset opened,actionAt,next;private bool menuSent,itemOpened,itemSent;private InventoryType fertilizerBag;private int fertilizerSlot;private uint fertilizerId;private bool closing;private bool confirmationSent;private uint plantSeed,plantSoil;private GardenCareAction? issuedAction;
         public GardenCarePort(Plugin plugin,SharedGardenPlan plan,bool postPlantTend=false,bool tendAll=false,bool visitorTend=false,bool mappedInspection=false){this.mappedInspection=mappedInspection;this.visitorTend=visitorTend;this.postPlantTend=postPlantTend;this.tendAll=tendAll;p=plugin;original=plan;owner=Player.ContentId;world=Player.CurrentWorld.RowId;origin=Objects.LocalPlayer?.Position??default;}
         private SharedGardenPlan Current(){var source=p.GardenPlanSources().FirstOrDefault(x=>x.HouseId==original.HouseId&&x.Batch==original.Batch)??throw new InvalidOperationException("Garden plan is no longer available.");if(source.At!=original.At)throw new InvalidOperationException("Garden plan changed during the run.");return p.EffectiveGardenPlan(source);}
         public DateTimeOffset? MovementRecoveryUntil=>walking?walkRecovery.Deadline:null;
@@ -201,7 +201,7 @@ public sealed partial class Plugin
         {
             if(!Player.IsLoaded||owner==0||Player.ContentId!=owner||Player.CurrentWorld.RowId!=world||!p.ObservingGardens||!p.atOutdoorEstate||SharedGardenLocation.Match(p.currentAddress,[original])!=original.HouseId||Objects.LocalPlayer is not {} player||(!walking&&Vector3.Distance(player.Position,origin)>1.5f)||Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]||Conditions[ConditionFlag.Unconscious]||Conditions[ConditionFlag.TradeOpen]||p.HelperInCutscene()||p.sellerRun.Running||p.TraderRunning||p.retrievalRun.Running||p.organizeRunning||p.chestRunning)
                 throw new InvalidOperationException("Character, location, movement or active operation changed.");
-            if(!GardenCarePolicy.TargetAllowed(targetId,Targets.Target?.GameObjectId??0,menuSent&&(issuedAction switch { GardenCareAction.Plant=>confirmationSent, GardenCareAction.Fertilize=>itemSent, _=>true }),issuedAction))throw new InvalidOperationException("Selected garden target changed.");
+            if(!GardenCarePolicy.TargetAllowed(targetId,Targets.Target?.GameObjectId??0,menuSent&&(issuedAction switch { GardenCareAction.Plant=>confirmationSent, GardenCareAction.Fertilize=>itemSent, _=>true }),issuedAction,closing))throw new InvalidOperationException($"Selected garden target changed (bed {openedBed}, expected {targetId:X}, current {Targets.Target?.GameObjectId??0:X}, action {issuedAction}, closing {closing}).");
         }
         public bool Open(int bed)
         {
@@ -230,7 +230,7 @@ public sealed partial class Plugin
                     var destination=found[0].Position+Vector3.Normalize(offset)*2.2f;
                     Pi.GetIpcSubscriber<List<Vector3>,bool?,float?,float?,object>("Lifestream.MoveEx").InvokeAction([destination],true,.3f,.3f);walking=true;walkRecovery.Reset(Objects.LocalPlayer.Position,destination);walkProgress.Reset(Objects.LocalPlayer.Position,now);walkedBed=bed;return false;
                 }
-                openedBed=bed;targetId=found[0].GameObjectId;opened=now;menuSent=itemOpened=itemSent=confirmationSent=false;issuedAction=null;actionAt=default;
+                openedBed=bed;targetId=found[0].GameObjectId;opened=now;menuSent=itemOpened=itemSent=confirmationSent=false;issuedAction=null;closing=false;actionAt=default;
                 Targets.Target=found[0];TargetSystem.Instance()->InteractWithObject((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)found[0].Address,false);return false;
             }
             if(now>=next&&SellerAddon("Talk")!=null){p.ClickVisibleTalk();next=now.AddMilliseconds(800);}
@@ -259,7 +259,7 @@ public sealed partial class Plugin
         {
             if(mappedInspection&&action!=GardenCareAction.Inspect)throw new InvalidOperationException("Inspection only permits reading bed state.");
             if(visitorTend&&action!=GardenCareAction.Tend)throw new InvalidOperationException("Visitor care only permits tending.");
-            if(action==GardenCareAction.Inspect){actionAt=opened;return Menu(bed)!=null;}
+            if(action==GardenCareAction.Inspect){actionAt=opened;issuedAction=action;menuSent=Menu(bed)!=null||mappedInspection&&InspectionObserved(bed);return menuSent;}
             if(!menuSent){
                 var plan=Current();var crop=plan.Beds.First(b=>b.Bed==bed);
                 if(action is not (GardenCareAction.Plant or GardenCareAction.RemoveStarter)&&!(postPlantTend&&action==GardenCareAction.Tend?GardenAutoPlant.NeedsPostPlantTend(plan,crop):GardenCarePolicy.Eligible(plan,crop,action,DateTimeOffset.UtcNow,tendAll)))throw new InvalidOperationException($"Bed {bed} changed or is protected. Reopen care actions.");
@@ -343,7 +343,7 @@ public sealed partial class Plugin
         {
             if(DateTimeOffset.UtcNow<next)return false;
             if(SellerAddon("Talk")!=null){p.ClickVisibleTalk();next=DateTimeOffset.UtcNow.AddMilliseconds(800);return false;}
-            if(Menu(bed) is {} m){var quit=Array.IndexOf(m.Options,"Quit");if(quit<0)throw new InvalidOperationException("Could not close the garden menu.");SelectTravelChoice((AtkUnitBase*)m.AddonAddress,quit);next=DateTimeOffset.UtcNow.AddMilliseconds(800);return false;}
+            if(Menu(bed) is {} m){var quit=Array.IndexOf(m.Options,"Quit");if(quit<0)throw new InvalidOperationException("Could not close the garden menu.");closing=true;SelectTravelChoice((AtkUnitBase*)m.AddonAddress,quit);next=DateTimeOffset.UtcNow.AddMilliseconds(800);return false;}
             if(SellerAddonPresentForGarden())return false;
             targetId=0;openedBed=0;walkedBed=0;return true;
         }

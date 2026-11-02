@@ -300,6 +300,6 @@ public sealed partial class Plugin
                 if(action==GardenCareAction.Inspect)gardenAdventureInspected[plan.HouseId+":"+plan.Batch]=now;
             }
             gardenTendStarted=true;gardenTendStatus=$"{action} · {plan.HouseName} · Batch {plan.Batch}";
-        }catch(Exception e){StopTendAdventure("Stopped: "+e.Message);PrintEquinox(gardenTendStatus);}
+        }catch(Exception e){StopTendAdventure(e.Message.StartsWith("Stopped:")?e.Message:"Stopped: "+e.Message);PrintEquinox(gardenTendStatus);}
     }
 }
