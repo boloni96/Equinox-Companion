@@ -1,12 +1,12 @@
 using System.Numerics;
 namespace EquinoxCompanion;
 
-internal enum NativeEventStep { Accept, EnterSquare, Complete, Wait, Unsupported, Finished }
+internal enum NativeEventStep { Accept, EnterSquare, MeetMaster, Complete, Wait, Unsupported, Finished }
 internal static class NativeEventPolicy
 {
     internal const uint Quest=5466, FullQuest=65536+Quest;
     internal static NativeEventStep Step(bool complete,bool accepted,byte sequence)=>complete?NativeEventStep.Finished:
-        !accepted?NativeEventStep.Accept:sequence switch {0=>NativeEventStep.Wait,1=>NativeEventStep.EnterSquare,255=>NativeEventStep.Complete,_=>NativeEventStep.Unsupported};
+        !accepted?NativeEventStep.Accept:sequence switch {0=>NativeEventStep.Wait,1=>NativeEventStep.EnterSquare,2=>NativeEventStep.MeetMaster,255=>NativeEventStep.Complete,_=>NativeEventStep.Unsupported};
     internal static bool EntranceShortcut(NativeEventStep step,bool walking)=>step==NativeEventStep.Accept&&!walking;
     internal static bool Scene(uint eventId,uint source,uint intended)=>eventId==FullQuest&&source==intended&&source is 1058756 or 1058754 or 1058752;
     internal static bool NearbyLeg(Vector3 start,Vector3 end)=>float.IsFinite(start.X)&&float.IsFinite(start.Y)&&float.IsFinite(start.Z)&&

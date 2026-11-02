@@ -114,7 +114,10 @@ public sealed partial class Plugin
     }
     private unsafe void NativeEventInteract(uint id,Vector3 fallback,DateTimeOffset now){
         var npc=Objects.FirstOrDefault(o=>o.BaseId==id&&o.IsTargetable);
-        if(!EventAccountWalk(npc?.Position??fallback,2.5f,now)||npc==null)return;
+        // Recorded reachable position on the player side of the Magitype counter.
+        var approach=id==1058752?new Vector3(-11.240237f,.025748253f,-26.007284f):npc?.Position??fallback;
+        if(!EventAccountWalk(approach,id==1058752?.4f:2.5f,now)||npc==null)return;
+        if(id==1058752&&CollisionRouteSearch.Horizontal(Objects.LocalPlayer!.Position,npc.Position)>4) return;
         if(now-nativeEventActionAt<TimeSpan.FromSeconds(3)||Conditions[ConditionFlag.OccupiedInEvent])return;
         if(nativeEventNpc==id&&now-nativeEventInteractionAt<TimeSpan.FromSeconds(15))return;
         var system=TargetSystem.Instance();if(system==null)return;
@@ -154,6 +157,7 @@ public sealed partial class Plugin
                     if(Client.TerritoryType==1360){nativeEventStatus="Waiting for the quest journal to update after arrival";return;}
                     if(!EventReachSaucer(now)){nativeEventStatus=eventAccountStatus;return;}
                     NativeEventInteract(1058754,new(.804425f,3.98254f,61.2062f),now);return;
+                case NativeEventStep.MeetMaster:
                 case NativeEventStep.Complete:
                     nativeEventStatus="Keyward Bound · speaking to the magitype master";
                     if(Client.TerritoryType!=1360){if(!EventAccountSquare(now))nativeEventStatus=eventAccountStatus;return;}
