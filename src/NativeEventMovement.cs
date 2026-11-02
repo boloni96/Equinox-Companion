@@ -32,9 +32,10 @@ public sealed partial class Plugin
             eventAccountStatus="Using the Gold Saucer aethernet to Entrance & Card Squares";
             if(now-eventSaucerTravelAt>TimeSpan.FromSeconds(90))throw new InvalidOperationException("Entrance aethernet travel timed out.");
             if(LifestreamBusy()||now-eventSaucerTravelAt<TimeSpan.FromSeconds(3))return false;
-            eventSaucerTravelOwned=false;
-            if(Vector3.Distance(self.Position,new(-64.74408f,2.8839111f,54.33728f))>20)throw new InvalidOperationException("Entrance aethernet arrival was not confirmed.");
-            return true;
+            // Lifestream can finish before loading/position settle. Keep observing the
+            // accepted request, without dispatching another teleport or failing early.
+            if(Conditions[Dalamud.Game.ClientState.Conditions.ConditionFlag.BetweenAreas]||Conditions[Dalamud.Game.ClientState.Conditions.ConditionFlag.BetweenAreas51]||Vector3.Distance(self.Position,new(-64.74408f,2.8839111f,54.33728f))>20)return false;
+            eventSaucerTravelOwned=false;return true;
         }
         // Only request the aethernet while actually near the main plaza crystal.
         if(Vector3.Distance(self.Position,new(-.015319824f,3.4942627f,-.015319824f))>15)return true;
