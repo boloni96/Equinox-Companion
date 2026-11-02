@@ -8,6 +8,8 @@ public sealed partial class Plugin
     private sealed record GardenAdventureWork(string TaskId,string Character,string House,int Batch,AdventureTaskRule Rule,bool TendOnly=false,bool InspectOnly=false);
     private Queue<GardenAdventureWork>? gardenTendRoute;
     private ulong gardenTendOwner;
+    private readonly AdventureConnectionRecovery gardenConnection=new();
+    private string gardenConnectionKey="";
     private string gardenTendBoard="",gardenTendGeneration="",gardenTendStatus="";
     private HashSet<string> gardenAdventureCharacters=[];
     private string gardenAdventureMain="";
@@ -52,6 +54,7 @@ public sealed partial class Plugin
         gardenAdventureMain=current.Id;
         RememberLoadedLoginAccount();
         gardenAdventureCharacters=(person?.Characters??[]).Where(c=>c.Id==current.Id||gardenAdventureSwitch&&GardenServiceAccount(c)>=0).Select(c=>c.Id).ToHashSet();
+        gardenConnection.Reset();gardenConnectionKey=config.PairingKey;
         gardenTendRoute=new();gardenTendOwner=Player.ContentId;gardenTendBoard=board.Id;gardenTendGeneration=board.Generation;
         gardenTendPreparing=false;gardenTendTravelSent=gardenTendStarted=gardenAdventureSwitchSent=false;gardenPlotApproaching=gardenPlotApproachAttempted=false;gardenCareRun=null;gardenAdventureNext=default;
         RequestStorageRefresh();gardenSupplyRefreshUntil=DateTimeOffset.UtcNow.AddSeconds(20);adventureNext=default;
@@ -60,6 +63,7 @@ public sealed partial class Plugin
     private void StopTendAdventure(string reason)
     {
         if(gardenTendRoute==null)return;
+        gardenConnection.Reset();gardenConnectionKey="";
         CancelAssignedLogin(reason);gardenPlotApproaching=false;gardenTendRoute=null;gardenAutoPlantPlan=null;gardenCareRun?.Stop(reason);gardenTendStatus=reason;
         goSeeHomeTrip=null;goSeeFriendTrip=null;gardenArrival.Reset();
         if(gardenAdventureSwitchSent){characterSwitchUntil=default;characterSwitchTarget=null;gardenAdventureSwitchSent=false;}
@@ -129,8 +133,19 @@ public sealed partial class Plugin
         if(gardenTendRoute==null||now<gardenAdventureNext)return;
         gardenAdventureNext=now.AddSeconds(1);
         try{
+            if(!config.SyncEnabled||config.PairingKey!=gardenConnectionKey)throw new InvalidOperationException("Adventure sync was disabled or its pairing changed.");
+            var connection=gardenConnection.Check(adventureFresh,adventureFetched,now);
+            if(connection==AdventureConnectionState.Expired)throw new InvalidOperationException("Adventure connection did not recover within 90 seconds. Progress is kept; resume when connected.");
+            if(connection==AdventureConnectionState.Waiting){
+                if(adventureRequest==null&&adventureNext>now.AddSeconds(5))adventureNext=now;
+                gardenTendStatus=$"Waiting for Adventure connection · retrying automatically · {(int)(now-gardenConnection.WaitingSince!.Value).TotalSeconds}/90s";
+                return;
+            }
+            if(gardenConnection.ResumedAfter>TimeSpan.Zero){
+                if(gardenTendDeadline!=default)gardenTendDeadline+=gardenConnection.ResumedAfter;
+                gardenTendStatus="Adventure connection restored · checking saved work…";
+            }
             var board=adventureBoards.FirstOrDefault(b=>b.Id==gardenTendBoard&&b.Generation==gardenTendGeneration)??throw new InvalidOperationException("The saved adventure changed or was removed.");
-            if(!adventureFresh||now-adventureFetched>TimeSpan.FromSeconds(30))throw new InvalidOperationException("Adventure connection is stale. Reconnect before resuming automatic work.");
             if(followSession.Armed||Conditions[ConditionFlag.InCombat])throw new InvalidOperationException("Another movement operation or combat started.");
             if(gardenTendRoute.Count==0){
                 if(now<gardenSupplyRefreshUntil){gardenTendStatus="Refreshing harvested supplies and selected batches…";return;}

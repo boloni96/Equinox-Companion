@@ -55,11 +55,13 @@ public sealed class GardenCareRun(IGardenCarePort port)
         Running=beds.Length>0;deadline=now.AddSeconds(20);Status=Running?$"{action} · 0/{Total}":"No eligible beds.";
     }
     public void Stop(string reason){Running=false;Status=reason;port.Release();}
-    public void Tick(DateTimeOffset now)
+    public void Tick(DateTimeOffset now,bool pauseBeforeNextBed=false)
     {
         if(!Running)return;
         try{
-            port.Validate();if(phase==0&&port.MovementRecoveryUntil is {} recoveryUntil&&recoveryUntil>deadline)deadline=recoveryUntil;
+            port.Validate();
+            if(phase==0&&pauseBeforeNextBed){deadline=now.AddSeconds(20);Status="Waiting for Adventure connection before the next bed";return;}
+            if(phase==0&&port.MovementRecoveryUntil is {} recoveryUntil&&recoveryUntil>deadline)deadline=recoveryUntil;
             if(now>=deadline)throw new InvalidOperationException("Timed out waiting for the game; the last action was not retried.");
             var bed=beds[index];Status=$"{Action} · Bed {bed} · {Completed}/{Total}";
             if(phase==1&&port.SkipReason(bed,Action) is {} reason){
