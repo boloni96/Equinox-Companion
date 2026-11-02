@@ -17,7 +17,7 @@ public static class GardenVisualState
     public static string CropArtwork(SharedGardenBed b,bool planVisible,DateTimeOffset now,bool animate=false) => For(b,planVisible,now) switch
     {
         "planned" => "plantLive",
-        "ready" or "keep-mature" => "plantMature",
+        "ready" or "keep-mature" or "mature-estimated" => "plantMature",
         "dead" or "dead-estimated" => "plantDead",
         "wilt-estimated" or "wilted" or "at-risk" => "plantWilted",
         _ => GrowthPercent(b,now) is null?"seedIcon":SeedlingEstimate(b,now)?"plantSeedling":"plantGrowing"
@@ -32,6 +32,7 @@ public static class GardenVisualState
         if(b.WiltedAt is {} wilted&&wilted<=now&&(b.Watered is null||b.Watered<=wilted)&&(b.Planted is null||b.Planted<=wilted))return "wilted";
         var death=b.Watered is {} w&&b.WiltHours is {} hours?w.AddHours(hours+24):(DateTimeOffset?)null;
         if(!(death<=b.GrowingObservedAt)&&GardenTiming.DeathRisk(b.Ready,death,b.HarvestAt,now))return "dead-estimated";
+        if(HasActualCrop(b)&&GardenTiming.MatureEstimate(b.HarvestAt,b.GrowingObservedAt,now))return "mature-estimated";
         if(GardenTiming.MaturityEstimateDue(b.HarvestAt,b.GrowingObservedAt,now))return "check-maturity";
         if(death is {} risk&&risk>now&&risk-now<=TimeSpan.FromHours(4))return "at-risk";
         if(b.Watered is {} care&&b.WiltHours is {} wilt&&care.AddHours(wilt)<=now&&!(care.AddHours(wilt)<=b.GrowingObservedAt))return "wilt-estimated";

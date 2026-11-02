@@ -485,7 +485,7 @@ Check("garden art due at exact 12h",GardenVisualState.For(artBed with {Watered=a
 Check("garden art wilt is not death",GardenVisualState.For(artBed with {Watered=artNow.AddHours(-25)},false,artNow),"wilt-estimated");
 Check("garden art dead after deadline",GardenVisualState.For(artBed with {Watered=artNow.AddHours(-49)},false,artNow),"dead-estimated");
 Check("garden art ready immune to old death",GardenVisualState.For(artBed with {Watered=artNow.AddHours(-49),Ready=true},false,artNow),"ready");
-Check("garden art maturity before death uncertain",GardenVisualState.For(artBed with {Watered=artNow.AddHours(-49),HarvestAt=artNow.AddHours(-2)},false,artNow),"check-maturity");
+Check("garden art mature after two hour buffer",GardenVisualState.For(artBed with {Watered=artNow.AddHours(-49),HarvestAt=artNow.AddHours(-2)},false,artNow),"mature-estimated");
 Check("garden art saved plan is distinct",GardenVisualState.For(artBed with {Status="planned",Watered=null,ActualCrop="Not synced yet"},true,artNow),"planned");
 Check("garden art confirmed empty has no wet",GardenVisualState.For(artBed with {ActualCrop="Empty"},false,artNow),"empty");
 Check("garden art unknown is not empty",GardenVisualState.For(artBed with {ActualCrop="Not synced yet",Watered=null},false,artNow),"unknown");

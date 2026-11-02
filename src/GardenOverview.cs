@@ -9,7 +9,7 @@ public static class GardenOverview
     {
         var beds=plans.SelectMany(p=>p.Beds.Select(b=>Bed(p,b,now))).ToArray();
         var icons=new List<string>();
-        if(beds.Any(b=>b.State=="ready"))icons.Add("ready");
+        if(beds.Any(b=>b.State is "ready" or "mature-estimated"))icons.Add("ready");
         if(beds.Any(b=>b.TendDue))icons.Add("tend");
         if(beds.Any(b=>b.State is "dead" or "wilted" or "wilt-estimated" or "at-risk" or "dead-estimated"))icons.Add("at-risk");
         if(beds.Any(b=>b.State=="check-maturity"))icons.Add("check-maturity");
@@ -23,7 +23,7 @@ public static class GardenOverview
         if(beds.Any(b=>b.State=="dead"))return "dead";
         if(beds.Any(b=>b.State is "wilted" or "wilt-estimated" or "at-risk" or "dead-estimated"))return "risk";
         if(beds.Any(b=>b.TendDue))return "tend";
-        if(beds.Any(b=>b.State=="ready"))return "harvest";
+        if(beds.Any(b=>b.State is "ready" or "mature-estimated"))return "harvest";
         if(beds.Any(b=>b.State=="check-maturity"))return "check";
         if(beds.Any(b=>b.State is "wet" or "keep-mature"))return "cared";
         return "none";
@@ -64,6 +64,7 @@ public static class GardenOverview
         GardenOverviewBed Row(string status,string care,string harvest,bool due=false,DateTimeOffset? next=null,DateTimeOffset? ready=null) => new(bed.Bed,crop,status,care,harvest,state,due,next,ready);
         if(state=="empty")return Row("Empty","—","—");
         if(state is "ready" or "keep-mature")return Row(state=="ready"?"Ready to harvest":"Kept mature","Not needed",state=="ready"?"Ready":"Kept mature");
+        if(state=="mature-estimated")return Row("Mature","No routine care · verify on opening","Mature (estimated +2h)");
         if(state=="dead")return Row("Dead · confirmed","—","Remove crop");
         if(plan.CompletedAt is null && GardenPlantRequirement.SuppressTending(bed))return Row(bed.Status=="replant"?"Replace starter":"Temporary starter","Not needed","Will be replaced");
         if(state=="unknown")return Row("Awaiting sync","Check in game","Unknown");
@@ -87,7 +88,7 @@ public static class GardenOverview
         Count("dead",b=>b.State=="dead");
         Count("at risk",b=>b.State is "wilted" or "wilt-estimated" or "at-risk" or "dead-estimated");
         Count("replace",b=>b.Status=="Replace starter");
-        Count("ready",b=>b.State=="ready");
+        Count("ready",b=>b.State is "ready" or "mature-estimated");
         Count("tend due",b=>b.TendDue);
         Count("check maturity",b=>b.State=="check-maturity");
         Count("unsynced",b=>b.State=="unknown");
@@ -104,7 +105,7 @@ public static class GardenOverview
         var beds=plans.SelectMany(p=>p.Beds.Select(b=>Bed(p,b,now))).ToArray();
         var parts=new List<string>();
         void Count(string text,Func<GardenOverviewBed,bool> match){var n=beds.Count(match);if(n>0)parts.Add($"{n} {text}");}
-        Count("replace starter",b=>b.Status=="Replace starter");Count("dead",b=>b.State=="dead");Count("tend due",b=>b.TendDue);Count("ready",b=>b.State=="ready");Count("kept mature",b=>b.State=="keep-mature");
+        Count("replace starter",b=>b.Status=="Replace starter");Count("dead",b=>b.State=="dead");Count("tend due",b=>b.TendDue);Count("ready",b=>b.State is "ready" or "mature-estimated");Count("kept mature",b=>b.State=="keep-mature");
         Count("check maturity",b=>b.State=="check-maturity");Count("awaiting sync",b=>b.State=="unknown");Count("empty",b=>b.State=="empty");
         var next=beds.Where(b=>b.NextTend>now).Select(b=>b.NextTend).Min();
         var harvest=beds.Where(b=>b.HarvestAt>now).Select(b=>b.HarvestAt).Min();

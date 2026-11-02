@@ -241,6 +241,19 @@ public sealed partial class Plugin
             var m=p.activeGardenMenu;var patch=original.PhysicalPatch>0?original.PhysicalPatch:original.Batch;
             return m!=null&&m.OpenedAt>=opened&&m.ClosedAt==null&&m.Target.TargetId==targetId.ToString("X16")&&(m.NumberedLocation()==(patch,bed)||(visitorTend||mappedInspection)&&m.NumberedLocation()==null&&(mappedInspection||m.Options.Contains("Tend Crop"))&&GardenTargetMap.SelectedBatch(m.Target,p.GardenResolver(),[original])==(original.HouseId,original.Batch,bed))&&SellerAddon("SelectString")== (AtkUnitBase*)m.AddonAddress?m:null;
         }
+        public string? SkipReason(int bed,GardenCareAction action)
+        {
+            if(menuSent||action is GardenCareAction.Inspect or GardenCareAction.Plant or GardenCareAction.RemoveStarter)return null;
+            var menu=Menu(bed);if(menu==null)return null;
+            // Opening the mapped bed records its live state before this check.
+            if(action is GardenCareAction.Tend or GardenCareAction.Fertilize && menu.ReadyLocation()!=null)return "Mature · no tending or fertilizer needed";
+            if(menu.EmptyLocation()!=null)return "Empty bed";
+            if(menu.DeadLocation()!=null)return "Dead crop · left untouched";
+            var plan=Current();var crop=plan.Beds.First(b=>b.Bed==bed);
+            var eligible=postPlantTend&&action==GardenCareAction.Tend?GardenAutoPlant.NeedsPostPlantTend(plan,crop):GardenCarePolicy.Eligible(plan,crop,action,DateTimeOffset.UtcNow,tendAll);
+            if(eligible)return null;
+            return crop.Ready&&action!=GardenCareAction.Harvest?"Mature · no care needed":GardenCarePolicy.Protection(plan,crop) is {Length:>0} protection?protection:"Care no longer needed";
+        }
         public bool Act(int bed,GardenCareAction action)
         {
             if(mappedInspection&&action!=GardenCareAction.Inspect)throw new InvalidOperationException("Inspection only permits reading bed state.");

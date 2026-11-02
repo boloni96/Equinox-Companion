@@ -160,6 +160,17 @@ internal static class GardenCare312Tests
         var harvesting=new HarvestPort();var harvestingRun=new GardenCareRun(harvesting);harvestingRun.Start([1,2,3],GardenCareAction.Harvest,now);
         for(int i=0;i<12;i++)harvestingRun.Tick(now.AddSeconds(i));
         Check(harvestingRun.Completed==3&&!harvestingRun.Running&&harvesting.Actions==3,"Target clears after each harvest without stopping or duplicating the next bed");
+        var skipping=new Port{Receipt=true,SkipFirst=true};var skipRun=new GardenCareRun(skipping);
+        skipRun.Start([1,2],GardenCareAction.Tend,now);
+        for(var i=0;i<8;i++)skipRun.Tick(now.AddSeconds(i));
+        Check(!skipRun.Running&&skipRun.Completed==1&&skipRun.Skipped==1&&skipping.Acts==1,"Newly mature bed is closed and skipped, next growing bed is tended once");
+        Check(skipping.Closed.SequenceEqual([1,2])&&skipRun.Status.Contains("Mature"),"Skipped menu closes before next bed and completion explains why");
+        Check(!GardenTiming.MatureEstimate(now.AddHours(-2).AddSeconds(1),null,now),"Mature display waits full two hour buffer");
+        Check(GardenTiming.MatureEstimate(now.AddHours(-2),null,now),"Mature display at two hours");
+        Check(!GardenTiming.MatureEstimate(now.AddHours(-3),now.AddMinutes(-1),now),"Fresh growing observation overrides maturity estimate");
+        Check(GardenTiming.MatureEstimate(now.AddHours(-4),now.AddHours(-2),now),"Growing observation gets its own two hour buffer");
+        var matureArt=Bed(1) with {Ready=false,HarvestAt=now.AddHours(-2),Watered=now,DeadConfirmedAt=null,GrowingObservedAt=null};
+        Check(GardenVisualState.CropArtwork(matureArt,false,now)=="plantMature"&&!matureArt.Ready,"Estimated mature sprite does not invent a confirmed harvest receipt");
         var port=new Port();var run=new GardenCareRun(port);run.Start([1,2],GardenCareAction.Tend,now);
         run.Tick(now);run.Tick(now.AddSeconds(1));run.Tick(now.AddSeconds(2));
         Check(run.Completed==0&&port.Acts==1,"Sending does not imply success");
@@ -179,10 +190,11 @@ internal static class GardenCare312Tests
     }
     private sealed class Port:IGardenCarePort
     {
-        public int Acts;public bool Receipt;public bool OpenReady=true;public DateTimeOffset? MovementRecoveryUntil{get;set;}
+        public int Acts;public bool Receipt;public bool SkipFirst;public List<int> Closed=[];
+        public string? SkipReason(int bed,GardenCareAction action)=>SkipFirst&&bed==1?"Mature":null;public bool OpenReady=true;public DateTimeOffset? MovementRecoveryUntil{get;set;}
         public void Validate(){} public bool Open(int bed)=>OpenReady;
         public bool Act(int bed,GardenCareAction action){Acts++;return true;}
         public bool Confirmed(int bed,GardenCareAction action,DateTimeOffset sent)=>Receipt;
-        public bool Close(int bed)=>true;public void Release(){}
+        public bool Close(int bed){Closed.Add(bed);return true;}public void Release(){}
     }
 }
