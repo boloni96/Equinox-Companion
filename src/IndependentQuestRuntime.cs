@@ -85,7 +85,7 @@ public sealed partial class Plugin
             if(!Player.IsLoaded||Player.ContentId!=independentQuestCharacter)throw new InvalidOperationException("Character changed or logged out.");
             if(FollowMovementKeysHeld())throw new InvalidOperationException("Stopped by your movement.");
             if(QuestToolsOtherOperation()||questRecorderActive)throw new InvalidOperationException("Another helper started.");
-            if(Conditions[ConditionFlag.BoundByDuty]||Conditions[ConditionFlag.InDutyQueue]){StopIndependentQuest("Duty left for manual play.",true);return;}
+            if(Conditions[ConditionFlag.BoundByDuty]||Conditions[ConditionFlag.InDutyQueue]||Conditions[ConditionFlag.InCombat]){StopIndependentQuest("Combat / duty left for manual play.",true);return;}
             if(QuestManager.IsQuestComplete(independentQuestId)){StopIndependentQuest("Quest completion confirmed.");return;}
             var sequence=QuestManager.GetQuestSequence(independentQuestId);
             if(sequence!=independentSequence){independentSequence=sequence;independentStep=0;ResetIndependentStep(now,HelperInCutscene()||QuestConversationVisible());}

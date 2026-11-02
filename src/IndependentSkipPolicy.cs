@@ -14,7 +14,7 @@ public static class IndependentSkipPolicy
             if(group.Value.ValueKind!=JsonValueKind.Object)return "Invalid skip group: "+group.Name;
             foreach(var field in group.Value.EnumerateObject()){
                 if(field.Name is not ("Never" or "InSameTerritory" or "InTerritory" or "NotInTerritory" or "NearPosition" or "NotNearPosition" or "QuestsAccepted" or "QuestsCompleted" or "CompletionQuestVariablesFlags"))
-                    if(IndependentStepPolicy.Meaningful(field.Value))return "Skip condition needs support: "+field.Name;
+                    if(IndependentStepPolicy.Meaningful(field.Value)||field.Value.ValueKind==JsonValueKind.False)return "Skip condition needs support: "+field.Name;
                 if(field.Name is "NearPosition" or "NotNearPosition"){
                     if(field.Value.ValueKind!=JsonValueKind.Object||field.Value.EnumerateObject().Any(p=>p.Name is not ("Position" or "TerritoryId" or "MaximumDistance")))return "Invalid position skip condition";
                 }
