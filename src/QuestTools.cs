@@ -68,6 +68,12 @@ public sealed partial class Plugin
         (q.Id+" "+q.Name+" "+q.Group).Contains(questSearch,StringComparison.OrdinalIgnoreCase)).Take(100).ToArray();
     private void DrawQuestTools()
     {
+        DrawWorkStatusBar(false);
+        if(ImGui.BeginChild("Quest tools content",Vector2.Zero,false))DrawQuestToolsContent();
+        ImGui.EndChild();
+    }
+    private void DrawQuestToolsContent()
+    {
         if(ImGui.BeginTabBar("QuestToolsTabs")){
             if(ImGui.BeginTabItem("Event quest")){DrawNativeEventQuest();ImGui.EndTabItem();}
             if(ImGui.BeginTabItem("Quest library")){

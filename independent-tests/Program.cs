@@ -31,6 +31,14 @@ using(var flags=System.Text.Json.JsonDocument.Parse("[{\"High\":1,\"Mode\":\"Exa
 Check(book.TravelId("[Gold Saucer] Entrance & Card Squares")==63,"shard mapping");
 Check(book.EmoteId("bow")>0,"emote mapping");
 Console.WriteLine("Collision planning, quest conditions and action mappings passed.");
+var lease=new WalkingInputLease();var frame=DateTimeOffset.UtcNow;
+Check(lease.Check(frame)==WalkingInputDecision.Inactive,"no movement before arming");
+var afterSlowPlanning=frame.AddMilliseconds(850);lease.Arm(afterSlowPlanning);
+Check(lease.Check(afterSlowPlanning.AddMilliseconds(10))==WalkingInputDecision.Allowed,"slow planning does not consume the input lease");
+Check(lease.Check(afterSlowPlanning.AddMilliseconds(180))==WalkingInputDecision.Expired,"stale input expires at boundary");
+lease.Arm(afterSlowPlanning.AddSeconds(1));lease.Revoke();
+Check(lease.Check(afterSlowPlanning.AddSeconds(1))==WalkingInputDecision.Inactive,"pause/stop revokes input immediately");
+Console.WriteLine("Movement lease timing and cancellation passed.");
 sealed class TestCollision:IWalkingCollision
 {
     public bool Ground(Vector3 near,out Vector3 ground){ground=new(near.X,0,near.Z);return MathF.Abs(near.Y)<1&&MathF.Abs(near.X)<=8&&MathF.Abs(near.Z)<=8;}

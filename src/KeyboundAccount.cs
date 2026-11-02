@@ -66,7 +66,7 @@ public sealed partial class Plugin
             eventAccountLoadedCharacter=0;eventAccountCompleted=eventAccountSkipped=0;eventAccountCharacters=characters.OrderBy(c=>c.Id==current.Id?0:1).ToArray();eventAccountIndex=0;
             eventAccountPairing=config.PairingKey;eventAccountPerson=scope.PersonId;eventAccountId=scope.AccountId;
             keyboundAccountRun=Guid.NewGuid().ToString("N");TraceKeyboundRun(keyboundAccountRun,"account-started","Selected characters: "+characters.Length,"user-button");
-            eventAccountActive=true;eventAccountDeadline=DateTimeOffset.UtcNow.AddHours(12);eventAccountNext=default;eventAccountStage="";
+            StopIndependentWalk(resetFailure:true);eventAccountActive=true;eventAccountDeadline=DateTimeOffset.UtcNow.AddHours(12);eventAccountNext=default;eventAccountStage="";
             eventAccountBuyingStarted=eventAccountFarmStarted=false;EventAccountStage("character","Checking selected character");
         }catch(Exception e){eventAccountStatus="Not started: "+e.Message;}
     }
