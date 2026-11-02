@@ -15,7 +15,7 @@ public sealed partial class Plugin
     private ulong independentQuestCharacter;
     private bool independentStepSent,independentScene,independentSceneSeen,independentDeferred,independentTravelSent,independentAethernetSent;
     private DateTimeOffset independentQuestNext,independentStepSince,independentActionAt;
-    private string independentQuestRun="";
+    private string independentQuestRun="",independentQuestSceneIdentity="";
     private string independentQuestBookError="",independentWorkBefore="";
     private bool QuestProviderRunning()=>independentQuestId!=0;
     private void InitializeIndependentQuests(string? directory)
@@ -34,6 +34,7 @@ public sealed partial class Plugin
             foreach(var property in route.Definition.EnumerateObject())
                 if(property.Name is not ("$schema" or "$" or "Author" or "LastChecked" or "Comment" or "Disabled" or "Interruptible" or "QuestSequence")&&IndependentStepPolicy.Meaningful(property.Value))
                     throw new InvalidOperationException("Unknown route condition: "+property.Name);
+            ResetQuestCutscene();independentQuestSceneIdentity="";
             independentRoute=route;independentQuestId=id;independentQuestCharacter=Player.ContentId;independentSequence=-1;independentDeferred=false;independentQuestNext=default;
             independentQuestRun=Guid.NewGuid().ToString("N");TraceKeyboundRun(independentQuestRun,"quest-started",$"Quest {id}","companion-quest",false);
             StopIndependentWalk(resetFailure:true);questToolsStatus="Companion starting: "+QuestTitle(id);return true;
@@ -43,11 +44,13 @@ public sealed partial class Plugin
     {
         if(independentQuestId==0)return;
         TraceKeyboundRun(independentQuestRun,"quest-stopped",$"Quest {independentQuestId}, sequence {independentSequence}, step {independentStep}: {reason}","companion-quest",false);
+        ResetQuestCutscene();independentQuestSceneIdentity="";
         independentQuestId=0;independentRoute=null;independentScene=false;independentDeferred=deferred;
         StopIndependentWalk(reason);CancelIndependentQuestTravel();questToolsStatus=reason;
     }
     private void ResetIndependentStep(DateTimeOffset now)
     {
+        ResetQuestCutscene();independentQuestSceneIdentity="";
         StopIndependentWalk();independentStepSent=independentScene=independentSceneSeen=false;
         independentTravelSent=independentAethernetSent=false;independentNpc=0;independentStepSince=now;independentActionAt=default;independentWorkBefore="";
     }
@@ -56,10 +59,13 @@ public sealed partial class Plugin
         var qm=QuestManager.Instance();var work=qm==null?null:qm->GetQuestById((ushort)independentQuestId);
         return work==null?new byte[6]:work->Variables.ToArray();
     }
-    private void ObserveIndependentQuest(uint eventId,uint npc)
+    private void ObserveIndependentQuest(uint eventId,uint npc,short scene)
     {
-        if(independentQuestId==0||DateTimeOffset.UtcNow-independentActionAt>TimeSpan.FromSeconds(30))return;
-        if(eventId==65536+independentQuestId&&(npc==independentNpc||npc==0&&independentScene))independentScene=independentSceneSeen=true;
+        if(independentQuestId==0)return;
+        independentScene=IndependentDialoguePolicy.OwnedScene(independentQuestId,eventId,npc,independentNpc,independentScene,
+            DateTimeOffset.UtcNow-independentActionAt<=TimeSpan.FromSeconds(30));
+        independentQuestSceneIdentity=independentScene?eventId+":"+scene:"";
+        independentSceneSeen|=independentScene;
     }
     private void NextIndependentStep(DateTimeOffset now){independentStep++;ResetIndependentStep(now);}
     private unsafe void UpdateIndependentQuest(DateTimeOffset now)
@@ -92,8 +98,9 @@ public sealed partial class Plugin
             if(step.TryGetProperty("CompletionQuestVariablesFlags",out var flags)&&IndependentStepPolicy.CompletedFlags(flags,IndependentWork())){NextIndependentStep(now);return;}
             if(now-independentStepSince>TimeSpan.FromMinutes(4))throw new InvalidOperationException("Quest step timed out: "+questToolsStatus);
             questToolsStatus=$"{QuestTitle(independentQuestId)} · sequence {sequence}, step {independentStep+1}/{steps.GetArrayLength()} · {kind}";
+            if(UpdateOwnedQuestCutscene(now,false,()=>IndependentQuestDialogue(step,kind,now)))return;
             if(IndependentQuestDialogue(step,kind,now))return;
-            if(Conditions[ConditionFlag.OccupiedInEvent]||Conditions[ConditionFlag.OccupiedInQuestEvent]||Conditions[ConditionFlag.WatchingCutscene]||Conditions[ConditionFlag.WatchingCutscene78]||Conditions[ConditionFlag.Casting])return;
+            if(Conditions[ConditionFlag.OccupiedInEvent]||Conditions[ConditionFlag.OccupiedInQuestEvent]||HelperInCutscene()||Conditions[ConditionFlag.Casting])return;
             var territory=IndependentStepPolicy.Number(step,"TerritoryId");
             if(independentStepSent){
                 var changed=Convert.ToHexString(IndependentWork())!=independentWorkBefore;

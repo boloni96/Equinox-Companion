@@ -22,7 +22,7 @@ public sealed partial class Plugin
             if(Conditions[ConditionFlag.BoundByDuty]||Conditions[ConditionFlag.InDutyQueue]||Conditions[ConditionFlag.InCombat]||QuestConversationVisible())throw new InvalidOperationException("Finish the current duty, queue, combat or conversation first.");
             if(OptionalQuestRunning()||LifestreamBusy())throw new InvalidOperationException("Another quest or travel task is running.");
             if(QuestManager.IsQuestComplete(NativeEventPolicy.Quest)){nativeEventStatus="Keyward Bound is complete. Missing rewards are checked separately.";return true;}
-            StopIndependentWalk(resetFailure:true);nativeEventActive=true;nativeEventFromAccount=fromAccount;nativeEventCharacter=Player.ContentId;
+            ResetQuestCutscene();StopIndependentWalk(resetFailure:true);nativeEventActive=true;nativeEventFromAccount=fromAccount;nativeEventCharacter=Player.ContentId;
             nativeEventStep=NativeEventStep.Unsupported;nativeEventStepAt=DateTimeOffset.UtcNow;nativeEventNext=nativeEventActionAt=nativeEventUnavailableAt=default;
             nativeEventNpc=0;nativeEventSceneOwned=nativeEventAcceptSent=nativeEventResultSent=nativeEventYesSent=false;
             nativeEventSceneIdentity=nativeEventSkipAttempt=nativeEventSkipConfirmed=nativeEventEscapeScene="";nativeEventPrompt="";nativeEventPromptLoaded=nativeEventKeyboardChecked=false;eventSaucerTravelAt=default;
@@ -31,7 +31,7 @@ public sealed partial class Plugin
     }
     private void StopNativeEventQuest(string reason){
         if(!nativeEventActive)return;
-        if(nativeEventEscapeScene.Length>0){nativeEventEscapeScene="";EndHelperNativeEscape();}
+        ResetQuestCutscene();
         nativeEventActive=false;CancelEventAccountMovement();nativeEventSceneOwned=false;nativeEventNpc=0;
         nativeEventStatus=reason;questToolsStatus=reason;
         PrintEquinox("Event quest · "+reason);

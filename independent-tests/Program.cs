@@ -105,6 +105,13 @@ Check(!EventCutsceneRetry.Ready(1,skipNow,skipNow.AddSeconds(-1)),"skip pulses s
 Check(EventCutsceneRetry.Ready(1,skipNow,skipNow.AddSeconds(-2)),"missed early pulse may retry");
 Check(!EventCutsceneRetry.Ready(3,skipNow,skipNow.AddSeconds(-20)),"skip retries bounded");
 Console.WriteLine("Wall clearance and event skip retry checks passed.");
+Check(IndependentDialoguePolicy.OwnedScene(100,65636,42,42,false,true),"matching interacted quest scene becomes owned");
+Check(IndependentDialoguePolicy.OwnedScene(100,65636,0,42,true,false),"owned cutscene continuation survives long scene");
+Check(!IndependentDialoguePolicy.OwnedScene(100,65637,0,42,true,true),"foreign quest revokes scene ownership");
+Check(!IndependentDialoguePolicy.OwnedScene(100,65636,43,42,true,true),"different NPC cannot borrow scene ownership");
+Check(!IndependentDialoguePolicy.OwnedScene(100,65636,0,0,false,true),"anonymous scene cannot establish ownership");
+using(var combatStep=System.Text.Json.JsonDocument.Parse("{\"InteractionType\":\"Combat\"}"))Check(IndependentStepPolicy.Review(combatStep.RootElement).Contains("manual"),"combat remains manual");
+using(var leveStep=System.Text.Json.JsonDocument.Parse("{\"InteractionType\":\"AcceptLeve\"}"))Check(IndependentStepPolicy.Review(leveStep.RootElement).Contains("manual"),"levequests remain manual");
 sealed class WallPreferenceCollision(bool narrow):IWalkingCollision
 {
     public bool Ground(Vector3 near,out Vector3 ground){ground=near;return near.X>=0&&near.X<=7&&near.Z>=0&&near.Z<=(narrow?0:3);}

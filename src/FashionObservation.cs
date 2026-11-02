@@ -17,7 +17,7 @@ public sealed partial class Plugin
     {
         if(eventAccountActive||nativeEventActive){eventEntranceSceneOwned=target!=null&&target->BaseId==1058754&&DateTimeOffset.UtcNow-eventEntranceInteractionAt<TimeSpan.FromMinutes(2);}
         if(nativeEventActive){try{ObserveNativeEventScene(eventId.Id,target==null?0:target->BaseId,scene);}catch(Exception e){Log.Debug(e,"Native event quest observation");}}
-        if(independentQuestId!=0){try{ObserveIndependentQuest(eventId.Id,target==null?0:target->BaseId);}catch(Exception e){Log.Debug(e,"Independent quest scene");}}
+        if(independentQuestId!=0){try{ObserveIndependentQuest(eventId.Id,target==null?0:target->BaseId,scene);}catch(Exception e){Log.Debug(e,"Independent quest scene");}}
         if(questRecorderActive){
             try{
                 var copied=new uint[Math.Min((int)count,64)];
