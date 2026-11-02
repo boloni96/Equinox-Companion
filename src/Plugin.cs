@@ -1269,6 +1269,7 @@ public sealed partial class Plugin : IDalamudPlugin
 
     public void Dispose()
     {
+        DisposeQuestTools();
         itemDeliveryClient.Dispose();
         DisposeEquinoxMarket();
         if (titleLoginProbe.Active) StopTitleLoginCheck("Login check stopped because Companion is unloading.");
@@ -1324,7 +1325,6 @@ public sealed partial class Plugin : IDalamudPlugin
         DisposeBidSearch();
         DisposeAdventures();
         DisposeTesting();
-        DisposeQuestTools();
         DisposeKeybound();
         windows.RemoveAllWindows();
         welcomeWindows.RemoveAllWindows();

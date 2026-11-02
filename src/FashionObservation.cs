@@ -15,6 +15,14 @@ public sealed partial class Plugin
     }
     private unsafe void ObserveNpcEvent(EventFramework* framework, NativeGameObject* target, EventId eventId, short scene, ulong flags, uint* values, byte count)
     {
+        if(questRecorderActive){
+            try{
+                var copied=new uint[Math.Min((int)count,64)];
+                if(values!=null)for(var i=0;i<copied.Length;i++)copied[i]=values[i];
+                if((eventId.Id>>16)==1)questRecordedIds.Add(QuestToolsPolicy.ShortId(eventId.Id));
+                RecordQuest("native-scene",new {eventId=eventId.Id,scene,flags,npc=target==null?0:target->BaseId,parameters=copied});
+            }catch(Exception e){Log.Debug(e,"Quest recorder scene observation");}
+        }
         fashionHook!.Original(framework,target,eventId,scene,flags,values,count);
         if (!config.SyncActivities || !Player.IsLoaded || target == null || target->BaseId != 1025176 || values == null || fashionObservations.Count >= 16) return;
         try

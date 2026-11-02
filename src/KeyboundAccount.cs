@@ -12,7 +12,7 @@ public sealed partial class Plugin
     private string eventAccountStatus="Choose characters from this service account.",eventAccountPairing="",eventAccountPerson="",eventAccountId="",eventAccountStage="";
     private readonly HashSet<string> eventAccountSelected=[];
     private SharedCharacter[] eventAccountCharacters=[];
-    private int eventAccountIndex;
+    private int eventAccountIndex,eventAccountCompleted,eventAccountSkipped;
     private DateTimeOffset eventAccountNext,eventAccountStageAt,eventAccountActionAt,eventAccountDeadline;
     private Task<List<Vector3>>? eventAccountPath;
     private CancellationTokenSource? eventAccountPathCancel;
@@ -63,7 +63,7 @@ public sealed partial class Plugin
             if(scope.PersonId.Length==0||scope.AccountId.Length==0||CurrentLoginServiceAccount()<0)throw new InvalidOperationException("Verify this client's service account first.");
             if(characters.Any(c=>c.AccountId!=current.AccountId||!EventAccountCandidates().Any(v=>v.Id==c.Id)))throw new InvalidOperationException("Selected characters no longer belong to this account.");
             if(LifestreamBusy()||QuestProviderRunning()||Pi.GetIpcSubscriber<bool>("vnavmesh.Path.IsRunning").InvokeFunc())throw new InvalidOperationException("A travel or quest plugin is busy.");
-            eventAccountCharacters=characters.OrderBy(c=>c.Id==current.Id?0:1).ToArray();eventAccountIndex=0;
+            eventAccountCompleted=eventAccountSkipped=0;eventAccountCharacters=characters.OrderBy(c=>c.Id==current.Id?0:1).ToArray();eventAccountIndex=0;
             eventAccountPairing=config.PairingKey;eventAccountPerson=scope.PersonId;eventAccountId=scope.AccountId;
             eventAccountActive=true;eventAccountDeadline=DateTimeOffset.UtcNow.AddHours(12);eventAccountNext=default;eventAccountStage="";
             eventAccountBuyingStarted=eventAccountFarmStarted=false;EventAccountStage("character","Checking selected character");
@@ -150,10 +150,11 @@ public sealed partial class Plugin
         try{
             if(config.PairingKey!=eventAccountPairing||!config.EnableKeyboundBrawler)throw new InvalidOperationException("Pairing or event tool changed.");
             if(now>eventAccountDeadline)throw new InvalidOperationException("Account routine reached its 12-hour limit.");
-            if(eventAccountIndex>=eventAccountCharacters.Length){StopEventAccount("All selected characters finished their reward goals.");return;}
+            if(eventAccountIndex>=eventAccountCharacters.Length){StopEventAccount($"Finished: {eventAccountCompleted} character(s) completed their reward goals; {eventAccountSkipped} unavailable character(s) skipped.");return;}
             var target=eventAccountCharacters[eventAccountIndex];
             if(assignedLogin!=null){eventAccountStatus=characterTravelStatus;return;}
             if(eventAccountWorldOwned){
+                if(now-eventAccountActionAt>TimeSpan.FromMinutes(30))throw new InvalidOperationException("Sophia travel timed out.");
                 eventAccountStatus="Travelling to Sophia · waiting for verified arrival";
                 if(LifestreamBusy())return;
                 if(!Player.IsLoaded||now-eventAccountActionAt<TimeSpan.FromSeconds(5))return;
@@ -195,7 +196,7 @@ public sealed partial class Plugin
                 }
                 if(Pi.GetIpcSubscriber<string,bool>("Questionable.IsQuestLocked").InvokeFunc(QuestToolsPolicy.KeywardBound.ToString())){
                     PrintEquinox("Event routine · "+target.Name+": quest unavailable; check level, event dates and prerequisites. Skipped for this run.");
-                    eventAccountIndex++;EventAccountStage("character","Checking next eligible character");return;
+                    eventAccountSkipped++;eventAccountIndex++;EventAccountStage("character","Checking next eligible character");return;
                 }
                 EventAccountStage("quest","Completing Keyward Bound");
                 if(!StartQuestionableQuest(QuestToolsPolicy.KeywardBound))throw new InvalidOperationException(questToolsStatus);
@@ -221,7 +222,7 @@ public sealed partial class Plugin
             if(decision==EventRoutineAction.Next){
                 StopKeybound();eventAccountFarmStarted=false;CancelEventAccountMovement();
                 PrintEquinox("Event routine · "+target.Name+": reward goal and item use confirmed.");
-                eventAccountIndex++;EventAccountStage("character","Preparing next selected character");return;
+                eventAccountCompleted++;eventAccountIndex++;EventAccountStage("character","Preparing next selected character");return;
             }
             if(!EventAccountSquare(now))return;
             if(decision==EventRoutineAction.BuyAndUse){

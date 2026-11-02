@@ -9,7 +9,8 @@ namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
     private QuestToolsWindow questToolsWindow=null!;
-    private bool questToolsCommand;
+    private bool questToolsCommand,companionHelperCommand,companionFollowCommand;
+    private CompanionHelperWindow companionHelperWindow=null!;
     private Task<QuestCatalogueRow[]>? questCatalogueTask;
     private QuestCatalogueRow[] questCatalogue=[],questSearchRows=[];
     private string questSearch="",questToolsStatus="Choose a quest, or record one manually.";
@@ -21,6 +22,9 @@ public sealed partial class Plugin
     private void InitializeQuestTools()
     {
         questToolsWindow=new(this);windows.AddWindow(questToolsWindow);
+        companionHelperWindow=new(this);windows.AddWindow(companionHelperWindow);
+        companionHelperCommand=Commands.AddHandler("/eqhelper",new CommandInfo((_,_)=>companionHelperWindow.IsOpen=true){HelpMessage="Open Helper: FollowThem, quest assistance, quest library and recorder."});
+        companionFollowCommand=Commands.AddHandler("/eqfollow",new CommandInfo((_,_)=>companionHelperWindow.IsOpen=true){HelpMessage="Open the standalone FollowThem / Helper window."});
         questToolsCommand=Commands.AddHandler("/eqquests",new CommandInfo((_,_)=>questToolsWindow.IsOpen=true){HelpMessage="Quest catalogue, Questionable integration and quest recorder."});
         var path=Path.Combine(Path.GetDirectoryName(typeof(Plugin).Assembly.Location)!,"questionable-quests.json");
         questCatalogueTask=Task.Run(()=>JsonSerializer.Deserialize<QuestCatalogueRow[]>(File.ReadAllText(path))??[]);
@@ -33,7 +37,9 @@ public sealed partial class Plugin
         StopQuestRecording("Plugin unloaded");
         DisposeQuestRecorder();
         if(questToolsCommand)Commands.RemoveHandler("/eqquests");
-        windows.RemoveWindow(questToolsWindow);
+        windows.RemoveWindow(questToolsWindow);windows.RemoveWindow(companionHelperWindow);
+        if(companionHelperCommand)Commands.RemoveHandler("/eqhelper");
+        if(companionFollowCommand)Commands.RemoveHandler("/eqfollow");
     }
     private bool QuestToolsOtherOperation()=>followSession.Armed||TraderRunning||gardenCareRun?.Running==true||
         gearRouting||armoireRunning||retrievalRun.Running||organizeRunning||sellerRun.Running||keyboundBuying||keyboundEnabled;
@@ -123,6 +129,14 @@ public sealed partial class Plugin
             if(ImGui.BeginTabItem("Recorder")){DrawQuestRecorder();ImGui.EndTabItem();}
             ImGui.EndTabBar();
         }
+    }
+    private sealed class CompanionHelperWindow:Window
+    {
+        private readonly Plugin p;
+        internal CompanionHelperWindow(Plugin p):base("Helper · Equinox###EquinoxStandaloneHelper"){
+            this.p=p;Size=new(560,480);SizeCondition=ImGuiCond.FirstUseEver;RespectCloseHotkey=false;
+        }
+        public override void Draw()=>p.DrawHelperWindowBody();
     }
     private sealed class QuestToolsWindow:Window
     {

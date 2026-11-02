@@ -19,7 +19,12 @@ public sealed partial class Plugin
     private string helperStopConfirm="";
     private void DrawHelperPanel()
     {
-        if(ImGui.Button("Quest library & recorder"))questToolsWindow.IsOpen=true;
+        ImGui.TextWrapped("FollowThem, quest assistance and the quest library now have their own Helper window.");
+        if(ImGui.Button("Open Helper / FollowThem"))companionHelperWindow.IsOpen=true;
+        ImGui.TextDisabled("/eqhelper · /eqfollow · /eqquests");
+    }
+    private void DrawHelperWindowBody()
+    {
         if(ImGui.BeginTabBar("helper-sections")){
             if(ImGui.BeginTabItem("FollowThem")){if(ImGui.BeginChild("FollowThemBody",Vector2.Zero,false))DrawFollowThem();ImGui.EndChild();ImGui.EndTabItem();}
             if(ImGui.BeginTabItem("Quest Helper")){
@@ -52,6 +57,7 @@ public sealed partial class Plugin
                 }
                 ImGui.EndChild();ImGui.EndTabItem();
             }
+            if(ImGui.BeginTabItem("Quests & recorder")){DrawQuestTools();ImGui.EndTabItem();}
             ImGui.EndTabBar();
         }
     }

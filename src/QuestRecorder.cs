@@ -66,6 +66,15 @@ public sealed partial class Plugin
         if(!questRecorderActive)return;
         RecordQuest("interaction",new {id=obj.BaseId,name=obj.Name.TextValue,kind=obj.ObjectKind.ToString(),position=RecorderPoint(obj.Position),territory=Client.TerritoryType,world=Player.CurrentWorld.RowId});
     }
+    private unsafe object[] QuestRecorderBags(){
+        var manager=InventoryManager.Instance();if(manager==null)return [];
+        var items=new List<object>();
+        foreach(var type in new[]{InventoryType.Inventory1,InventoryType.Inventory2,InventoryType.Inventory3,InventoryType.Inventory4}){
+            var bag=manager->GetInventoryContainer(type);if(bag==null||!bag->IsLoaded||bag->Items==null||bag->Size>200)continue;
+            for(var i=0;i<bag->Size;i++)if(bag->Items[i].ItemId!=0)items.Add(new {container=type.ToString(),slot=i,item=bag->Items[i].ItemId,quantity=bag->Items[i].Quantity});
+        }
+        return items.ToArray();
+    }
     private static object RecorderPoint(Vector3 p)=>new {x=p.X,y=p.Y,z=p.Z};
     private void StartQuestRecording(){
         if(!Player.IsLoaded){questRecorderStatus="Log into the character first.";return;}
@@ -84,11 +93,11 @@ public sealed partial class Plugin
         if(questRecorded.Count<12000)questRecorded.Add(new(DateTimeOffset.UtcNow,"stop",new {reason}));questRecorderActive=false;questRecorderStatus=reason;
         if(!questRecorderHookEnabled&&!ObservingGardens)callbackHook?.Disable();
         if(!questRecorderIntHookEnabled&&!ObservingGardens)callbackIntHook?.Disable();
-        ExportQuestRecording();
+        ExportQuestRecording(true);
     }
-    private void ExportQuestRecording(){
+    private void ExportQuestRecording(bool final=false){
         if(questRecorded.Count==0)return;
-        if(questRecorderWrite!=null){questRecorderSaveAgain=true;return;}
+        if(questRecorderWrite!=null&&!final){questRecorderSaveAgain=true;return;}
         var path=Path.Combine(Pi.GetPluginConfigDirectory(),"exports","quest-"+questRecorderStarted.ToString("yyyyMMdd-HHmmss")+"-"+Guid.NewGuid().ToString("N")[..8]+".json");
         var data=new {format="equinox-quest-recording-v1",version=typeof(Plugin).Assembly.GetName().Version?.ToString(),started=questRecorderStarted,
             label=questRecorderLabel,recording=questRecorderActive,limitations="Observed UI events and state, not an executable quest path. Arbitrary text input and private chat are excluded. Some native actions have no callback.",events=questRecorded.ToArray()};
@@ -120,7 +129,7 @@ public sealed partial class Plugin
                 foreach(ref var q in qm->NormalQuests)if(q.QuestId!=0)questRecordedIds.Add(q.QuestId);
                 var quests=questRecordedIds.Order().Select(id=>new {id,sheetId=65536+id,name=QuestTitle(id),accepted=qm->IsQuestAccepted(id),sequence=QuestManager.GetQuestSequence(id),complete=QuestManager.IsQuestComplete(id)}).ToArray();
                 var target=Targets.Target;
-                var state=new {quests,scene=HelperScene(),target=target==null?null:new {id=target.BaseId,name=target.Name.TextValue,kind=target.ObjectKind.ToString(),position=RecorderPoint(target.Position)},
+                var state=new {quests,bags=QuestRecorderBags(),scene=HelperScene(),target=target==null?null:new {id=target.BaseId,name=target.Name.TextValue,kind=target.ObjectKind.ToString(),position=RecorderPoint(target.Position)},
                     conditions=Enum.GetValues<Dalamud.Game.ClientState.Conditions.ConditionFlag>().Where(c=>(int)c>0&&(int)c<100&&Conditions[c]).Select(c=>c.ToString()).ToArray()};
                 var fingerprint=JsonSerializer.Serialize(state);
                 if(fingerprint!=questRecorderState){RecordQuest("state",state);questRecorderState=fingerprint;}
