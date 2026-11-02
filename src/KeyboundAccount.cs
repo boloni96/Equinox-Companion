@@ -133,6 +133,7 @@ public sealed partial class Plugin
                 EventAccountStage("accountcheck","Waiting before switching to "+target.Name+". The login service-account slot is not known. Log into that character manually in this client; this routine resumes after login.");
                 return;
             }
+            if(eventAccountStage=="accountcheck")EventAccountStage("character","Account check resolved · preparing "+target.Name);
             if(current.Id!=target.Id){
                 if(eventAccountStage=="switch")throw new InvalidOperationException("Character switch stopped before the selected character logged in. "+characterTravelStatus);
                 EventAccountStage("switch","Switching to "+target.Name);
