@@ -144,6 +144,26 @@ public sealed partial class Plugin
             if(now>=questRecorderCheckpoint){questRecorderCheckpoint=now.AddSeconds(30);ExportQuestRecording();}
         }catch(Exception e){questRecorderStatus="Observation unavailable: "+e.GetType().Name;Log.Debug(e,"Quest recorder observation");}
     }
+    private void DrawQuestCutsceneControls(){
+        if(!questRecorderActive&&!nativeEventActive&&!eventAccountActive&&independentQuestId==0)return;
+        var viewport=ImGui.GetMainViewport();
+        ImGui.SetNextWindowPos(viewport.Pos+new Vector2(20,80),ImGuiCond.FirstUseEver);
+        ImGui.SetNextWindowSize(new Vector2(290,0),ImGuiCond.Always);
+        if(ImGui.Begin("Quest controls · Equinox",ImGuiWindowFlags.AlwaysAutoResize|ImGuiWindowFlags.NoFocusOnAppearing|ImGuiWindowFlags.NoNavFocus)){
+            if(questRecorderActive){
+                ImGui.TextUnformatted("Recording · cutscene controls");
+                if(ImGui.Button("Mark problem here"))RecordQuest("problem",new {message="User marked a problem during cutscene",territory=Client.TerritoryType,scene=HelperScene()});
+                ImGui.SameLine();if(ImGui.Button("Stop & export"))StopQuestRecording("Stopped by you.");
+            }else{
+                ImGui.TextWrapped(eventAccountActive?eventAccountStatus:nativeEventActive?nativeEventStatus:questToolsStatus);
+                if(ImGui.Button("Stop helper")){
+                    if(eventAccountActive)StopEventAccount("Stopped by you.");
+                    else if(nativeEventActive)StopNativeEventQuest("Stopped by you.");
+                    else StopIndependentQuest("Stopped by you.");
+                }
+            }
+        }ImGui.End();
+    }
     private void DrawQuestRecorder(){
         ImGui.TextWrapped("Records quest progress, NPC interactions, movement, window changes and numeric UI actions. Includes special event windows. No automatic clicking or replay.");
         ImGui.BeginDisabled(questRecorderActive);ImGui.InputText("Label",ref questRecorderLabel,100);ImGui.EndDisabled();

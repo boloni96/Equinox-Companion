@@ -8,7 +8,7 @@ using FFXIVClientStructs.FFXIV.Component.GUI;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
-    private bool nativeEventActive,nativeEventFromAccount,nativeEventSceneOwned,nativeEventAcceptSent,nativeEventResultSent,nativeEventYesSent,nativeEventPromptLoaded;
+    private bool nativeEventActive,nativeEventFromAccount,nativeEventSceneOwned,nativeEventAcceptSent,nativeEventResultSent,nativeEventYesSent,nativeEventPromptLoaded,nativeEventKeyboardChecked;
     private ulong nativeEventCharacter;
     private uint nativeEventNpc;
     private NativeEventStep nativeEventStep;
@@ -25,7 +25,7 @@ public sealed partial class Plugin
             StopIndependentWalk(resetFailure:true);nativeEventActive=true;nativeEventFromAccount=fromAccount;nativeEventCharacter=Player.ContentId;
             nativeEventStep=NativeEventStep.Unsupported;nativeEventStepAt=DateTimeOffset.UtcNow;nativeEventNext=nativeEventActionAt=nativeEventUnavailableAt=default;
             nativeEventNpc=0;nativeEventSceneOwned=nativeEventAcceptSent=nativeEventResultSent=nativeEventYesSent=false;
-            nativeEventPrompt="";nativeEventPromptLoaded=false;eventSaucerTravelAt=default;
+            nativeEventPrompt="";nativeEventPromptLoaded=nativeEventKeyboardChecked=false;eventSaucerTravelAt=default;
             nativeEventStatus="Starting Keyward Bound with Companion";return true;
         }catch(Exception e){nativeEventStatus="Not started: "+e.Message;return false;}
     }
@@ -97,8 +97,14 @@ public sealed partial class Plugin
             }
             if(nativeEventStep==NativeEventStep.Complete&&nativeEventNpc==1058752&&!nativeEventYesSent&&addon!=null&&addon->PromptText!=null){
                 if(!nativeEventPromptLoaded){nativeEventPromptLoaded=true;nativeEventPrompt=ReadNativeEventPrompt();}
-                if(NativeEventPolicy.Prompt(nativeEventPrompt,TravelMenuText(addon->PromptText->NodeText.StringPtr)??"")&&NativeEventButton((AtkUnitBase*)addon,addon->YesButton)){
-                    nativeEventYesSent=true;nativeEventActionAt=now;return true;
+                if(NativeEventPolicy.KeyboardConfirmation(nativeEventPrompt,TravelMenuText(addon->PromptText->NodeText.StringPtr)??"")){
+                    var check=(AtkComponentButton*)addon->ConfirmCheckBox;
+                    if(check!=null&&!check->IsChecked){
+                        if(nativeEventKeyboardChecked)return true;
+                        var click=KeyboundButtonEvent(check);if(click==null)return true;
+                        nativeEventKeyboardChecked=true;check->SetChecked(true);SendKeyboundButtonEvent((AtkUnitBase*)addon,click);nativeEventActionAt=now;return true;
+                    }
+                    if(NativeEventButton((AtkUnitBase*)addon,addon->YesButton)){nativeEventYesSent=true;nativeEventActionAt=now;}return true;
                 }
             }
             nativeEventStatus="Unrecognized quest confirmation · choose manually to continue";return true;
@@ -132,7 +138,7 @@ public sealed partial class Plugin
             if(Conditions[ConditionFlag.BoundByDuty]||Conditions[ConditionFlag.InDutyQueue])throw new InvalidOperationException("Duty or queue detected; complete it manually.");
             var manager=QuestManager.Instance();if(manager==null)return;
             var step=NativeEventPolicy.Step(QuestManager.IsQuestComplete(NativeEventPolicy.Quest),manager->IsQuestAccepted(NativeEventPolicy.Quest),QuestManager.GetQuestSequence(NativeEventPolicy.Quest));
-            if(step!=nativeEventStep){CancelEventAccountMovement();nativeEventStep=step;nativeEventStepAt=now;}
+            if(step!=nativeEventStep){CancelEventAccountMovement();nativeEventStep=step;nativeEventStepAt=now;nativeEventYesSent=nativeEventKeyboardChecked=false;}
             if(now-nativeEventStepAt>TimeSpan.FromMinutes(5))throw new InvalidOperationException("No quest progress for five minutes. "+nativeEventStatus);
             if(step==NativeEventStep.Complete&&Client.TerritoryType!=1360){if(!EventAccountSquare(now))nativeEventStatus=eventAccountStatus;return;}
             if(NativeEventDialogue(now))return;
@@ -153,7 +159,9 @@ public sealed partial class Plugin
                     if(Client.TerritoryType!=1360){if(!EventAccountSquare(now))nativeEventStatus=eventAccountStatus;return;}
                     NativeEventInteract(1058752,new(-13.6017f,.332853f,-28.1275f),now);return;
                 case NativeEventStep.Wait:nativeEventStatus="Waiting for quest acceptance to update";return;
-                default:throw new InvalidOperationException("Unsupported Keyward Bound quest sequence. Use the recorder to capture this step.");
+                default:
+                    if(now-nativeEventStepAt<TimeSpan.FromSeconds(15)){nativeEventStatus="Waiting for event quest progress to settle · sequence "+QuestManager.GetQuestSequence(NativeEventPolicy.Quest);return;}
+                    throw new InvalidOperationException("Unsupported Keyward Bound quest sequence "+QuestManager.GetQuestSequence(NativeEventPolicy.Quest)+". Use the recorder to capture this step.");
             }
         }catch(Exception e){StopNativeEventQuest("Stopped: "+e.Message);}
     }

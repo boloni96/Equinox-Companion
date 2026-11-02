@@ -37,7 +37,7 @@ public sealed partial class Plugin
         }
         ImGui.EndDisabled();
         ImGui.SameLine();DrawKeyboundHelp();
-        ImGui.SameLine();ImGui.TextUnformatted(eventAccountActive?"Account routine":keyboundBuying?(keyboundUsingRewards?"Using rewards":"Buying rewards"):keyboundEnabled?"Running":"Stopped");
+        ImGui.SameLine();ImGui.TextUnformatted(eventAccountActive?"Account routine":keyboundBuying?(keyboundUsingRewards?"Using rewards":"Buying rewards"):keyboundEnabled?(keyboundStatus.StartsWith("Paused:",StringComparison.Ordinal)?"Paused":"Running"):"Stopped");
         // Reserve the same space for short phrases and long waiting/error text.
         // Content scrolls here; neither the window nor the controls below jump.
         if(ImGui.BeginChild("Keybound running status",new System.Numerics.Vector2(0,ImGui.GetTextLineHeightWithSpacing()*4.5f),true)){
