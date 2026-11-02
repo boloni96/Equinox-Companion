@@ -1,25 +1,28 @@
-# Independent quest and navigation work
+# Independent quest execution and local collision navigation
 
-Goal: execute imported quests in Companion without installing Questionable or vnavmesh. Use an internal collision-derived 3D navigation system; retain aethernet travel. Duties and solo duties remain manual.
+Companion now bundles the complete pinned quest-data pack and executes supported steps internally. The runtime does not call or load Questionable or vnavmesh. Lifestream remains the existing integration for aethernet/world/account travel.
 
-## Implemented on this development branch
+## Implemented
 
-- Pinned upstream source as a data-source submodule at `f737a0865627bc6fa70fb7024ab403b3e4881736`.
-- Lossless deterministic importer: 4,388 routes, all 4,392 QuestPaths JSON files, original authors and AGPL-3.0 licence. No Questionable executable is built or loaded by this importer/reader.
-- Independent route reader verifies per-route hashes and retains the entire JSON, including unknown fields. Identifiers are strings so custom routes are not discarded; duplicate IDs remain selectable by source path.
-- Missing-handler checks explicitly distinguish imported data from executable support.
-- Independent A* search over connected 3D walkable cells and shared portals, including one-way connections, cancellation and bounded search. Disconnected floors return no route. This component consumes validated geometry; it does not generate it.
-- CI verifies every source JSON byte, deterministic packing, route reading, aethernet preservation, unsupported actions, corridor routing, disconnected floors, cancellation and plugin compilation.
+- Lossless, deterministic import of 4,388 routes and all 4,392 QuestPaths JSON files from `f737a0865627bc6fa70fb7024ab403b3e4881736`. Original bytes, author fields, licence and symbolic travel/emote source mappings are preserved. Corresponding source is the pinned `vendor/questionable-data-source` submodule.
+- Standalone route reader with per-route hashes and unknown fields preserved.
+- Live FFXIV BGCollision queries for ground, floor normals, headroom, body clearance and supported edges. Native queries stay on the framework thread.
+- Incremental local A* search, budgeted per framework update. Separate heights are separate cells; every edge is checked. Maximum range 160 yalms, bounded search, no straight-line fallback. Flying and mounted movement are not supported.
+- Companion movement through UI-filtered forward input, with character/camera heading updates. Input leases expire after 180 ms unless renewed. Manual movement, Stop, unload, dialogue, text entry, loading, combat and duty release or suppress the synthetic input. Body checks are refreshed at each waypoint and at most every 150 ms between waypoints. Stalls allow two new route searches before a clear stop.
+- Event quest/account NPC approaches use this walker rather than Lifestream.MoveEx.
+- General quest execution handles basic ground approaches, NPC interactions, accept/complete, verified Talk, localized matching Yes/No and unprompted list answers, quest item use, emotes, localized Say phrases, and completion variable flags.
+- Quest-line continuation and other accepted quests now use the independent runner and bundled route review. Unsupported steps remain pending with a reason, allowing another accepted quest. Duties and solo duties are manual.
+- Reports include navigation state, waypoint, goal, search count, replan count and quest sequence/step/action state.
+- CI tests full data preservation, deterministic packing, independent reading, travel/emote mapping, bounded/cancellable path search, collision corridor routing, disconnected floors, unknown-condition rejection and quest-variable matching. Full plugin compile also passes.
 
-## Still required before release
+## Practical limits and live validation
 
-1. FFXIV scene/collision extraction into immutable geometry on the game thread, with mesh generation off-thread and territory/version-aware caching.
-2. Clearance, slope, step-height and floor separation during mesh generation; no straight-line fallback through unverified geometry.
-3. Internal movement controller with progress observation, manual interruption, arrival checks, bounded recovery and stop reasons. Existing Lifestream movement is not an independent movement implementation.
-4. Quest executor adapters for conditions, quest variables, dialogue choices, interactions, item actions, travel and sequence completion. Reject unsupported semantics before issuing an action; duties stay pending for manual play.
-5. Connect the independent book/executor to quest library and accepted-quest continuation, replacing Questionable IPC only when supported.
-6. Live validation in Gold Saucer and Keybound Square, including aethernet, walls/stairs, zoning, dialogues, cancellation and account reward flow.
+This is local collision-sampled ground navigation, not a prebuilt full-zone mesh. It can fail in narrow passages, steep surfaces, long routes, unloaded collision regions and unusual geometry. Replanning is bounded. Its frame budget is checked between edge queries; an individual native raycast cannot be preempted.
 
-The released 0.5.1.379 general quest runner still uses Questionable IPC. This branch is a development foundation, not a completed replacement and not an installer release. No game geometry extraction or autonomous movement is claimed as implemented here.
+The entire catalogue is imported, but not every quest is automated. Unsupported conditions (including complex required-variable/skip predicates), combat, crafting, gathering, fishing, jumps, special UI minigames and other unimplemented interaction types are left pending. List choices with an additional prompt require manual input. Interactions are sent once and await observed progress; they are not blindly retried.
 
-Upstream: https://github.com/PunishXIV/Questionable. Original route JSON is retained without modifications; its licence and author fields travel with the generated data pack. No vnavmesh source code is copied.
+Cross-zone steps need a supported unlocked aetheryte shortcut or manual travel. Aethernet integration is used only beside an available crystal. The dedicated Saucer event route retains its existing teleport/aethernet/entrance handling.
+
+Automated build/test success does not establish in-game route correctness. Gold Saucer and Keybound Square still need live checks for walls/stairs, input steering, zoning, dialogue ownership, manual interruption, completion and the reward/account flow. No live success is claimed from synthetic collision tests. Manual recordings remain observations, not automatic route replay.
+
+Upstream data: https://github.com/PunishXIV/Questionable (AGPL-3.0, included in the data pack). No vnavmesh source is copied. Collision APIs are supplied by FFXIVClientStructs; the runtime and planner here are independently implemented.

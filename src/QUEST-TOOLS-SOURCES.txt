@@ -1,28 +1,26 @@
-Quest catalogue source: https://github.com/PunishXIV/Questionable
-Snapshot commit: f737a0865627bc6fa70fb7024ab403b3e4881736
-The catalogue indexes numeric quest IDs, game titles and directory categories.
-General quest execution uses the optional installed Questionable plugin through its public IPC;
-no Questionable executable code or authored quest-path JSON is bundled.
-Questionable project license: AGPL-3.0.
+Quest data source: https://github.com/PunishXIV/Questionable
+Pinned commit: f737a0865627bc6fa70fb7024ab403b3e4881736
 
-Keyward Bound route reference:
-QuestPaths/2.x - A Realm Reborn/Other Quests/Special Quests/Collaboration Quests/5466_Keyward Bound.json
-Authors: alydev, OmegaJackie. Last checked upstream: 2026-10-29.
-Game destination used for return entry: W'zazanh (1058754), territory 144,
-position 0.804425, 3.98254, 61.2062; destination Keybound Square (1360).
-Keyward Bound now uses an independently written Companion state machine, not Questionable IPC.
-Factual route identifiers also used: catlike mammet 1058756 (-33.7745,0,45.1991),
-magitype master 1058752 (-13.6017,0.332853,-28.1275) in territory 1360;
-quest sequences 1 and 255; localized confirmation key TEXT_SUBGSC801_05466_YESNOCHECK_000_029.
-Gold Saucer aethernet IDs 62/63 and crystal positions checked against Questionable's
-EAetheryteLocation and AetheryteData at the same snapshot. These are game data facts.
-The NPC legs are direct waypoint approaches, not an obstacle-avoiding navigation map.
-The current game's two-column quest text sheets supply the localized confirmation text.
+quest-routes.zip contains all 4,392 original QuestPaths JSON files, including 4,388
+route definitions. Original author fields and JSON bytes are retained. The pack
+includes the upstream AGPL-3.0 LICENSE, NOTICE and source mapping files used to
+resolve symbolic aetheryte and emote identifiers. Complete corresponding upstream
+source is pinned as vendor/questionable-data-source in this repository.
 
-Public integration contracts inspected:
-Questionable/External/QuestionableIpc.cs at the snapshot above.
-https://github.com/NightmareXIV/Lifestream/blob/main/Lifestream/IPC/IPCProvider.cs
-MoveEx and AethernetTeleportById supply movement without requesting navmesh paths.
-Lifestream travel and account login reuse Equinox's existing integration.
-Recorder exports are observations for review, not automatically executable paths.
+Companion's reader, planner and step runner are independently implemented.
+The runner does not load or call the Questionable plugin. Data import is not a
+claim that every interaction is automated: unsupported steps and conditions are
+reported and left pending. Duties and solo duties remain manual.
 
+Local navigation samples FFXIV's live BGCollisionModule through the public
+FFXIVClientStructs API. A bounded incremental search connects ground positions
+only after checking support, step height and body clearance. The movement
+controller uses the game's UI-filtered movement input and releases its input on
+stop, dialogue, user movement, zoning or deadline. No vnavmesh code is copied,
+and neither vnavmesh nor Questionable is required. Live route validation is still
+necessary; this is local ground navigation, not a full-zone or flying mesh.
+
+Lifestream remains the existing integration for aethernet/world/account travel.
+Keyward Bound's dedicated quest runner and reward/account workflow use Companion
+local navigation. The current game's quest text sheets supply localized prompts.
+Manual recorder exports remain observations for review, not automatic replay.

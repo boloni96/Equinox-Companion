@@ -7,6 +7,10 @@ namespace EquinoxCompanion;
 internal sealed class GameWalkingCollision:IWalkingCollision
 {
     private const float Radius=.32f,Height=1.85f;
+    internal static unsafe bool Available(){
+        var f=GameFramework.Instance();var c=f==null?null:f->BGCollisionModule;
+        return c!=null&&!c->ShuttingDown&&c->LoadInProgressCounter==0;
+    }
     private static unsafe void Ready()
     {
         var f=GameFramework.Instance();var c=f==null?null:f->BGCollisionModule;
@@ -19,7 +23,7 @@ internal sealed class GameWalkingCollision:IWalkingCollision
         if(!Hit(near+new Vector3(0,.7f,0),-Vector3.UnitY,1.5f,out var hit))return false;
         // Triangle cross product is available even when a collider omits its normal.
         var normal=hit.Normal;if(normal.LengthSquared()<.1f)normal=Vector3.Cross(hit.V2-hit.V1,hit.V3-hit.V1);
-        if(normal.LengthSquared()<.0001f||MathF.Abs(Vector3.Normalize(normal).Y)<.65f)return false;
+        if(normal.LengthSquared()<.0001f||Vector3.Normalize(normal).Y<.65f)return false;
         if(hit.Point.Y-near.Y>.65f||near.Y-hit.Point.Y>.7f)return false;
         ground=hit.Point;
         if(Hit(ground+new Vector3(0,.12f,0),Vector3.UnitY,Height-.12f,out _))return false;

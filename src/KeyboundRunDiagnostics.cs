@@ -25,16 +25,16 @@ public sealed partial class Plugin
         try{keyboundTraceWriter?.Flush(keyboundRunHistory.Snapshot());}
         catch(Exception e){Log.Warning(e,"Keybound history could not flush");}
     }
-    private void TraceKeyboundRun(string run,string kind,string status,string source="system"){
+    private void TraceKeyboundRun(string run,string kind,string status,string source="system",bool includeRewardState=true){
         try{
-            var item=keyboundUsePending??keyboundBuyItem;int? held=null,unlocked=null;
+            var item=includeRewardState?(keyboundUsePending??keyboundBuyItem):null;int? held=null,unlocked=null;
             if(item!=null&&Player.IsLoaded){try{held=KeyboundBagCount(item.Item);unlocked=KeyboundUnlockState(item.Item);}catch{/* Loading is recorded as unknown. */}}
             var names=new[]{"SelectYesno","Talk","SelectString","SelectIconString","ShopExchangeCurrency","ShopExchangeItem","JournalResult","CharaCardDesignSetting","BannerEditor","BannerList"};
             var windows=names.Where(VisibleFollowAddon).ToArray();
             var flags=new[]{ConditionFlag.OccupiedInEvent,ConditionFlag.OccupiedInQuestEvent,ConditionFlag.Casting,ConditionFlag.Mounted,ConditionFlag.BetweenAreas,ConditionFlag.BetweenAreas51,ConditionFlag.InCombat}.Where(c=>Conditions[c]).Select(c=>c.ToString()).ToArray();
             keyboundRunHistory.Add(new(DateTimeOffset.UtcNow,keyboundTraceSession,run,source,kind,Player.IsLoaded?Player.ContentId:0,
-                status.Length>1500?status[..1500]:status,item?.Item,item?.Name,keyboundUsePending!=null?keyboundUseBefore:null,held,unlocked,
-                keyboundUsingRewards?keyboundUseDeadline:null,windows,flags));
+                status.Length>1500?status[..1500]:status,item?.Item,item?.Name,includeRewardState&&keyboundUsePending!=null?keyboundUseBefore:null,held,unlocked,
+                includeRewardState&&keyboundUsingRewards?keyboundUseDeadline:null,windows,flags));
             keyboundTraceWriter?.Enqueue(keyboundRunHistory.Snapshot());
         }catch(Exception e){keyboundTraceError=e.GetType().Name;Log.Debug(e,"Keybound history observation unavailable");}
     }

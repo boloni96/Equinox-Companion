@@ -15,6 +15,7 @@ public sealed partial class Plugin
     private ulong independentQuestCharacter;
     private bool independentStepSent,independentScene,independentSceneSeen,independentDeferred,independentTravelSent,independentAethernetSent;
     private DateTimeOffset independentQuestNext,independentStepSince,independentActionAt;
+    private string independentQuestRun="";
     private string independentQuestBookError="",independentWorkBefore="";
     private bool QuestProviderRunning()=>independentQuestId!=0;
     private void InitializeIndependentQuests(string? directory)
@@ -27,16 +28,21 @@ public sealed partial class Plugin
             if(independentBook==null)throw new InvalidOperationException(independentQuestBookError.Length>0?independentQuestBookError:"Quest data is still loading.");
             if(!Player.IsLoaded||QuestManager.Instance()==null)throw new InvalidOperationException("Log in first.");
             if(independentQuestId!=0||nativeEventActive||QuestToolsOtherOperation()||questRecorderActive)throw new InvalidOperationException("Stop the other helper first.");
-            if(QuestConversationVisible()||Conditions[ConditionFlag.BoundByDuty]||Conditions[ConditionFlag.InDutyQueue])throw new InvalidOperationException("Finish the open conversation or duty first.");
+            if(QuestConversationVisible()||VisibleFollowAddon("SelectYesno")||Conditions[ConditionFlag.BoundByDuty]||Conditions[ConditionFlag.InDutyQueue])throw new InvalidOperationException("Finish the open conversation or duty first.");
             var routes=independentBook.Find(id.ToString());if(routes.Length!=1)throw new InvalidOperationException("Quest route missing or ambiguous.");
             var route=routes[0];if(route.Definition.TryGetProperty("Disabled",out var disabled)&&disabled.ValueKind==JsonValueKind.True)throw new InvalidOperationException("Upstream marks this route disabled.");
+            foreach(var property in route.Definition.EnumerateObject())
+                if(property.Name is not ("$schema" or "$" or "Author" or "LastChecked" or "Comment" or "Disabled" or "Interruptible" or "QuestSequence")&&IndependentStepPolicy.Meaningful(property.Value))
+                    throw new InvalidOperationException("Unknown route condition: "+property.Name);
             independentRoute=route;independentQuestId=id;independentQuestCharacter=Player.ContentId;independentSequence=-1;independentDeferred=false;independentQuestNext=default;
+            independentQuestRun=Guid.NewGuid().ToString("N");TraceKeyboundRun(independentQuestRun,"quest-started",$"Quest {id}","companion-quest",false);
             StopIndependentWalk();questToolsStatus="Companion starting: "+QuestTitle(id);return true;
         }catch(Exception e){questToolsStatus="Not started: "+e.Message;return false;}
     }
     private void StopIndependentQuest(string reason,bool deferred=false)
     {
         if(independentQuestId==0)return;
+        TraceKeyboundRun(independentQuestRun,"quest-stopped",$"Quest {independentQuestId}, sequence {independentSequence}, step {independentStep}: {reason}","companion-quest",false);
         independentQuestId=0;independentRoute=null;independentScene=false;independentDeferred=deferred;
         StopIndependentWalk(reason);CancelIndependentQuestTravel();questToolsStatus=reason;
     }
@@ -110,6 +116,7 @@ public sealed partial class Plugin
             if(kind is "AcceptQuest" or "CompleteQuest" or "Interact"){
                 if(npc==null){questToolsStatus+=" · waiting for target NPC";return;}
                 var system=TargetSystem.Instance();if(system==null)return;
+                TraceKeyboundRun(independentQuestRun,"quest-interaction-requested",$"{kind}: NPC {id}, sequence {sequence}, step {independentStep}","companion-quest",false);
                 independentNpc=id;Targets.Target=npc;independentActionAt=now;independentStepSent=true;independentWorkBefore=Convert.ToHexString(IndependentWork());
                 helperReplaying=true;try{system->InteractWithObject((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)npc.Address,false);}finally{helperReplaying=false;}
                 return;
@@ -117,6 +124,7 @@ public sealed partial class Plugin
             if(id!=0&&npc==null){questToolsStatus+=" · waiting for action target";return;}
             if(npc!=null)Targets.Target=npc;
             independentWorkBefore=Convert.ToHexString(IndependentWork());independentActionAt=now;
+            TraceKeyboundRun(independentQuestRun,"quest-action-requested",$"{kind}, sequence {sequence}, step {independentStep}","companion-quest",false);
             if(!DispatchIndependentQuestAction(step,kind,npc?.GameObjectId??0xE0000000))throw new InvalidOperationException("Game refused quest action: "+kind);
             independentStepSent=true;
         }catch(Exception e){StopIndependentQuest("Stopped: "+e.Message);Log.Warning(e,"Independent quest stopped");}
