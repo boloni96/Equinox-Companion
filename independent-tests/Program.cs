@@ -44,6 +44,22 @@ Check(!WalkingInputLease.CanSupplyGround(0,-1,0),"never replace manual backward 
 Check(!WalkingInputLease.CanSupplyGround(0,0,.1f),"never replace manual turn input");
 Check(!WalkingInputLease.CanSupplyGround(float.NaN,0,0),"invalid movement output fails closed");
 Console.WriteLine("Movement lease timing, cancellation and manual priority passed.");
+var forwardAxes=WalkingSteering.Axes(Vector3.Zero,new(0,0,5),0);
+Check(Vector2.Distance(forwardAxes,new(0,1))<.001f,"forward steering");
+Check(Vector2.Distance(WalkingSteering.Axes(Vector3.Zero,new(5,0,0),MathF.PI/2),new(0,1))<.001f,"relative heading steering");
+var corridor=new[]{Vector3.Zero,new Vector3(0,0,1),new Vector3(.3f,0,2),new Vector3(0,0,3)};
+Check(WalkingSteering.LookAhead(Vector3.Zero,corridor,1,(_,_)=>true)==2,"bounded lookahead removes zigzag");
+Check(WalkingSteering.LookAhead(Vector3.Zero,corridor,1,(_,_)=>false)==1,"lookahead cannot cut blocked corner");
+Console.WriteLine("Relative movement and collision-approved lookahead passed.");
+var phases=new NavigationPhaseTimer();phases.Begin(frame);
+Check(!phases.Expired(frame.AddSeconds(89.6)),"planning has own time budget");
+phases.SetPlanning(false,frame.AddSeconds(89.6));
+Check(!phases.Expired(frame.AddSeconds(94)),"long planning does not consume walking budget");
+Check(phases.Expired(frame.AddSeconds(180)),"walking is still bounded");
+var avoided=new AvoidStalledTargets(collision,new[]{new Vector3(0,0,1)});
+Check(!avoided.Traverse(Vector3.Zero,new(0,0,1)),"retry rejects stalled target");
+Check(avoided.Traverse(Vector3.Zero,new(-1,0,0)),"retry may leave along another clear edge");
+Console.WriteLine("Separate phase deadlines and blocked-target retry passed.");
 sealed class TestCollision:IWalkingCollision
 {
     public bool Ground(Vector3 near,out Vector3 ground){ground=new(near.X,0,near.Z);return MathF.Abs(near.Y)<1&&MathF.Abs(near.X)<=8&&MathF.Abs(near.Z)<=8;}

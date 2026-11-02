@@ -131,7 +131,7 @@ public sealed partial class Plugin
             if(now-nativeEventStepAt>TimeSpan.FromMinutes(5))throw new InvalidOperationException("No quest progress for five minutes. "+nativeEventStatus);
             if(step==NativeEventStep.Complete&&Client.TerritoryType!=1360){if(!EventAccountSquare(now))nativeEventStatus=eventAccountStatus;return;}
             if(NativeEventDialogue(now))return;
-            if(Conditions[ConditionFlag.OccupiedInEvent]||Conditions[ConditionFlag.WatchingCutscene]||Conditions[ConditionFlag.WatchingCutscene78]){nativeEventStatus="Waiting for the quest scene to finish";return;}
+            if(Conditions[ConditionFlag.OccupiedInEvent]||Conditions[ConditionFlag.OccupiedInQuestEvent]||Conditions[ConditionFlag.WatchingCutscene]||Conditions[ConditionFlag.WatchingCutscene78]){nativeEventStatus="Waiting for the quest scene to finish";return;}
             switch(step){
                 case NativeEventStep.Finished:StopNativeEventQuest("Keyward Bound completed · rewards are checked separately.");return;
                 case NativeEventStep.Accept:
@@ -141,7 +141,7 @@ public sealed partial class Plugin
                 case NativeEventStep.EnterSquare:
                     nativeEventStatus="Keyward Bound · entering Keybound Square";
                     if(Client.TerritoryType==1360){nativeEventStatus="Waiting for the quest journal to update after arrival";return;}
-                    if(!EventReachSaucer(now)||!EventReachEntrance(now)){nativeEventStatus=eventAccountStatus;return;}
+                    if(!EventReachSaucer(now)){nativeEventStatus=eventAccountStatus;return;}
                     NativeEventInteract(1058754,new(.804425f,3.98254f,61.2062f),now);return;
                 case NativeEventStep.Complete:
                     nativeEventStatus="Keyward Bound · speaking to the magitype master";

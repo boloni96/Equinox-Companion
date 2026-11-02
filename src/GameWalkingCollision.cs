@@ -6,7 +6,9 @@ namespace EquinoxCompanion;
 // All native queries run on the framework thread. No native pointers enter a worker.
 internal sealed class GameWalkingCollision:IWalkingCollision
 {
-    private const float Radius=.32f,Height=1.85f;
+    private readonly Dictionary<Vector3,(bool Found,Vector3 Ground)>? groundCache;
+    internal GameWalkingCollision(bool cacheGround=false){if(cacheGround)groundCache=new();}
+    private const float Radius=.45f,Height=1.85f;
     internal static unsafe bool Available(){
         var f=GameFramework.Instance();var c=f==null?null:f->BGCollisionModule;
         return c!=null&&!c->ShuttingDown&&c->LoadInProgressCounter==0;
@@ -18,6 +20,13 @@ internal sealed class GameWalkingCollision:IWalkingCollision
     }
     private static bool Hit(Vector3 origin,Vector3 direction,float distance,out RaycastHit hit)=>BGCollisionModule.RaycastMaterialFilter(origin,direction,out hit,distance);
     public bool Ground(Vector3 near,out Vector3 ground)
+    {
+        if(groundCache!=null&&groundCache.TryGetValue(near,out var cached)){ground=cached.Ground;return cached.Found;}
+        var found=ReadGround(near,out ground);
+        if(groundCache!=null&&groundCache.Count<100000)groundCache[near]=(found,ground);
+        return found;
+    }
+    private bool ReadGround(Vector3 near,out Vector3 ground)
     {
         Ready();ground=default;
         if(!Hit(near+new Vector3(0,.7f,0),-Vector3.UnitY,1.5f,out var hit))return false;
@@ -40,10 +49,10 @@ internal sealed class GameWalkingCollision:IWalkingCollision
             var point=Vector3.Lerp(from,to,(float)i/steps);point.Y=previous.Y;
             if(!Ground(point,out var floor)||MathF.Abs(floor.Y-previous.Y)>.45f)return false;
             // Keep both sides supported; don't squeeze along an edge or cut a corner.
-            foreach(var offset in new[]{-side,Vector3.Zero,side})
+            foreach(var offset in (ReadOnlySpan<Vector3>)[-side,Vector3.Zero,side])
             {
                 if(!Ground(floor+offset,out var support)||MathF.Abs(support.Y-floor.Y)>.4f)return false;
-                foreach(var height in new[]{.5f,1.05f,Height})
+                foreach(var height in (ReadOnlySpan<float>)[.2f,.5f,1.05f,Height])
                 {
                     var a=previous+offset+new Vector3(0,height,0);var b=floor+offset+new Vector3(0,height,0);
                     var direction=b-a;var length=direction.Length();
