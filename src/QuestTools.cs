@@ -26,8 +26,15 @@ public sealed partial class Plugin
         companionHelperCommand=Commands.AddHandler("/eqhelper",new CommandInfo((_,_)=>companionHelperWindow.IsOpen=true){HelpMessage="Open Helper: FollowThem, quest assistance, quest library and recorder."});
         companionFollowCommand=Commands.AddHandler("/eqfollow",new CommandInfo((_,_)=>companionHelperWindow.IsOpen=true){HelpMessage="Open the standalone FollowThem / Helper window."});
         questToolsCommand=Commands.AddHandler("/eqquests",new CommandInfo((_,_)=>questToolsWindow.IsOpen=true){HelpMessage="Quest catalogue, Questionable integration and quest recorder."});
-        var path=Path.Combine(Path.GetDirectoryName(typeof(Plugin).Assembly.Location)!,"questionable-quests.json");
-        questCatalogueTask=Task.Run(()=>JsonSerializer.Deserialize<QuestCatalogueRow[]>(File.ReadAllText(path))??[]);
+        // Dalamud can load assemblies from bytes: Assembly.Location is then empty.
+        // Resolve assets from its installation path, and isolate I/O failures from startup.
+        var directory=Pi.AssemblyLocation.DirectoryName;
+        questCatalogueTask=Task.Run(()=>{
+            if(string.IsNullOrWhiteSpace(directory))
+                throw new InvalidOperationException("The plugin installation directory is unavailable.");
+            var path=Path.Combine(directory,"questionable-quests.json");
+            return JsonSerializer.Deserialize<QuestCatalogueRow[]>(File.ReadAllText(path))??[];
+        });
         InitializeQuestRecorder();
     }
     private void DisposeQuestTools()
