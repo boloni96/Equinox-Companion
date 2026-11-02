@@ -19,6 +19,8 @@ public sealed partial class Plugin
     private uint independentTerritory;
     private float independentRange;
     private Vector2 independentAxes;
+    private float independentSpeed=1;
+    private Vector3[]? independentPendingPath;
     private float? independentHeading;
     private DateTimeOffset independentSteeringAt;
     private int independentLastRoutePoints,independentLastExpanded;
@@ -55,6 +57,12 @@ public sealed partial class Plugin
                 independentLease.Revoke();return;
             }
             // Apply direction relative to the current control mode; never rotate the camera.
+            var player=Objects.LocalPlayer;if(player==null||independentHeading is not {} heading)return;
+            var cameras=CameraManager.Instance();var camera=cameras==null?null:(FFXIVClientStructs.FFXIV.Client.Game.Camera*)cameras->GetActiveCamera();
+            if(camera==null)return;
+            var legacy=MarketGameConfig.UiControl.TryGetUInt("MoveMode",out var mode)&&mode==1;
+            var reference=legacy?camera->DirH+MathF.PI:player.Rotation;
+            independentAxes=new(MathF.Sin(heading-reference)*independentSpeed,MathF.Cos(heading-reference)*independentSpeed);
             *left=independentAxes.X;*forward=independentAxes.Y;independentInputOverrides++;independentInputBlock="";
         }catch(Exception e){independentNativeExceptions++;independentInputBlock=e.GetType().Name;independentLease.Revoke();}
     }
@@ -74,7 +82,7 @@ public sealed partial class Plugin
     {
         if(independentSearch!=null||independentPath!=null)TraceKeyboundRun(independentNavigationRun,"navigation-stopped",reason,"companion-navigation",false);
         independentHeading=null;independentMoving=false;independentPulseUntil=default;independentLease.Revoke();independentForwardHook?.Disable();
-        independentSearch=null;independentPath=null;independentArrived=false;independentWalkStatus=reason;independentWalkFailure="";
+        independentSearch=null;independentPath=null;independentPendingPath=null;independentArrived=false;independentWalkStatus=reason;independentWalkFailure="";
         if(resetFailure)independentLastWalkFailure="";
     }
     private bool IndependentWalk(Vector3 destination,float range,DateTimeOffset now)
@@ -97,8 +105,13 @@ public sealed partial class Plugin
         independentGoal=destination;independentRange=range;independentCharacter=Player.ContentId;independentTerritory=Client.TerritoryType;
         independentWalkFailure="";independentArrived=false;independentReplans=0;independentSince=independentPlanningSince=independentProgressAt=now;
         independentPrevious=independentLastProgress=self.Position;
-        independentSearch=CreateIndependentSearch(self.Position,destination,range);
-        independentWalkStatus="Checking collision geometry and finding a route";return false;
+        var cached=RecallIndependentRoute(self.Position,destination,range);
+        if(cached!=null){independentPath=cached;independentWaypoint=1;independentCheckedWaypoint=-1;independentPhaseTimer.SetPlanning(false,now);independentWalkStatus="Using a saved route · checking the next section";return false;}
+        // The opening is fully checked; the remainder starts at its fixed endpoint.
+        var opening=VerifiedWalkingOpening.Build(independentCollision,self.Position,destination,range);
+        if(opening.Length>1){independentPath=opening;independentWaypoint=1;independentCheckedWaypoint=-1;}
+        independentSearch=CreateIndependentSearch(opening.Length>1?opening[^1]:self.Position,destination,range);
+        independentWalkStatus=opening.Length>1?"Opening route ready · calculating ahead":"Checking collision geometry and finding a route";return false;
     }
     private unsafe void UpdateIndependentWalk(DateTimeOffset now)
     {
@@ -121,14 +134,24 @@ public sealed partial class Plugin
                 independentLastExpanded=independentSearch.Expanded;independentPlanningSeconds=(DateTimeOffset.UtcNow-independentPlanningSince).TotalSeconds;
                 independentWalkStatus=$"Finding walkable route · {independentSearch.Expanded} areas checked";
                 if(independentSearch.Error.Length>0)throw new InvalidOperationException(independentSearch.Error);
-                if(independentSearch.Path==null)return;
+                if(independentSearch.Path==null&&independentPath==null)return;
+                if(independentSearch.Path!=null){
                 TraceKeyboundRun(independentNavigationRun,"route-found",$"{independentSearch.Path.Length} points; {independentSearch.Expanded} nodes checked","companion-navigation",false);
                 independentPhaseTimer.SetPlanning(false,DateTimeOffset.UtcNow);
-                independentPath=independentSearch.Path;independentLastRoutePoints=independentPath.Length;independentSearch=null;independentWaypoint=1;independentCheckedWaypoint=-1;
+                var found=independentSearch.Path;
+                if(independentPath!=null)independentPendingPath=found;
+                else {independentPath=found;independentWaypoint=1;independentCheckedWaypoint=-1;}
+                RememberIndependentRoute(independentPendingPath!=null?independentPath!.Concat(found.Skip(1)).ToArray():found);
+                independentLastRoutePoints=found.Length;independentSearch=null;
                 independentLastProgress=self.Position;independentProgressAt=DateTimeOffset.UtcNow;
+                }
             }
             if(CollisionRouteSearch.Horizontal(self.Position,independentGoal)<=independentRange&&MathF.Abs(self.Position.Y-independentGoal.Y)<=1.2f){
                 StopIndependentWalk("Arrived · movement released");independentArrived=true;return;
+            }
+            if(independentPath!=null&&CollisionRouteSearch.Horizontal(self.Position,independentPath[^1])<.3f&&MathF.Abs(self.Position.Y-independentPath[^1].Y)<.5f){
+                if(independentPendingPath!=null){independentPath=independentPendingPath;independentPendingPath=null;independentWaypoint=1;independentCheckedWaypoint=-1;}
+                else if(independentSearch!=null){independentProgressAt=now;independentWalkStatus="Verified section complete · calculating the next section";return;}
             }
             if(independentPath!=null)independentWaypoint=WalkingSteering.AdvanceWaypoint(self.Position,independentPath,independentWaypoint,independentCollision.Traverse);
             if(independentPath==null||independentWaypoint>=independentPath.Length)throw new InvalidOperationException("Route ended without confirmed arrival.");
@@ -144,7 +167,7 @@ public sealed partial class Plugin
                 if(independentInputOverrides==0&&now-independentProgressAt>TimeSpan.FromSeconds(4))throw new InvalidOperationException($"Movement not delivered · ground reads {independentForwardReads}, game blocked {independentNativeGateRejects}, other input {independentNativeManualReads}, expired {independentExpiredReads}. {independentInputBlock}");
                 if(++independentReplans>2)throw new InvalidOperationException("Movement blocked after two route checks; stopped.");
                 var blockedAt=stalled?Vector3.Lerp(self.Position,target,MathF.Min(1,.6f/MathF.Max(.01f,Vector3.Distance(self.Position,target)))):independentCollision.LastBlockedAt??target;
-                independentBlockedTargets.Add(blockedAt);independentPhaseTimer.SetPlanning(true,now);independentPlanningSince=now;
+                ForgetIndependentRoute();independentPendingPath=null;independentBlockedTargets.Add(blockedAt);independentPhaseTimer.SetPlanning(true,now);independentPlanningSince=now;
                 independentSearch=CreateIndependentSearch(self.Position,independentGoal,independentRange);independentPath=null;independentProgressAt=now;
                 TraceKeyboundRun(independentNavigationRun,"route-replan",$"Attempt {independentReplans}; avoiding obstacle {blockedAt}; target {target}; position {self.Position}; stalled {stalled}; input reads {independentInputReads}, overrides {independentInputOverrides}","companion-navigation",false);
                 independentWalkStatus="Path changed or blocked · finding another route";return;
@@ -165,7 +188,8 @@ public sealed partial class Plugin
             }
             independentHeading=heading;independentSteeringAt=now;
             var turnError=MathF.Abs(MathF.IEEERemainder(MathF.Atan2(delta.X,delta.Z)-heading,2*MathF.PI));
-            var speed=turnError>.5f?.4f:1f;
+            if(turnError>1.05f){independentProgressAt=now;independentWalkStatus="Aligning with the route";return;}
+            var speed=turnError>.5f?.4f:1f;independentSpeed=speed;
             var reference=legacy?camera->DirH+MathF.PI:self.Rotation;
             independentAxes=new(MathF.Sin(heading-reference)*speed,MathF.Cos(heading-reference)*speed);
             EnsureIndependentGroundInput();
