@@ -9,6 +9,19 @@ internal sealed class GameWalkingCollision:IWalkingCollision
     private readonly Dictionary<Vector3,(bool Found,Vector3 Ground)>? groundCache;
     internal GameWalkingCollision(bool cacheGround=false){if(cacheGround)groundCache=new();}
     private const float Radius=.45f,Height=1.85f;
+    private readonly Dictionary<Vector3,float> wallCache=[];
+    public float WallPenalty(Vector3 point){
+        if(groundCache!=null&&wallCache.TryGetValue(point,out var cached))return cached;
+        Ready();const float preferred=1.2f;var nearest=preferred;
+        for(var i=0;i<8;i++){
+            var angle=i*MathF.PI/4;var direction=new Vector3(MathF.Cos(angle),0,MathF.Sin(angle));
+            if(Hit(point+new Vector3(0,.9f,0),direction,preferred,out var hit))nearest=MathF.Min(nearest,CollisionRouteSearch.Horizontal(point,hit.Point));
+        }
+        var penalty=Math.Clamp((preferred-nearest)/(preferred-Radius),0,1);
+        if(groundCache!=null&&wallCache.Count<100000)wallCache[point]=penalty;
+        return penalty;
+    }
+    public bool ComfortableTraverse(Vector3 from,Vector3 to)=>Traverse(from,to)&&WalkingClearance.PreservesRoom(from,to,WallPenalty);
     internal Vector3? LastBlockedAt { get; private set; }
     private bool Reject(Vector3 point){LastBlockedAt=point;return false;}
     private static bool Blocked(Vector3 a,Vector3 b){var delta=b-a;var length=delta.Length();return length>.001f&&Hit(a,delta/length,length,out _);}

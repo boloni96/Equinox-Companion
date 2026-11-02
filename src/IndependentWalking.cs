@@ -165,9 +165,9 @@ public sealed partial class Plugin
                 if(independentPendingPath!=null){independentPath=independentPendingPath;independentPendingPath=null;independentWaypoint=1;independentCheckedWaypoint=-1;}
                 else if(independentSearch!=null){independentProgressAt=now;independentWalkStatus="Verified section complete · calculating the next section";return;}
             }
-            if(independentPath!=null)independentWaypoint=WalkingSteering.AdvanceWaypoint(self.Position,independentPath,independentWaypoint,independentCollision.Traverse);
+            if(independentPath!=null)independentWaypoint=WalkingSteering.AdvanceWaypoint(self.Position,independentPath,independentWaypoint,independentCollision.ComfortableTraverse);
             if(independentPath==null||independentWaypoint>=independentPath.Length)throw new InvalidOperationException("Route ended without confirmed arrival.");
-            var target=WalkingSteering.PursuitTarget(self.Position,independentPath,independentWaypoint,independentCollision.Traverse);
+            var target=WalkingSteering.PursuitTarget(self.Position,independentPath,independentWaypoint,independentCollision.ComfortableTraverse);
             if(Vector3.Distance(self.Position,independentLastProgress)>.3f){independentProgressAt=now;independentLastProgress=self.Position;independentPositionChanged=true;}
             var checkCollision=now>=independentCollisionAt||independentCheckedWaypoint!=independentWaypoint;
             if(checkCollision){
@@ -194,7 +194,7 @@ public sealed partial class Plugin
                 var smooth=WalkingSteering.SmoothHeading(previousHeading,heading,(float)(now-independentSteeringAt).TotalSeconds);
                 if(MathF.Abs(MathF.IEEERemainder(smooth-heading,2*MathF.PI))>.01f){
                     var probe=self.Position+new Vector3(MathF.Sin(smooth),0,MathF.Cos(smooth))*.6f;
-                    if(independentCollision.Ground(probe,out var floor)&&independentCollision.Traverse(self.Position,floor))heading=smooth;
+                    if(independentCollision.Ground(probe,out var floor)&&independentCollision.ComfortableTraverse(self.Position,floor))heading=smooth;
                     else {independentHeading=smooth;independentSteeringAt=now;independentProgressAt=now;independentWalkStatus="Turning toward the clear route";return;}
                 }
             }

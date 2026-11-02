@@ -71,6 +71,7 @@ internal sealed class NavigationPhaseTimer
 internal sealed class AvoidStalledTargets(IWalkingCollision inner,Vector3[] blocked):IWalkingCollision
 {
     public bool Ground(Vector3 near,out Vector3 ground)=>inner.Ground(near,out ground);
+    public float WallPenalty(Vector3 point)=>inner.WallPenalty(point);
     public bool Traverse(Vector3 from,Vector3 to)=>
         !blocked.Any(p=>CollisionRouteSearch.Horizontal(p,to)<.65f&&MathF.Abs(p.Y-to.Y)<1)&&inner.Traverse(from,to);
 }
@@ -78,6 +79,11 @@ internal sealed class AvoidStalledTargets(IWalkingCollision inner,Vector3[] bloc
 // Cross the full footprint, not just three parallel tracks, to catch narrow posts.
 internal static class WalkingClearance
 {
+    public static bool PreservesRoom(Vector3 from,Vector3 to,Func<Vector3,float> penalty){
+        var allowed=MathF.Max(penalty(from),penalty(to))+.1f;
+        for(var i=1;i<4;i++)if(penalty(Vector3.Lerp(from,to,i/4f))>allowed)return false;
+        return true;
+    }
     public static bool BodyRoom(Vector3 floor,float radius,Func<Vector3,Vector3,bool> blocked)
     {
         foreach(var height in (ReadOnlySpan<float>)[.5f,1.05f,1.75f])

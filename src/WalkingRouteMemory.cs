@@ -10,7 +10,7 @@ internal static class VerifiedWalkingOpening
         var direction=delta/length;var path=new List<Vector3>{start};
         for(var i=1;i<=8;i++){
             var next=start+direction*i;next.Y=path[^1].Y;
-            if(!collision.Ground(next,out var floor)||!collision.Traverse(path[^1],floor))return [];
+            if(!collision.Ground(next,out var floor)||!collision.Traverse(path[^1],floor)||collision.WallPenalty(floor)>.1f)return [];
             path.Add(floor);
         }
         // Keep two checked yalms beyond the opening, so it does not end facing a wall.
