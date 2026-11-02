@@ -93,7 +93,7 @@ public sealed partial class Plugin
             if(now-independentStepSince>TimeSpan.FromMinutes(4))throw new InvalidOperationException("Quest step timed out: "+questToolsStatus);
             questToolsStatus=$"{QuestTitle(independentQuestId)} · sequence {sequence}, step {independentStep+1}/{steps.GetArrayLength()} · {kind}";
             if(IndependentQuestDialogue(step,kind,now))return;
-            if(Conditions[ConditionFlag.OccupiedInEvent]||Conditions[ConditionFlag.WatchingCutscene]||Conditions[ConditionFlag.WatchingCutscene78]||Conditions[ConditionFlag.Casting])return;
+            if(Conditions[ConditionFlag.OccupiedInEvent]||Conditions[ConditionFlag.OccupiedInQuestEvent]||Conditions[ConditionFlag.WatchingCutscene]||Conditions[ConditionFlag.WatchingCutscene78]||Conditions[ConditionFlag.Casting])return;
             var territory=IndependentStepPolicy.Number(step,"TerritoryId");
             if(independentStepSent){
                 var changed=Convert.ToHexString(IndependentWork())!=independentWorkBefore;

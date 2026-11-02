@@ -55,6 +55,7 @@ public sealed partial class Plugin
     }
     private void StartEventAccount(SharedCharacter[] characters){
         try{
+            if(!config.KeyboundUseRoutines)throw new InvalidOperationException("Enable Use routines in Options first.");
             if(!config.EnableKeyboundBrawler||!Player.IsLoaded||characters.Length==0)throw new InvalidOperationException("Enable the event tool and log in first.");
             if(nativeEventActive||questChainActive||questRecorderActive||independentQuestId!=0||QuestToolsOtherOperation()||assignedLogin!=null)throw new InvalidOperationException("Stop other automation before starting the account routine.");
             if(Conditions[ConditionFlag.BoundByDuty]||Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.InDutyQueue])throw new InvalidOperationException("Leave the duty, queue or combat first.");
@@ -207,7 +208,7 @@ public sealed partial class Plugin
             var registrar=Objects.FirstOrDefault(o=>o.BaseId==1058751&&o.IsTargetable);
             if(registrar==null){eventAccountStatus="Waiting for the Keybound registrar to load";return;}
             if(!EventAccountWalk(registrar.Position,registrar.HitboxRadius+2.5f,now))return;
-            keyboundAutoRepeat=true;keyboundTypingRun=Guid.NewGuid().ToString("N");TraceKeyboundRun(keyboundTypingRun,"typing-started","Farming selected character","account-routine:"+keyboundAccountRun);keyboundEnabled=true;keyboundNext=keyboundHold=keyboundMissing=default;
+            keyboundTypingRun=Guid.NewGuid().ToString("N");TraceKeyboundRun(keyboundTypingRun,"typing-started","Farming selected character","account-routine:"+keyboundAccountRun);keyboundEnabled=true;keyboundNext=keyboundHold=keyboundMissing=default;
             keyboundStatus="Ready to register";eventAccountFarmStarted=true;
         }catch(Exception e){StopEventAccount(e.Message.StartsWith("Stopped:",StringComparison.Ordinal)?e.Message:"Stopped: "+e.Message);}
     }

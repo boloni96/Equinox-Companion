@@ -76,6 +76,8 @@ public sealed class Configuration : IPluginConfiguration
     public bool CofferMainMap { get; set; } = true;
     public bool FollowAntiAfk { get; set; }
     public bool EnableKeyboundBrawler { get; set; }
+    public bool KeyboundAutoRepeat { get; set; }
+    public bool KeyboundUseRoutines { get; set; }
     public bool KeyboundStopAtRewardGoal { get; set; } = true;
     public bool KeyboundGoalDefaultsApplied { get; set; }
     public bool KeyboundUseJournalWishlist { get; set; } = true;
