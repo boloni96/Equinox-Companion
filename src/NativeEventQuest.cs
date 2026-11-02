@@ -22,7 +22,7 @@ public sealed partial class Plugin
             if(Conditions[ConditionFlag.BoundByDuty]||Conditions[ConditionFlag.InDutyQueue]||Conditions[ConditionFlag.InCombat]||QuestConversationVisible())throw new InvalidOperationException("Finish the current duty, queue, combat or conversation first.");
             if(OptionalQuestRunning()||LifestreamBusy())throw new InvalidOperationException("Another quest or travel task is running.");
             if(QuestManager.IsQuestComplete(NativeEventPolicy.Quest)){nativeEventStatus="Keyward Bound is complete. Missing rewards are checked separately.";return true;}
-            ResetQuestCutscene();StopIndependentWalk(resetFailure:true);nativeEventActive=true;nativeEventFromAccount=fromAccount;nativeEventCharacter=Player.ContentId;
+            questRewardAttempt="";ResetQuestCutscene();StopIndependentWalk(resetFailure:true);nativeEventActive=true;nativeEventFromAccount=fromAccount;nativeEventCharacter=Player.ContentId;
             nativeEventStep=NativeEventStep.Unsupported;nativeEventStepAt=DateTimeOffset.UtcNow;nativeEventNext=nativeEventActionAt=nativeEventUnavailableAt=default;
             nativeEventNpc=0;nativeEventSceneOwned=nativeEventAcceptSent=nativeEventResultSent=nativeEventYesSent=false;
             nativeEventSceneIdentity=nativeEventSkipAttempt=nativeEventSkipConfirmed=nativeEventEscapeScene="";nativeEventPrompt="";nativeEventPromptLoaded=nativeEventKeyboardChecked=false;eventSaucerTravelAt=default;
@@ -85,7 +85,9 @@ public sealed partial class Plugin
         }
         if(VisibleFollowAddon("JournalResult")){
             var addon=(AddonJournalResult*)KeyboundAddon("JournalResult");
-            if(nativeEventStep==NativeEventStep.Complete&&!nativeEventResultSent&&NativeEventTitle((AtkUnitBase*)addon)&&NativeEventButton((AtkUnitBase*)addon,addon->CompleteButton)){
+            if(nativeEventStep==NativeEventStep.Complete&&!nativeEventResultSent&&NativeEventTitle((AtkUnitBase*)addon)){
+                if(!PrepareQuestReward(addon,NativeEventPolicy.Quest,out var rewardStatus)){nativeEventStatus=rewardStatus;return true;}
+                if(!NativeEventButton((AtkUnitBase*)addon,addon->CompleteButton))return true;
                 nativeEventResultSent=true;nativeEventActionAt=now;nativeEventStatus="Complete sent · waiting for confirmed completion";
             }else nativeEventStatus="Quest reward window · waiting for Complete to become available";
             return true;

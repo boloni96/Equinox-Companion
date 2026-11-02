@@ -49,7 +49,10 @@ public sealed partial class Plugin
         }
         if(VisibleFollowAddon("JournalResult")){
             var a=(AddonJournalResult*)KeyboundAddon("JournalResult");
-            if(kind=="CompleteQuest"&&NativeEventTitle((AtkUnitBase*)a,independentQuestId)&&NativeEventButton((AtkUnitBase*)a,a->CompleteButton))independentActionAt=now;
+            if(kind=="CompleteQuest"&&NativeEventTitle((AtkUnitBase*)a,independentQuestId)){
+                if(!PrepareQuestReward(a,independentQuestId,out var rewardStatus)){questToolsStatus=rewardStatus;return true;}
+                if(NativeEventButton((AtkUnitBase*)a,a->CompleteButton))independentActionAt=now;
+            }
             else questToolsStatus+=" · choose any required quest reward manually";
             return true;
         }

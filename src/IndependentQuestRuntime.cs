@@ -34,7 +34,7 @@ public sealed partial class Plugin
             foreach(var property in route.Definition.EnumerateObject())
                 if(property.Name is not ("$schema" or "$" or "Author" or "LastChecked" or "Comment" or "Disabled" or "Interruptible" or "QuestSequence")&&IndependentStepPolicy.Meaningful(property.Value))
                     throw new InvalidOperationException("Unknown route condition: "+property.Name);
-            ResetQuestCutscene();independentQuestSceneIdentity="";
+            questRewardAttempt="";ResetQuestCutscene();independentQuestSceneIdentity="";
             independentRoute=route;independentQuestId=id;independentQuestCharacter=Player.ContentId;independentSequence=-1;independentDeferred=false;independentQuestNext=default;
             independentQuestRun=Guid.NewGuid().ToString("N");TraceKeyboundRun(independentQuestRun,"quest-started",$"Quest {id}","companion-quest",false);
             StopIndependentWalk(resetFailure:true);questToolsStatus="Companion starting: "+QuestTitle(id);return true;
