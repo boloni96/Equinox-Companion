@@ -40,7 +40,8 @@ internal static class QuestTools373Tests
         Check("accepted quest waits for sequence",NativeEventPolicy.Step(false,true,0)==NativeEventStep.Wait);
         Check("accepted quest enters square",NativeEventPolicy.Step(false,true,1)==NativeEventStep.EnterSquare);
         Check("final sequence completes",NativeEventPolicy.Step(false,true,255)==NativeEventStep.Complete);
-        Check("unknown sequence never guesses",NativeEventPolicy.Step(false,true,2)==NativeEventStep.Unsupported);
+        Check("sequence two meets master",NativeEventPolicy.Step(false,true,2)==NativeEventStep.MeetMaster);
+        Check("unknown sequence never guesses",NativeEventPolicy.Step(false,true,3)==NativeEventStep.Unsupported);
         Check("native completion wins",NativeEventPolicy.Step(true,true,255)==NativeEventStep.Finished);
         Check("wrong NPC scene rejected",!NativeEventPolicy.Scene(71002,1058754,1058752));
         Check("unrelated event rejected",!NativeEventPolicy.Scene(71003,1058752,1058752));

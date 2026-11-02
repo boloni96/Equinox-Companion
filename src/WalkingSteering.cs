@@ -4,7 +4,32 @@ internal static class WalkingSteering
 {
     public static float SmoothHeading(float current,float desired,float seconds){
         var difference=MathF.IEEERemainder(desired-current,2*MathF.PI);
-        return current+Math.Clamp(difference,-6*Math.Clamp(seconds,0,.05f),6*Math.Clamp(seconds,0,.05f));
+        var dt=Math.Clamp(seconds,0,.05f);
+        return current+Math.Clamp(difference*(1-MathF.Exp(-8*dt)),-2.4f*dt,2.4f*dt);
+    }
+    public static int AdvanceWaypoint(Vector3 position,Vector3[] path,int next,Func<Vector3,Vector3,bool> clear)
+    {
+        // Never discard the final endpoint before the destination arrival check.
+        while(next<path.Length-1){
+            var end=path[next];var start=path[Math.Max(0,next-1)];var segment=end-start;segment.Y=0;
+            var offset=position-end;offset.Y=0;
+            var passed=Vector3.Dot(offset,segment)>=0&&offset.Length()<.8f;
+            if((CollisionRouteSearch.Horizontal(position,end)<.3f||passed)&&MathF.Abs(position.Y-end.Y)<.5f&&clear(position,path[next+1]))next++;
+            else break;
+        }
+        return next;
+    }
+    public static Vector3 PursuitTarget(Vector3 position,Vector3[] path,int next,Func<Vector3,Vector3,bool> clear)
+    {
+        var start=path[Math.Max(0,next-1)];var segment=path[next]-start;
+        var length=segment.LengthSquared();var t=length<.0001f?1:Math.Clamp(Vector3.Dot(position-start,segment)/length,0,1);
+        var point=Vector3.Lerp(start,path[next],t);var remaining=2.2f;
+        for(var i=next;i<path.Length;i++){
+            var distance=Vector3.Distance(point,path[i]);
+            if(distance>=remaining){point=Vector3.Lerp(point,path[i],remaining/MathF.Max(distance,.001f));break;}
+            point=path[i];remaining-=distance;
+        }
+        return CollisionRouteSearch.Horizontal(position,point)<=2.6f&&clear(position,point)?point:path[next];
     }
     public static Vector2 Axes(Vector3 from,Vector3 target,float referenceHeading)
     {

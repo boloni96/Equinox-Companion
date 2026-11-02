@@ -130,14 +130,12 @@ public sealed partial class Plugin
             if(CollisionRouteSearch.Horizontal(self.Position,independentGoal)<=independentRange&&MathF.Abs(self.Position.Y-independentGoal.Y)<=1.2f){
                 StopIndependentWalk("Arrived · movement released");independentArrived=true;return;
             }
-            while(independentPath!=null&&independentWaypoint<independentPath.Length&&Vector3.Distance(self.Position,independentPath[independentWaypoint])<.3f)independentWaypoint++;
+            if(independentPath!=null)independentWaypoint=WalkingSteering.AdvanceWaypoint(self.Position,independentPath,independentWaypoint,independentCollision.Traverse);
             if(independentPath==null||independentWaypoint>=independentPath.Length)throw new InvalidOperationException("Route ended without confirmed arrival.");
-            var target=independentPath[independentWaypoint];
+            var target=WalkingSteering.PursuitTarget(self.Position,independentPath,independentWaypoint,independentCollision.Traverse);
             if(Vector3.Distance(self.Position,independentLastProgress)>.3f){independentProgressAt=now;independentLastProgress=self.Position;independentPositionChanged=true;}
             var checkCollision=now>=independentCollisionAt||independentCheckedWaypoint!=independentWaypoint;
             if(checkCollision){
-                independentWaypoint=WalkingSteering.LookAhead(self.Position,independentPath,independentWaypoint,independentCollision.Traverse);
-                target=independentPath[independentWaypoint];
                 independentCollisionAt=now.AddMilliseconds(150);independentCheckedWaypoint=independentWaypoint;
             }
             var stalled=now-independentProgressAt>TimeSpan.FromSeconds(independentInputOverrides>0?1.5:4);
@@ -156,16 +154,20 @@ public sealed partial class Plugin
             if(camera==null)throw new InvalidOperationException("Movement camera unavailable.");
             var legacy=MarketGameConfig.UiControl.TryGetUInt("MoveMode",out var mode)&&mode==1;
             var delta=target-self.Position;var heading=MathF.Atan2(delta.X,delta.Z);
+            independentHeading??=self.Rotation;
             if(independentHeading is {} previousHeading){
                 var smooth=WalkingSteering.SmoothHeading(previousHeading,heading,(float)(now-independentSteeringAt).TotalSeconds);
                 if(MathF.Abs(MathF.IEEERemainder(smooth-heading,2*MathF.PI))>.01f){
                     var probe=self.Position+new Vector3(MathF.Sin(smooth),0,MathF.Cos(smooth))*.6f;
                     if(independentCollision.Ground(probe,out var floor)&&independentCollision.Traverse(self.Position,floor))heading=smooth;
+                    else {independentHeading=smooth;independentSteeringAt=now;independentProgressAt=now;independentWalkStatus="Turning toward the clear route";return;}
                 }
             }
             independentHeading=heading;independentSteeringAt=now;
+            var turnError=MathF.Abs(MathF.IEEERemainder(MathF.Atan2(delta.X,delta.Z)-heading,2*MathF.PI));
+            var speed=turnError>.5f?.4f:1f;
             var reference=legacy?camera->DirH+MathF.PI:self.Rotation;
-            independentAxes=new(MathF.Sin(heading-reference),MathF.Cos(heading-reference));
+            independentAxes=new(MathF.Sin(heading-reference)*speed,MathF.Cos(heading-reference)*speed);
             EnsureIndependentGroundInput();
             // Start the lease AFTER collision work and hook setup, not at frame start.
             if(!independentForwardHook!.IsEnabled)independentForwardHook.Enable();
