@@ -152,7 +152,7 @@ public sealed partial class Plugin
         try{
             if(config.PairingKey!=eventAccountPairing||!config.EnableKeyboundBrawler)throw new InvalidOperationException("Pairing or event tool changed.");
             if(now>eventAccountDeadline)throw new InvalidOperationException("Account routine reached its 12-hour limit.");
-            if(eventAccountIndex>=eventAccountCharacters.Length){StopEventAccount($"Finished: {eventAccountCompleted} character(s) completed their reward goals; {eventAccountSkipped} unavailable character(s) skipped.");return;}
+            if(eventAccountIndex>=eventAccountCharacters.Length){CelebrateEventAccount();StopEventAccount($"Finished: {eventAccountCompleted} character(s) completed their reward goals; {eventAccountSkipped} unavailable character(s) skipped.");return;}
             var target=eventAccountCharacters[eventAccountIndex];
             if(assignedLogin!=null){eventAccountStatus=characterTravelStatus;return;}
             if(eventAccountWorldOwned){

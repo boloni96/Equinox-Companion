@@ -3,6 +3,7 @@ namespace EquinoxCompanion;
 [Serializable]
 public sealed class Configuration : IPluginConfiguration
 {
+    public HashSet<string> AccountCelebrationsShown { get; set; } = [];
     public Dictionary<ulong,OrganizerDresserSnapshot> OrganizerDresserSnapshots { get; set; } = [];
     public bool ProtectOrganizerGearSets { get; set; } = true;
     public bool StorageGearSkipDyed { get; set; } = true;
