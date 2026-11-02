@@ -143,7 +143,7 @@ public sealed partial class Plugin
             var step=NativeEventPolicy.Step(QuestManager.IsQuestComplete(NativeEventPolicy.Quest),manager->IsQuestAccepted(NativeEventPolicy.Quest),QuestManager.GetQuestSequence(NativeEventPolicy.Quest));
             if(step!=nativeEventStep){CancelEventAccountMovement();nativeEventStep=step;nativeEventStepAt=now;nativeEventYesSent=nativeEventKeyboardChecked=false;}
             if(now-nativeEventStepAt>TimeSpan.FromMinutes(5))throw new InvalidOperationException("No quest progress for five minutes. "+nativeEventStatus);
-            if(step==NativeEventStep.Complete&&Client.TerritoryType!=1360){if(!EventAccountSquare(now))nativeEventStatus=eventAccountStatus;return;}
+            if((step is NativeEventStep.MeetMaster or NativeEventStep.Complete)&&Client.TerritoryType!=1360){if(!EventAccountSquare(now))nativeEventStatus=eventAccountStatus;return;}
             if(NativeEventDialogue(now))return;
             if(Conditions[ConditionFlag.OccupiedInEvent]||Conditions[ConditionFlag.OccupiedInQuestEvent]||Conditions[ConditionFlag.WatchingCutscene]||Conditions[ConditionFlag.WatchingCutscene78]){nativeEventStatus="Waiting for the quest scene to finish";return;}
             switch(step){

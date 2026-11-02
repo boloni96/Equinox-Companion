@@ -160,7 +160,7 @@ public sealed partial class Plugin
                 if(MathF.Abs(MathF.IEEERemainder(smooth-heading,2*MathF.PI))>.01f){
                     var probe=self.Position+new Vector3(MathF.Sin(smooth),0,MathF.Cos(smooth))*.6f;
                     if(independentCollision.Ground(probe,out var floor)&&independentCollision.Traverse(self.Position,floor))heading=smooth;
-                    else {independentHeading=smooth;independentSteeringAt=now;independentWalkStatus="Turning toward the clear route";return;}
+                    else {independentHeading=smooth;independentSteeringAt=now;independentProgressAt=now;independentWalkStatus="Turning toward the clear route";return;}
                 }
             }
             independentHeading=heading;independentSteeringAt=now;
