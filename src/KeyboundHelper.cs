@@ -32,15 +32,15 @@ public sealed partial class Plugin
     private void DrawKeyboundHelper()
     {
         ImGui.BeginDisabled(keyboundBuying);
-        if(ImGui.Button(keyboundEnabled?"Stop":"Start")){
-            if(keyboundEnabled)StopKeybound();else{StopKeybound();keyboundBuyStatus="";keyboundGoalCheckAt=default;keyboundEnabled=true;keyboundNext=keyboundHold=keyboundMissing=default;keyboundStatus="Waiting for Keybound Brawler";}
+        if(ImGui.Button(eventAccountActive||keyboundEnabled?"Stop":"Start")){
+            if(eventAccountActive)StopEventAccount("Stopped by you.");else if(keyboundEnabled)StopKeybound();else{StopKeybound();keyboundBuyStatus="";keyboundGoalCheckAt=default;keyboundEnabled=true;keyboundNext=keyboundHold=keyboundMissing=default;keyboundStatus="Waiting for Keybound Brawler";}
         }
         ImGui.EndDisabled();
         ImGui.SameLine();ImGui.TextUnformatted(keyboundBuying?(keyboundUsingRewards?"Using rewards":"Buying rewards"):keyboundEnabled?"Running":"Stopped");
         // Reserve the same space for short phrases and long waiting/error text.
         // Content scrolls here; neither the window nor the controls below jump.
         if(ImGui.BeginChild("Keybound running status",new System.Numerics.Vector2(0,ImGui.GetTextLineHeightWithSpacing()*4.5f),true)){
-            var status=(keyboundBuying||!keyboundEnabled)&&keyboundBuyStatus.Length>0?keyboundBuyStatus:keyboundStatus;
+            var status=eventAccountActive?eventAccountStatus:(keyboundBuying||!keyboundEnabled)&&keyboundBuyStatus.Length>0?keyboundBuyStatus:keyboundStatus;
             ImGui.TextWrapped(status);
             if(keyboundEnabled&&keyboundWord.Length>0&&!status.Contains(keyboundWord,StringComparison.Ordinal))
                 ImGui.TextWrapped("Target: "+keyboundWord);
@@ -49,6 +49,7 @@ public sealed partial class Plugin
         ImGui.Separator();
         DrawKeyboundRewards();
         DrawKeyboundShopping();
+        DrawEventAccount();
         ImGui.Separator();
         if(ImGui.CollapsingHeader("Options")){
         ImGui.Checkbox("Auto-repeat",ref keyboundAutoRepeat);
@@ -142,7 +143,7 @@ public sealed partial class Plugin
             if(!Client.IsLoggedIn){StopKeybound("Stopped: logged out");return;}
             if(now<keyboundTimingEditUntil){keyboundDeadline=now.AddSeconds(2);keyboundStatus="Paused: editing timing";return;}
             var stage=AtkStage.Instance();if(stage==null)return;
-            if(config.KeyboundStopAtRewardGoal&&Client.TerritoryType!=1359&&CheckKeyboundGoal(now))return;
+            if(!eventAccountActive&&config.KeyboundStopAtRewardGoal&&Client.TerritoryType!=1359&&CheckKeyboundGoal(now))return;
             if(keyboundAutoRepeat&&UpdateKeyboundLoop(now))return;
             var input=stage->RaptureAtkUnitManager->GetAddonByName("KTGInput");
             if(input==null||!input->IsVisible){
@@ -229,4 +230,5 @@ public sealed partial class Plugin
     }
     private void KeyboundExpect(string expected,DateTimeOffset now){keyboundExpected=expected;keyboundAwaiting=true;keyboundDeadline=now.AddSeconds(2);}
 }
+
 

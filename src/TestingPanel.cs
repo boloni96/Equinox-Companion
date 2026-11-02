@@ -65,6 +65,7 @@ public sealed partial class Plugin
  private void DrawTesting()
  {
   windowStatus=testingMessage;windowFooter=()=>{if(ImGui.SmallButton("Export results")&&testingExport is null)ExportTesting();ImGui.SameLine();if(ImGui.SmallButton("Open exports folder")){var path=Path.Combine(Pi.GetPluginConfigDirectory(),"exports");Directory.CreateDirectory(path);Dalamud.Utility.Util.OpenLink(path);}if(ImGui.IsItemHovered())ImGui.SetTooltip("The export includes test definitions, all downloaded reports, notes, versions and local pending results. Share it for review; no pairing key or game records are included.");};
+  if(ImGui.Button("Quest tools / recorder"))questToolsWindow.IsOpen=true;
   if(scopeMissing()){ImGui.TextWrapped("Connect to your shared Journal in Settings to receive the testing checklist.");if(ImGui.Button("Open Settings"))OpenSettings();return;}
   ImGui.SetNextItemWidth(190);
   if(ImGui.BeginCombo("Testing as",config.TestingTesterName.Length>0?AdventureText(config.TestingTesterName):"Choose tester")){
@@ -113,4 +114,5 @@ public sealed partial class Plugin
   testingExport=Task.Run(()=>{Directory.CreateDirectory(Path.GetDirectoryName(path)!);File.WriteAllText(path,JsonSerializer.Serialize(snapshot,new JsonSerializerOptions(JsonSerializerDefaults.Web){WriteIndented=true}));return path;});testingMessage="Exporting checklist…";
  }
 }
+
 

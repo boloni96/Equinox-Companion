@@ -19,6 +19,7 @@ public sealed partial class Plugin
     private string helperStopConfirm="";
     private void DrawHelperPanel()
     {
+        if(ImGui.Button("Quest library & recorder"))questToolsWindow.IsOpen=true;
         if(ImGui.BeginTabBar("helper-sections")){
             if(ImGui.BeginTabItem("FollowThem")){if(ImGui.BeginChild("FollowThemBody",Vector2.Zero,false))DrawFollowThem();ImGui.EndChild();ImGui.EndTabItem();}
             if(ImGui.BeginTabItem("Quest Helper")){
@@ -94,5 +95,6 @@ public sealed partial class Plugin
         ImGui.End();
     }
 }
+
 
 

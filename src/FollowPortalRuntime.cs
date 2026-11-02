@@ -48,7 +48,7 @@ public sealed partial class Plugin
     {
         try
         {
-            if(obj!=null&&!relayInteracting){var helperClicked=Objects.FirstOrDefault(o=>o.Address==(nint)obj);if(helperClicked!=null)CaptureHelperNpc(helperClicked);}
+            if(obj!=null&&!relayInteracting){var helperClicked=Objects.FirstOrDefault(o=>o.Address==(nint)obj);if(helperClicked!=null){RecordQuestNpc(helperClicked);CaptureHelperNpc(helperClicked);}}
             if(config.EnableFollowThem&&config.FollowThem.SharePortalTransitions&&!relayInteracting&&obj!=null&&Player.IsLoaded)
             {
                 outgoingPortal=null;boundaryDeparture=null;
@@ -78,7 +78,7 @@ public sealed partial class Plugin
     }
     private unsafe void UpdateFollowPortalRelay(DateTimeOffset now)
     {
-        if(!config.EnableFollowThem&&followPortalHook==null&&portalSendTask==null&&portalReadTask==null&&followLeaseId.Length==0&&followLeaseTask==null)return;
+        if(!questRecorderActive&&!config.EnableFollowThem&&followPortalHook==null&&portalSendTask==null&&portalReadTask==null&&followLeaseId.Length==0&&followLeaseTask==null)return;
         if(now<nextPortalTick)return;
         nextPortalTick=now.AddMilliseconds(100);
         try
@@ -91,7 +91,7 @@ public sealed partial class Plugin
             if(!HelperPaused&&!HelperQuestBusy)UpdateFollowApproach(now);
             UpdateFollowTravel(now);
             if(relayPairingKey!=config.PairingKey){relayPairingKey=config.PairingKey;relayGeneration++;ResetTravelQueue();receivedPortal=null;outgoingPortal=null;pendingAethernet=null;pendingWard=null;pendingTransport=null;transportCapture=null;worldSource=null;CancelLifestreamTravel();CancelFollowApproach();pendingDutyLeave=null;}
-            var sharing=config.EnableFollowThem&&(config.FollowThem.SharePortalTransitions||SharingQuest);
+            var sharing=questRecorderActive||config.EnableFollowThem&&(config.FollowThem.SharePortalTransitions||SharingQuest);
             if(sharing&&!portalHookFailed&&followPortalHook==null)
             {
                 try { followPortalHook=Interop.HookFromAddress<FollowInteractDelegate>(TargetSystem.MemberFunctionPointers.InteractWithObject,ObserveFollowPortalClick);followPortalHook.Enable(); }
@@ -201,5 +201,6 @@ public sealed partial class Plugin
         finally {relayInteracting=false;}
     }
 }
+
 
 

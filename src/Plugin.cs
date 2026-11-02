@@ -233,6 +233,7 @@ public sealed partial class Plugin : IDalamudPlugin
         InitializeBidSearch();
         InitializeAdventures();
         InitializeTesting();
+        InitializeQuestTools();
         InitializeKeybound();
         itemSearchWindow=new ItemSearchWindow(this);windows.AddWindow(itemSearchWindow);
         mainWindow = new CompanionWindow(this); windows.AddWindow(mainWindow);
@@ -325,6 +326,7 @@ public sealed partial class Plugin : IDalamudPlugin
     private unsafe void UpdateCore(IFramework framework)
     {
         var now = DateTimeOffset.UtcNow;
+        UpdateQuestTools(now);
         UpdateAssignedLogin(now);
         var gardenStarted=System.Diagnostics.Stopwatch.GetTimestamp();UpdateGardenCare(now);RecordPerformanceElapsed("garden automation",gardenStarted);
         UpdateItemDelivery(now);
@@ -622,6 +624,7 @@ public sealed partial class Plugin : IDalamudPlugin
         try
         {
             if(count==1&&values!=null&&((int)values[0].Type&15) is 3 or 5){CaptureFollowInstanceChoice(addon,values[0].Int);CaptureTransportChoice(addon,values[0].Int);CaptureHelperChoice(addon,values[0].Int);}
+            RecordQuestCallback(addon,count,values);
             CaptureHelperPurchase(addon,count,values);
             CaptureHelperQuestCallback(addon,count,values);
             CaptureHelperResultCallback(addon,count,values);
@@ -649,7 +652,7 @@ public sealed partial class Plugin : IDalamudPlugin
     {
         try
         {
-            var diagnosticValue=new AtkValue{Type=AtkValueType.Int,Int=value};CaptureHelperQuestCallback(addon,1,&diagnosticValue);ObserveTravelCallbackDiagnostic(addon,1,&diagnosticValue);
+            var diagnosticValue=new AtkValue{Type=AtkValueType.Int,Int=value};RecordQuestCallback(addon,1,&diagnosticValue);CaptureHelperQuestCallback(addon,1,&diagnosticValue);ObserveTravelCallbackDiagnostic(addon,1,&diagnosticValue);
             CaptureFollowInstanceChoice(addon,value);
             CaptureTransportChoice(addon,value);
             CaptureHelperChoice(addon,value);
@@ -1031,7 +1034,7 @@ public sealed partial class Plugin : IDalamudPlugin
         recordingUntil = DateTimeOffset.UtcNow.AddMinutes(5); recording = true; exportPath = null;
     }
 
-    private void StopRecording() { recording = false; if (!ObservingGardens) { callbackHook?.Disable(); callbackIntHook?.Disable(); plantHook?.Disable(); } Volatile.Write(ref pendingTend, null); Volatile.Write(ref pendingRemove, null); Volatile.Write(ref pendingHarvest, null); Volatile.Write(ref pendingPlant, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); messages.Clear(); menuMessages.Clear(); readyMenus.Clear(); cropChats.Clear(); cropMatcher.Clear(); harvestInspections.Clear(); harvestedChats.Clear(); lastSnapshotKey = ""; }
+    private void StopRecording() { recording = false; if (!ObservingGardens && !questRecorderActive) { callbackHook?.Disable(); callbackIntHook?.Disable(); plantHook?.Disable(); } Volatile.Write(ref pendingTend, null); Volatile.Write(ref pendingRemove, null); Volatile.Write(ref pendingHarvest, null); Volatile.Write(ref pendingPlant, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); messages.Clear(); menuMessages.Clear(); readyMenus.Clear(); cropChats.Clear(); cropMatcher.Clear(); harvestInspections.Clear(); harvestedChats.Clear(); lastSnapshotKey = ""; }
 
     private void Export()
     {
@@ -1321,6 +1324,7 @@ public sealed partial class Plugin : IDalamudPlugin
         DisposeBidSearch();
         DisposeAdventures();
         DisposeTesting();
+        DisposeQuestTools();
         DisposeKeybound();
         windows.RemoveAllWindows();
         welcomeWindows.RemoveAllWindows();
