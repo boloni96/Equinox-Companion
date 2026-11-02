@@ -65,8 +65,8 @@ public sealed partial class Plugin
                     var offset=self.Position-crystal.Position;offset.Y=0;
                     if(offset.LengthSquared()<.01f)throw new InvalidOperationException("Aethernet crystal is on another floor.");
                     var approach=crystal.Position+Vector3.Normalize(offset)*4;
-                    Vector3? floor=null;
-                    for(var drop=0;drop<=4;drop+=2)if(independentCollision.Ground(approach-new Vector3(0,drop,0),out var ground)){floor=ground;break;}
+                    Vector3? floor=(independentSearch!=null||independentPath!=null)&&Vector3.Distance(independentGoal,crystal.Position)<8?independentGoal:null;
+                    for(var drop=0;floor==null&&drop<=4;drop+=2)if(independentCollision.Ground(approach-new Vector3(0,drop,0),out var ground)){floor=ground;break;}
                     if(floor==null)throw new InvalidOperationException("No supported approach beside the aethernet crystal.");
                     if(!IndependentWalk(floor.Value,.75f,now)){questToolsStatus+=" · approaching aethernet · "+independentWalkStatus;return false;}
                     if(Vector3.Distance(crystal.Position,self.Position)>8)throw new InvalidOperationException("Aethernet approach arrived outside interaction range.");
