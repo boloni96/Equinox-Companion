@@ -51,7 +51,7 @@ public sealed partial class Plugin
         if(!Player.IsLoaded)return;
         var now=ImGui.GetTime();
         if(accountCelebration is null){if(accountCelebrations.Count==0)return;accountCelebration=accountCelebrations.Dequeue();accountCelebrationAt=now;}
-        var elapsed=now-accountCelebrationAt;if(elapsed>=3){accountCelebration=null;return;}
+        var elapsed=now-accountCelebrationAt;if(elapsed>=AccountCelebrationPolicy.DurationSeconds){accountCelebration=null;return;}
         var alpha=AccountCelebrationPolicy.Alpha(elapsed);if(alpha<=0)return;
         var content=accountCelebration.Value;
         var viewport=ImGui.GetMainViewport();var center=viewport.Pos+viewport.Size*.5f;
@@ -59,11 +59,11 @@ public sealed partial class Plugin
         var draw=ImGui.GetForegroundDrawList();
         uint Color(float r,float g,float b,float a=1)=>ImGui.ColorConvertFloat4ToU32(new(r,g,b,a*alpha));
         var image=Textures.GetFromFile(Path.Combine(Pi.AssemblyLocation.DirectoryName!,"goddess-complete.png")).GetWrapOrDefault();
-        var h=175*scale;var w=image==null?h:h*image.Width/image.Height;
-        var top=center-new Vector2(w/2,145*scale);
+        var h=210*scale;var w=image==null?h:h*image.Width/image.Height;
+        var top=center-new Vector2(w/2,165*scale);
         if(image!=null)draw.AddImage(image.Handle,top,top+new Vector2(w,h),Vector2.Zero,Vector2.One,Color(1,1,1));
         var lines=new[]{"You completed all "+content.Activity+"!",content.Account+" · Good job!"};
-        var y=center.Y+38*scale;
+        var y=center.Y+58*scale;
         foreach(var line in lines){
             var size=ImGui.CalcTextSize(line);var p=new Vector2(center.X-size.X/2,y);
             draw.AddRectFilled(p-new Vector2(12,5)*scale,p+size+new Vector2(12,5)*scale,Color(.025f,.06f,.12f,.86f),8*scale);
