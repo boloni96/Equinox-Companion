@@ -76,6 +76,7 @@ public sealed partial class Plugin
         if(!eventAccountActive)return;
         TraceKeyboundRun(keyboundAccountRun,"account-stopped",reason,reason=="Stopped by you."?"user-button":"system");
         eventAccountActive=false;eventEntranceSceneOwned=false;eventEntranceInteractionAt=default;StopNativeEventQuest(reason);CancelEventAccountMovement();
+        if(eventAccountStage=="return-home"&&eventReturnWorldRequested){try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}}
         if(eventAccountWorldOwned){try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}eventAccountWorldOwned=false;}
         if(assignedLogin!=null)CancelAssignedLogin(reason);
         StopIndependentQuest(reason);StopKeybound(reason);if(keyboundBuying)StopKeyboundBuying(reason);
@@ -123,6 +124,7 @@ public sealed partial class Plugin
             if(now>eventAccountDeadline)throw new InvalidOperationException("Account routine reached its 12-hour limit.");
             if(eventAccountIndex>=eventAccountCharacters.Length){CelebrateEventAccount();StopEventAccount($"Finished: {eventAccountCompleted} character(s) completed their reward goals; {eventAccountSkipped} unavailable character(s) skipped.");return;}
             var target=eventAccountCharacters[eventAccountIndex];
+            if(eventAccountStage=="return-home"){UpdateEventReturnHome(now,target);return;}
             if(assignedLogin!=null){eventAccountStatus=characterTravelStatus;return;}
             if(eventAccountWorldOwned){
                 if(now-eventAccountActionAt>TimeSpan.FromMinutes(30))throw new InvalidOperationException("Sophia travel timed out.");
@@ -195,9 +197,7 @@ public sealed partial class Plugin
                 KeyboundWallet(),keyboundUseReady,keyboundHeldRewards.Count);
             if(decision==EventRoutineAction.Verify)throw new InvalidOperationException(keyboundPlanError.Length>0?keyboundPlanError:"Purchases are held for verification; no duplicate was bought.");
             if(decision==EventRoutineAction.Next){
-                StopKeybound();eventAccountFarmStarted=false;CancelEventAccountMovement();
-                PrintEquinox("Event routine · "+target.Name+": reward goal and item use confirmed.");
-                eventAccountCompleted++;eventAccountIndex++;EventAccountStage("character","Preparing next selected character");return;
+                BeginEventReturnHome(now);return;
             }
             if(!EventAccountSquare(now))return;
             if(decision==EventRoutineAction.BuyAndUse){

@@ -9,14 +9,20 @@ internal static class WalkingSteering
     }
     public static int AdvanceWaypoint(Vector3 position,Vector3[] path,int next,Func<Vector3,Vector3,bool> clear)
     {
-        // Never discard the final endpoint before the destination arrival check.
-        while(next<path.Length-1){
-            var end=path[next];var start=path[Math.Max(0,next-1)];var segment=end-start;segment.Y=0;
-            var offset=position-end;offset.Y=0;
-            var passed=Vector3.Dot(offset,segment)>=0&&offset.Length()<.8f;
-            if((CollisionRouteSearch.Horizontal(position,end)<.3f||passed)&&MathF.Abs(position.Y-end.Y)<.5f&&clear(position,path[next+1]))next++;
-            else break;
+        // Recover forward progress after a rounded corner or a slow frame.
+        // Only join a nearby onward segment through a checked connector.
+        var bestDistance=float.MaxValue;var best=next;
+        for(var i=next;i<path.Length&&i<=next+12;i++){
+            var start=path[Math.Max(0,i-1)];var edge=path[i]-start;
+            var t=edge.LengthSquared()<.0001f?1:Math.Clamp(Vector3.Dot(position-start,edge)/edge.LengthSquared(),0,1);
+            var projection=Vector3.Lerp(start,path[i],t);var distance=Vector3.Distance(position,projection);
+            if(distance>.9f||distance>bestDistance+.02f)continue;
+            var candidate=t>=.95f&&i<path.Length-1?i+1:i;
+            var connector=BoundedTarget(position,path[candidate]);
+            if(!clear(position,connector))continue;
+            bestDistance=distance;best=candidate;
         }
+        next=Math.Min(best,path.Length-1);
         return next;
     }
     public static Vector3 PursuitTarget(Vector3 position,Vector3[] path,int next,Func<Vector3,Vector3,bool> clear)
@@ -29,7 +35,12 @@ internal static class WalkingSteering
             if(distance>=remaining){point=Vector3.Lerp(point,path[i],remaining/MathF.Max(distance,.001f));break;}
             point=path[i];remaining-=distance;
         }
-        return CollisionRouteSearch.Horizontal(position,point)<=2.6f&&clear(position,point)?point:path[next];
+        point=BoundedTarget(position,point);
+        return clear(position,point)?point:BoundedTarget(position,path[next]);
+    }
+    public static Vector3 BoundedTarget(Vector3 position,Vector3 target){
+        var distance=Vector3.Distance(position,target);
+        return Vector3.Lerp(position,target,MathF.Min(1,2.2f/MathF.Max(distance,.001f)));
     }
     public static Vector2 Axes(Vector3 from,Vector3 target,float referenceHeading)
     {

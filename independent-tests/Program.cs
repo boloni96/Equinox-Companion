@@ -77,6 +77,19 @@ Check(WalkingSteering.PursuitTarget(new(.5f,0,0),[Vector3.Zero,new(1,0,0),new(2,
 var exact=new CollisionRouteSearch(collision,Vector3.Zero,new(-.5f,0,-.5f),.4f);
 for(var i=0;i<100&&!exact.Finished;i++)exact.Advance(100,1000);
 Check(exact.Path!=null&&CollisionRouteSearch.Horizontal(exact.Path[^1],new(-.5f,0,-.5f))<=.4f,"sub-grid destination gets verified connector");
+var longLine=Enumerable.Range(0,10).Select(i=>new Vector3(i,0,0)).ToArray();
+Check(WalkingSteering.AdvanceWaypoint(new(3.2f,0,.2f),longLine,1,(_,_)=>true)>=4,"slow frame recovers onward waypoint instead of turning back");
+Check(Vector3.Distance(Vector3.Zero,WalkingSteering.PursuitTarget(Vector3.Zero,[new(4,0,0),new(5,0,0)],1,(_,_)=>false))<=2.21f,"fallback target stays inside collision query range");
+var opening=VerifiedWalkingOpening.Build(collision,Vector3.Zero,new(-7,0,0),.4f);
+Check(opening.Length>=5&&opening.Zip(opening.Skip(1)).All(p=>collision.Traverse(p.First,p.Second)),"opening is checked before streaming movement");
+Check(VerifiedWalkingOpening.Build(collision,Vector3.Zero,new(7,0,0),.4f).Length==0,"blocked opening waits for full planning");
+RememberedWalkingRoute[] remembered=[new(144,new(8,0,0),1,longLine)];
+Check(WalkingRouteMemory.Join(remembered,144,new(3.1f,0,0),new(8,0,0),1,(_,_)=>true)!=null,"saved route can join near current position");
+Check(WalkingRouteMemory.Join(remembered,1360,new(3.1f,0,0),new(8,0,0),1,(_,_)=>true)==null,"route memory isolates territories");
+Check(WalkingRouteMemory.Join(remembered,144,new(3.1f,0,0),new(8,0,0),1,(_,_)=>false)==null,"blocked saved-route connector cannot start walking");
+var json=System.Text.Json.JsonSerializer.Serialize(remembered,new System.Text.Json.JsonSerializerOptions{IncludeFields=true});
+var restoredRoutes=System.Text.Json.JsonSerializer.Deserialize<RememberedWalkingRoute[]>(json,new System.Text.Json.JsonSerializerOptions{IncludeFields=true})!;
+Check(restoredRoutes[0].Points[^1]==longLine[^1],"persisted route coordinates survive reload");
 sealed class TestCollision:IWalkingCollision
 {
     public bool Ground(Vector3 near,out Vector3 ground){ground=new(near.X,0,near.Z);return MathF.Abs(near.Y)<1&&MathF.Abs(near.X)<=8&&MathF.Abs(near.Z)<=8;}
