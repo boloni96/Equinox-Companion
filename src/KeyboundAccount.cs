@@ -18,6 +18,8 @@ public sealed partial class Plugin
     private DateTimeOffset eventAccountNext,eventAccountStageAt,eventAccountActionAt,eventAccountDeadline;
     private uint eventAccountPathTerritory;
     private Vector3 eventAccountGoal;
+    private bool eventEntranceSceneOwned;
+    private DateTimeOffset eventEntranceInteractionAt;
     private SharedCharacter[] EventAccountCandidates(){
         var current=CurrentSharedCharacter();if(current==null||string.IsNullOrEmpty(current.AccountId))return [];
         var person=(config.SharedRoster?.People??[]).SingleOrDefault(p=>p.Characters.Any(c=>c.Id==current.Id));
@@ -72,25 +74,25 @@ public sealed partial class Plugin
     }
     private void StopEventAccount(string reason){
         if(!eventAccountActive)return;
-        eventAccountActive=false;StopNativeEventQuest(reason);CancelEventAccountMovement();
+        eventAccountActive=false;eventEntranceSceneOwned=false;eventEntranceInteractionAt=default;StopNativeEventQuest(reason);CancelEventAccountMovement();
         if(eventAccountWorldOwned){try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}eventAccountWorldOwned=false;}
         if(assignedLogin!=null)CancelAssignedLogin(reason);
         StopQuestionableQuest(reason);StopKeybound(reason);if(keyboundBuying)StopKeyboundBuying(reason);
         eventAccountStatus=reason;PrintEquinox("Event routine · "+reason);
     }
     private unsafe bool EventAccountSquare(DateTimeOffset now){
-        if(Client.TerritoryType==1360)return true;
+        if(Client.TerritoryType==1360){eventEntranceSceneOwned=false;eventEntranceInteractionAt=default;return true;}
         if(!EventReachSaucer(now)||!EventReachEntrance(now))return false;
         EventAccountStage("entrance","Going to the Keybound Square entrance");
         var npc=Objects.FirstOrDefault(o=>o.BaseId==1058754&&o.IsTargetable);
         var goal=npc?.Position??new Vector3(.804425f,3.98254f,61.2062f);
         if(VisibleFollowAddon("Talk")){
-            if(Targets.Target?.BaseId==1058754&&now-eventAccountActionAt>TimeSpan.FromSeconds(1)){ClickVisibleTalk();eventAccountActionAt=now;}
+            if(eventEntranceSceneOwned&&now-eventEntranceInteractionAt<TimeSpan.FromMinutes(2)&&now-eventAccountActionAt>TimeSpan.FromSeconds(1)){ClickVisibleTalk();eventAccountActionAt=now;}
             return false;
         }
         if(VisibleFollowAddon("SelectString")||VisibleFollowAddon("SelectYesno")||VisibleFollowAddon("SelectIconString")){
             var place=DataManager.GetExcelSheet<Lumina.Excel.Sheets.TerritoryType>().GetRowOrDefault(1360)?.PlaceName.Value.Name.ToString()??"";
-            if(place.Length>0&&Targets.Target?.BaseId==1058754&&now-eventAccountActionAt>TimeSpan.FromSeconds(2)){
+            if(place.Length>0&&eventEntranceSceneOwned&&now-eventEntranceInteractionAt<TimeSpan.FromMinutes(2)&&now-eventAccountActionAt>TimeSpan.FromSeconds(2)){
                 foreach(var name in new[]{"SelectString","SelectIconString"}){
                     var addon=KeyboundAddon(name);var choices=HelperChoices(addon,name);
                     var matches=choices.Select((text,index)=>(text,index)).Where(x=>x.text.Contains(place,StringComparison.OrdinalIgnoreCase)).ToArray();
@@ -104,6 +106,7 @@ public sealed partial class Plugin
         if(!EventAccountWalk(goal,2.5f,now)||npc==null)return false;
         if(now-eventAccountActionAt<TimeSpan.FromSeconds(3))return false;
         var system=TargetSystem.Instance();if(system==null)return false;
+        eventEntranceSceneOwned=false;eventEntranceInteractionAt=now;
         Targets.Target=npc;system->InteractWithObject((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)npc.Address,false);eventAccountActionAt=now;
         return false;
     }

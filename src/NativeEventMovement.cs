@@ -1,5 +1,6 @@
 using System.Numerics;
 using FFXIVClientStructs.FFXIV.Client.Game;
+using FFXIVClientStructs.FFXIV.Client.Game.UI;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
@@ -23,14 +24,14 @@ public sealed partial class Plugin
             return false;
         }
         if(LifestreamBusy())throw new InvalidOperationException("Another Lifestream task is running; it was left alone.");
-        if(!NativeEventPolicy.NearbyLeg(self.Position,destination))throw new InvalidOperationException("No verified nearby walking leg. Move to the event NPC's area and restart.");
+        if(!NativeEventPolicy.NearbyLeg(self.Position,destination))throw new InvalidOperationException("Destination is outside the supported nearby approach range. Move to the event NPC's area and restart.");
         eventAccountGoal=destination;eventAccountPathTerritory=Client.TerritoryType;
         // Existing Companion waypoint movement: no pathfinding or navmesh request.
         Pi.GetIpcSubscriber<List<Vector3>,bool?,float?,float?,object>("Lifestream.MoveEx").InvokeAction([destination],true,range-.25f,.3f);
         eventAccountMoveOwned=true;eventWalkStarted=now;eventWalkWatch.Start(distance,now);return false;
     }
     private unsafe bool EventReachSaucer(DateTimeOffset now){
-        if(Client.TerritoryType==144){eventSaucerTravelAt=default;return true;}
+        if(Client.TerritoryType==144){if(!eventSaucerTravelOwned)eventSaucerTravelAt=default;return true;}
         eventAccountStatus="Travelling to the Gold Saucer";
         if(eventSaucerTravelAt!=default){if(now-eventSaucerTravelAt>TimeSpan.FromMinutes(2))throw new InvalidOperationException("Gold Saucer arrival was not confirmed.");return false;}
         var telepo=Telepo.Instance();if(telepo==null)return false;

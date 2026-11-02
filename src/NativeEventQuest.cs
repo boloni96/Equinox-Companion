@@ -12,7 +12,7 @@ public sealed partial class Plugin
     private ulong nativeEventCharacter;
     private uint nativeEventNpc;
     private NativeEventStep nativeEventStep;
-    private DateTimeOffset nativeEventNext,nativeEventStepAt,nativeEventActionAt,nativeEventInteractionAt;
+    private DateTimeOffset nativeEventNext,nativeEventStepAt,nativeEventActionAt,nativeEventInteractionAt,nativeEventUnavailableAt;
     private string nativeEventStatus="Keyward Bound · Companion runner",nativeEventPrompt="";
     private unsafe bool StartNativeEventQuest(bool fromAccount=false){
         try{
@@ -23,7 +23,7 @@ public sealed partial class Plugin
             if(OptionalQuestRunning()||LifestreamBusy())throw new InvalidOperationException("Another quest or travel task is running.");
             if(QuestManager.IsQuestComplete(NativeEventPolicy.Quest)){nativeEventStatus="Keyward Bound is complete. Missing rewards are checked separately.";return true;}
             nativeEventActive=true;nativeEventFromAccount=fromAccount;nativeEventCharacter=Player.ContentId;
-            nativeEventStep=NativeEventStep.Unsupported;nativeEventStepAt=DateTimeOffset.UtcNow;nativeEventNext=nativeEventActionAt=default;
+            nativeEventStep=NativeEventStep.Unsupported;nativeEventStepAt=DateTimeOffset.UtcNow;nativeEventNext=nativeEventActionAt=nativeEventUnavailableAt=default;
             nativeEventNpc=0;nativeEventSceneOwned=nativeEventAcceptSent=nativeEventResultSent=nativeEventYesSent=false;
             nativeEventPrompt="";eventSaucerTravelAt=default;
             nativeEventStatus="Starting Keyward Bound with Companion";return true;
@@ -37,7 +37,7 @@ public sealed partial class Plugin
     }
     private void ObserveNativeEventScene(uint eventId,uint source){
         if(!nativeEventActive)return;
-        nativeEventSceneOwned=NativeEventPolicy.Scene(eventId,source,nativeEventNpc)&&
+        nativeEventSceneOwned=(NativeEventPolicy.Scene(eventId,source,nativeEventNpc)||nativeEventSceneOwned&&eventId==NativeEventPolicy.FullQuest&&source==0)&&
             DateTimeOffset.UtcNow-nativeEventInteractionAt<TimeSpan.FromMinutes(3);
     }
     private unsafe bool NativeEventButton(AtkUnitBase* addon,AtkComponentButton* button){
@@ -113,7 +113,14 @@ public sealed partial class Plugin
     private unsafe void UpdateNativeEventQuest(DateTimeOffset now){
         if(!nativeEventActive||now<nativeEventNext)return;nativeEventNext=now.AddMilliseconds(500);
         try{
-            if(!Player.IsLoaded||Player.ContentId!=nativeEventCharacter)throw new InvalidOperationException("Character changed or logged out.");
+            if(Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51])return;
+            if(!Player.IsLoaded){
+                if(nativeEventUnavailableAt==default)nativeEventUnavailableAt=now;
+                if(now-nativeEventUnavailableAt>TimeSpan.FromSeconds(30))throw new InvalidOperationException("Character remained unavailable for 30 seconds.");
+                nativeEventStatus="Waiting for the character to load";return;
+            }
+            nativeEventUnavailableAt=default;
+            if(Player.ContentId!=nativeEventCharacter)throw new InvalidOperationException("Character changed.");
             if(FollowMovementKeysHeld())throw new InvalidOperationException("Stopped by your movement. Restart when ready.");
             if(QuestToolsOtherOperation()||questChainActive||questRecorderActive||OptionalQuestRunning())throw new InvalidOperationException("Another helper started; the event quest was stopped.");
             if(Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51])return;
@@ -122,6 +129,7 @@ public sealed partial class Plugin
             var step=NativeEventPolicy.Step(QuestManager.IsQuestComplete(NativeEventPolicy.Quest),manager->IsQuestAccepted(NativeEventPolicy.Quest),QuestManager.GetQuestSequence(NativeEventPolicy.Quest));
             if(step!=nativeEventStep){CancelEventAccountMovement();nativeEventStep=step;nativeEventStepAt=now;}
             if(now-nativeEventStepAt>TimeSpan.FromMinutes(5))throw new InvalidOperationException("No quest progress for five minutes. "+nativeEventStatus);
+            if(step==NativeEventStep.Complete&&Client.TerritoryType!=1360){if(!EventAccountSquare(now))nativeEventStatus=eventAccountStatus;return;}
             if(NativeEventDialogue(now))return;
             if(Conditions[ConditionFlag.OccupiedInEvent]||Conditions[ConditionFlag.WatchingCutscene]||Conditions[ConditionFlag.WatchingCutscene78]){nativeEventStatus="Waiting for the quest scene to finish";return;}
             switch(step){
