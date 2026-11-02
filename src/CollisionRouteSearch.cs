@@ -61,7 +61,11 @@ public sealed class CollisionRouteSearch
             var parent=expanding;var d=Directions[neighbor++];if(neighbor==Directions.Length)expanding=null;
             var candidate=parent.Point+new Vector3(d.X*spacing,0,d.Z*spacing);
             if(Horizontal(candidate,origin)>512||Horizontal(candidate,goal)>Horizontal(origin,goal)+35)continue;
-            if(!collision.Ground(candidate,out var point))continue;
+            // A rising stair endpoint can lie above the single local ground probe.
+            // Probe adjacent height bands; Traverse still verifies every supported step.
+            if(!collision.Ground(candidate,out var point)&&
+               !collision.Ground(candidate+new Vector3(0,.45f,0),out point)&&
+               !collision.Ground(candidate-new Vector3(0,.45f,0),out point))continue;
             var key=Address(point);if(closed.Contains(key))continue;
             var cost=parent.Cost+Vector3.Distance(parent.Point,point)*(1+3*collision.WallPenalty(point));
             if(costs.TryGetValue(key,out var known)&&cost>=known)continue;
