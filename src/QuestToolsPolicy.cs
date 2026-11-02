@@ -4,6 +4,8 @@ internal sealed record QuestCatalogueRow(uint Id,string Name,string Group);
 internal enum EventRoutineAction { Quest, Farm, BuyAndUse, Verify, Next }
 internal static class QuestToolsPolicy
 {
+    internal static bool EventCharacterReady(string current,string target,int serviceAccount)=>
+        current.Length>0&&target.Length>0&&(current==target||serviceAccount is >=0 and <=15);
     internal const uint KeywardBound=5466;
     internal static uint ShortId(uint id)=>id&0xffff;
     internal static EventRoutineAction Next(bool questComplete,bool planKnown,long cost,long wallet,int usable,int held)

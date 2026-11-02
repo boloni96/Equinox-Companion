@@ -3,6 +3,11 @@ internal static class QuestTools373Tests
 {
     internal static void Run(){
         void Check(string name,bool good){if(!good)throw new Exception(name);}
+        Check("current character needs no login slot",QuestToolsPolicy.EventCharacterReady("current","current",-1));
+        Check("switch waits without login slot",!QuestToolsPolicy.EventCharacterReady("current","next",-1));
+        Check("known slot permits switch",QuestToolsPolicy.EventCharacterReady("current","next",0));
+        Check("missing identity blocks run",!QuestToolsPolicy.EventCharacterReady("","",0));
+        Check("invalid slot blocks switch",!QuestToolsPolicy.EventCharacterReady("current","next",16));
         Check("full sheet ID maps to quest",QuestToolsPolicy.ShortId(71002)==5466);
         Check("completed quest still farms missing rewards",QuestToolsPolicy.Next(true,true,6380,2000,0,0)==EventRoutineAction.Farm);
         Check("enough funds buys and uses",QuestToolsPolicy.Next(true,true,6380,6459,0,0)==EventRoutineAction.BuyAndUse);

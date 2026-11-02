@@ -41,6 +41,7 @@ public sealed partial class Plugin
         else if(name=="Planting")plantingWindow.IsOpen=false;
         else if(name=="Testing")testingWindow.IsOpen=false;
         else if(name=="Adventure")adventureWindow.IsOpen=false;
+        else if(name=="Helper")companionHelperWindow.IsOpen=false;
         else if(name=="Housing bids")bidWindow.IsOpen=false;
         else if(name=="Welcome")welcomeWindow.IsOpen=false;
         else if(name=="New Character"){registrationDeferred=true;registrationWindow.IsOpen=false;}
@@ -60,6 +61,8 @@ public sealed partial class Plugin
     }
     private void DrawFloatingLaunchers()
     {
+        if(companionHelperWindow.IsOpen)minimizedLaunchers.Remove("Helper");
+        DrawLauncher("Helper",14,"icon.png");
         if(equinoxMarketWindow.IsOpen)minimizedLaunchers.Remove("Equinox Market");
         if(sellerWindow.IsOpen)minimizedLaunchers.Remove("Equinox Seller");
         if(gilTraderWindow.IsOpen)minimizedLaunchers.Remove("Gil Trader");
@@ -101,6 +104,7 @@ public sealed partial class Plugin
                 else if(pending=="Do I already have it?")itemSearchWindow.IsOpen=true;
                 else if(pending=="Testing")OpenTesting();
                 else if(pending=="Adventure")OpenAdventure();
+                else if(pending=="Helper")companionHelperWindow.IsOpen=true;
                 else if(pending=="Housing bids")bidWindow.IsOpen=true;
                 else if(pending=="Companion") Open();
                 else if(pending=="Fashion Report") fashionWindow.OpenReport();
@@ -181,13 +185,13 @@ public sealed partial class Plugin
         var changed = ImGui.SliderFloat("Opacity", ref opacity, .2f, 1, "%.2f");
         changed |= ImGui.Checkbox("Blur background", ref blur);
         changed |= ImGui.Checkbox("Lock position", ref locked);
-        if (ImGui.Button("Reset position")) { o.X = 24; o.Y = 180 + (name == "Companion" ? 0 : name == "Fashion Report" ? 76 : name=="Planting"?152:name=="Welcome"?228:name=="New Character"?304:name=="Where is it cheapest?"?456:name=="Adventure"?532:name=="Housing bids"?608:name=="Testing"?684:380); changed = true; }
+        if (ImGui.Button("Reset position")) { o.X = 24; o.Y = 180 + (name == "Companion" ? 0 : name == "Fashion Report" ? 76 : name=="Planting"?152:name=="Welcome"?228:name=="New Character"?304:name=="Where is it cheapest?"?456:name=="Adventure"?532:name=="Housing bids"?608:name=="Testing"?684:name=="Helper"?1064:380); changed = true; }
         if (changed) { o.Opacity = opacity; o.Blur = blur; o.Locked = locked; SaveConfiguration(); }
     }
     private void DrawFloatingLauncherSettings()
     {
         SettingsHelp("Use the native title-bar collapse triangle or double-click the title bar to minimize to an icon. Single-click reopens its window; double-click closes both. Esc minimizes the focused window to its icon. X closes without an icon. Commands reopen windows. Drag icons to move them.",false);
-        var names = new[] { "Companion", "Fashion Report", "Planting", "Welcome", "New Character", "Do I already have it?", "Where is it cheapest?", "Adventure", "Housing bids", "Testing", "Equinox Market", "Equinox Seller", "Gil Trader", "Equinox Organizer" };
+        var names = new[] { "Companion", "Fashion Report", "Planting", "Welcome", "New Character", "Do I already have it?", "Where is it cheapest?", "Adventure", "Housing bids", "Testing", "Equinox Market", "Equinox Seller", "Gil Trader", "Equinox Organizer", "Helper" };
         for (var i = 0; i < names.Length; i++) { if(!OptionalToolAvailable(names[i]))continue; ImGui.PushID(i); if(ImGui.CollapsingHeader(EquinoxWindowLabel(names[i])))DrawLauncherOptions(names[i], LauncherOptions(names[i], i)); ImGui.PopID(); }
     }
 }

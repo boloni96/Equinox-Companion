@@ -154,6 +154,7 @@ public sealed partial class Plugin
             this.p=p;Size=new(560,480);SizeCondition=ImGuiCond.FirstUseEver;RespectCloseHotkey=false;
         }
         public override void Draw()=>p.DrawHelperWindowBody();
+        public override void PostDraw()=>HandleNativeCollapse(this,()=>p.MinimizeLauncher("Helper"));
     }
     private sealed class QuestToolsWindow:Window
     {

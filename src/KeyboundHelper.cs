@@ -36,6 +36,7 @@ public sealed partial class Plugin
             if(eventAccountActive)StopEventAccount("Stopped by you.");else if(keyboundEnabled)StopKeybound();else{StopKeybound();keyboundBuyStatus="";keyboundGoalCheckAt=default;keyboundEnabled=true;keyboundNext=keyboundHold=keyboundMissing=default;keyboundStatus="Waiting for Keybound Brawler";}
         }
         ImGui.EndDisabled();
+        ImGui.SameLine();DrawKeyboundHelp();
         ImGui.SameLine();ImGui.TextUnformatted(eventAccountActive?"Account routine":keyboundBuying?(keyboundUsingRewards?"Using rewards":"Buying rewards"):keyboundEnabled?"Running":"Stopped");
         // Reserve the same space for short phrases and long waiting/error text.
         // Content scrolls here; neither the window nor the controls below jump.
@@ -49,7 +50,6 @@ public sealed partial class Plugin
         ImGui.Separator();
         DrawKeyboundRewards();
         DrawKeyboundShopping();
-        DrawEventAccount();
         ImGui.Separator();
         if(ImGui.CollapsingHeader("Options")){
         ImGui.Checkbox("Auto-repeat",ref keyboundAutoRepeat);
@@ -71,9 +71,23 @@ public sealed partial class Plugin
         if(ImGui.Checkbox("Use Journal wishlist",ref journal)){config.KeyboundUseJournalWishlist=journal;keyboundBuyRefresh=default;SaveConfiguration();}
         ImGui.EndDisabled();
         }
-        if(ImGui.CollapsingHeader("How it works")){
+        DrawEventAccount();
+    }
+    private void DrawKeyboundHelp()
+    {
+        if(ImGui.SmallButton("?##KeyboundHelp"))ImGui.OpenPopup("Keybound help");
+        if(ImGui.IsItemHovered())ImGui.SetTooltip("How it works");
+        if(ImGui.BeginPopup("Keybound help")){
+            ImGui.PushTextWrapPos(ImGui.GetFontSize()*28);
             ImGui.TextWrapped("Optional typing assistance for Keybound Brawler. Keeps spaces and punctuation, uses Up for consecutive repeats, and clears its partial text when a target disappears. Pauses through stuns and no-typing casts.");
             ImGui.TextWrapped("Background running and anti-AFK are automatic while the tool is running. Stop when enough MGC optionally ends farming before the next registration when your balance covers the missing rewards. Disable it to farm extra coffers. Input goes directly to this game client. Keep the game running; background frame limits can slow it down. Other in-game text fields pause assistance. Auto-queue & repeat registers at the nearby Keybound registrar, accepts the match, and returns after results. Start near the registrar in Keybound Square. Stop or disabling the tool ends automation.");
+            ImGui.Separator();
+            ImGui.TextWrapped("Account routine: Sophia → event quest if missing → rounds → buy missing rewards → use unlocks and all event coffers → next selected character. It stops farming at the reward goal; use ordinary Start for extra coffers.");
+            ImGui.TextWrapped("Your current character uses its known Journal account. The login service-account slot is checked only before switching characters. If it is unknown, the routine waits for you to log into the next selected character manually.");
+            ImGui.TextWrapped("Lifestream supplies travel and movement. Keyward Bound does not require Questionable or vnavmesh, but walking currently uses direct nearby approaches and can stop at obstacles. Recorded corridor routes are not implemented yet.");
+            ImGui.PopTextWrapPos();
+            if(ImGui.SmallButton("Close"))ImGui.CloseCurrentPopup();
+            ImGui.EndPopup();
         }
     }
     private void DrawKeyboundSpeedPreset(string label,int min,int max,int submit)

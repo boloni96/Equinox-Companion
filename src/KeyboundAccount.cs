@@ -27,8 +27,6 @@ public sealed partial class Plugin
     }
     private void DrawEventAccount(){
         if(!ImGui.CollapsingHeader("Account event routine"))return;
-        ImGui.TextWrapped("Sophia → event quest if missing → Keybound rounds → buy missing rewards → use unlocks and all event coffers → next selected character.");
-        ImGui.TextWrapped("Uses Companion for Keyward Bound and Lifestream for travel and waypoint movement. No Questionable or vnavmesh required for this event route. Quest completion never skips missing rewards.");
         if(eventAccountActive){
             ImGui.TextWrapped(eventAccountStatus);
             if(ImGui.Button("Stop account routine"))StopEventAccount("Stopped by you.");
@@ -49,7 +47,6 @@ public sealed partial class Plugin
         if(ImGui.Button("Start selected characters"))StartEventAccount(candidates.Where(c=>eventAccountSelected.Contains(c.Id)).ToArray());
         ImGui.EndDisabled();
         ImGui.TextWrapped(eventAccountStatus);
-        ImGui.TextDisabled("The account routine stops farming at its reward goal. Use ordinary Start for extra coffer farming.");
     }
     private void EventAccountStage(string stage,string message){
         if(nativeEventActive&&eventAccountStage=="quest"){eventAccountStatus=message;return;}
@@ -63,7 +60,7 @@ public sealed partial class Plugin
             if(Conditions[ConditionFlag.BoundByDuty]||Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.InDutyQueue])throw new InvalidOperationException("Leave the duty, queue or combat first.");
             var current=CurrentSharedCharacter()??throw new InvalidOperationException("Waiting for this character's Journal identity.");
             var scope=CharacterSwitchScope(current.Id);
-            if(scope.PersonId.Length==0||scope.AccountId.Length==0||CurrentLoginServiceAccount()<0)throw new InvalidOperationException("Verify this client's service account first.");
+            if(scope.PersonId.Length==0||scope.AccountId.Length==0)throw new InvalidOperationException("Waiting for this character's Person and account from the Journal.");
             if(characters.Any(c=>c.AccountId!=current.AccountId||!EventAccountCandidates().Any(v=>v.Id==c.Id)))throw new InvalidOperationException("Selected characters no longer belong to this account.");
             if(LifestreamBusy()||OptionalQuestRunning())throw new InvalidOperationException("A travel or quest plugin is busy.");
             eventAccountLoadedCharacter=0;eventAccountCompleted=eventAccountSkipped=0;eventAccountCharacters=characters.OrderBy(c=>c.Id==current.Id?0:1).ToArray();eventAccountIndex=0;
@@ -131,6 +128,11 @@ public sealed partial class Plugin
             var current=CurrentSharedCharacter()??throw new InvalidOperationException("Current character identity is not synced.");
             var scope=CharacterSwitchScope(current.Id);
             if(scope.PersonId!=eventAccountPerson||scope.AccountId!=eventAccountId)throw new InvalidOperationException("Current character is outside the reserved account.");
+            if(!QuestToolsPolicy.EventCharacterReady(current.Id,target.Id,CurrentLoginServiceAccount())){
+                CancelEventAccountMovement();
+                EventAccountStage("accountcheck","Waiting before switching to "+target.Name+". The login service-account slot is not known. Log into that character manually in this client; this routine resumes after login.");
+                return;
+            }
             if(current.Id!=target.Id){
                 if(eventAccountStage=="switch")throw new InvalidOperationException("Character switch stopped before the selected character logged in. "+characterTravelStatus);
                 EventAccountStage("switch","Switching to "+target.Name);
