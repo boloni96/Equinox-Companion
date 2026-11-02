@@ -65,12 +65,14 @@ public sealed partial class Plugin
             if(LifestreamBusy()||OptionalQuestRunning())throw new InvalidOperationException("A travel or quest plugin is busy.");
             eventAccountLoadedCharacter=0;eventAccountCompleted=eventAccountSkipped=0;eventAccountCharacters=characters.OrderBy(c=>c.Id==current.Id?0:1).ToArray();eventAccountIndex=0;
             eventAccountPairing=config.PairingKey;eventAccountPerson=scope.PersonId;eventAccountId=scope.AccountId;
+            keyboundAccountRun=Guid.NewGuid().ToString("N");TraceKeyboundRun(keyboundAccountRun,"account-started","Selected characters: "+characters.Length,"user-button");
             eventAccountActive=true;eventAccountDeadline=DateTimeOffset.UtcNow.AddHours(12);eventAccountNext=default;eventAccountStage="";
             eventAccountBuyingStarted=eventAccountFarmStarted=false;EventAccountStage("character","Checking selected character");
         }catch(Exception e){eventAccountStatus="Not started: "+e.Message;}
     }
     private void StopEventAccount(string reason){
         if(!eventAccountActive)return;
+        TraceKeyboundRun(keyboundAccountRun,"account-stopped",reason,reason=="Stopped by you."?"user-button":"system");
         eventAccountActive=false;eventEntranceSceneOwned=false;eventEntranceInteractionAt=default;StopNativeEventQuest(reason);CancelEventAccountMovement();
         if(eventAccountWorldOwned){try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}eventAccountWorldOwned=false;}
         if(assignedLogin!=null)CancelAssignedLogin(reason);
@@ -196,7 +198,7 @@ public sealed partial class Plugin
                 var trader=Objects.FirstOrDefault(KeyboundIsTrader);
                 if(trader==null){eventAccountStatus="Waiting for the MGC trader to load";return;}
                 if(!EventAccountWalk(trader.Position,trader.HitboxRadius+2.5f,now))return;
-                StartKeyboundBuying(true);
+                StartKeyboundBuying(true,"account-routine:"+keyboundAccountRun);
                 if(!keyboundBuying)throw new InvalidOperationException(keyboundBuyStatus);
                 eventAccountBuyingStarted=true;return;
             }
@@ -205,9 +207,10 @@ public sealed partial class Plugin
             var registrar=Objects.FirstOrDefault(o=>o.BaseId==1058751&&o.IsTargetable);
             if(registrar==null){eventAccountStatus="Waiting for the Keybound registrar to load";return;}
             if(!EventAccountWalk(registrar.Position,registrar.HitboxRadius+2.5f,now))return;
-            keyboundAutoRepeat=true;keyboundEnabled=true;keyboundNext=keyboundHold=keyboundMissing=default;
+            keyboundAutoRepeat=true;keyboundTypingRun=Guid.NewGuid().ToString("N");TraceKeyboundRun(keyboundTypingRun,"typing-started","Farming selected character","account-routine:"+keyboundAccountRun);keyboundEnabled=true;keyboundNext=keyboundHold=keyboundMissing=default;
             keyboundStatus="Ready to register";eventAccountFarmStarted=true;
         }catch(Exception e){StopEventAccount("Stopped: "+e.Message);}
     }
 }
+
 

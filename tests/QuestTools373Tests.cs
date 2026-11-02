@@ -52,7 +52,16 @@ internal static class QuestTools373Tests
         Check("stall reported",watch.Check(30,start.AddSeconds(9)).Length>0);
         watch.Start(30,start);Check("forward progress continues",watch.Check(25,start.AddSeconds(6)).Length==0);
         Check("sideways wandering times out",watch.Check(26,start.AddSeconds(15)).Length>0);
+        var history=new KeyboundRunHistory();
+        KeyboundRunEvent Event(string run,string kind)=>new(DateTimeOffset.UtcNow,"session",run,"user-button",kind,42,"test",null,null,null,null,null,null,[],[]);
+        history.Add(Event("first","started"));history.Add(Event("first","stopped"));history.Add(Event("second","started"));
+        Check("restart retains prior stop",history.Snapshot().Select(e=>e.Run+":"+e.Kind).SequenceEqual(new[]{"first:started","first:stopped","second:started"}));
+        var restored=new KeyboundRunHistory();restored.Restore(System.Text.Json.JsonSerializer.Deserialize<KeyboundRunEvent[]>(System.Text.Json.JsonSerializer.Serialize(history.Snapshot()))!);
+        Check("reload preserves run identities",restored.Snapshot().Select(e=>e.Run).SequenceEqual(new[]{"first","first","second"}));
+        for(var i=0;i<600;i++)history.Add(Event(i.ToString(),"state"));
+        Check("history bounded without losing latest",history.Snapshot().Length==KeyboundRunHistory.Limit&&history.Snapshot()[^1].Run=="599");
         Console.WriteLine("Quest tools and account celebration tests passed.");
     }
 }
+
 

@@ -25,6 +25,7 @@ public sealed partial class Plugin
     [DllImport("user32.dll",SetLastError=true)] private static extern bool PostMessageW(nint window,uint message,nint value,nint detail);
     private void StopKeybound(string reason="Stopped")
     {
+        if(keyboundEnabled)TraceKeyboundRun(keyboundTypingRun,"typing-stopped",reason,reason=="Stopped by you."?"user-button":"system");
         keyboundLastSubmitted=keyboundPendingSubmission="";keyboundRecallTried=keyboundRecalling=keyboundClearing=false;
         keyboundQueueOwned=false;keyboundRegistrarOwned=false;keyboundSubmitAt=default;
         keyboundEnabled=false;keyboundSeen=false;keyboundAwaiting=false;keyboundWord=keyboundSent=keyboundExpected="";keyboundTarget=0;keyboundRecent.Clear();keyboundOpenAttempts=0;keyboundStatus=reason;
@@ -33,7 +34,7 @@ public sealed partial class Plugin
     {
         ImGui.BeginDisabled(keyboundBuying&&!eventAccountActive);
         if(ImGui.Button(eventAccountActive||keyboundEnabled?"Stop":"Start")){
-            if(eventAccountActive)StopEventAccount("Stopped by you.");else if(keyboundEnabled)StopKeybound();else{StopKeybound();keyboundBuyStatus="";keyboundGoalCheckAt=default;keyboundEnabled=true;keyboundNext=keyboundHold=keyboundMissing=default;keyboundStatus="Waiting for Keybound Brawler";}
+            if(eventAccountActive)StopEventAccount("Stopped by you.");else if(keyboundEnabled)StopKeybound("Stopped by you.");else{StopKeybound();keyboundBuyStatus="";keyboundGoalCheckAt=default;keyboundEnabled=true;keyboundTypingRun=Guid.NewGuid().ToString("N");TraceKeyboundRun(keyboundTypingRun,"typing-started","Typing started","user-button");keyboundNext=keyboundHold=keyboundMissing=default;keyboundStatus="Waiting for Keybound Brawler";}
         }
         ImGui.EndDisabled();
         ImGui.SameLine();DrawKeyboundHelp();
@@ -244,5 +245,6 @@ public sealed partial class Plugin
     }
     private void KeyboundExpect(string expected,DateTimeOffset now){keyboundExpected=expected;keyboundAwaiting=true;keyboundDeadline=now.AddSeconds(2);}
 }
+
 
 

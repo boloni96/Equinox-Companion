@@ -95,7 +95,7 @@ public sealed partial class Plugin
     }
     private void DrawKeyboundBuyButton()
     {
-        if(keyboundBuying){if(ImGui.Button(keyboundUsingRewards?"Stop using rewards":"Stop buying"))StopKeyboundBuying("Stopped; confirmed purchases are saved.");}
+        if(keyboundBuying){if(ImGui.Button(keyboundUsingRewards?"Stop using rewards":"Stop buying"))StopKeyboundBuying("Stopped by you; confirmed purchases are saved.","user-button");}
         else{
             ImGui.BeginDisabled(keyboundReadyPlan==null||keyboundReadyPlan.Count==0);
             if(ImGui.Button("Buy all missing"))StartKeyboundBuying();
@@ -110,9 +110,12 @@ public sealed partial class Plugin
     }
     private unsafe uint KeyboundWallet(){var c=CurrencyManager.Instance();if(c==null||!c->HasItem(52322))throw new InvalidOperationException("MGC wallet is not loaded.");return c->GetItemCount(52322);}
     private bool KeyboundIsTrader(Dalamud.Game.ClientState.Objects.Types.IGameObject? obj)=>obj!=null&&obj.ObjectKind==ObjectKind.EventNpc&&string.Equals(DataManager.GetExcelSheet<Lumina.Excel.Sheets.ENpcResident>(Dalamud.Game.ClientLanguage.English).GetRowOrDefault(obj.BaseId)?.Singular.ToString(),"MGC trader",StringComparison.OrdinalIgnoreCase);
-    private unsafe void StartKeyboundBuying(bool useRewards=false)
+    private unsafe void StartKeyboundBuying(bool useRewards=false,string source="user-button")
     {
+        var requestedRun=Guid.NewGuid().ToString("N");
+        TraceKeyboundRun(requestedRun,"start-requested",useRewards?"Buy all & use requested":"Buy all missing requested",source);
         try{
+            if(keyboundBuying){TraceKeyboundRun(requestedRun,"start-rejected","Another reward run is active",source);return;}
             RefreshKeyboundBuyPlan();if(keyboundReadyPlan==null)throw new InvalidOperationException(keyboundPlanError);
             if(keyboundReadyPlan.Count==0&&(!useRewards||keyboundUseReady==0))throw new InvalidOperationException(keyboundHeldRewards.Count>0?"Remaining purchases need verification; duplicate purchases are held.":"All selected rewards are already obtained.");
             if(!config.EnableKeyboundBrawler||Client.TerritoryType==1359||Conditions[ConditionFlag.InDutyQueue]||Conditions[ConditionFlag.WaitingForDuty])throw new InvalidOperationException("Finish the round / leave the queue before buying.");
@@ -125,11 +128,12 @@ public sealed partial class Plugin
             var resume=keyboundOffers!.FirstOrDefault(o=>keyboundReadyPlan.ContainsKey(o.Key)&&keyboundPurchases!.Find(Player.ContentId,o.Item) is {} r&&CanResumeKeyboundPurchase(o,r,out _,out _));
             if(KeyboundPurchaseDialogVisible()&&resume==null)throw new InvalidOperationException("Close the unrelated purchase confirmation first.");
             if((PurchaseShop().Length>0||VisibleFollowAddon("SelectString")||VisibleFollowAddon("Talk"))&&(trader==null||Targets.Target?.GameObjectId!=trader.GameObjectId))throw new InvalidOperationException("Close the other NPC's window first.");
-            StopKeybound();keyboundBuying=true;keyboundBuyerCharacter=Player.ContentId;keyboundBuyerWorld=Player.CurrentWorld.RowId;keyboundBuyerTerritory=Client.TerritoryType;keyboundBuyerObject=trader?.GameObjectId??0;
+            StopKeybound("Stopped for reward purchase/use");keyboundBuyerRun=requestedRun;keyboundTraceFingerprint="";keyboundBuying=true;keyboundBuyerCharacter=Player.ContentId;keyboundBuyerWorld=Player.CurrentWorld.RowId;keyboundBuyerTerritory=Client.TerritoryType;keyboundBuyerObject=trader?.GameObjectId??0;
             keyboundBuyAndUse=useRewards;keyboundUsingRewards=false;keyboundUseRemaining.Clear();keyboundUseRemaining.UnionWith(keyboundUseCandidates);keyboundUsed=0;keyboundCoffersOpened=0;keyboundUseSkipped=0;keyboundUsePending=null;
             keyboundBuyRemaining.Clear();keyboundBuyRemaining.UnionWith(keyboundOffers!.Where(o=>keyboundReadyPlan.ContainsKey(o.Key)).Select(o=>o.Item));
             keyboundEquipmentCheckSent=false;keyboundBuySelected=keyboundBuyConfirmed=keyboundBuyerOpened=false;keyboundBuyItem=null;keyboundBuyIntent=null;keyboundBought=keyboundGreetingCount=0;keyboundVisitedTabs.Clear();keyboundTabFingerprint="";keyboundTabStableAt=default;keyboundRequestedTab=null;keyboundTabPrimed=false;keyboundRowFingerprint="";
             keyboundBuyNext=default;keyboundBuyDeadline=DateTimeOffset.UtcNow.AddSeconds(45);keyboundBuyStatus="Buying missing rewards…";
+            TraceKeyboundRun(keyboundBuyerRun,"started",useRewards?"Buying and using selected rewards":"Buying selected rewards",source);
             if(trader!=null)Targets.Target=trader;
             if(keyboundBuyRemaining.Count==0){FinishKeyboundBuying();return;}
             if(resume!=null){
@@ -138,10 +142,10 @@ public sealed partial class Plugin
                 keyboundBuyItem=resume;keyboundBuyIntent=receipt;keyboundBuyShop=resumeShop;keyboundBuyIndex=resumeIndex;keyboundBuySelected=true;keyboundBuyConfirmed=receipt.Submitted;
                 keyboundBuyStatus="Resuming confirmation: "+resume.Name;
             }
-        }catch(Exception e){StopKeyboundBuying(e.Message);}
+        }catch(Exception e){TraceKeyboundRun(requestedRun,"start-failed",e.Message,source);StopKeyboundBuying(e.Message);}
     }
     private string KeyboundBuyFinished()=>$"Bought {keyboundBought} rewards"+(keyboundHeldRewards.Count>0?$" · {keyboundHeldRewards.Count} held for verification.":" · Done.");
-    private void StopKeyboundBuying(string reason){keyboundBuying=false;keyboundUsingRewards=false;keyboundBuyAndUse=false;keyboundBuyStatus=reason;keyboundBuyRefresh=default;}
+    private void StopKeyboundBuying(string reason,string source="system"){if(keyboundBuying)TraceKeyboundRun(keyboundBuyerRun,"stopped",reason,source);keyboundBuying=false;keyboundUsingRewards=false;keyboundBuyAndUse=false;keyboundBuyStatus=reason;keyboundBuyRefresh=default;}
     private bool KeyboundPurchaseDialogVisible()=>new[]{"SelectYesno","ShopExchangeItemDialog","ShopExchangeCurrencyDialog","Request"}.Any(VisibleFollowAddon);
     private unsafe KeyboundOffer? KeyboundReadOffer(string shop,int row,out uint index)
     {
@@ -220,6 +224,7 @@ public sealed partial class Plugin
             try{TargetSystem.Instance()->InteractWithObject((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)trader.Address,false);}finally{helperReplaying=relayInteracting=false;}
             keyboundBuyNext=now.AddSeconds(1);
         }catch(Exception e){StopKeyboundBuying(e.Message);Log.Warning(e,"Keybound reward buyer stopped");}
+        finally{ObserveKeyboundRunProgress(now);}
     }
     private unsafe void ConfirmKeyboundBuy()
     {
@@ -243,3 +248,4 @@ public sealed partial class Plugin
         try{dialog->ReceiveEvent(click.State.EventType,(int)click.Param,&click,&data);}finally{helperReplaying=false;}
     }
 }
+
