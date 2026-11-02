@@ -4,13 +4,13 @@ using FFXIVClientStructs.FFXIV.Client.UI.Misc;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
-    private uint independentEquipJob;
+    private byte independentEquipJob;
     private uint[] independentEquipItems=[];
     private unsafe void UpdateIndependentEquipment(DateTimeOffset now)
     {
         var module=RecommendEquipModule.Instance();var manager=InventoryManager.Instance();
         if(module==null||manager==null||PlayerState.Instance()==null)return;
-        if(independentEquipPhase==0){independentEquipJob=PlayerState.Instance()->CurrentClassJobId;independentEquipItems=[];module->SetupForClassJob(independentEquipJob);independentEquipPhase=1;independentActionAt=now;return;}
+        if(independentEquipPhase==0){independentEquipJob=PlayerState.Instance()->CurrentClassJobId;independentEquipItems=[];if(!module->SetupForClassJob(independentEquipJob))return;independentEquipPhase=1;independentActionAt=now;return;}
         if(PlayerState.Instance()->CurrentClassJobId!=independentEquipJob)throw new InvalidOperationException("Job changed while equipping recommended gear.");
         if(module->IsUpdating||now-independentActionAt<TimeSpan.FromMilliseconds(500))return;
         if(independentEquipPhase==1){var items=new List<uint>();foreach(var recommendation in module->RecommendedItems){var item=recommendation.Value;if(item!=null&&item->ItemId!=0)items.Add(item->ItemId);}independentEquipItems=items.ToArray();module->EquipRecommendedGear();independentEquipPhase=2;independentActionAt=now;return;}

@@ -7,7 +7,8 @@ namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
     private bool independentTravelOwned;
-    private uint independentTravelDestination;
+    private uint independentTravelDestination,independentTravelSourceTerritory;
+    private Vector3 independentTravelSourcePosition;
     private DateTimeOffset independentTravelAt;
     private unsafe bool IndependentSkip(JsonElement step,string group)=>Objects.LocalPlayer is {} player&&IndependentSkipPolicy.Matches(step,group,Client.TerritoryType,player.Position,IndependentWork(),id=>QuestManager.Instance()!=null&&QuestManager.Instance()->IsQuestAccepted(id),id=>QuestManager.IsQuestComplete(id));
     private void CancelIndependentQuestTravel(){
@@ -33,7 +34,8 @@ public sealed partial class Plugin
             if(now-independentTravelAt>TimeSpan.FromSeconds(90))throw new InvalidOperationException("Aethernet arrival timed out.");
             if(LifestreamBusy()||now-independentTravelAt<TimeSpan.FromSeconds(3))return false;
             var expected=sheet.GetRowOrDefault(independentTravelDestination)?.Territory.RowId??0;
-            if(expected!=0&&Client.TerritoryType!=expected)throw new InvalidOperationException("Aethernet ended in a different territory than requested.");
+            if(expected!=0&&Client.TerritoryType!=expected)return false;
+            if(Client.TerritoryType==independentTravelSourceTerritory&&Objects.LocalPlayer is {} arriving&&Vector3.Distance(arriving.Position,independentTravelSourcePosition)<8){questToolsStatus+=" · waiting for destination position";return false;}
             independentTravelOwned=false;independentTravelDestination=0;independentAethernetSent=true;
             return true; // Some imported None steps name the source territory.
         }
@@ -63,6 +65,7 @@ public sealed partial class Plugin
                 if(LifestreamBusy())throw new InvalidOperationException("Another travel operation is running.");
                 StopIndependentWalk();
                 if(!Pi.GetIpcSubscriber<uint,bool>("Lifestream.AethernetTeleportById").InvokeFunc(netId))throw new InvalidOperationException("Aethernet request was refused.");
+                independentTravelSourceTerritory=Client.TerritoryType;independentTravelSourcePosition=self.Position;
                 independentTravelOwned=true;independentTravelDestination=netId;independentTravelAt=now;return false;
             }
             var main=sheet.FirstOrDefault(a=>a.IsAetheryte&&a.AethernetGroup==group&&group!=0).RowId;
