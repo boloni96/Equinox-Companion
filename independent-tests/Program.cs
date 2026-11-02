@@ -137,6 +137,13 @@ using(var flight=System.Text.Json.JsonDocument.Parse("""{"InteractionType":"Inte
 var longRoute=new CollisionRouteSearch(new OpenCollision(),Vector3.Zero,new(240,0,0),2.5f);
 for(var i=0;i<100&&!longRoute.Finished;i++)longRoute.Advance(100,10000);
 Check(longRoute.Path!=null&&longRoute.Path.Length>160,"ground route spans former short search radius");
+var stairs=new CollisionRouteSearch(new StairCollision(),Vector3.Zero,new(5,4.5f,0),.3f);
+for(var i=0;i<100&&!stairs.Finished;i++)stairs.Advance(100,10000);
+Check(stairs.Path!=null&&MathF.Abs(stairs.Path[^1].Y-4.5f)<.1f,"stair endpoint above first ground probe remains reachable through verified edges");
+sealed class StairCollision:IWalkingCollision {
+ public bool Ground(Vector3 p,out Vector3 ground){ground=new(p.X,.9f*p.X,p.Z);return p.X>=0&&p.X<=5&&MathF.Abs(p.Z)<.1f&&MathF.Abs(p.Y-ground.Y)<=.7f;}
+ public bool Traverse(Vector3 a,Vector3 b)=>Vector3.Distance(a,b)<1.5f;
+}
 sealed class OpenCollision:IWalkingCollision {
  public bool Ground(Vector3 p,out Vector3 ground){ground=p;return true;}
  public bool Traverse(Vector3 a,Vector3 b)=>Vector3.Distance(a,b)<2;
