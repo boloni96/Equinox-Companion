@@ -8,7 +8,7 @@ using FFXIVClientStructs.FFXIV.Component.GUI;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
-    private bool nativeEventActive,nativeEventFromAccount,nativeEventSceneOwned,nativeEventAcceptSent,nativeEventResultSent,nativeEventYesSent;
+    private bool nativeEventActive,nativeEventFromAccount,nativeEventSceneOwned,nativeEventAcceptSent,nativeEventResultSent,nativeEventYesSent,nativeEventPromptLoaded;
     private ulong nativeEventCharacter;
     private uint nativeEventNpc;
     private NativeEventStep nativeEventStep;
@@ -25,7 +25,7 @@ public sealed partial class Plugin
             nativeEventActive=true;nativeEventFromAccount=fromAccount;nativeEventCharacter=Player.ContentId;
             nativeEventStep=NativeEventStep.Unsupported;nativeEventStepAt=DateTimeOffset.UtcNow;nativeEventNext=nativeEventActionAt=nativeEventUnavailableAt=default;
             nativeEventNpc=0;nativeEventSceneOwned=nativeEventAcceptSent=nativeEventResultSent=nativeEventYesSent=false;
-            nativeEventPrompt="";eventSaucerTravelAt=default;
+            nativeEventPrompt="";nativeEventPromptLoaded=false;eventSaucerTravelAt=default;
             nativeEventStatus="Starting Keyward Bound with Companion";return true;
         }catch(Exception e){nativeEventStatus="Not started: "+e.Message;return false;}
     }
@@ -91,7 +91,7 @@ public sealed partial class Plugin
         if(VisibleFollowAddon("SelectYesno")){
             var addon=(AddonSelectYesno*)KeyboundAddon("SelectYesno");
             if(nativeEventStep==NativeEventStep.Complete&&nativeEventNpc==1058752&&!nativeEventYesSent&&addon!=null&&addon->PromptText!=null){
-                if(nativeEventPrompt.Length==0)nativeEventPrompt=ReadNativeEventPrompt();
+                if(!nativeEventPromptLoaded){nativeEventPromptLoaded=true;nativeEventPrompt=ReadNativeEventPrompt();}
                 if(NativeEventPolicy.Prompt(nativeEventPrompt,TravelMenuText(addon->PromptText->NodeText.StringPtr)??"")&&NativeEventButton((AtkUnitBase*)addon,addon->YesButton)){
                     nativeEventYesSent=true;nativeEventActionAt=now;return true;
                 }

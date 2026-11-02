@@ -86,10 +86,6 @@ public sealed partial class Plugin
         EventAccountStage("entrance","Going to the Keybound Square entrance");
         var npc=Objects.FirstOrDefault(o=>o.BaseId==1058754&&o.IsTargetable);
         var goal=npc?.Position??new Vector3(.804425f,3.98254f,61.2062f);
-        if(VisibleFollowAddon("Talk")){
-            if(eventEntranceSceneOwned&&now-eventEntranceInteractionAt<TimeSpan.FromMinutes(2)&&now-eventAccountActionAt>TimeSpan.FromSeconds(1)){ClickVisibleTalk();eventAccountActionAt=now;}
-            return false;
-        }
         if(VisibleFollowAddon("SelectString")||VisibleFollowAddon("SelectYesno")||VisibleFollowAddon("SelectIconString")){
             var place=DataManager.GetExcelSheet<Lumina.Excel.Sheets.TerritoryType>().GetRowOrDefault(1360)?.PlaceName.Value.Name.ToString()??"";
             if(place.Length>0&&eventEntranceSceneOwned&&now-eventEntranceInteractionAt<TimeSpan.FromMinutes(2)&&now-eventAccountActionAt>TimeSpan.FromSeconds(2)){
@@ -100,6 +96,10 @@ public sealed partial class Plugin
                 }
             }
             eventAccountStatus="Entrance choice needs verification; select Keybound Square manually. The routine resumes on arrival.";
+            return false;
+        }
+        if(VisibleFollowAddon("Talk")){
+            if(eventEntranceSceneOwned&&now-eventEntranceInteractionAt<TimeSpan.FromMinutes(2)&&now-eventAccountActionAt>TimeSpan.FromSeconds(1)){ClickVisibleTalk();eventAccountActionAt=now;}
             return false;
         }
         if(Conditions[ConditionFlag.OccupiedInEvent])return false;
