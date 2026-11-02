@@ -20,7 +20,7 @@ public sealed partial class Plugin
         ImGui.Checkbox("Then do other accepted quests",ref questNextAccepted);
         ImGui.EndDisabled();
         ImGui.TextDisabled("Duty / solo-duty routes stay pending. No AutoDuty required.");
-        ImGui.BeginDisabled(questChainActive||eventAccountActive||questionableOwnedQuest!=0);
+        ImGui.BeginDisabled(nativeEventActive||questChainActive||eventAccountActive||questionableOwnedQuest!=0);
         if(ImGui.Button("Work on accepted quests")){
             questChainVisited.Clear();var id=NextAcceptedQuest();
             if(id!=0)BeginQuestChain(id);else questChainStatus="No indexed accepted quests were found on this character.";
@@ -33,7 +33,7 @@ public sealed partial class Plugin
         }
     }
     private void BeginQuestChain(uint id){
-        if(questChainActive||eventAccountActive||questRecorderActive||QuestToolsOtherOperation()||!Player.IsLoaded){questToolsStatus="Finish the other operation first.";return;}
+        if(nativeEventActive||questChainActive||eventAccountActive||questRecorderActive||QuestToolsOtherOperation()||!Player.IsLoaded){questToolsStatus="Finish the other operation first.";return;}
         try{if(QuestProviderRunning()){questToolsStatus="Questionable already has a task; it was left alone.";return;}}
         catch{questToolsStatus="Install / enable Questionable first.";return;}
         questChainActive=true;questChainStartedQuest=false;questChainCharacter=Player.ContentId;
@@ -127,3 +127,4 @@ public sealed partial class Plugin
         }catch(Exception e){StopQuestChain("Quest routine stopped: "+e.Message);}
     }
 }
+

@@ -15,6 +15,7 @@ public sealed partial class Plugin
     }
     private unsafe void ObserveNpcEvent(EventFramework* framework, NativeGameObject* target, EventId eventId, short scene, ulong flags, uint* values, byte count)
     {
+        if(nativeEventActive){try{ObserveNativeEventScene(eventId.Id,target==null?0:target->BaseId);}catch(Exception e){Log.Debug(e,"Native event quest observation");}}
         if(questRecorderActive){
             try{
                 var copied=new uint[Math.Min((int)count,64)];
@@ -45,3 +46,4 @@ public sealed partial class Plugin
                 Fashion:new(observed.Score,observed.Remaining,0,FashionCycle(observed.At).ToString("O"))));
     }
 }
+

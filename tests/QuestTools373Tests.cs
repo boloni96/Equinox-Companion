@@ -28,6 +28,26 @@ internal static class QuestTools373Tests
         Check("completion transition celebrates",AccountCelebrationPolicy.Transition(false,true));
         Check("repeated completion stays quiet",!AccountCelebrationPolicy.Transition(true,true));
         Check("five second fade",AccountCelebrationPolicy.Alpha(0)==0&&AccountCelebrationPolicy.Alpha(.25)==.5f&&AccountCelebrationPolicy.Alpha(1)==1&&AccountCelebrationPolicy.Alpha(3)==1&&AccountCelebrationPolicy.Alpha(4.625)==.5f&&AccountCelebrationPolicy.Alpha(5)==0);
+        Check("missing quest accepts",NativeEventPolicy.Step(false,false,0)==NativeEventStep.Accept);
+        Check("accepted quest waits for sequence",NativeEventPolicy.Step(false,true,0)==NativeEventStep.Wait);
+        Check("accepted quest enters square",NativeEventPolicy.Step(false,true,1)==NativeEventStep.EnterSquare);
+        Check("final sequence completes",NativeEventPolicy.Step(false,true,255)==NativeEventStep.Complete);
+        Check("unknown sequence never guesses",NativeEventPolicy.Step(false,true,2)==NativeEventStep.Unsupported);
+        Check("native completion wins",NativeEventPolicy.Step(true,true,255)==NativeEventStep.Finished);
+        Check("wrong NPC scene rejected",!NativeEventPolicy.Scene(71002,1058754,1058752));
+        Check("unrelated event rejected",!NativeEventPolicy.Scene(71003,1058752,1058752));
+        Check("expected quest scene accepted",NativeEventPolicy.Scene(71002,1058752,1058752));
+        Check("empty prompt rejected",!NativeEventPolicy.Prompt("",""));
+        Check("different confirmation rejected",!NativeEventPolicy.Prompt("Continue?","Buy this item?"));
+        Check("localized line wrapping tolerated",NativeEventPolicy.Prompt("Continue now?","Continue\nnow?"));
+        Check("distant unverified walk rejected",!NativeEventPolicy.NearbyLeg(new(0,0,0),new(100,0,0)));
+        Check("different floor rejected",!NativeEventPolicy.NearbyLeg(new(0,0,0),new(0,20,0)));
+        Check("invalid coordinate rejected",!NativeEventPolicy.NearbyLeg(new(0,0,0),new(float.NaN,0,0)));
+        var watch=new NativeEventWalkWatch();var start=DateTimeOffset.UtcNow;watch.Start(30,start);
+        Check("stall reported",watch.Check(30,start.AddSeconds(9)).Length>0);
+        watch.Start(30,start);Check("forward progress continues",watch.Check(25,start.AddSeconds(6)).Length==0);
+        Check("sideways wandering times out",watch.Check(26,start.AddSeconds(15)).Length>0);
         Console.WriteLine("Quest tools and account celebration tests passed.");
     }
 }
+

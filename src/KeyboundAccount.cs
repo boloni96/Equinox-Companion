@@ -16,8 +16,6 @@ public sealed partial class Plugin
     private ulong eventAccountLoadedCharacter;
     private DateTimeOffset eventAccountReadyAt;
     private DateTimeOffset eventAccountNext,eventAccountStageAt,eventAccountActionAt,eventAccountDeadline;
-    private Task<List<Vector3>>? eventAccountPath;
-    private CancellationTokenSource? eventAccountPathCancel;
     private uint eventAccountPathTerritory;
     private Vector3 eventAccountGoal;
     private SharedCharacter[] EventAccountCandidates(){
@@ -28,7 +26,7 @@ public sealed partial class Plugin
     private void DrawEventAccount(){
         if(!ImGui.CollapsingHeader("Account event routine"))return;
         ImGui.TextWrapped("Sophia → event quest if missing → Keybound rounds → buy missing rewards → use unlocks and all event coffers → next selected character.");
-        ImGui.TextWrapped("Requires Questionable for the quest, Lifestream for world/login travel, and vnavmesh for walking. Quest completion never skips missing rewards.");
+        ImGui.TextWrapped("Uses Companion for Keyward Bound and Lifestream for travel and waypoint movement. No Questionable or vnavmesh required for this event route. Quest completion never skips missing rewards.");
         if(eventAccountActive){
             ImGui.TextWrapped(eventAccountStatus);
             if(ImGui.Button("Stop account routine"))StopEventAccount("Stopped by you.");
@@ -52,75 +50,37 @@ public sealed partial class Plugin
         ImGui.TextDisabled("The account routine stops farming at its reward goal. Use ordinary Start for extra coffer farming.");
     }
     private void EventAccountStage(string stage,string message){
+        if(nativeEventActive&&eventAccountStage=="quest"){eventAccountStatus=message;return;}
         if(eventAccountStage!=stage){eventAccountStage=stage;eventAccountStageAt=DateTimeOffset.UtcNow;eventAccountActionAt=default;}
         eventAccountStatus=message;
     }
     private void StartEventAccount(SharedCharacter[] characters){
         try{
             if(!config.EnableKeyboundBrawler||!Player.IsLoaded||characters.Length==0)throw new InvalidOperationException("Enable the event tool and log in first.");
-            if(questChainActive||questRecorderActive||questionableOwnedQuest!=0||QuestToolsOtherOperation()||assignedLogin!=null)throw new InvalidOperationException("Stop other automation before starting the account routine.");
+            if(nativeEventActive||questChainActive||questRecorderActive||questionableOwnedQuest!=0||QuestToolsOtherOperation()||assignedLogin!=null)throw new InvalidOperationException("Stop other automation before starting the account routine.");
             if(Conditions[ConditionFlag.BoundByDuty]||Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.InDutyQueue])throw new InvalidOperationException("Leave the duty, queue or combat first.");
             var current=CurrentSharedCharacter()??throw new InvalidOperationException("Waiting for this character's Journal identity.");
             var scope=CharacterSwitchScope(current.Id);
             if(scope.PersonId.Length==0||scope.AccountId.Length==0||CurrentLoginServiceAccount()<0)throw new InvalidOperationException("Verify this client's service account first.");
             if(characters.Any(c=>c.AccountId!=current.AccountId||!EventAccountCandidates().Any(v=>v.Id==c.Id)))throw new InvalidOperationException("Selected characters no longer belong to this account.");
-            if(LifestreamBusy()||QuestProviderRunning()||Pi.GetIpcSubscriber<bool>("vnavmesh.Path.IsRunning").InvokeFunc())throw new InvalidOperationException("A travel or quest plugin is busy.");
+            if(LifestreamBusy()||OptionalQuestRunning())throw new InvalidOperationException("A travel or quest plugin is busy.");
             eventAccountLoadedCharacter=0;eventAccountCompleted=eventAccountSkipped=0;eventAccountCharacters=characters.OrderBy(c=>c.Id==current.Id?0:1).ToArray();eventAccountIndex=0;
             eventAccountPairing=config.PairingKey;eventAccountPerson=scope.PersonId;eventAccountId=scope.AccountId;
             eventAccountActive=true;eventAccountDeadline=DateTimeOffset.UtcNow.AddHours(12);eventAccountNext=default;eventAccountStage="";
             eventAccountBuyingStarted=eventAccountFarmStarted=false;EventAccountStage("character","Checking selected character");
         }catch(Exception e){eventAccountStatus="Not started: "+e.Message;}
     }
-    private void CancelEventAccountMovement(){
-        eventAccountPathCancel?.Cancel();eventAccountPathCancel?.Dispose();eventAccountPathCancel=null;
-        if(eventAccountPath!=null){_ = eventAccountPath.ContinueWith(t=>{_ = t.Exception;},TaskContinuationOptions.OnlyOnFaulted);eventAccountPath=null;}
-        if(eventAccountMoveOwned){try{Pi.GetIpcSubscriber<object>("vnavmesh.Path.Stop").InvokeAction();}catch{}}
-        eventAccountMoveOwned=false;
-    }
     private void StopEventAccount(string reason){
         if(!eventAccountActive)return;
-        eventAccountActive=false;CancelEventAccountMovement();
+        eventAccountActive=false;StopNativeEventQuest(reason);CancelEventAccountMovement();
         if(eventAccountWorldOwned){try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}eventAccountWorldOwned=false;}
         if(assignedLogin!=null)CancelAssignedLogin(reason);
         StopQuestionableQuest(reason);StopKeybound(reason);if(keyboundBuying)StopKeyboundBuying(reason);
         eventAccountStatus=reason;PrintEquinox("Event routine · "+reason);
     }
-    private bool EventAccountWalk(Vector3 destination,float range,DateTimeOffset now){
-        var self=Objects.LocalPlayer;if(self==null)return false;
-        if(Vector3.Distance(self.Position,destination)<=range){CancelEventAccountMovement();return true;}
-        if(eventAccountPath!=null){
-            if(!eventAccountPath.IsCompleted)return false;
-            var path=eventAccountPath.GetAwaiter().GetResult();eventAccountPath=null;
-            if(eventAccountPathTerritory!=Client.TerritoryType||Vector3.DistanceSquared(eventAccountGoal,destination)>4)throw new InvalidOperationException("Walking destination changed.");
-            if(path.Count==0)throw new InvalidOperationException("No walking route found.");
-            Pi.GetIpcSubscriber<List<Vector3>,bool,object>("vnavmesh.Path.MoveTo").InvokeAction(path,false);eventAccountMoveOwned=true;eventAccountActionAt=now;
-            return false;
-        }
-        if(eventAccountMoveOwned){
-            if(now-eventAccountActionAt>TimeSpan.FromMinutes(2))throw new InvalidOperationException("Walking timed out; no arrival confirmed.");
-            if(!Pi.GetIpcSubscriber<bool>("vnavmesh.Path.IsRunning").InvokeFunc())throw new InvalidOperationException("Walking stopped before reaching the NPC.");
-            return false;
-        }
-        if(!Pi.GetIpcSubscriber<bool>("vnavmesh.Nav.IsReady").InvokeFunc()){eventAccountStatus="Waiting for the area's navigation map";return false;}
-        if(Pi.GetIpcSubscriber<bool>("vnavmesh.Path.IsRunning").InvokeFunc())throw new InvalidOperationException("Another navigation task is running.");
-        eventAccountPathCancel=new();eventAccountGoal=destination;eventAccountPathTerritory=Client.TerritoryType;
-        eventAccountPath=Pi.GetIpcSubscriber<Vector3,Vector3,bool,CancellationToken,Task<List<Vector3>>>("vnavmesh.Nav.PathfindCancelable")
-            .InvokeFunc(self.Position,destination,false,eventAccountPathCancel.Token);
-        return false;
-    }
     private unsafe bool EventAccountSquare(DateTimeOffset now){
         if(Client.TerritoryType==1360)return true;
-        if(Client.TerritoryType!=144){
-            EventAccountStage("saucer","Travelling to the Gold Saucer");
-            if(eventAccountActionAt!=default)return false;
-            var telepo=Telepo.Instance();if(telepo==null)return false;
-            telepo->UpdateAetheryteList();
-            foreach(var t in telepo->TeleportList)if(t.AetheryteId==62){
-                if(!telepo->Teleport(t.AetheryteId,t.SubIndex))throw new InvalidOperationException("Gold Saucer teleport was refused.");
-                eventAccountActionAt=now;return false;
-            }
-            throw new InvalidOperationException("This character has not unlocked Gold Saucer teleport.");
-        }
+        if(!EventReachSaucer(now)||!EventReachEntrance(now))return false;
         EventAccountStage("entrance","Going to the Keybound Square entrance");
         var npc=Objects.FirstOrDefault(o=>o.BaseId==1058754&&o.IsTargetable);
         var goal=npc?.Position??new Vector3(.804425f,3.98254f,61.2062f);
@@ -195,21 +155,13 @@ public sealed partial class Plugin
                 return;
             }
             if(!QuestManager.IsQuestComplete(QuestToolsPolicy.KeywardBound)){
-                if(questionableOwnedQuest!=0){eventAccountStatus=questToolsStatus;return;}
-                if(eventAccountStage=="quest")throw new InvalidOperationException(questToolsStatus);
-                if(Client.TerritoryType!=144&&Client.TerritoryType!=1360){
-                    EventAccountStage("questtravel","Travelling to the Gold Saucer for Keyward Bound");
-                    if(eventAccountActionAt==default){GoToAdventureFashion();eventAccountActionAt=now;}
-                    return;
-                }
-                if(Pi.GetIpcSubscriber<string,bool>("Questionable.IsQuestLocked").InvokeFunc(QuestToolsPolicy.KeywardBound.ToString())){
-                    PrintEquinox("Event routine · "+target.Name+": quest unavailable; check level, event dates and prerequisites. Skipped for this run.");
-                    eventAccountSkipped++;eventAccountIndex++;EventAccountStage("character","Checking next eligible character");return;
-                }
-                EventAccountStage("quest","Completing Keyward Bound");
-                if(!StartQuestionableQuest(QuestToolsPolicy.KeywardBound))throw new InvalidOperationException(questToolsStatus);
+                if(nativeEventActive){eventAccountStatus=nativeEventStatus;return;}
+                if(eventAccountStage=="quest")throw new InvalidOperationException(nativeEventStatus);
+                EventAccountStage("quest","Completing Keyward Bound with Companion");
+                if(!StartNativeEventQuest(true))throw new InvalidOperationException(nativeEventStatus);
                 return;
             }
+            if(nativeEventActive){eventAccountStatus=nativeEventStatus;return;}
             if(questionableOwnedQuest!=0)return;
             if(Client.TerritoryType==1359||Conditions[ConditionFlag.InDutyQueue]||Conditions[ConditionFlag.WaitingForDuty]||
                 Conditions[ConditionFlag.WaitingForRaceOrMatch]||Conditions[ConditionFlag.RegisteringForRaceOrMatch]||Conditions[ConditionFlag.WaitingForDutyFinder]||VisibleFollowAddon("ContentsFinderConfirm")){
@@ -252,3 +204,4 @@ public sealed partial class Plugin
         }catch(Exception e){StopEventAccount("Stopped: "+e.Message);}
     }
 }
+
