@@ -7,7 +7,9 @@ public static class IndependentStepPolicy
     public static string Review(JsonElement step)
     {
         var type=Text(step,"InteractionType");
-        if(!Actions.Contains(type))return type is "Duty" or "SinglePlayerDuty"?"Duty / solo duty left for manual play.":"Step requires manual play: "+type;
+        if(type.Contains("Leve",StringComparison.OrdinalIgnoreCase))return "Levequest left for manual play.";
+        if(type is "Combat" or "Duty" or "SinglePlayerDuty")return "Combat / duty left for manual play.";
+        if(!Actions.Contains(type))return "Step requires manual play: "+type;
         foreach(var p in step.EnumerateObject())
             if(!Fields.Contains(p.Name)&&Meaningful(p.Value))return "Step condition not supported yet: "+p.Name;
         if(step.TryGetProperty("DialogueChoices",out var choices)&&choices.ValueKind==JsonValueKind.Array)

@@ -105,6 +105,18 @@ Check(!EventCutsceneRetry.Ready(1,skipNow,skipNow.AddSeconds(-1)),"skip pulses s
 Check(EventCutsceneRetry.Ready(1,skipNow,skipNow.AddSeconds(-2)),"missed early pulse may retry");
 Check(!EventCutsceneRetry.Ready(3,skipNow,skipNow.AddSeconds(-20)),"skip retries bounded");
 Console.WriteLine("Wall clearance and event skip retry checks passed.");
+Check(IndependentDialoguePolicy.OwnedScene(100,65636,42,42,false,true),"matching interacted quest scene becomes owned");
+Check(IndependentDialoguePolicy.OwnedScene(100,65636,0,42,true,false),"owned cutscene continuation survives long scene");
+Check(!IndependentDialoguePolicy.OwnedScene(100,65637,0,42,true,true),"foreign quest revokes scene ownership");
+Check(!IndependentDialoguePolicy.OwnedScene(100,65636,43,42,true,true),"different NPC cannot borrow scene ownership");
+Check(!IndependentDialoguePolicy.OwnedScene(100,65636,0,0,false,true),"anonymous scene cannot establish ownership");
+using(var combatStep=System.Text.Json.JsonDocument.Parse("{\"InteractionType\":\"Combat\"}"))Check(IndependentStepPolicy.Review(combatStep.RootElement).Contains("manual"),"combat remains manual");
+using(var leveStep=System.Text.Json.JsonDocument.Parse("{\"InteractionType\":\"AcceptLeve\"}"))Check(IndependentStepPolicy.Review(leveStep.RootElement).Contains("manual"),"levequests remain manual");
+QuestRewardCandidate[] rewardOffers=[new(0,10,1,false,false,50,500,"Upgrade"),new(1,11,2,true,false,0,200,"Coins"),new(2,12,1,false,false,0,1000,"Sell")];
+Check(QuestRewardPolicy.Choose(rewardOffers)?.ItemId==11,"gil first over gear and sell value");
+Check(QuestRewardPolicy.Choose(rewardOffers.Where(x=>!x.Gil))?.ItemId==10,"usable gear upgrade before vendor fallback");
+Check(QuestRewardPolicy.Choose(rewardOffers.Select(x=>x with {Gil=false,Upgrade=0}))?.ItemId==12,"highest total vendor value fallback");
+Check(QuestRewardPolicy.Choose(rewardOffers.Select(x=>x with {UniqueOwned=true}))==null,"owned unique rewards excluded");
 sealed class WallPreferenceCollision(bool narrow):IWalkingCollision
 {
     public bool Ground(Vector3 near,out Vector3 ground){ground=near;return near.X>=0&&near.X<=7&&near.Z>=0&&near.Z<=(narrow?0:3);}

@@ -93,6 +93,7 @@ public sealed partial class Plugin
         if(VisibleHelperResultQuest()!=a.QuestId){if(now-helperActionStarted>TimeSpan.FromSeconds(10))BlockHelper("The matching quest completion window did not appear.");return;}
         var addon=(AddonJournalResult*)GardenGui.GetAddonByName("JournalResult").Address;
         if(addon==null||!addon->AtkUnitBase.IsReady)return;
+        if(a.Scene=="complete"&&!PrepareQuestReward(addon,QuestToolsPolicy.ShortId(a.QuestId),out var rewardStatus)){helperQuestStatus=rewardStatus;return;}
         var button=a.Scene=="decline"?addon->DeclineButton:addon->CompleteButton;
         if(button==null||!button->IsEnabled){BlockHelper("Complete is unavailable. A reward choice or another quest requirement needs your attention; no reward was chosen automatically.");return;}
         if(button->AtkComponentBase.OwnerNode==null)return;

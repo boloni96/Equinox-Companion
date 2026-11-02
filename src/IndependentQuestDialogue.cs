@@ -30,12 +30,12 @@ public sealed partial class Plugin
     }
     private unsafe bool IndependentQuestDialogue(JsonElement step,string kind,DateTimeOffset now)
     {
-        if(!QuestConversationVisible()&&!VisibleFollowAddon("SelectYesno"))return false;
+        if(!QuestConversationVisible()&&!VisibleFollowAddon("SelectYesno")&&!VisibleFollowAddon("CutSceneSelectString"))return false;
         StopIndependentWalk("Paused for quest conversation");
         if(now-independentActionAt<TimeSpan.FromMilliseconds(750))return true;
         if(!independentScene){
             if(independentNpc!=0&&Targets.Target?.BaseId==independentNpc&&independentStepSent&&now-independentActionAt<TimeSpan.FromSeconds(20))
-                foreach(var name in new[]{"SelectString","SelectIconString"}){
+                foreach(var name in new[]{"SelectString","SelectIconString","CutSceneSelectString"}){
                     var addon=KeyboundAddon(name);var choices=HelperChoices(addon,name);
                     var matches=choices.Select((text,index)=>(text,index)).Where(x=>x.text.Trim()==QuestTitle(independentQuestId)).ToArray();
                     if(matches.Length==1){SelectTravelChoice(addon,matches[0].index);independentActionAt=now;return true;}
@@ -49,7 +49,10 @@ public sealed partial class Plugin
         }
         if(VisibleFollowAddon("JournalResult")){
             var a=(AddonJournalResult*)KeyboundAddon("JournalResult");
-            if(kind=="CompleteQuest"&&NativeEventTitle((AtkUnitBase*)a,independentQuestId)&&NativeEventButton((AtkUnitBase*)a,a->CompleteButton))independentActionAt=now;
+            if(kind=="CompleteQuest"&&NativeEventTitle((AtkUnitBase*)a,independentQuestId)){
+                if(!PrepareQuestReward(a,independentQuestId,out var rewardStatus)){questToolsStatus=rewardStatus;return true;}
+                if(NativeEventButton((AtkUnitBase*)a,a->CompleteButton))independentActionAt=now;
+            }
             else questToolsStatus+=" · choose any required quest reward manually";
             return true;
         }
@@ -65,15 +68,24 @@ public sealed partial class Plugin
                     var yes=!definition.TryGetProperty("Yes",out var answer)||answer.ValueKind==JsonValueKind.True;
                     if(NativeEventButton((AtkUnitBase*)a,yes?a->YesButton:a->NoButton)){independentActionAt=now;return true;}
                 }
-                // List prompts are not exposed by every menu layout. Only use an exact,
-                // unique localized answer when the definition has no additional prompt.
-                if(IndependentStepPolicy.Text(definition,"Type")=="List"&&!definition.TryGetProperty("Prompt",out _)){
+                if(IndependentStepPolicy.Text(definition,"Type")=="List"){
                     var answer=IndependentDialogueText(definition,"Answer");
                     bool answerPattern=definition.TryGetProperty("AnswerIsRegularExpression",out var re)&&re.ValueKind==JsonValueKind.True;
-                    foreach(var name in new[]{"SelectString","SelectIconString"}){
-                        var a=KeyboundAddon(name);var choices=HelperChoices(a,name);
+                    foreach(var name in new[]{"SelectString","SelectIconString","CutSceneSelectString"}){
+                        var a=KeyboundAddon(name);if(a==null||!a->IsVisible||!a->IsReady)continue;
+                        if(definition.TryGetProperty("Prompt",out var promptRef)&&promptRef.ValueKind!=JsonValueKind.Null){
+                            // Match an actual displayed string; do not discard the imported prompt constraint.
+                            if(a->AtkValues==null||a->AtkValuesCount>1024)continue;
+                            var matched=false;
+                            for(var i=0;i<a->AtkValuesCount;i++){
+                                var v=a->AtkValues[i];if(((int)v.Type&15) is not (8 or 10))continue;
+                                if(IndependentTextMatches(expected,TravelMenuText(v.String.Value)??"",pattern)){matched=true;break;}
+                            }
+                            if(!matched)continue;
+                        }
+                        var choices=HelperChoices(a,name);
                         var matches=choices.Select((text,index)=>(text,index)).Where(x=>IndependentTextMatches(answer,x.text,answerPattern)).ToArray();
-                        if(matches.Length==1){SelectTravelChoice(a,matches[0].index);independentActionAt=now;return true;}
+                        if(matches.Length==1){helperReplaying=true;try{SelectTravelChoice(a,matches[0].index);}finally{helperReplaying=false;}independentActionAt=now;return true;}
                     }
                 }
             }
