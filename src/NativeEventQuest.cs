@@ -18,11 +18,11 @@ public sealed partial class Plugin
         try{
             if(nativeEventActive)throw new InvalidOperationException("The event quest is already running.");
             if(!Player.IsLoaded||QuestManager.Instance()==null)throw new InvalidOperationException("Log in first.");
-            if(questChainActive||questionableOwnedQuest!=0||questRecorderActive||QuestToolsOtherOperation()||(!fromAccount&&eventAccountActive))throw new InvalidOperationException("Stop the other helper first.");
+            if(questChainActive||independentQuestId!=0||questRecorderActive||QuestToolsOtherOperation()||(!fromAccount&&eventAccountActive))throw new InvalidOperationException("Stop the other helper first.");
             if(Conditions[ConditionFlag.BoundByDuty]||Conditions[ConditionFlag.InDutyQueue]||Conditions[ConditionFlag.InCombat]||QuestConversationVisible())throw new InvalidOperationException("Finish the current duty, queue, combat or conversation first.");
             if(OptionalQuestRunning()||LifestreamBusy())throw new InvalidOperationException("Another quest or travel task is running.");
             if(QuestManager.IsQuestComplete(NativeEventPolicy.Quest)){nativeEventStatus="Keyward Bound is complete. Missing rewards are checked separately.";return true;}
-            nativeEventActive=true;nativeEventFromAccount=fromAccount;nativeEventCharacter=Player.ContentId;
+            StopIndependentWalk();nativeEventActive=true;nativeEventFromAccount=fromAccount;nativeEventCharacter=Player.ContentId;
             nativeEventStep=NativeEventStep.Unsupported;nativeEventStepAt=DateTimeOffset.UtcNow;nativeEventNext=nativeEventActionAt=nativeEventUnavailableAt=default;
             nativeEventNpc=0;nativeEventSceneOwned=nativeEventAcceptSent=nativeEventResultSent=nativeEventYesSent=false;
             nativeEventPrompt="";nativeEventPromptLoaded=false;eventSaucerTravelAt=default;
@@ -49,9 +49,9 @@ public sealed partial class Plugin
         helperReplaying=true;try{addon->ReceiveEvent(click.State.EventType,(int)click.Param,&click,&data);}finally{helperReplaying=false;}
         return true;
     }
-    private unsafe bool NativeEventTitle(AtkUnitBase* addon){
+    private unsafe bool NativeEventTitle(AtkUnitBase* addon,uint questId=NativeEventPolicy.Quest){
         if(addon==null||addon->AtkValues==null||addon->AtkValuesCount>1024)return false;
-        var title=QuestTitle(NativeEventPolicy.Quest);
+        var title=QuestTitle(questId);
         for(var i=0;i<addon->AtkValuesCount;i++){
             var v=addon->AtkValues[i];if(((int)v.Type&15) is not (8 or 10))continue;
             var text=(TravelMenuText(v.String.Value)??"").Trim();
@@ -153,9 +153,10 @@ public sealed partial class Plugin
         }catch(Exception e){StopNativeEventQuest("Stopped: "+e.Message);}
     }
     private void DrawNativeEventQuest(){
-        ImGui.TextWrapped("Keyward Bound runs in Companion. Lifestream supplies travel and waypoint movement; Questionable and vnavmesh are not required for this event route.");
+        ImGui.TextWrapped("Keyward Bound runs in Companion. Companion uses live collision checks for local walking. Lifestream supplies aethernet/world travel; Questionable and vnavmesh are not required.");
         ImGui.TextWrapped(nativeEventStatus);
+        ImGui.TextWrapped(independentWalkStatus);
         if(nativeEventActive){if(ImGui.Button("Stop event quest")){if(nativeEventFromAccount)StopEventAccount("Stopped by you.");else StopNativeEventQuest("Stopped by you.");}}
-        else {ImGui.BeginDisabled(eventAccountActive||questChainActive||questionableOwnedQuest!=0||questRecorderActive);if(ImGui.Button("Start Keyward Bound"))StartNativeEventQuest();ImGui.EndDisabled();}
+        else {ImGui.BeginDisabled(eventAccountActive||questChainActive||independentQuestId!=0||questRecorderActive);if(ImGui.Button("Start Keyward Bound"))StartNativeEventQuest();ImGui.EndDisabled();}
     }
 }

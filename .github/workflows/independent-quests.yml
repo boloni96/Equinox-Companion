@@ -1,0 +1,49 @@
+name: Independent quest and navigation foundation
+on:
+  push:
+    branches: [feature/independent-quests]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Verify pinned source and preserve all quest data
+        run: |
+          test "$(git -C vendor/questionable-data-source rev-parse HEAD)" = f737a0865627bc6fa70fb7024ab403b3e4881736
+          python3 scripts/import_quest_routes.py vendor/questionable-data-source independent-tests/quest-routes.zip
+          python3 independent-tests/verify_pack.py vendor/questionable-data-source independent-tests/quest-routes.zip
+      - name: Test standalone reader and 3D graph search
+        run: dotnet run --project independent-tests/IndependentTests.csproj -c Release -- independent-tests/quest-routes.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: independent-quest-data
+          path: independent-tests/quest-routes.zip
+  plugin-build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Download official build references
+        shell: pwsh
+        run: |
+          $refs = Join-Path $env:RUNNER_TEMP 'dalamud'
+          $zip = Join-Path $env:RUNNER_TEMP 'dalamud.zip'
+          Invoke-WebRequest https://goatcorp.github.io/dalamud-distrib/latest.zip -OutFile $zip
+          Expand-Archive $zip -DestinationPath $refs
+          "DALAMUD_HOME=$refs" >> $env:GITHUB_ENV
+      - name: Generate bundled quest data
+        run: python scripts/import_quest_routes.py vendor/questionable-data-source src/quest-routes.zip
+      - name: Compile Companion with independent components
+        run: dotnet build src/EquinoxCompanion.csproj -c Release -p:RestoreLockedMode=true

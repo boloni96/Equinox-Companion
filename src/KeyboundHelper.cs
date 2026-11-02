@@ -85,7 +85,7 @@ public sealed partial class Plugin
             ImGui.Separator();
             ImGui.TextWrapped("Account routine: Sophia → event quest if missing → rounds → buy missing rewards → use unlocks and all event coffers → next selected character. It stops farming at the reward goal; use ordinary Start for extra coffers.");
             ImGui.TextWrapped("Your current character uses its known Journal account. The login service-account slot is checked only before switching characters. If it is unknown, the routine waits for you to log into the next selected character manually.");
-            ImGui.TextWrapped("Lifestream supplies travel and movement. Keyward Bound does not require Questionable or vnavmesh, but walking currently uses direct nearby approaches and can stop at obstacles. Recorded corridor routes are not implemented yet.");
+            ImGui.TextWrapped("Companion plans local ground routes using live collision checks. Lifestream supplies aethernet/world travel. Questionable and vnavmesh are not required. Flying and routes beyond the local search range remain manual.");
             ImGui.PopTextWrapPos();
             if(ImGui.SmallButton("Close"))ImGui.CloseCurrentPopup();
             ImGui.EndPopup();

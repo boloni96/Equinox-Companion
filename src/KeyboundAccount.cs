@@ -56,7 +56,7 @@ public sealed partial class Plugin
     private void StartEventAccount(SharedCharacter[] characters){
         try{
             if(!config.EnableKeyboundBrawler||!Player.IsLoaded||characters.Length==0)throw new InvalidOperationException("Enable the event tool and log in first.");
-            if(nativeEventActive||questChainActive||questRecorderActive||questionableOwnedQuest!=0||QuestToolsOtherOperation()||assignedLogin!=null)throw new InvalidOperationException("Stop other automation before starting the account routine.");
+            if(nativeEventActive||questChainActive||questRecorderActive||independentQuestId!=0||QuestToolsOtherOperation()||assignedLogin!=null)throw new InvalidOperationException("Stop other automation before starting the account routine.");
             if(Conditions[ConditionFlag.BoundByDuty]||Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.InDutyQueue])throw new InvalidOperationException("Leave the duty, queue or combat first.");
             var current=CurrentSharedCharacter()??throw new InvalidOperationException("Waiting for this character's Journal identity.");
             var scope=CharacterSwitchScope(current.Id);
@@ -76,7 +76,7 @@ public sealed partial class Plugin
         eventAccountActive=false;eventEntranceSceneOwned=false;eventEntranceInteractionAt=default;StopNativeEventQuest(reason);CancelEventAccountMovement();
         if(eventAccountWorldOwned){try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}eventAccountWorldOwned=false;}
         if(assignedLogin!=null)CancelAssignedLogin(reason);
-        StopQuestionableQuest(reason);StopKeybound(reason);if(keyboundBuying)StopKeyboundBuying(reason);
+        StopIndependentQuest(reason);StopKeybound(reason);if(keyboundBuying)StopKeyboundBuying(reason);
         eventAccountStatus=reason;PrintEquinox("Event routine · "+reason);
     }
     private unsafe bool EventAccountSquare(DateTimeOffset now){
@@ -170,7 +170,7 @@ public sealed partial class Plugin
                 return;
             }
             if(nativeEventActive){eventAccountStatus=nativeEventStatus;return;}
-            if(questionableOwnedQuest!=0)return;
+            if(independentQuestId!=0)return;
             if(Client.TerritoryType==1359||Conditions[ConditionFlag.InDutyQueue]||Conditions[ConditionFlag.WaitingForDuty]||
                 Conditions[ConditionFlag.WaitingForRaceOrMatch]||Conditions[ConditionFlag.RegisteringForRaceOrMatch]||Conditions[ConditionFlag.WaitingForDutyFinder]||VisibleFollowAddon("ContentsFinderConfirm")){
                 eventAccountStatus="Finishing the current event round";return;

@@ -9,27 +9,11 @@ public sealed partial class Plugin
     private bool eventSaucerTravelOwned;
     private bool OptionalQuestRunning(){try{return QuestProviderRunning();}catch{return false;}}
     private void CancelEventAccountMovement(){
+        StopIndependentWalk();
         if(eventAccountMoveOwned||eventSaucerTravelOwned){try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}}
         eventAccountMoveOwned=eventSaucerTravelOwned=false;eventSaucerTravelAt=default;
     }
-    private bool EventAccountWalk(Vector3 destination,float range,DateTimeOffset now){
-        var self=Objects.LocalPlayer;if(self==null)return false;
-        var distance=Vector3.Distance(self.Position,destination);
-        if(distance<=range){CancelEventAccountMovement();return true;}
-        if(eventAccountMoveOwned){
-            if(eventAccountPathTerritory!=Client.TerritoryType||Vector3.DistanceSquared(eventAccountGoal,destination)>4){CancelEventAccountMovement();return false;}
-            var error=eventWalkWatch.Check(distance,now);
-            if(error.Length>0)throw new InvalidOperationException(error+" Move nearer the NPC and restart; no interaction was sent.");
-            if(now-eventWalkStarted>TimeSpan.FromSeconds(2)&&!LifestreamBusy())throw new InvalidOperationException("Walking stopped before arrival. Move nearer the NPC and restart.");
-            return false;
-        }
-        if(LifestreamBusy())throw new InvalidOperationException("Another Lifestream task is running; it was left alone.");
-        if(!NativeEventPolicy.NearbyLeg(self.Position,destination))throw new InvalidOperationException("Destination is outside the supported nearby approach range. Move to the event NPC's area and restart.");
-        eventAccountGoal=destination;eventAccountPathTerritory=Client.TerritoryType;
-        // Existing Companion waypoint movement: no pathfinding or navmesh request.
-        Pi.GetIpcSubscriber<List<Vector3>,bool?,float?,float?,object>("Lifestream.MoveEx").InvokeAction([destination],true,range-.25f,.3f);
-        eventAccountMoveOwned=true;eventWalkStarted=now;eventWalkWatch.Start(distance,now);return false;
-    }
+    private bool EventAccountWalk(Vector3 destination,float range,DateTimeOffset now)=>IndependentWalk(destination,range,now);
     private unsafe bool EventReachSaucer(DateTimeOffset now){
         if(Client.TerritoryType==144){if(!eventSaucerTravelOwned)eventSaucerTravelAt=default;return true;}
         eventAccountStatus="Travelling to the Gold Saucer";
