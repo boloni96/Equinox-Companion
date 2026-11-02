@@ -1,15 +1,17 @@
 using System.Numerics;
 using Dalamud.Hooking;
 using Dalamud.Game.ClientState.Conditions;
-using FFXIVClientStructs.FFXIV.Client.System.Input;
-using FFXIVClientStructs.FFXIV.Client.UI;
+using System.Runtime.InteropServices;
 using FFXIVClientStructs.FFXIV.Client.Game.Control;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
     private CollisionRouteSearch? independentSearch;
     private readonly GameWalkingCollision independentCollision=new();
-    private Hook<FollowInputRead>? independentForwardHook;
+    private unsafe delegate void GroundMovementRead(nint controller,float* left,float* forward,float* turn,byte* strafe,byte* flags,byte additive);
+    private delegate byte GroundMovementEnabled(nint controller);
+    private Hook<GroundMovementRead>? independentForwardHook;
+    private GroundMovementEnabled? independentGroundEnabled1,independentGroundEnabled2;
     private Vector3 independentGoal,independentPrevious,independentLastProgress;
     private Vector3[]? independentPath;
     private int independentWaypoint,independentReplans;
@@ -21,27 +23,44 @@ public sealed partial class Plugin
     private int independentCheckedWaypoint=-1,independentInputReads,independentInputOverrides;
     private string independentNavigationRun="";
     private readonly WalkingInputLease independentLease=new();
-    private readonly int[] independentInputCodes=new int[256];
+    private int independentNativeGateRejects,independentNativeManualReads,independentNativeExceptions;
     private int independentForwardReads,independentExpiredReads,independentInactiveReads;
     private bool independentPositionChanged;
     private string independentInputBlock="",independentLastWalkFailure="";
     private string independentWalkStatus="Idle",independentWalkFailure="";
-    private unsafe byte IndependentForward(nint input,int id)
+    private unsafe void IndependentGroundInput(nint controller,float* left,float* forward,float* turn,byte* strafe,byte* flags,byte additive)
     {
-        var original=independentForwardHook!.Original(input,id);
-        // Movement is consumed by the game control input manager, not UIInputData.
-        if(input!=(nint)InputManager.Instance())return original;
+        independentForwardHook!.Original(controller,left,forward,turn,strafe,flags,additive);
         independentInputReads++;
-        if((uint)id<(uint)independentInputCodes.Length)independentInputCodes[id]++;
-        if(id!=(int)InputCode.MOVE_FORE)return original;
+        if(controller==0||left==null||forward==null||turn==null||additive!=0)return;
         independentForwardReads++;
-        // UI/condition checks run on Framework.Update, never inside a native input
-        // callback (ImGui may have no context there). The short lease fails closed.
         var decision=independentLease.Check(DateTimeOffset.UtcNow);
-        if(decision==WalkingInputDecision.Expired){independentExpiredReads++;independentInputBlock="Movement pulse expired before the game read it";}
-        else if(decision==WalkingInputDecision.Inactive){independentInactiveReads++;}
-        else{independentInputOverrides++;independentInputBlock="";return 1;}
-        return original;
+        if(decision==WalkingInputDecision.Expired){independentExpiredReads++;independentInputBlock="Movement pulse expired";return;}
+        if(decision==WalkingInputDecision.Inactive){independentInactiveReads++;return;}
+        try{
+            // Respect the game's native movement gates and any real/other-plugin input.
+            var enabled=independentGroundEnabled1!(controller)!=0&&independentGroundEnabled2!(controller)!=0;
+            if(!enabled){independentNativeGateRejects++;independentInputBlock="Game movement is temporarily disabled";return;}
+            if(!WalkingInputLease.CanSupplyGround(*left,*forward,*turn)){
+                independentNativeManualReads++;independentInputBlock="Another movement input has priority";
+                independentLease.Revoke();return;
+            }
+            // Framework.Update has aligned both standard and legacy camera headings
+            // with the next collision-checked waypoint. Only supply forward ground input.
+            *forward=1f;independentInputOverrides++;independentInputBlock="";
+        }catch(Exception e){independentNativeExceptions++;independentInputBlock=e.GetType().Name;independentLease.Revoke();}
+    }
+    private unsafe void EnsureIndependentGroundInput()
+    {
+        if(independentForwardHook!=null)return;
+        // Native ABI/signature references: awgil/ffxiv_navmesh, Movement/OverrideMovement.cs.
+        // Independently implemented ground-only adapter; no plugin dependency.
+        if(!QuickLootScanner.TryScanText("E8 ?? ?? ?? ?? 84 C0 75 10 38 43 3C",out var gate1)||
+           !QuickLootScanner.TryScanText("E8 ?? ?? ?? ?? 84 C0 75 03 88 47 3F",out var gate2))
+            throw new InvalidOperationException("Game ground-movement checks are unavailable for this version.");
+        independentGroundEnabled1=Marshal.GetDelegateForFunctionPointer<GroundMovementEnabled>(gate1);
+        independentGroundEnabled2=Marshal.GetDelegateForFunctionPointer<GroundMovementEnabled>(gate2);
+        independentForwardHook=Interop.HookFromSignature<GroundMovementRead>("E8 ?? ?? ?? ?? 80 7B 3E 00 48 8D 3D",IndependentGroundInput);
     }
     private void StopIndependentWalk(string reason="Stopped",bool resetFailure=false)
     {
@@ -63,7 +82,7 @@ public sealed partial class Plugin
             StopIndependentWalk("Destination changed");
         }
         independentNavigationRun=Guid.NewGuid().ToString("N");independentInputReads=independentInputOverrides=0;
-        independentForwardReads=independentExpiredReads=independentInactiveReads=0;Array.Clear(independentInputCodes);
+        independentForwardReads=independentExpiredReads=independentInactiveReads=0;independentNativeGateRejects=independentNativeManualReads=independentNativeExceptions=0;
         independentInputBlock=independentLastWalkFailure="";independentPositionChanged=false;independentLease.Revoke();
         TraceKeyboundRun(independentNavigationRun,"navigation-started",$"Destination {destination}; range {range}",independentQuestId!=0?"quest:"+independentQuestRun:"event",false);
         independentGoal=destination;independentRange=range;independentCharacter=Player.ContentId;independentTerritory=Client.TerritoryType;
@@ -77,6 +96,8 @@ public sealed partial class Plugin
         if(independentSearch==null&&independentPath==null)return;
         try{
             independentPulseUntil=default;independentLease.Revoke();independentMoving=false;
+            if(independentNativeManualReads>0)throw new InvalidOperationException("Navigation stopped: another movement input took priority.");
+            if(independentNativeExceptions>0)throw new InvalidOperationException("Ground movement callback failed: "+independentInputBlock);
             if(IndependentOtherTravelBusy())throw new InvalidOperationException("Another travel task took control; local walking stopped.");
             if(!Player.IsLoaded||Player.ContentId!=independentCharacter||Client.TerritoryType!=independentTerritory)throw new InvalidOperationException("Navigation stopped: character or territory changed.");
             if(FollowMovementKeysHeld())throw new InvalidOperationException("Navigation stopped by your movement.");
@@ -105,7 +126,7 @@ public sealed partial class Plugin
             if(checkCollision){independentCollisionAt=now.AddMilliseconds(150);independentCheckedWaypoint=independentWaypoint;}
             if(now-independentProgressAt>TimeSpan.FromSeconds(4)||checkCollision&&!independentCollision.Traverse(self.Position,target)){
                 independentMoving=false;independentForwardHook?.Disable();
-                if(independentInputOverrides==0&&now-independentProgressAt>TimeSpan.FromSeconds(4))throw new InvalidOperationException($"Movement not delivered · forward reads {independentForwardReads}, expired {independentExpiredReads}, inactive {independentInactiveReads} (all controls {independentInputReads}). {independentInputBlock}");
+                if(independentInputOverrides==0&&now-independentProgressAt>TimeSpan.FromSeconds(4))throw new InvalidOperationException($"Movement not delivered · ground reads {independentForwardReads}, game blocked {independentNativeGateRejects}, other input {independentNativeManualReads}, expired {independentExpiredReads}. {independentInputBlock}");
                 if(++independentReplans>2)throw new InvalidOperationException("Movement blocked after two route checks; stopped.");
                 independentSearch=new(independentCollision,self.Position,independentGoal,independentRange);independentPath=null;independentProgressAt=now;
                 TraceKeyboundRun(independentNavigationRun,"route-replan",$"Attempt {independentReplans}; input reads {independentInputReads}, overrides {independentInputOverrides}","companion-navigation",false);
@@ -117,10 +138,10 @@ public sealed partial class Plugin
             var delta=target-self.Position;var yaw=MathF.Atan2(delta.X,delta.Z);
             ((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)self.Address)->SetRotation(yaw);
             camera->DirH=yaw-MathF.PI;
-            independentForwardHook??=Interop.HookFromAddress<FollowInputRead>(InputManager.MemberFunctionPointers.GetInputStatus,IndependentForward);
+            EnsureIndependentGroundInput();
             // Start the lease AFTER collision work and hook setup, not at frame start.
+            if(!independentForwardHook!.IsEnabled)independentForwardHook.Enable();
             independentMoving=true;independentLease.Arm(DateTimeOffset.UtcNow);independentPulseUntil=independentLease.Until;
-            if(!independentForwardHook.IsEnabled)independentForwardHook.Enable();
             independentWalkStatus=independentPositionChanged?$"Walking · point {independentWaypoint}/{independentPath.Length-1}":"Ready to move · waiting for movement confirmation";independentPrevious=self.Position;
         }catch(Exception e){StopIndependentWalk(e.Message);independentWalkFailure=independentLastWalkFailure=e.Message;Log.Warning(e,"Independent navigation stopped");}
     }

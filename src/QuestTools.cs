@@ -40,7 +40,7 @@ public sealed partial class Plugin
         StopEventAccount("Plugin unloaded");
         StopIndependentQuest("Plugin unloaded");
         StopQuestRecording("Plugin unloaded");
-        DisposeQuestRecorder();DisposeIndependentWalk();
+        DisposeQuestRecorder();DisposeIndependentWalk();RemoveWorkBar();
         if(questToolsCommand)Commands.RemoveHandler("/eqquests");
         windows.RemoveWindow(questToolsWindow);windows.RemoveWindow(companionHelperWindow);
         if(companionHelperCommand)Commands.RemoveHandler("/eqhelper");
@@ -63,16 +63,11 @@ public sealed partial class Plugin
         UpdateNativeEventQuest(now);
         UpdateQuestChain(now);
         UpdateEventAccount(now);
+        UpdateWorkBar(now);
     }
     private void FilterQuestCatalogue()=>questSearchRows=questCatalogue.Where(q=>questSearch.Length==0||
         (q.Id+" "+q.Name+" "+q.Group).Contains(questSearch,StringComparison.OrdinalIgnoreCase)).Take(100).ToArray();
     private void DrawQuestTools()
-    {
-        DrawWorkStatusBar(false);
-        if(ImGui.BeginChild("Quest tools content",Vector2.Zero,false))DrawQuestToolsContent();
-        ImGui.EndChild();
-    }
-    private void DrawQuestToolsContent()
     {
         if(ImGui.BeginTabBar("QuestToolsTabs")){
             if(ImGui.BeginTabItem("Event quest")){DrawNativeEventQuest();ImGui.EndTabItem();}

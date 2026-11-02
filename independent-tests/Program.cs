@@ -38,7 +38,12 @@ Check(lease.Check(afterSlowPlanning.AddMilliseconds(10))==WalkingInputDecision.A
 Check(lease.Check(afterSlowPlanning.AddMilliseconds(180))==WalkingInputDecision.Expired,"stale input expires at boundary");
 lease.Arm(afterSlowPlanning.AddSeconds(1));lease.Revoke();
 Check(lease.Check(afterSlowPlanning.AddSeconds(1))==WalkingInputDecision.Inactive,"pause/stop revokes input immediately");
-Console.WriteLine("Movement lease timing and cancellation passed.");
+Check(WalkingInputLease.CanSupplyGround(0,0,0),"supply idle ground movement");
+Check(!WalkingInputLease.CanSupplyGround(1,0,0),"never replace manual strafe");
+Check(!WalkingInputLease.CanSupplyGround(0,-1,0),"never replace manual backward input");
+Check(!WalkingInputLease.CanSupplyGround(0,0,.1f),"never replace manual turn input");
+Check(!WalkingInputLease.CanSupplyGround(float.NaN,0,0),"invalid movement output fails closed");
+Console.WriteLine("Movement lease timing, cancellation and manual priority passed.");
 sealed class TestCollision:IWalkingCollision
 {
     public bool Ground(Vector3 near,out Vector3 ground){ground=new(near.X,0,near.Z);return MathF.Abs(near.Y)<1&&MathF.Abs(near.X)<=8&&MathF.Abs(near.Z)<=8;}

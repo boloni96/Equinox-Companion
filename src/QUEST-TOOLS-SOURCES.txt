@@ -24,3 +24,8 @@ Lifestream remains the existing integration for aethernet/world/account travel.
 Keyward Bound's dedicated quest runner and reward/account workflow use Companion
 local navigation. The current game's quest text sheets supply localized prompts.
 Manual recorder exports remain observations for review, not automatic replay.
+
+Ground movement adapter: native walking callback ABI and movement-enable signature
+references from https://github.com/awgil/ffxiv_navmesh/blob/master/vnavmesh/Movement/OverrideMovement.cs .
+Only native interface facts are used; Companion implements its own short-lived,
+ground-only forward adapter and retains its own planner and stop conditions.
