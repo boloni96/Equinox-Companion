@@ -20,6 +20,8 @@ public sealed partial class Plugin
     private float independentRange;
     private Vector2 independentAxes;
     private float independentSpeed=1;
+    private bool independentGameGateBlocked;
+    private DateTimeOffset independentGatePauseSince;
     private Vector3[]? independentPendingPath;
     private float? independentHeading;
     private DateTimeOffset independentSteeringAt;
@@ -51,6 +53,7 @@ public sealed partial class Plugin
         try{
             // Respect the game's native movement gates and any real/other-plugin input.
             var enabled=independentGroundEnabled1!(controller)!=0&&independentGroundEnabled2!(controller)!=0;
+            independentGameGateBlocked=!enabled;
             if(!enabled){independentNativeGateRejects++;independentInputBlock="Game movement is temporarily disabled";return;}
             if(!WalkingInputLease.CanSupplyGround(*left,*forward,*turn)){
                 independentNativeManualReads++;independentInputBlock="Another movement input has priority";
@@ -81,7 +84,7 @@ public sealed partial class Plugin
     private void StopIndependentWalk(string reason="Stopped",bool resetFailure=false)
     {
         if(independentSearch!=null||independentPath!=null)TraceKeyboundRun(independentNavigationRun,"navigation-stopped",reason,"companion-navigation",false);
-        independentHeading=null;independentMoving=false;independentPulseUntil=default;independentLease.Revoke();independentForwardHook?.Disable();
+        independentGameGateBlocked=false;independentGatePauseSince=default;independentHeading=null;independentMoving=false;independentPulseUntil=default;independentLease.Revoke();independentForwardHook?.Disable();
         independentSearch=null;independentPath=null;independentPendingPath=null;independentArrived=false;independentWalkStatus=reason;independentWalkFailure="";
         if(resetFailure)independentLastWalkFailure="";
     }
@@ -127,8 +130,17 @@ public sealed partial class Plugin
             if(now-independentSince>TimeSpan.FromMinutes(5))throw new InvalidOperationException("Navigation exceeded its five-minute total limit.");
             if(independentPhaseTimer.Expired(now))throw new InvalidOperationException(independentSearch!=null?"Route calculation timed out after 90 seconds.":"Walking timed out after 90 seconds.");
             if(!GameWalkingCollision.Available()){independentWalkStatus="Waiting for collision geometry to load";return;}
-            if(IndependentMovementWindow()||FollowStopTextEntryActive()||Conditions[ConditionFlag.OccupiedInEvent]||Conditions[ConditionFlag.OccupiedInQuestEvent]||Conditions[ConditionFlag.WatchingCutscene]||Conditions[ConditionFlag.WatchingCutscene78]||Conditions[ConditionFlag.Casting]){independentWalkStatus="Paused · close the conversation or wait for the cast";independentInputBlock=independentWalkStatus;independentProgressAt=now;return;}
+            if(IndependentMovementWindow()||FollowStopTextEntryActive()||Conditions[ConditionFlag.OccupiedInEvent]||Conditions[ConditionFlag.OccupiedInQuestEvent]||HelperInCutscene()||Conditions[ConditionFlag.Casting]){independentWalkStatus="Paused · close the conversation or wait for the cast";independentInputBlock=independentWalkStatus;independentProgressAt=now;return;}
             var self=Objects.LocalPlayer;if(self==null)return;
+            if(independentGameGateBlocked){
+                if(independentGatePauseSince==default)independentGatePauseSince=now;
+                if(now-independentGatePauseSince>TimeSpan.FromSeconds(60))throw new InvalidOperationException("The game kept movement locked for 60 seconds. Finish the current scene or prompt and restart.");
+                independentSpeed=0;independentProgressAt=now;
+                // Recheck the native gate with zero movement until the game releases it.
+                independentLease.Arm(DateTimeOffset.UtcNow);
+                independentWalkStatus="Paused · game movement locked; waiting for scene or transition";return;
+            }
+            independentGatePauseSince=default;
             if(independentSearch!=null){
                 independentMoving=false;independentSearch.Advance(milliseconds:3,edgeBudget:96);
                 independentLastExpanded=independentSearch.Expanded;independentPlanningSeconds=(DateTimeOffset.UtcNow-independentPlanningSince).TotalSeconds;

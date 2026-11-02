@@ -11,7 +11,9 @@ public sealed partial class Plugin
     private int helperNativeEscapeReads;
     private unsafe bool CanReadHelperEscape(nint input,int id)
     {
-        if(input!=(nint)UIInputData.Instance()||!helperIncoming.TryPeek(out var a))return false;
+        if(input!=(nint)UIInputData.Instance())return false;
+        if(nativeEventEscapeScene.Length>0)return NativeEventEscapeAllowed(id)&&!FollowStopTextEntryActive()&&!HelperCutsceneReplayPolicy.BlockingAddons.Any(VisibleFollowAddon);
+        if(!helperIncoming.TryPeek(out var a))return false;
         var permitted=config.EnableFollowThem&&helperPermission.Active&&helperPermission.Quest&&helperPermission.Skip&&!helperSessionTextAdvance&&!HelperPaused&&!helperPermission.QuestPaused&&helperBlocked.Length==0&&Player.IsLoaded;
         if(!HelperNativeSkipPolicy.Escape(permitted,a.Kind=="skip"&&a.Id==helperNativeSkipAction,HelperInCutscene(),a.Scene,HelperScene(),id,DateTimeOffset.UtcNow,helperNativeEscapeUntil))return false;
         return !FollowStopTextEntryActive()&&!HelperCutsceneReplayPolicy.BlockingAddons.Any(VisibleFollowAddon);
@@ -49,6 +51,9 @@ public sealed partial class Plugin
     private void ObserveHelperNativeEscape(DateTimeOffset now)
     {
         if(helperNativeEscapeUntil==default)return;
+        if(nativeEventEscapeScene.Length>0){
+            if(!NativeEventEscapeAllowed(3)){nativeEventEscapeScene="";EndHelperNativeEscape();}return;
+        }
         if(now>=helperNativeEscapeUntil||!helperPermission.Active||!helperPermission.Skip||HelperPaused||helperPermission.QuestPaused||!HelperInCutscene())
             EndHelperNativeEscape();
     }

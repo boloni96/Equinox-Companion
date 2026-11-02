@@ -25,18 +25,20 @@ public sealed partial class Plugin
             StopIndependentWalk(resetFailure:true);nativeEventActive=true;nativeEventFromAccount=fromAccount;nativeEventCharacter=Player.ContentId;
             nativeEventStep=NativeEventStep.Unsupported;nativeEventStepAt=DateTimeOffset.UtcNow;nativeEventNext=nativeEventActionAt=nativeEventUnavailableAt=default;
             nativeEventNpc=0;nativeEventSceneOwned=nativeEventAcceptSent=nativeEventResultSent=nativeEventYesSent=false;
-            nativeEventPrompt="";nativeEventPromptLoaded=nativeEventKeyboardChecked=false;eventSaucerTravelAt=default;
+            nativeEventSceneIdentity=nativeEventSkipAttempt=nativeEventSkipConfirmed=nativeEventEscapeScene="";nativeEventPrompt="";nativeEventPromptLoaded=nativeEventKeyboardChecked=false;eventSaucerTravelAt=default;
             nativeEventStatus="Starting Keyward Bound with Companion";return true;
         }catch(Exception e){nativeEventStatus="Not started: "+e.Message;return false;}
     }
     private void StopNativeEventQuest(string reason){
         if(!nativeEventActive)return;
+        if(nativeEventEscapeScene.Length>0){nativeEventEscapeScene="";EndHelperNativeEscape();}
         nativeEventActive=false;CancelEventAccountMovement();nativeEventSceneOwned=false;nativeEventNpc=0;
         nativeEventStatus=reason;questToolsStatus=reason;
         PrintEquinox("Event quest · "+reason);
     }
-    private void ObserveNativeEventScene(uint eventId,uint source){
+    private void ObserveNativeEventScene(uint eventId,uint source,short scene){
         if(!nativeEventActive)return;
+        nativeEventSceneIdentity=eventId+":"+scene;
         nativeEventSceneOwned=(NativeEventPolicy.Scene(eventId,source,nativeEventNpc)||nativeEventSceneOwned&&eventId==NativeEventPolicy.FullQuest&&source==0)&&
             DateTimeOffset.UtcNow-nativeEventInteractionAt<TimeSpan.FromMinutes(3);
     }
@@ -143,9 +145,10 @@ public sealed partial class Plugin
             var step=NativeEventPolicy.Step(QuestManager.IsQuestComplete(NativeEventPolicy.Quest),manager->IsQuestAccepted(NativeEventPolicy.Quest),QuestManager.GetQuestSequence(NativeEventPolicy.Quest));
             if(step!=nativeEventStep){CancelEventAccountMovement();nativeEventStep=step;nativeEventStepAt=now;nativeEventYesSent=nativeEventKeyboardChecked=false;}
             if(now-nativeEventStepAt>TimeSpan.FromMinutes(5))throw new InvalidOperationException("No quest progress for five minutes. "+nativeEventStatus);
+            if(UpdateNativeEventCutscene(now))return;
             if((step is NativeEventStep.MeetMaster or NativeEventStep.Complete)&&Client.TerritoryType!=1360){if(!EventAccountSquare(now))nativeEventStatus=eventAccountStatus;return;}
             if(NativeEventDialogue(now))return;
-            if(Conditions[ConditionFlag.OccupiedInEvent]||Conditions[ConditionFlag.OccupiedInQuestEvent]||Conditions[ConditionFlag.WatchingCutscene]||Conditions[ConditionFlag.WatchingCutscene78]){nativeEventStatus="Waiting for the quest scene to finish";return;}
+            if(Conditions[ConditionFlag.OccupiedInEvent]||Conditions[ConditionFlag.OccupiedInQuestEvent]||HelperInCutscene()){nativeEventStatus="Waiting for the quest scene to finish";return;}
             switch(step){
                 case NativeEventStep.Finished:StopNativeEventQuest("Keyward Bound completed · rewards are checked separately.");return;
                 case NativeEventStep.Accept:
