@@ -61,7 +61,7 @@ public sealed class CollisionRouteSearch
             var cost=parent.Cost+Vector3.Distance(parent.Point,point);
             if(costs.TryGetValue(key,out var known)&&cost>=known)continue;
             if(!collision.Traverse(parent.Point,point))continue;
-            costs[key]=cost;open.Enqueue(new(key,point,cost,parent),cost+Heuristic(point));
+            costs[key]=cost;open.Enqueue(new(key,point,cost,parent),cost+1.25f*Heuristic(point));
         }
     }
     private Key Address(Vector3 p)=>new((int)MathF.Round((p.X-origin.X)/spacing),(int)MathF.Round(p.Y*4),(int)MathF.Round((p.Z-origin.Z)/spacing));

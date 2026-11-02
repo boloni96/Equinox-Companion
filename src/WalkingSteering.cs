@@ -2,6 +2,10 @@ using System.Numerics;
 namespace EquinoxCompanion;
 internal static class WalkingSteering
 {
+    public static float SmoothHeading(float current,float desired,float seconds){
+        var difference=MathF.IEEERemainder(desired-current,2*MathF.PI);
+        return current+Math.Clamp(difference,-6*Math.Clamp(seconds,0,.05f),6*Math.Clamp(seconds,0,.05f));
+    }
     public static Vector2 Axes(Vector3 from,Vector3 target,float referenceHeading)
     {
         var delta=target-from;
@@ -33,4 +37,18 @@ internal sealed class AvoidStalledTargets(IWalkingCollision inner,Vector3[] bloc
     public bool Ground(Vector3 near,out Vector3 ground)=>inner.Ground(near,out ground);
     public bool Traverse(Vector3 from,Vector3 to)=>
         !blocked.Any(p=>CollisionRouteSearch.Horizontal(p,to)<.65f&&MathF.Abs(p.Y-to.Y)<1)&&inner.Traverse(from,to);
+}
+
+// Cross the full footprint, not just three parallel tracks, to catch narrow posts.
+internal static class WalkingClearance
+{
+    public static bool BodyRoom(Vector3 floor,float radius,Func<Vector3,Vector3,bool> blocked)
+    {
+        foreach(var height in (ReadOnlySpan<float>)[.5f,1.05f,1.75f])
+        foreach(var axis in (ReadOnlySpan<Vector3>)[Vector3.UnitX,Vector3.UnitZ,new(.707107f,0,.707107f),new(.707107f,0,-.707107f)]){
+            var center=floor+new Vector3(0,height,0);
+            if(blocked(center-axis*radius,center+axis*radius))return false;
+        }
+        return true;
+    }
 }

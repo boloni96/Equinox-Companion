@@ -1088,7 +1088,7 @@ public sealed partial class Plugin : IDalamudPlugin
 
     private void DrawCore()
     {
-        // Dalamud's cutscene exception is plugin-wide; draw only Adventure here.
+        // Dalamud's cutscene exception is plugin-wide; draw only selected controls here.
         // Keep the same window instance/namespace, position and minimize behavior.
         if (HelperInCutscene())
         {
@@ -1098,6 +1098,7 @@ public sealed partial class Plugin : IDalamudPlugin
             using (new EquinoxAppearance(GoddessAppearance))
             {
                 adventureCutsceneWindows.Draw();
+                DrawQuestCutsceneControls();
                 DrawPluginItemPopup();
             }
             return;

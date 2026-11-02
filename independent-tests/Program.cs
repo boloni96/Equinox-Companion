@@ -60,6 +60,16 @@ var avoided=new AvoidStalledTargets(collision,new[]{new Vector3(0,0,1)});
 Check(!avoided.Traverse(Vector3.Zero,new(0,0,1)),"retry rejects stalled target");
 Check(avoided.Traverse(Vector3.Zero,new(-1,0,0)),"retry may leave along another clear edge");
 Console.WriteLine("Separate phase deadlines and blocked-target retry passed.");
+// Thin post offset between the old center and side tracks.
+Check(!WalkingClearance.BodyRoom(Vector3.Zero,.45f,(a,b)=>{
+    var d=b-a;var post=new Vector3(.22f,a.Y,0);
+    var t=Math.Clamp(Vector3.Dot(post-a,d)/d.LengthSquared(),0,1);
+    return Vector3.Distance(post,a+t*d)<.04f;
+}),"full footprint catches a narrow off-center post");
+Check(WalkingClearance.BodyRoom(Vector3.Zero,.45f,(_,_)=>false),"open footprint remains walkable");
+Console.WriteLine("Thin obstacle footprint checks passed.");
+Check(MathF.Abs(WalkingSteering.SmoothHeading(0,1,.02f)-.12f)<.001f,"turn rate is bounded");
+Check(MathF.Abs(WalkingSteering.SmoothHeading(3.13f,-3.13f,.02f)-3.153185f)<.001f,"heading wraps along shortest turn");
 sealed class TestCollision:IWalkingCollision
 {
     public bool Ground(Vector3 near,out Vector3 ground){ground=new(near.X,0,near.Z);return MathF.Abs(near.Y)<1&&MathF.Abs(near.X)<=8&&MathF.Abs(near.Z)<=8;}

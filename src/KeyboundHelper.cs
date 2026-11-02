@@ -9,7 +9,6 @@ namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
     private bool keyboundEnabled,keyboundSeen,keyboundAwaiting;
-    private bool keyboundAutoRepeat;
     private int keyboundDelayDraft;
     private DateTimeOffset keyboundTimingEditUntil;
     private DateTimeOffset keyboundSubmitAt;
@@ -38,7 +37,7 @@ public sealed partial class Plugin
         }
         ImGui.EndDisabled();
         ImGui.SameLine();DrawKeyboundHelp();
-        ImGui.SameLine();ImGui.TextUnformatted(eventAccountActive?"Account routine":keyboundBuying?(keyboundUsingRewards?"Using rewards":"Buying rewards"):keyboundEnabled?"Running":"Stopped");
+        ImGui.SameLine();ImGui.TextUnformatted(eventAccountActive?"Account routine":keyboundBuying?(keyboundUsingRewards?"Using rewards":"Buying rewards"):keyboundEnabled?(keyboundStatus.StartsWith("Paused:",StringComparison.Ordinal)?"Paused":"Running"):"Stopped");
         // Reserve the same space for short phrases and long waiting/error text.
         // Content scrolls here; neither the window nor the controls below jump.
         if(ImGui.BeginChild("Keybound running status",new System.Numerics.Vector2(0,ImGui.GetTextLineHeightWithSpacing()*4.5f),true)){
@@ -56,7 +55,14 @@ public sealed partial class Plugin
         DrawKeyboundShopping();
         ImGui.Separator();
         if(ImGui.CollapsingHeader("Options")){
-        ImGui.Checkbox("Auto-repeat",ref keyboundAutoRepeat);
+        var repeat=config.KeyboundAutoRepeat;
+        if(ImGui.Checkbox("Auto-repeat",ref repeat)){config.KeyboundAutoRepeat=repeat;SaveConfiguration();}
+        var routines=config.KeyboundUseRoutines;
+        if(ImGui.Checkbox("Use routines",ref routines)){
+            config.KeyboundUseRoutines=routines;SaveConfiguration();
+            if(!routines&&eventAccountActive)StopEventAccount("Stopped: account routines disabled.");
+        }
+        if(ImGui.IsItemHovered())ImGui.SetTooltip("Show the account event routine below. Enabling this does not start it; choose characters and press Start selected characters.");
         var stopAtGoal=config.KeyboundStopAtRewardGoal;
         if(ImGui.Checkbox("Stop when enough MGC",ref stopAtGoal)){config.KeyboundStopAtRewardGoal=stopAtGoal;keyboundGoalCheckAt=default;SaveConfiguration();}
         if(ImGui.IsItemHovered())ImGui.SetTooltip("Stop before the next round when you can afford the missing rewards. Turn off to keep farming, including for extra coffers.");
@@ -75,7 +81,7 @@ public sealed partial class Plugin
         if(ImGui.Checkbox("Use Journal wishlist",ref journal)){config.KeyboundUseJournalWishlist=journal;keyboundBuyRefresh=default;SaveConfiguration();}
         ImGui.EndDisabled();
         }
-        DrawEventAccount();
+        if(config.KeyboundUseRoutines)DrawEventAccount();
     }
     private void DrawKeyboundHelp()
     {
@@ -162,7 +168,7 @@ public sealed partial class Plugin
             if(now<keyboundTimingEditUntil){keyboundDeadline=now.AddSeconds(2);keyboundStatus="Paused: editing timing";return;}
             var stage=AtkStage.Instance();if(stage==null)return;
             if(!eventAccountActive&&config.KeyboundStopAtRewardGoal&&Client.TerritoryType!=1359&&CheckKeyboundGoal(now))return;
-            if(keyboundAutoRepeat&&UpdateKeyboundLoop(now))return;
+            if((config.KeyboundAutoRepeat||eventAccountActive)&&UpdateKeyboundLoop(now))return;
             var input=stage->RaptureAtkUnitManager->GetAddonByName("KTGInput");
             if(input==null||!input->IsVisible){
                 if(Client.TerritoryType==1359){keyboundDeadline=now.AddSeconds(2);keyboundStatus="Waiting: minigame transition";keyboundNext=now.AddMilliseconds(500);return;}
