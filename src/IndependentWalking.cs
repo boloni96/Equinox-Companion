@@ -142,7 +142,7 @@ public sealed partial class Plugin
             }
             independentGatePauseSince=default;
             if(independentSearch!=null){
-                independentMoving=false;independentSearch.Advance(milliseconds:3,edgeBudget:96);
+                independentMoving=false;independentSearch.Advance(milliseconds:6,edgeBudget:192);
                 independentLastExpanded=independentSearch.Expanded;independentPlanningSeconds=(DateTimeOffset.UtcNow-independentPlanningSince).TotalSeconds;
                 independentWalkStatus=$"Finding walkable route · {independentSearch.Expanded} areas checked";
                 if(independentSearch.Error.Length>0)throw new InvalidOperationException(independentSearch.Error);

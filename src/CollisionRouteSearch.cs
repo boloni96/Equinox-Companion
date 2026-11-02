@@ -29,7 +29,7 @@ public sealed class CollisionRouteSearch
     {
         this.collision=collision;this.goal=goal;this.range=Math.Clamp(range,.25f,5f);this.spacing=spacing;
         if(!Finite(start)||!Finite(goal)||!float.IsFinite(spacing)||spacing<.25f||spacing>2)throw new ArgumentException("Invalid navigation coordinates");
-        if(Vector3.Distance(start,goal)>160)throw new InvalidOperationException("Local route exceeds 160 yalms; use travel first.");
+        if(Vector3.Distance(start,goal)>512)throw new InvalidOperationException("Local route exceeds 512 yalms; use travel first.");
         if(!collision.Ground(start,out origin)){Error="No walkable ground beneath the character.";return;}
         var first=new Node(Address(origin),origin,0,null);costs[first.Key]=0;open.Enqueue(first,Heuristic(origin));
     }
@@ -46,7 +46,7 @@ public sealed class CollisionRouteSearch
                 while(open.TryDequeue(out var n,out _)){if(!closed.Contains(n.Key)&&n.Cost<=costs[n.Key]){next=n;break;}}
                 if(next==null){Error="No connected walkable route found.";return;}
                 closed.Add(next.Key);
-                if(closed.Count>12000){Error="Local navigation search limit reached.";return;}
+                if(closed.Count>24000){Error="Local navigation search limit reached.";return;}
                 Vector3? endpoint=null;
                 var arrived=Horizontal(next.Point,goal)<=range&&MathF.Abs(next.Point.Y-goal.Y)<=1.2f;
                 // A sub-grid arrival radius needs a checked final connector to the exact point.
@@ -60,7 +60,7 @@ public sealed class CollisionRouteSearch
             }
             var parent=expanding;var d=Directions[neighbor++];if(neighbor==Directions.Length)expanding=null;
             var candidate=parent.Point+new Vector3(d.X*spacing,0,d.Z*spacing);
-            if(Horizontal(candidate,origin)>160||Horizontal(candidate,goal)>Horizontal(origin,goal)+35)continue;
+            if(Horizontal(candidate,origin)>512||Horizontal(candidate,goal)>Horizontal(origin,goal)+35)continue;
             if(!collision.Ground(candidate,out var point))continue;
             var key=Address(point);if(closed.Contains(key))continue;
             var cost=parent.Cost+Vector3.Distance(parent.Point,point)*(1+3*collision.WallPenalty(point));

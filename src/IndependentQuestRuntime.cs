@@ -10,7 +10,7 @@ public sealed partial class Plugin
     private Task<IndependentQuestBook>? independentBookTask;
     private IndependentQuestBook? independentBook;
     private IndependentQuestBook.Route? independentRoute;
-    private int independentSequence=-1,independentStep;
+    private int independentSequence=-1,independentStep,independentEquipPhase;
     private uint independentQuestId,independentNpc;
     private ulong independentQuestCharacter;
     private bool independentStepSent,independentScene,independentSceneSeen,independentDeferred,independentTravelSent,independentAethernetSent;
@@ -55,7 +55,7 @@ public sealed partial class Plugin
         var sceneIdentity=independentQuestSceneIdentity;var sceneNpc=independentNpc;var actionAt=independentActionAt;
         if(!owned){ResetQuestCutscene();independentQuestSceneIdentity="";}
         StopIndependentWalk();independentStepSent=independentScene=independentSceneSeen=false;
-        independentTravelSent=independentAethernetSent=false;independentNpc=0;independentStepSince=now;independentActionAt=default;independentWorkBefore="";
+        independentEquipPhase=0;independentTravelSent=independentAethernetSent=false;independentTravelDestination=0;independentNpc=0;independentStepSince=now;independentActionAt=default;independentWorkBefore="";
         if(owned){independentScene=independentSceneSeen=true;independentQuestSceneIdentity=sceneIdentity;independentNpc=sceneNpc;independentActionAt=actionAt;}
     }
     private unsafe byte[] IndependentWork()
@@ -99,6 +99,7 @@ public sealed partial class Plugin
             var step=steps[independentStep];var kind=IndependentStepPolicy.Text(step,"InteractionType");
             if(step.TryGetProperty("Disabled",out var disabled)&&disabled.ValueKind==JsonValueKind.True){NextIndependentStep(now);return;}
             var reason=IndependentStepPolicy.Review(step);if(reason.Length>0){StopIndependentQuest(reason,true);return;}
+            if(IndependentSkip(step,"StepIf")){NextIndependentStep(now);return;}
             if(step.TryGetProperty("CompletionQuestVariablesFlags",out var flags)&&IndependentStepPolicy.CompletedFlags(flags,IndependentWork())){NextIndependentStep(now);return;}
             if(now-independentStepSince>TimeSpan.FromMinutes(4))throw new InvalidOperationException("Quest step timed out: "+questToolsStatus);
             questToolsStatus=$"{QuestTitle(independentQuestId)} · sequence {sequence}, step {independentStep+1}/{steps.GetArrayLength()} · {kind}";
@@ -115,6 +116,7 @@ public sealed partial class Plugin
                 return;
             }
             if(!IndependentQuestTravel(step,territory,now))return;
+            if(kind=="EquipRecommended"){UpdateIndependentEquipment(now);return;}
             if(step.TryGetProperty("DelaySecondsAtStart",out var delay)&&now-independentStepSince<TimeSpan.FromSeconds(Math.Clamp(delay.GetDouble(),0,120)))return;
             var id=IndependentStepPolicy.Number(step,"DataId");var npc=id==0?null:Objects.FirstOrDefault(o=>o.BaseId==id&&o.IsTargetable);
             Vector3? position=npc?.Position;

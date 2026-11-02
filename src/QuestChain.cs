@@ -9,6 +9,7 @@ public sealed partial class Plugin
     private ulong questChainCharacter;
     private readonly HashSet<uint> questChainVisited=[];
     private readonly Dictionary<uint,string> questChainDeferred=[];
+    private readonly Dictionary<uint,int> questChainDeferredSequence=[];
     private readonly Dictionary<uint,QuestRouteReview> questRouteReviews=[];
     private Task<QuestRouteReview>? questRouteRequest;
     private uint questRouteRequestId;
@@ -22,7 +23,7 @@ public sealed partial class Plugin
         ImGui.TextDisabled("Duty / solo-duty routes stay pending. No AutoDuty required.");
         ImGui.BeginDisabled(nativeEventActive||questChainActive||eventAccountActive||independentQuestId!=0);
         if(ImGui.Button("Work on accepted quests")){
-            questChainVisited.Clear();var id=NextAcceptedQuest();
+            ResetDeferredCharacter();questChainVisited.Clear();var id=NextAcceptedQuest();
             if(id!=0)BeginQuestChain(id);else questChainStatus="No indexed accepted quests were found on this character.";
         }
         ImGui.EndDisabled();
@@ -30,14 +31,15 @@ public sealed partial class Plugin
         if(questChainActive&&ImGui.Button("Stop quest routine"))StopQuestChain("Stopped by you.");
         if(questChainDeferred.Count>0&&ImGui.CollapsingHeader("Quests left pending")){
             foreach(var entry in questChainDeferred)ImGui.TextWrapped(QuestTitle(entry.Key)+": "+entry.Value);
+            if(!questChainActive&&ImGui.Button("Retry pending quests")){questChainDeferred.Clear();questChainDeferredSequence.Clear();questChainVisited.Clear();var retry=NextAcceptedQuest();if(retry!=0)BeginQuestChain(retry);}
         }
     }
     private void BeginQuestChain(uint id){
         if(nativeEventActive||questChainActive||eventAccountActive||questRecorderActive||QuestToolsOtherOperation()||!Player.IsLoaded){questToolsStatus="Finish the other operation first.";return;}
         if(QuestProviderRunning()){questToolsStatus="Another quest is running.";return;}
         if(independentBook==null){questToolsStatus="Independent quest data is still loading.";return;}
-        questChainActive=true;questChainStartedQuest=false;questChainCharacter=Player.ContentId;
-        questChainCandidate=QuestToolsPolicy.ShortId(id);questChainLast=0;questChainVisited.Clear();questChainDeferred.Clear();questChainNext=default;
+        ResetDeferredCharacter();questChainActive=true;questChainStartedQuest=false;questChainCharacter=Player.ContentId;
+        questChainCandidate=QuestToolsPolicy.ShortId(id);questChainLast=0;questChainVisited.Clear();questChainNext=default;
         questChainStatus="Checking the selected quest route before starting.";
     }
     private void StopQuestChain(string reason){
@@ -55,17 +57,19 @@ public sealed partial class Plugin
                 var row=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Quest>().GetRowOrDefault(q.Id+65536);
                 return row.HasValue&&row.Value.PreviousQuest.Any(p=>QuestToolsPolicy.ShortId(p.RowId)==previous);
             }).Select(q=>q.Id).ToArray();
-        var available=candidates.Where(id=>id!=previous&&!questChainVisited.Contains(id)&&!QuestManager.IsQuestComplete(id)&&
+        var available=candidates.Where(id=>id!=previous&&!questChainVisited.Contains(id)&&!QuestStillDeferred(id)&&!QuestManager.IsQuestComplete(id)&&
             independentBook?.Find(id.ToString()).Length==1).ToArray();
         var accepted=available.Where(id=>QuestManager.Instance()->IsQuestAccepted(id)).ToArray();
         // Do not choose between unaccepted branches on the player's behalf.
         return accepted.Length>0?accepted[0]:available.Length==1?available[0]:0;
     }
+    private void ResetDeferredCharacter(){if(questChainCharacter!=Player.ContentId){questChainDeferred.Clear();questChainDeferredSequence.Clear();questChainCharacter=Player.ContentId;}}
+    private bool QuestStillDeferred(uint id)=>questChainDeferredSequence.TryGetValue(id,out var sequence)&&sequence==QuestManager.GetQuestSequence(id);
     private unsafe uint NextAcceptedQuest(){
         var qm=QuestManager.Instance();if(qm==null)return 0;
         foreach(ref var quest in qm->NormalQuests){
             var id=(uint)quest.QuestId;
-            if(id!=0&&!questChainVisited.Contains(id)&&questCatalogue.Any(q=>q.Id==id))return id;
+            if(id!=0&&!questChainVisited.Contains(id)&&!QuestStillDeferred(id)&&questCatalogue.Any(q=>q.Id==id))return id;
         }
         return 0;
     }
@@ -83,7 +87,7 @@ public sealed partial class Plugin
             if(questChainStartedQuest){
                 questChainStartedQuest=false;
                 if(!QuestManager.IsQuestComplete(questChainCandidate)){
-                    if(independentDeferred){questChainDeferred[questChainCandidate]=questToolsStatus;questChainCandidate=0;independentDeferred=false;}
+                    if(independentDeferred){questChainDeferred[questChainCandidate]=questToolsStatus;questChainDeferredSequence[questChainCandidate]=QuestManager.GetQuestSequence(questChainCandidate);questChainCandidate=0;independentDeferred=false;}
                     else {StopQuestChain("Quest stopped before completion: "+questToolsStatus);return;}
                 }
                 questChainLast=questChainCandidate;questChainCandidate=0;
