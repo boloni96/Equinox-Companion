@@ -46,10 +46,14 @@ public sealed class CollisionRouteSearch
                 if(next==null){Error="No connected walkable route found.";return;}
                 closed.Add(next.Key);
                 if(closed.Count>12000){Error="Local navigation search limit reached.";return;}
-                if(Horizontal(next.Point,goal)<=range&&MathF.Abs(next.Point.Y-goal.Y)<=1.2f)
+                Vector3? endpoint=null;
+                var arrived=Horizontal(next.Point,goal)<=range&&MathF.Abs(next.Point.Y-goal.Y)<=1.2f;
+                // A sub-grid arrival radius needs a checked final connector to the exact point.
+                if(!arrived&&range<1&&Horizontal(next.Point,goal)<=2.6f&&collision.Ground(goal,out var floor)&&MathF.Abs(floor.Y-goal.Y)<=1.2f&&collision.Traverse(next.Point,floor))endpoint=floor;
+                if(arrived||endpoint.HasValue)
                 {
                     var path=new List<Vector3>();for(var n=next;n!=null;n=n.Previous)path.Add(n.Point);
-                    path.Reverse();Path=path.ToArray();return;
+                    path.Reverse();if(endpoint is {} end)path.Add(end);Path=path.ToArray();return;
                 }
                 expanding=next;neighbor=0;
             }
