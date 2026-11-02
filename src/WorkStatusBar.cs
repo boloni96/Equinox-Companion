@@ -19,7 +19,7 @@ public sealed partial class Plugin
         else if(active){label="Working";detail=nativeEventActive?nativeEventStatus:independentQuestId!=0?questToolsStatus:eventAccountStatus;}
         else if(eventTool&&keyboundEnabled){label="Working";detail=keyboundStatus;}
         else if(!eventTool&&followSession.Armed){label="Working";detail=followStatus;}
-        else if(independentLastWalkFailure.Length>0){label="Stopped · movement needs attention";detail=independentLastWalkFailure;color=new(1,.38f,.25f,1);}
+        else if(independentLastWalkFailure.Length>0){label="Stopped · check details";detail=independentLastWalkFailure;color=new(1,.38f,.25f,1);}
         else if(independentArrived){label="Arrived";detail="Destination confirmed; movement released.";}
         else if(independentNavigationRun.Length>0){label="Stopped";detail=independentWalkStatus;color=new(.5f,.53f,.58f,1);}
         if(label is "Paused" or "Ready to move")color=new(.8f,.59f,.18f,1);
