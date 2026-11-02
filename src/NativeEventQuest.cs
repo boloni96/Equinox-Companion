@@ -22,7 +22,7 @@ public sealed partial class Plugin
             if(Conditions[ConditionFlag.BoundByDuty]||Conditions[ConditionFlag.InDutyQueue]||Conditions[ConditionFlag.InCombat]||QuestConversationVisible())throw new InvalidOperationException("Finish the current duty, queue, combat or conversation first.");
             if(OptionalQuestRunning()||LifestreamBusy())throw new InvalidOperationException("Another quest or travel task is running.");
             if(QuestManager.IsQuestComplete(NativeEventPolicy.Quest)){nativeEventStatus="Keyward Bound is complete. Missing rewards are checked separately.";return true;}
-            StopIndependentWalk();nativeEventActive=true;nativeEventFromAccount=fromAccount;nativeEventCharacter=Player.ContentId;
+            StopIndependentWalk(resetFailure:true);nativeEventActive=true;nativeEventFromAccount=fromAccount;nativeEventCharacter=Player.ContentId;
             nativeEventStep=NativeEventStep.Unsupported;nativeEventStepAt=DateTimeOffset.UtcNow;nativeEventNext=nativeEventActionAt=nativeEventUnavailableAt=default;
             nativeEventNpc=0;nativeEventSceneOwned=nativeEventAcceptSent=nativeEventResultSent=nativeEventYesSent=false;
             nativeEventPrompt="";nativeEventPromptLoaded=false;eventSaucerTravelAt=default;

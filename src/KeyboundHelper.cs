@@ -32,6 +32,12 @@ public sealed partial class Plugin
     }
     private void DrawKeyboundHelper()
     {
+        DrawWorkStatusBar(true);
+        if(ImGui.BeginChild("Keybound content",System.Numerics.Vector2.Zero,false))DrawKeyboundHelperContent();
+        ImGui.EndChild();
+    }
+    private void DrawKeyboundHelperContent()
+    {
         ImGui.BeginDisabled(keyboundBuying&&!eventAccountActive);
         if(ImGui.Button(eventAccountActive||keyboundEnabled?"Stop":"Start")){
             if(eventAccountActive)StopEventAccount("Stopped by you.");else if(keyboundEnabled)StopKeybound("Stopped by you.");else{StopKeybound();keyboundBuyStatus="";keyboundGoalCheckAt=default;keyboundEnabled=true;keyboundTypingRun=Guid.NewGuid().ToString("N");TraceKeyboundRun(keyboundTypingRun,"typing-started","Typing started","user-button");keyboundNext=keyboundHold=keyboundMissing=default;keyboundStatus="Waiting for Keybound Brawler";}
@@ -43,7 +49,10 @@ public sealed partial class Plugin
         // Content scrolls here; neither the window nor the controls below jump.
         if(ImGui.BeginChild("Keybound running status",new System.Numerics.Vector2(0,ImGui.GetTextLineHeightWithSpacing()*4.5f),true)){
             var status=eventAccountActive?eventAccountStatus:(keyboundBuying||!keyboundEnabled)&&keyboundBuyStatus.Length>0?keyboundBuyStatus:keyboundStatus;
+            if(!eventAccountActive&&!keyboundEnabled&&!keyboundBuying&&independentLastWalkFailure.Length>0)
+                status=independentLastWalkFailure;
             ImGui.TextWrapped(status);
+            if(eventAccountActive&&(independentSearch!=null||independentPath!=null))ImGui.TextWrapped(independentWalkStatus);
             if(keyboundEnabled&&keyboundWord.Length>0&&!status.Contains(keyboundWord,StringComparison.Ordinal))
                 ImGui.TextWrapped("Target: "+keyboundWord);
         }

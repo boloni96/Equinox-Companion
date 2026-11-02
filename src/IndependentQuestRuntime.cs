@@ -36,7 +36,7 @@ public sealed partial class Plugin
                     throw new InvalidOperationException("Unknown route condition: "+property.Name);
             independentRoute=route;independentQuestId=id;independentQuestCharacter=Player.ContentId;independentSequence=-1;independentDeferred=false;independentQuestNext=default;
             independentQuestRun=Guid.NewGuid().ToString("N");TraceKeyboundRun(independentQuestRun,"quest-started",$"Quest {id}","companion-quest",false);
-            StopIndependentWalk();questToolsStatus="Companion starting: "+QuestTitle(id);return true;
+            StopIndependentWalk(resetFailure:true);questToolsStatus="Companion starting: "+QuestTitle(id);return true;
         }catch(Exception e){questToolsStatus="Not started: "+e.Message;return false;}
     }
     private void StopIndependentQuest(string reason,bool deferred=false)

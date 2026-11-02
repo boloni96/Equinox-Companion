@@ -20,6 +20,11 @@ public sealed partial class Plugin
     private DateTimeOffset independentPulseUntil,independentSince,independentProgressAt,independentCollisionAt;
     private int independentCheckedWaypoint=-1,independentInputReads,independentInputOverrides;
     private string independentNavigationRun="";
+    private readonly WalkingInputLease independentLease=new();
+    private readonly int[] independentInputCodes=new int[256];
+    private int independentForwardReads,independentExpiredReads,independentInactiveReads;
+    private bool independentPositionChanged;
+    private string independentInputBlock="",independentLastWalkFailure="";
     private string independentWalkStatus="Idle",independentWalkFailure="";
     private unsafe byte IndependentForward(nint input,int id)
     {
@@ -27,18 +32,23 @@ public sealed partial class Plugin
         // Movement is consumed by the game control input manager, not UIInputData.
         if(input!=(nint)InputManager.Instance())return original;
         independentInputReads++;
+        if((uint)id<(uint)independentInputCodes.Length)independentInputCodes[id]++;
         if(id!=(int)InputCode.MOVE_FORE)return original;
-        try{
-            if(independentMoving&&DateTimeOffset.UtcNow<independentPulseUntil&&Player.IsLoaded&&Player.ContentId==independentCharacter&&Client.TerritoryType==independentTerritory&&
-               !FollowMovementKeysHeld()&&!FollowStopTextEntryActive()&&!IndependentMovementWindow()&&!Conditions[ConditionFlag.OccupiedInEvent]&&!Conditions[ConditionFlag.BetweenAreas]&&!Conditions[ConditionFlag.BetweenAreas51]&&!Conditions[ConditionFlag.InCombat]&&!Conditions[ConditionFlag.Casting]&&!Conditions[ConditionFlag.OccupiedInQuestEvent]&&!Conditions[ConditionFlag.WatchingCutscene]&&!Conditions[ConditionFlag.WatchingCutscene78]){independentInputOverrides++;return 1;}
-        }catch{/* Never interrupt the game's input callback. */}
+        independentForwardReads++;
+        // UI/condition checks run on Framework.Update, never inside a native input
+        // callback (ImGui may have no context there). The short lease fails closed.
+        var decision=independentLease.Check(DateTimeOffset.UtcNow);
+        if(decision==WalkingInputDecision.Expired){independentExpiredReads++;independentInputBlock="Movement pulse expired before the game read it";}
+        else if(decision==WalkingInputDecision.Inactive){independentInactiveReads++;}
+        else{independentInputOverrides++;independentInputBlock="";return 1;}
         return original;
     }
-    private void StopIndependentWalk(string reason="Stopped")
+    private void StopIndependentWalk(string reason="Stopped",bool resetFailure=false)
     {
         if(independentSearch!=null||independentPath!=null)TraceKeyboundRun(independentNavigationRun,"navigation-stopped",reason,"companion-navigation",false);
-        independentMoving=false;independentPulseUntil=default;independentForwardHook?.Disable();
+        independentMoving=false;independentPulseUntil=default;independentLease.Revoke();independentForwardHook?.Disable();
         independentSearch=null;independentPath=null;independentArrived=false;independentWalkStatus=reason;independentWalkFailure="";
+        if(resetFailure)independentLastWalkFailure="";
     }
     private bool IndependentWalk(Vector3 destination,float range,DateTimeOffset now)
     {
@@ -53,6 +63,8 @@ public sealed partial class Plugin
             StopIndependentWalk("Destination changed");
         }
         independentNavigationRun=Guid.NewGuid().ToString("N");independentInputReads=independentInputOverrides=0;
+        independentForwardReads=independentExpiredReads=independentInactiveReads=0;Array.Clear(independentInputCodes);
+        independentInputBlock=independentLastWalkFailure="";independentPositionChanged=false;independentLease.Revoke();
         TraceKeyboundRun(independentNavigationRun,"navigation-started",$"Destination {destination}; range {range}",independentQuestId!=0?"quest:"+independentQuestRun:"event",false);
         independentGoal=destination;independentRange=range;independentCharacter=Player.ContentId;independentTerritory=Client.TerritoryType;
         independentWalkFailure="";independentArrived=false;independentReplans=0;independentSince=independentProgressAt=now;
@@ -64,14 +76,14 @@ public sealed partial class Plugin
     {
         if(independentSearch==null&&independentPath==null)return;
         try{
-            independentPulseUntil=default;
+            independentPulseUntil=default;independentLease.Revoke();independentMoving=false;
             if(IndependentOtherTravelBusy())throw new InvalidOperationException("Another travel task took control; local walking stopped.");
             if(!Player.IsLoaded||Player.ContentId!=independentCharacter||Client.TerritoryType!=independentTerritory)throw new InvalidOperationException("Navigation stopped: character or territory changed.");
             if(FollowMovementKeysHeld())throw new InvalidOperationException("Navigation stopped by your movement.");
             if(Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]||Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.BoundByDuty]||Conditions[ConditionFlag.Mounted]||Conditions[ConditionFlag.InFlight])throw new InvalidOperationException("Navigation stopped for loading, combat, duty or mounted movement. Dismount for ground walking.");
             if(now-independentSince>TimeSpan.FromSeconds(90))throw new InvalidOperationException("Navigation timed out after 90 seconds.");
             if(!GameWalkingCollision.Available()){independentWalkStatus="Waiting for collision geometry to load";return;}
-            if(IndependentMovementWindow()||FollowStopTextEntryActive()||Conditions[ConditionFlag.OccupiedInEvent]||Conditions[ConditionFlag.OccupiedInQuestEvent]||Conditions[ConditionFlag.WatchingCutscene]||Conditions[ConditionFlag.WatchingCutscene78]||Conditions[ConditionFlag.Casting]){independentWalkStatus="Movement paused for a window or cast";return;}
+            if(IndependentMovementWindow()||FollowStopTextEntryActive()||Conditions[ConditionFlag.OccupiedInEvent]||Conditions[ConditionFlag.OccupiedInQuestEvent]||Conditions[ConditionFlag.WatchingCutscene]||Conditions[ConditionFlag.WatchingCutscene78]||Conditions[ConditionFlag.Casting]){independentWalkStatus="Paused · close the conversation or wait for the cast";independentInputBlock=independentWalkStatus;independentProgressAt=now;return;}
             var self=Objects.LocalPlayer;if(self==null)return;
             if(independentSearch!=null){
                 independentMoving=false;independentSearch.Advance();
@@ -80,7 +92,7 @@ public sealed partial class Plugin
                 if(independentSearch.Path==null)return;
                 TraceKeyboundRun(independentNavigationRun,"route-found",$"{independentSearch.Path.Length} points; {independentSearch.Expanded} nodes checked","companion-navigation",false);
                 independentPath=independentSearch.Path;independentSearch=null;independentWaypoint=1;independentCheckedWaypoint=-1;
-                independentLastProgress=self.Position;independentProgressAt=now;
+                independentLastProgress=self.Position;independentProgressAt=DateTimeOffset.UtcNow;
             }
             if(CollisionRouteSearch.Horizontal(self.Position,independentGoal)<=independentRange&&MathF.Abs(self.Position.Y-independentGoal.Y)<=1.2f){
                 StopIndependentWalk("Arrived · movement released");independentArrived=true;return;
@@ -88,12 +100,12 @@ public sealed partial class Plugin
             while(independentPath!=null&&independentWaypoint<independentPath.Length&&Vector3.Distance(self.Position,independentPath[independentWaypoint])<.3f)independentWaypoint++;
             if(independentPath==null||independentWaypoint>=independentPath.Length)throw new InvalidOperationException("Route ended without confirmed arrival.");
             var target=independentPath[independentWaypoint];
-            if(Vector3.Distance(self.Position,independentLastProgress)>.3f){independentProgressAt=now;independentLastProgress=self.Position;}
+            if(Vector3.Distance(self.Position,independentLastProgress)>.3f){independentProgressAt=now;independentLastProgress=self.Position;independentPositionChanged=true;}
             var checkCollision=now>=independentCollisionAt||independentCheckedWaypoint!=independentWaypoint;
             if(checkCollision){independentCollisionAt=now.AddMilliseconds(150);independentCheckedWaypoint=independentWaypoint;}
             if(now-independentProgressAt>TimeSpan.FromSeconds(4)||checkCollision&&!independentCollision.Traverse(self.Position,target)){
                 independentMoving=false;independentForwardHook?.Disable();
-                if(independentInputOverrides==0&&now-independentProgressAt>TimeSpan.FromSeconds(4))throw new InvalidOperationException($"Movement input was not delivered (control reads {independentInputReads}); stopped before repeating the route.");
+                if(independentInputOverrides==0&&now-independentProgressAt>TimeSpan.FromSeconds(4))throw new InvalidOperationException($"Movement not delivered · forward reads {independentForwardReads}, expired {independentExpiredReads}, inactive {independentInactiveReads} (all controls {independentInputReads}). {independentInputBlock}");
                 if(++independentReplans>2)throw new InvalidOperationException("Movement blocked after two route checks; stopped.");
                 independentSearch=new(independentCollision,self.Position,independentGoal,independentRange);independentPath=null;independentProgressAt=now;
                 TraceKeyboundRun(independentNavigationRun,"route-replan",$"Attempt {independentReplans}; input reads {independentInputReads}, overrides {independentInputOverrides}","companion-navigation",false);
@@ -106,10 +118,11 @@ public sealed partial class Plugin
             ((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)self.Address)->SetRotation(yaw);
             camera->DirH=yaw-MathF.PI;
             independentForwardHook??=Interop.HookFromAddress<FollowInputRead>(InputManager.MemberFunctionPointers.GetInputStatus,IndependentForward);
-            independentMoving=true;independentPulseUntil=now.AddMilliseconds(180);
+            // Start the lease AFTER collision work and hook setup, not at frame start.
+            independentMoving=true;independentLease.Arm(DateTimeOffset.UtcNow);independentPulseUntil=independentLease.Until;
             if(!independentForwardHook.IsEnabled)independentForwardHook.Enable();
-            independentWalkStatus=$"Walking · point {independentWaypoint}/{independentPath.Length-1}";independentPrevious=self.Position;
-        }catch(Exception e){StopIndependentWalk(e.Message);independentWalkFailure=e.Message;Log.Warning(e,"Independent navigation stopped");}
+            independentWalkStatus=independentPositionChanged?$"Walking · point {independentWaypoint}/{independentPath.Length-1}":"Ready to move · waiting for movement confirmation";independentPrevious=self.Position;
+        }catch(Exception e){StopIndependentWalk(e.Message);independentWalkFailure=independentLastWalkFailure=e.Message;Log.Warning(e,"Independent navigation stopped");}
     }
     private bool IndependentMovementWindow()=>QuestConversationVisible()||VisibleFollowAddon("SelectYesno")||VisibleFollowAddon("SystemMenu");
     private bool IndependentOtherTravelBusy(){try{return LifestreamBusy();}catch{return false;}}
