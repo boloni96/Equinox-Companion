@@ -89,6 +89,11 @@ public sealed partial class Plugin
         if(VisibleFollowAddon("SelectString")||VisibleFollowAddon("SelectYesno")||VisibleFollowAddon("SelectIconString")){
             var place=DataManager.GetExcelSheet<Lumina.Excel.Sheets.TerritoryType>().GetRowOrDefault(1360)?.PlaceName.Value.Name.ToString()??"";
             if(place.Length>0&&eventEntranceSceneOwned&&now-eventEntranceInteractionAt<TimeSpan.FromMinutes(2)&&now-eventAccountActionAt>TimeSpan.FromSeconds(2)){
+                var confirm=(AddonSelectYesno*)KeyboundAddon("SelectYesno");
+                if(confirm!=null&&confirm->IsVisible&&confirm->PromptText!=null&&NativeEventPolicy.EntranceConfirmation(NativeEventStep.EnterSquare,1058754,Client.TerritoryType,eventEntranceSceneOwned,place,TravelMenuText(confirm->PromptText->NodeText.StringPtr)??"")){
+                    if(NativeEventButton((AtkUnitBase*)confirm,confirm->YesButton)){eventEntranceSceneOwned=false;eventAccountActionAt=now;eventAccountStatus="Entering Keybound Square · waiting for arrival";}
+                    return false;
+                }
                 foreach(var name in new[]{"SelectString","SelectIconString"}){
                     var addon=KeyboundAddon(name);var choices=HelperChoices(addon,name);
                     var matches=choices.Select((text,index)=>(text,index)).Where(x=>x.text.Contains(place,StringComparison.OrdinalIgnoreCase)).ToArray();

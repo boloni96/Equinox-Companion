@@ -19,6 +19,8 @@ public sealed partial class Plugin
     private uint independentTerritory;
     private float independentRange;
     private Vector2 independentAxes;
+    private float? independentHeading;
+    private DateTimeOffset independentSteeringAt;
     private int independentLastRoutePoints,independentLastExpanded;
     private double independentPlanningSeconds;
     private readonly NavigationPhaseTimer independentPhaseTimer=new();
@@ -71,7 +73,7 @@ public sealed partial class Plugin
     private void StopIndependentWalk(string reason="Stopped",bool resetFailure=false)
     {
         if(independentSearch!=null||independentPath!=null)TraceKeyboundRun(independentNavigationRun,"navigation-stopped",reason,"companion-navigation",false);
-        independentMoving=false;independentPulseUntil=default;independentLease.Revoke();independentForwardHook?.Disable();
+        independentHeading=null;independentMoving=false;independentPulseUntil=default;independentLease.Revoke();independentForwardHook?.Disable();
         independentSearch=null;independentPath=null;independentArrived=false;independentWalkStatus=reason;independentWalkFailure="";
         if(resetFailure)independentLastWalkFailure="";
     }
@@ -153,7 +155,17 @@ public sealed partial class Plugin
             var camera=cameras==null?null:(FFXIVClientStructs.FFXIV.Client.Game.Camera*)cameras->GetActiveCamera();
             if(camera==null)throw new InvalidOperationException("Movement camera unavailable.");
             var legacy=MarketGameConfig.UiControl.TryGetUInt("MoveMode",out var mode)&&mode==1;
-            independentAxes=WalkingSteering.Axes(self.Position,target,legacy?camera->DirH+MathF.PI:self.Rotation);
+            var delta=target-self.Position;var heading=MathF.Atan2(delta.X,delta.Z);
+            if(independentHeading is {} previousHeading){
+                var smooth=WalkingSteering.SmoothHeading(previousHeading,heading,(float)(now-independentSteeringAt).TotalSeconds);
+                if(MathF.Abs(MathF.IEEERemainder(smooth-heading,2*MathF.PI))>.01f){
+                    var probe=self.Position+new Vector3(MathF.Sin(smooth),0,MathF.Cos(smooth))*.6f;
+                    if(independentCollision.Ground(probe,out var floor)&&independentCollision.Traverse(self.Position,floor))heading=smooth;
+                }
+            }
+            independentHeading=heading;independentSteeringAt=now;
+            var reference=legacy?camera->DirH+MathF.PI:self.Rotation;
+            independentAxes=new(MathF.Sin(heading-reference),MathF.Cos(heading-reference));
             EnsureIndependentGroundInput();
             // Start the lease AFTER collision work and hook setup, not at frame start.
             if(!independentForwardHook!.IsEnabled)independentForwardHook.Enable();

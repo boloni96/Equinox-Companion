@@ -12,6 +12,8 @@ internal static class NativeEventPolicy
     internal static bool NearbyLeg(Vector3 start,Vector3 end)=>float.IsFinite(start.X)&&float.IsFinite(start.Y)&&float.IsFinite(start.Z)&&
         float.IsFinite(end.X)&&float.IsFinite(end.Y)&&float.IsFinite(end.Z)&&Vector3.Distance(start,end)<=80&&Math.Abs(start.Y-end.Y)<=6;
     internal static string Text(string value)=>string.Concat(value.Where(c=>!char.IsWhiteSpace(c)));
+    internal static bool EntranceConfirmation(NativeEventStep step,uint npc,uint territory,bool owned,string place,string prompt)=>
+        step==NativeEventStep.EnterSquare&&npc==1058754&&territory==144&&owned&&place.Length>0&&Prompt("Proceed to "+place+"?",prompt);
     internal static bool Prompt(string expected,string actual)=>expected.Length>0&&Text(expected)==Text(actual);
 }
 

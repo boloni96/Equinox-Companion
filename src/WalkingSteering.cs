@@ -2,6 +2,10 @@ using System.Numerics;
 namespace EquinoxCompanion;
 internal static class WalkingSteering
 {
+    public static float SmoothHeading(float current,float desired,float seconds){
+        var difference=MathF.IEEERemainder(desired-current,2*MathF.PI);
+        return current+Math.Clamp(difference,-6*Math.Clamp(seconds,0,.05f),6*Math.Clamp(seconds,0,.05f));
+    }
     public static Vector2 Axes(Vector3 from,Vector3 target,float referenceHeading)
     {
         var delta=target-from;

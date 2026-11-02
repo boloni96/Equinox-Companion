@@ -45,6 +45,9 @@ internal static class QuestTools373Tests
         Check("wrong NPC scene rejected",!NativeEventPolicy.Scene(71002,1058754,1058752));
         Check("unrelated event rejected",!NativeEventPolicy.Scene(71003,1058752,1058752));
         Check("expected quest scene accepted",NativeEventPolicy.Scene(71002,1058752,1058752));
+        Check("owned square confirmation accepted",NativeEventPolicy.EntranceConfirmation(NativeEventStep.EnterSquare,1058754,144,true,"Keybound Square","Proceed to Keybound Square?"));
+        Check("unowned square confirmation rejected",!NativeEventPolicy.EntranceConfirmation(NativeEventStep.EnterSquare,1058754,144,false,"Keybound Square","Proceed to Keybound Square?"));
+        Check("other destination rejected",!NativeEventPolicy.EntranceConfirmation(NativeEventStep.EnterSquare,1058754,144,true,"Keybound Square","Proceed to another place?"));
         Check("empty prompt rejected",!NativeEventPolicy.Prompt("",""));
         Check("different confirmation rejected",!NativeEventPolicy.Prompt("Continue?","Buy this item?"));
         Check("localized line wrapping tolerated",NativeEventPolicy.Prompt("Continue now?","Continue\nnow?"));

@@ -90,6 +90,11 @@ public sealed partial class Plugin
         }
         if(VisibleFollowAddon("SelectYesno")){
             var addon=(AddonSelectYesno*)KeyboundAddon("SelectYesno");
+            var place=DataManager.GetExcelSheet<Lumina.Excel.Sheets.TerritoryType>().GetRowOrDefault(1360)?.PlaceName.Value.Name.ToString()??"";
+            if(!nativeEventYesSent&&addon!=null&&addon->PromptText!=null&&NativeEventPolicy.EntranceConfirmation(nativeEventStep,nativeEventNpc,Client.TerritoryType,nativeEventSceneOwned,place,TravelMenuText(addon->PromptText->NodeText.StringPtr)??"")){
+                if(NativeEventButton((AtkUnitBase*)addon,addon->YesButton)){nativeEventYesSent=true;nativeEventActionAt=now;nativeEventStatus="Entering Keybound Square · waiting for arrival";}
+                return true;
+            }
             if(nativeEventStep==NativeEventStep.Complete&&nativeEventNpc==1058752&&!nativeEventYesSent&&addon!=null&&addon->PromptText!=null){
                 if(!nativeEventPromptLoaded){nativeEventPromptLoaded=true;nativeEventPrompt=ReadNativeEventPrompt();}
                 if(NativeEventPolicy.Prompt(nativeEventPrompt,TravelMenuText(addon->PromptText->NodeText.StringPtr)??"")&&NativeEventButton((AtkUnitBase*)addon,addon->YesButton)){
