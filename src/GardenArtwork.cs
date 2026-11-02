@@ -42,7 +42,7 @@ public sealed partial class Plugin
         var actual=GardenVisualState(b,false,DateTimeOffset.UtcNow);
         return actual switch {"wet"=>"growing","due"=>"tend","wilt-estimated" or "wilted"=>"wilting",_=>actual};
     }
-    private static string GardenCareAsset(string icon) => icon switch {"starter"=>"assets/badges/starter.png","remove-starter" or "replant"=>"assets/badges/replant.png","warning"=>"assets/badges/different.png","unknown"=>"assets/badges/unknown.png","dead"=>"assets/badges/dead.png",_=>"assets/icons/"+icon+".png"};
+    private static string GardenCareAsset(string icon) => icon switch {"mature-estimated"=>"assets/icons/ready.png","starter"=>"assets/badges/starter.png","remove-starter" or "replant"=>"assets/badges/replant.png","warning"=>"assets/badges/different.png","unknown"=>"assets/badges/unknown.png","dead"=>"assets/badges/dead.png",_=>"assets/icons/"+icon+".png"};
     private static string GardenCareHint(string icon) => icon switch
     {
         "starter" => "Temporary starter · finish the other planting steps, then replace this crop. No tending reminder for this temporary plant.",
@@ -55,6 +55,7 @@ public sealed partial class Plugin
         "growing" => "Growing · maturity has not been confirmed. Follow the care times below.",
         "empty" => "Empty · follow the planting plan when you are ready to plant.",
         "unknown" => "Crop or bed state unknown · open this numbered bed in game to inspect it.",
+        "mature-estimated" => "Mature · estimated growth time plus a two-hour buffer. A newer growing observation restarts the buffer. Harvest readiness is still checked in game.",
         "check-maturity" => "Estimated ready · mature appearance is based on timing. Open this bed in game to confirm readiness.",
         "at-risk" => "At risk (estimated) · check the crop and tend it if still growing.",
         "wilting" => "Wilting (estimated) · inspect the crop in game and tend it if alive.",
@@ -74,13 +75,13 @@ public sealed partial class Plugin
         GardenImage("assets/beds/soil-"+EquinoxCompanion.GardenVisualState.SoilArtwork(b,planVisible,now)+".png",at,new(size));
         var hasPicture=gardenPictures!.TryGetValue(crop,out var picture);
         if(hasPicture)GardenImage(picture.GetProperty(cropArtwork).GetString()!,at,new(size));
-        var effect=state switch {"ready" or "keep-mature"=>"ready-sparkles","wilt-estimated" or "wilted" or "at-risk"=>"wilt-mist","dead" or "dead-estimated"=>"dead-shade","unknown"=>"unknown-shade","planned"=>"planned-veil",_=>null};
+        var effect=state switch {"ready" or "keep-mature" or "mature-estimated"=>"ready-sparkles","wilt-estimated" or "wilted" or "at-risk"=>"wilt-mist","dead" or "dead-estimated"=>"dead-shade","unknown"=>"unknown-shade","planned"=>"planned-veil",_=>null};
         // Droplets request tending. Recorded care keeps wet soil and the same growth sprite.
         if(EquinoxCompanion.GardenVisualState.NeedsWater(b,planVisible,now)&&(!animate||EquinoxCompanion.GardenVisualState.EffectVisible(now)))GardenImage("assets/effects/wet-droplets.png",at,new(size));
         if(animate&&effect is "wet-droplets" or "ready-sparkles" or "wilt-mist"&&!EquinoxCompanion.GardenVisualState.EffectVisible(now))effect=null;
         if(effect is not null){var shade=effect is "unknown-shade" or "planned-veil" or "dead-shade";GardenImage("assets/effects/"+effect+".png",shade?at-new Vector2(size*.06f):at,new(size*(shade?1.12f:1)));}
         GardenImage("assets/beds/frame-"+(config.SharedRoster?.GardenFrame=="simple"?"simple":"wood")+".png",at,new(size));
-        var border=state switch {"wilt-estimated" or "wilted"=>"wilt","check-maturity"=>"unknown","empty" or "growing"=>null,_=>state};
+        var border=state switch {"mature-estimated"=>"ready","wilt-estimated" or "wilted"=>"wilt","check-maturity"=>"unknown","empty" or "growing"=>null,_=>state};
         if(planVisible&&GardenPlantRequirement.SuppressTending(b)&&border is "due" or "wet" or "at-risk" or "wilt" or "unknown")border=null;
         if(border is not null)GardenImage("assets/borders/"+border+".png",at,new(size));
         // Plan meaning stays at the top right; actual care belongs to the lower target.

@@ -31,6 +31,7 @@ public interface IGardenCarePort
     DateTimeOffset? MovementRecoveryUntil=>null;
     void Validate();
     bool Open(int bed);
+    string? SkipReason(int bed,GardenCareAction action)=>null;
     bool Act(int bed,GardenCareAction action);
     bool Confirmed(int bed,GardenCareAction action,DateTimeOffset sent);
     bool Close(int bed);
@@ -42,13 +43,15 @@ public sealed class GardenCareRun(IGardenCarePort port)
     private int[] beds=[];private int index,phase;private DateTimeOffset deadline,sent;
     public bool Running{get;private set;}
     public int Completed{get;private set;}
+    public int Skipped{get;private set;}
+    public string LastSkip{get;private set;}="";
     public int Total=>beds.Length;
     public GardenCareAction Action{get;private set;}
     public string Status{get;private set;}="";
     public void Start(IEnumerable<int> selected,GardenCareAction action,DateTimeOffset now)
     {
         if(Running)throw new InvalidOperationException("Finish or stop garden care first.");
-        beds=selected.Where(b=>b is >=1 and <=8).Distinct().ToArray();index=phase=Completed=0;Action=action;
+        beds=selected.Where(b=>b is >=1 and <=8).Distinct().ToArray();index=phase=Completed=Skipped=0;LastSkip="";Action=action;
         Running=beds.Length>0;deadline=now.AddSeconds(20);Status=Running?$"{action} · 0/{Total}":"No eligible beds.";
     }
     public void Stop(string reason){Running=false;Status=reason;port.Release();}
@@ -59,11 +62,15 @@ public sealed class GardenCareRun(IGardenCarePort port)
             port.Validate();if(phase==0&&port.MovementRecoveryUntil is {} recoveryUntil&&recoveryUntil>deadline)deadline=recoveryUntil;
             if(now>=deadline)throw new InvalidOperationException("Timed out waiting for the game; the last action was not retried.");
             var bed=beds[index];Status=$"{Action} · Bed {bed} · {Completed}/{Total}";
+            if(phase==1&&port.SkipReason(bed,Action) is {} reason){
+                Skipped++;LastSkip=$"Bed {bed}: {reason}";phase=3;deadline=now.AddSeconds(20);
+                Status=$"Skipping {LastSkip} · {Completed} confirmed · {Skipped} skipped";return;
+            }
             bool advance=phase switch{0=>port.Open(bed),1=>port.Act(bed,Action),2=>port.Confirmed(bed,Action,sent),_=>port.Close(bed)};
             if(!advance)return;
             if(phase==1)sent=now;
             if(phase==2)Completed++;
-            if(++phase==4){phase=0;index++;if(index==beds.Length){Stop($"Complete · {Completed}/{Total} beds confirmed.");return;}}
+            if(++phase==4){phase=0;index++;if(index==beds.Length){Stop($"Complete · {Completed}/{Total} beds confirmed"+(Skipped>0?$" · {Skipped} skipped. Last: {LastSkip}":"."));return;}}
             deadline=now.AddSeconds(20);
         }catch(Exception e){Stop("Stopped: "+e.Message);}
     }

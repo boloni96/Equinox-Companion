@@ -485,7 +485,7 @@ Check("garden art due at exact 12h",GardenVisualState.For(artBed with {Watered=a
 Check("garden art wilt is not death",GardenVisualState.For(artBed with {Watered=artNow.AddHours(-25)},false,artNow),"wilt-estimated");
 Check("garden art dead after deadline",GardenVisualState.For(artBed with {Watered=artNow.AddHours(-49)},false,artNow),"dead-estimated");
 Check("garden art ready immune to old death",GardenVisualState.For(artBed with {Watered=artNow.AddHours(-49),Ready=true},false,artNow),"ready");
-Check("garden art maturity before death uncertain",GardenVisualState.For(artBed with {Watered=artNow.AddHours(-49),HarvestAt=artNow.AddHours(-2)},false,artNow),"check-maturity");
+Check("garden art mature after two hour buffer",GardenVisualState.For(artBed with {Watered=artNow.AddHours(-49),HarvestAt=artNow.AddHours(-2)},false,artNow),"mature-estimated");
 Check("garden art saved plan is distinct",GardenVisualState.For(artBed with {Status="planned",Watered=null,ActualCrop="Not synced yet"},true,artNow),"planned");
 Check("garden art confirmed empty has no wet",GardenVisualState.For(artBed with {ActualCrop="Empty"},false,artNow),"empty");
 Check("garden art unknown is not empty",GardenVisualState.For(artBed with {ActualCrop="Not synced yet",Watered=null},false,artNow),"unknown");
@@ -934,9 +934,9 @@ Check("tend wets this bed",GardenVisualState.SoilArtwork(cared39,false,artNow),"
 Check("neighbor soil stays independent",GardenVisualState.SoilArtwork(wateredPlan.Beds[1],false,artNow),"normal");
 Check("soil stays wet before twelve hours",GardenVisualState.SoilArtwork(cared39,false,artNow.AddHours(11.99)),"wet");
 Check("soil dries at twelve hours",GardenVisualState.SoilArtwork(cared39,false,artNow.AddHours(12)),"normal");
-Check("tend prompt returns at twelve hours",GardenVisualState.NeedsWater(cared39,false,artNow.AddHours(12)).ToString(),"True");
+Check("mature estimate suppresses tend artwork after buffer",GardenVisualState.NeedsWater(cared39,false,artNow.AddHours(12)).ToString(),"False");
 Check("ready observation keeps wet soil",GardenVisualState.SoilArtwork(cared39 with {Ready=true},false,artNow.AddMinutes(1)),"wet");
-Check("estimated maturity keeps growing artwork",GardenVisualState.CropArtwork(staleMature with {Ready=false},false,artNow),"plantGrowing");
+Check("estimated maturity uses mature artwork after buffer",GardenVisualState.CropArtwork(staleMature with {Ready=false},false,artNow),"plantMature");
 Check("confirmed maturity uses mature artwork",GardenVisualState.CropArtwork(staleMature,false,artNow),"plantMature");
 Check("planting alone is not wet soil",GardenVisualState.SoilArtwork(cared39 with {Planted=artNow,Watered=artNow},false,artNow),"normal");
 
@@ -951,7 +951,7 @@ Check("FC membership groups before pending progress",SharedCharacterGrouping.Gro
 Check("tend bar blue attention",GardenOverview.Attention([carePlan with {Beds=[staleMature with {Ready=false,HarvestAt=null}]}],artNow),"tend");
 Check("harvest bar green attention",GardenOverview.Attention([carePlan with {Beds=[staleMature]}],artNow),"harvest");
 Check("mixed bar does not hide tending",GardenOverview.Attention([carePlan with {Beds=[staleMature,staleMature with {Ready=false,HarvestAt=null}]}],artNow),"tend");
-Check("estimated mature gets check color",GardenOverview.Attention([carePlan with {Beds=[staleMature with {Ready=false,Watered=artNow.AddHours(-1)}]}],artNow),"check");
+Check("buffered mature gets harvest color",GardenOverview.Attention([carePlan with {Beds=[staleMature with {Ready=false,Watered=artNow.AddHours(-1)}]}],artNow),"harvest");
 var fashionNow=DateTimeOffset.Parse("2026-10-03T20:00:00Z");
 var fashionActor=new Actor("123","Fashion Character",410,57,"Rafflesia","Siren");
 var fashionEvent=new SyncEvent("fashion39","fashion.observed",fashionNow.AddMinutes(-1),fashionActor,null,Fashion:new(80,3,0,FashionCompletion.Cycle(fashionNow).ToString("O")));

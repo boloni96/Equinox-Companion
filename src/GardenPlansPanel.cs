@@ -389,7 +389,7 @@ public sealed partial class Plugin
         if (b.Watered is {} watered) DrawGardenInfoLabel("clock", $"Latest care: {DisplayTime.Local(watered)}");
         DrawGardenInfoLabel("actor", "Tended by: " + (b.TendedBy.Length > 0 ? b.TendedBy : "Gardener not recorded"));
         if (b.LastFertilized is {} fed) {DrawGardenItem("Fishmeal",true,"Fertilizer: ");DrawGardenInfoLabel("fertilized", $"Last fertilized: {DisplayTime.Local(fed)} · does not reset tending.");}
-        if (!b.Ready && b.DeadConfirmedAt is null)
+        if (!b.Ready && b.DeadConfirmedAt is null && state!="mature-estimated")
         {
             if ((GardenTiming.FirstTendDue(b.Planted,b.Watered,DateTimeOffset.UtcNow)?b.Planted:b.NextTend) is {} tend) DrawGardenInfoLabel("tend", $"Tending suggested: {DisplayTime.Local(tend)}");
             if (b.HarvestAt is {} harvest) DrawGardenInfoLabel("check-maturity", $"Maturity estimate: {DisplayTime.Local(harvest)}");
