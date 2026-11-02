@@ -37,6 +37,8 @@ public sealed partial class Plugin
             if(Conditions[Dalamud.Game.ClientState.Conditions.ConditionFlag.BetweenAreas]||Conditions[Dalamud.Game.ClientState.Conditions.ConditionFlag.BetweenAreas51]||Vector3.Distance(self.Position,new(-64.74408f,2.8839111f,54.33728f))>20)return false;
             eventSaucerTravelOwned=false;return true;
         }
+        // A shortcut is a pre-walk decision, never a trigger while passing a crystal.
+        if(!NativeEventPolicy.EntranceShortcut(nativeEventStep,independentSearch!=null||independentPath!=null))return true;
         // Only request the aethernet while actually near the main plaza crystal.
         if(Vector3.Distance(self.Position,new(-.015319824f,3.4942627f,-.015319824f))>15)return true;
         if(LifestreamBusy())throw new InvalidOperationException("Another travel task is running.");

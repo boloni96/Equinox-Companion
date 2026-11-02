@@ -81,7 +81,7 @@ public sealed partial class Plugin
     }
     private unsafe bool EventAccountSquare(DateTimeOffset now){
         if(Client.TerritoryType==1360){eventEntranceSceneOwned=false;eventEntranceInteractionAt=default;return true;}
-        if(!EventReachSaucer(now)||!EventReachEntrance(now))return false;
+        if(!EventReachSaucer(now))return false;
         EventAccountStage("entrance","Going to the Keybound Square entrance");
         var npc=Objects.FirstOrDefault(o=>o.BaseId==1058754&&o.IsTargetable);
         var goal=npc?.Position??new Vector3(.804425f,3.98254f,61.2062f);

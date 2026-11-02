@@ -33,6 +33,9 @@ internal static class QuestTools373Tests
         Check("completion transition celebrates",AccountCelebrationPolicy.Transition(false,true));
         Check("repeated completion stays quiet",!AccountCelebrationPolicy.Transition(true,true));
         Check("five second fade",AccountCelebrationPolicy.Alpha(0)==0&&AccountCelebrationPolicy.Alpha(.25)==.5f&&AccountCelebrationPolicy.Alpha(1)==1&&AccountCelebrationPolicy.Alpha(3)==1&&AccountCelebrationPolicy.Alpha(4.625)==.5f&&AccountCelebrationPolicy.Alpha(5)==0);
+        Check("accept may use entrance shard",NativeEventPolicy.EntranceShortcut(NativeEventStep.Accept,false));
+        Check("square step never uses entrance shard",!NativeEventPolicy.EntranceShortcut(NativeEventStep.EnterSquare,false));
+        Check("walking past crystal does not teleport",!NativeEventPolicy.EntranceShortcut(NativeEventStep.Accept,true));
         Check("missing quest accepts",NativeEventPolicy.Step(false,false,0)==NativeEventStep.Accept);
         Check("accepted quest waits for sequence",NativeEventPolicy.Step(false,true,0)==NativeEventStep.Wait);
         Check("accepted quest enters square",NativeEventPolicy.Step(false,true,1)==NativeEventStep.EnterSquare);

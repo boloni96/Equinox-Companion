@@ -17,6 +17,7 @@ public sealed partial class Plugin
     private void InitializeQuestTools()
     {
         questToolsWindow=new(this);windows.AddWindow(questToolsWindow);
+        navigationSystemWindow=new(this);windows.AddWindow(navigationSystemWindow);
         companionHelperWindow=new(this);windows.AddWindow(companionHelperWindow);
         companionHelperCommand=Commands.AddHandler("/eqhelper",new CommandInfo((_,_)=>companionHelperWindow.IsOpen=true){HelpMessage="Open Helper: FollowThem, quest assistance, quest library and recorder."});
         companionFollowCommand=Commands.AddHandler("/eqfollow",new CommandInfo((_,_)=>companionHelperWindow.IsOpen=true){HelpMessage="Open the standalone FollowThem / Helper window."});
@@ -42,7 +43,7 @@ public sealed partial class Plugin
         StopQuestRecording("Plugin unloaded");
         DisposeQuestRecorder();DisposeIndependentWalk();RemoveWorkBar();
         if(questToolsCommand)Commands.RemoveHandler("/eqquests");
-        windows.RemoveWindow(questToolsWindow);windows.RemoveWindow(companionHelperWindow);
+        windows.RemoveWindow(questToolsWindow);windows.RemoveWindow(companionHelperWindow);windows.RemoveWindow(navigationSystemWindow);
         if(companionHelperCommand)Commands.RemoveHandler("/eqhelper");
         if(companionFollowCommand)Commands.RemoveHandler("/eqfollow");
     }
