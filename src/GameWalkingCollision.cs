@@ -12,7 +12,7 @@ internal sealed class GameWalkingCollision:IWalkingCollision
     private readonly Dictionary<Vector3,float> wallCache=[];
     public float WallPenalty(Vector3 point){
         if(groundCache!=null&&wallCache.TryGetValue(point,out var cached))return cached;
-        Ready();const float preferred=1.2f;var nearest=preferred;
+        Ready();const float preferred=3.5f;var nearest=preferred;
         for(var i=0;i<8;i++){
             var angle=i*MathF.PI/4;var direction=new Vector3(MathF.Cos(angle),0,MathF.Sin(angle));
             if(Hit(point+new Vector3(0,.9f,0),direction,preferred,out var hit))nearest=MathF.Min(nearest,CollisionRouteSearch.Horizontal(point,hit.Point));
