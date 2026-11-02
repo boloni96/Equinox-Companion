@@ -32,12 +32,6 @@ public sealed partial class Plugin
     }
     private void DrawKeyboundHelper()
     {
-        DrawWorkStatusBar(true);
-        if(ImGui.BeginChild("Keybound content",System.Numerics.Vector2.Zero,false))DrawKeyboundHelperContent();
-        ImGui.EndChild();
-    }
-    private void DrawKeyboundHelperContent()
-    {
         ImGui.BeginDisabled(keyboundBuying&&!eventAccountActive);
         if(ImGui.Button(eventAccountActive||keyboundEnabled?"Stop":"Start")){
             if(eventAccountActive)StopEventAccount("Stopped by you.");else if(keyboundEnabled)StopKeybound("Stopped by you.");else{StopKeybound();keyboundBuyStatus="";keyboundGoalCheckAt=default;keyboundEnabled=true;keyboundTypingRun=Guid.NewGuid().ToString("N");TraceKeyboundRun(keyboundTypingRun,"typing-started","Typing started","user-button");keyboundNext=keyboundHold=keyboundMissing=default;keyboundStatus="Waiting for Keybound Brawler";}

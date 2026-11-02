@@ -24,7 +24,7 @@ public sealed partial class Plugin
             this.plugin=plugin;
             Size=new Vector2(360,320);SizeCondition=ImGuiCond.FirstUseEver;
             SizeConstraints=new WindowSizeConstraints{MinimumSize=new Vector2(360,260),MaximumSize=new Vector2(float.MaxValue,float.MaxValue)};
-            RespectCloseHotkey=false;Flags|=ImGuiWindowFlags.NoScrollbar|ImGuiWindowFlags.NoScrollWithMouse;
+            RespectCloseHotkey=false;
         }
         public override void Draw()=>plugin.DrawKeyboundHelper();
     }
