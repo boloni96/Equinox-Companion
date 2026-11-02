@@ -117,6 +117,10 @@ Check(QuestRewardPolicy.Choose(rewardOffers)?.ItemId==11,"gil first over gear an
 Check(QuestRewardPolicy.Choose(rewardOffers.Where(x=>!x.Gil))?.ItemId==10,"usable gear upgrade before vendor fallback");
 Check(QuestRewardPolicy.Choose(rewardOffers.Select(x=>x with {Gil=false,Upgrade=0}))?.ItemId==12,"highest total vendor value fallback");
 Check(QuestRewardPolicy.Choose(rewardOffers.Select(x=>x with {UniqueOwned=true}))==null,"owned unique rewards excluded");
+foreach(var (quest,sequence) in new[]{(162,2),(5490,1),(1556,1),(2560,1)}){
+ var imported=book.Find(quest.ToString()).Single().Definition.GetProperty("QuestSequence").EnumerateArray().Single(q=>q.GetProperty("Sequence").GetInt32()==sequence).GetProperty("Steps")[0];
+ Check(IndependentStepPolicy.Review(imported)=="",$"reported quest {quest} sequence {sequence} is supported");
+}
 using(var skipDoc=System.Text.Json.JsonDocument.Parse("""
 {"TerritoryId":133,"InteractionType":"Interact","SkipConditions":{"AetheryteShortcutIf":{"InTerritory":[132,133]},"StepIf":{"NearPosition":{"TerritoryId":133,"Position":{"X":2,"Y":0,"Z":0},"MaximumDistance":3}}}}
 """)){
