@@ -29,7 +29,8 @@ public sealed partial class Plugin
     {
         if(now<gardenCareNext)return;
         gardenCareNext=now.AddMilliseconds(200);TickTendAdventure(now);
-        if(gardenCareRun?.Running==true)gardenCareRun.Tick(now);
+        if(gardenCareRun?.Running==true)gardenCareRun.Tick(now,gardenTendRoute!=null&&gardenConnection.WaitingSince!=null);
+        if(gardenTendRoute!=null&&gardenConnection.WaitingSince!=null)return;
         if(gardenHouseHarvest!=null&&gardenCareRun?.Running!=true){
             if(gardenCareRun?.Status.StartsWith("Stopped")==true)gardenHouseHarvest=null;
             else if(gardenHouseHarvest.TryDequeue(out var nextBatch))StartGardenCare(nextBatch.Plan,nextBatch.Action,allowedBeds:nextBatch.Beds,tendAll:nextBatch.TendAll);
@@ -114,7 +115,7 @@ public sealed partial class Plugin
         if(gardenCareRun.Running){
             if(ImGui.SmallButton("Stop garden care")){gardenHousePlant=null;gardenHousePlantStatus="";gardenAutoPlantPlan=null;gardenHouseHarvest=null;StopTendAdventure("Stopped by you.");gardenCareRun.Stop("Stopped by you · an already-sent action may still finish.");}
             ImGui.SameLine();ImGui.ProgressBar((float)(gardenCareRun.Completed+gardenCareRun.Skipped)/Math.Max(1,gardenCareRun.Total),new Vector2(Math.Max(100,ImGui.GetContentRegionAvail().X),ImGui.GetFrameHeight()),gardenCareRun.Status);
-        }else ImGui.TextWrapped(gardenCareRun.Status);
+        }else if(gardenCareRun.Status!=gardenTendStatus)ImGui.TextWrapped(gardenCareRun.Status);
     }
     private void StartScopedGardenCare(SharedGardenPlan plan,GardenCareAction action,DateTimeOffset now,bool tendAll=false)
     {
