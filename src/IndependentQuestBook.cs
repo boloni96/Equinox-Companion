@@ -9,6 +9,9 @@ public sealed class IndependentQuestBook
     public sealed record Route(string Key,string Path,JsonElement Definition);
     private readonly Dictionary<string,Route> byPath=new(StringComparer.Ordinal);
     public IReadOnlyCollection<Route> Routes=>byPath.Values;
+    private Dictionary<string,uint> travel=[],emotes=[];
+    public uint EmoteId(string name)=>emotes.GetValueOrDefault(name);
+    public uint TravelId(string name)=>travel.GetValueOrDefault(name);
     public string Revision { get; private set; }="";
     public static IndependentQuestBook Load(Stream stream)
     {
@@ -19,6 +22,8 @@ public sealed class IndependentQuestBook
         var root=manifest.RootElement;
         if(root.GetProperty("format").GetInt32()!=1)throw new InvalidDataException("Unsupported quest pack");
         var book=new IndependentQuestBook{Revision=root.GetProperty("revision").GetString()??""};
+        book.emotes=JsonSerializer.Deserialize<Dictionary<string,uint>>(Read(zip,"emote-map.json",1024*1024))??[];
+        book.travel=JsonSerializer.Deserialize<Dictionary<string,uint>>(Read(zip,"travel-map.json",1024*1024))??[];
         foreach(var row in root.GetProperty("routes").EnumerateArray())
         {
             var path=row.GetProperty("path").GetString()??throw new InvalidDataException("Route path missing");

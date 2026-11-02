@@ -45,6 +45,26 @@ def build(root, destination):
                     license='AGPL-3.0', routes=rows,
                     interactionCounts=dict(sorted(kinds.items())),
                     jsonFiles=len(files), routeCount=len(rows))
+    enum_path = root/'Questionable.Model/Common/EAetheryteLocation.cs'
+    identifiers = dict((name, int(value)) for name, value in re.findall(r'(\w+)\s*=\s*(\d+)\b', enum_path.read_text(encoding='utf-8-sig')))
+    travel = {}
+    for relative in ['Questionable.Model/Common/Converter/AetheryteConverter.cs', 'Questionable.Model/Questing/Converter/AethernetShardConverter.cs']:
+        source = (root/relative).read_text(encoding='utf-8-sig')
+        for name, label in re.findall(r'EAetheryteLocation\.(\w+),\s*"([^"]+)"', source):
+            if name not in identifiers:
+                raise ValueError('Unresolved aetheryte mapping: '+name)
+            travel[label] = identifiers[name]
+        files['SourceMappings/'+Path(relative).name] = (root/relative).read_bytes()
+    files['SourceMappings/EAetheryteLocation.cs'] = enum_path.read_bytes()
+    files['travel-map.json'] = json.dumps(travel, sort_keys=True).encode()
+    emote_enum = root/'Questionable.Model/Questing/EEmote.cs'
+    emote_converter = root/'Questionable.Model/Questing/Converter/EmoteConverter.cs'
+    emote_ids = dict((name, int(value)) for name, value in re.findall(r'(\w+)\s*=\s*(\d+)\b', emote_enum.read_text(encoding='utf-8-sig')))
+    emotes = {label: emote_ids[name] for name, label in re.findall(r'EEmote\.(\w+),\s*"([^"]+)"', emote_converter.read_text(encoding='utf-8-sig'))}
+    files['emote-map.json'] = json.dumps(emotes, sort_keys=True).encode()
+    files['SourceMappings/EEmote.cs'] = emote_enum.read_bytes()
+    files['SourceMappings/EmoteConverter.cs'] = emote_converter.read_bytes()
+
     files['LICENSE'] = license_bytes
     files['manifest.json'] = json.dumps(manifest, indent=2, ensure_ascii=False).encode()
     files['NOTICE.txt'] = (f'Unmodified Questionable quest data from {SOURCE}\n'

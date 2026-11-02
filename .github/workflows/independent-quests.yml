@@ -30,6 +30,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
@@ -41,5 +43,7 @@ jobs:
           Invoke-WebRequest https://goatcorp.github.io/dalamud-distrib/latest.zip -OutFile $zip
           Expand-Archive $zip -DestinationPath $refs
           "DALAMUD_HOME=$refs" >> $env:GITHUB_ENV
+      - name: Generate bundled quest data
+        run: python scripts/import_quest_routes.py vendor/questionable-data-source src/quest-routes.zip
       - name: Compile Companion with independent components
         run: dotnet build src/EquinoxCompanion.csproj -c Release -p:RestoreLockedMode=true

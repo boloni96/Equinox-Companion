@@ -14,18 +14,13 @@ public sealed partial class Plugin
     private Task<QuestCatalogueRow[]>? questCatalogueTask;
     private QuestCatalogueRow[] questCatalogue=[],questSearchRows=[];
     private string questSearch="",questToolsStatus="Choose a quest, or record one manually.";
-    private uint questionableOwnedQuest;
-    private ulong questionableOwnedCharacter;
-    private DateTimeOffset questionableNext,questionableStarted;
-    private bool QuestProviderRunning()=>Pi.GetIpcSubscriber<bool>("Questionable.IsRunning").InvokeFunc();
-    private string? QuestProviderCurrent()=>Pi.GetIpcSubscriber<string?>("Questionable.GetCurrentQuestId").InvokeFunc();
     private void InitializeQuestTools()
     {
         questToolsWindow=new(this);windows.AddWindow(questToolsWindow);
         companionHelperWindow=new(this);windows.AddWindow(companionHelperWindow);
         companionHelperCommand=Commands.AddHandler("/eqhelper",new CommandInfo((_,_)=>companionHelperWindow.IsOpen=true){HelpMessage="Open Helper: FollowThem, quest assistance, quest library and recorder."});
         companionFollowCommand=Commands.AddHandler("/eqfollow",new CommandInfo((_,_)=>companionHelperWindow.IsOpen=true){HelpMessage="Open the standalone FollowThem / Helper window."});
-        questToolsCommand=Commands.AddHandler("/eqquests",new CommandInfo((_,_)=>questToolsWindow.IsOpen=true){HelpMessage="Quest catalogue, Questionable integration and quest recorder."});
+        questToolsCommand=Commands.AddHandler("/eqquests",new CommandInfo((_,_)=>questToolsWindow.IsOpen=true){HelpMessage="Independent quest runner, library and recorder."});
         // Dalamud can load assemblies from bytes: Assembly.Location is then empty.
         // Resolve assets from its installation path, and isolate I/O failures from startup.
         var directory=Pi.AssemblyLocation.DirectoryName;
@@ -35,6 +30,7 @@ public sealed partial class Plugin
             var path=Path.Combine(directory,"questionable-quests.json");
             return JsonSerializer.Deserialize<QuestCatalogueRow[]>(File.ReadAllText(path))??[];
         });
+        InitializeIndependentQuests(directory);
         InitializeQuestRecorder();
     }
     private void DisposeQuestTools()
@@ -42,9 +38,9 @@ public sealed partial class Plugin
         StopNativeEventQuest("Plugin unloaded");
         StopQuestChain("Plugin unloaded");
         StopEventAccount("Plugin unloaded");
-        StopQuestionableQuest("Plugin unloaded");
+        StopIndependentQuest("Plugin unloaded");
         StopQuestRecording("Plugin unloaded");
-        DisposeQuestRecorder();
+        DisposeQuestRecorder();DisposeIndependentWalk();
         if(questToolsCommand)Commands.RemoveHandler("/eqquests");
         windows.RemoveWindow(questToolsWindow);windows.RemoveWindow(companionHelperWindow);
         if(companionHelperCommand)Commands.RemoveHandler("/eqhelper");
@@ -52,42 +48,8 @@ public sealed partial class Plugin
     }
     private bool QuestToolsOtherOperation()=>followSession.Armed||TraderRunning||gardenCareRun?.Running==true||
         gearRouting||armoireRunning||retrievalRun.Running||organizeRunning||sellerRun.Running||keyboundBuying||keyboundEnabled;
-    private unsafe bool StartQuestionableQuest(uint id)
-    {
-        try
-        {
-            id=QuestToolsPolicy.ShortId(id);
-            if(!Player.IsLoaded||QuestManager.Instance()==null)throw new InvalidOperationException("Log into the intended character first.");
-            if(Conditions[Dalamud.Game.ClientState.Conditions.ConditionFlag.BoundByDuty]||Conditions[Dalamud.Game.ClientState.Conditions.ConditionFlag.InDutyQueue])throw new InvalidOperationException("Leave the current duty or queue first.");
-            if(nativeEventActive||QuestToolsOtherOperation())throw new InvalidOperationException("Stop the other helper or inventory operation first.");
-            if(questRecorderActive)throw new InvalidOperationException("Stop manual recording before starting quest automation.");
-            if(QuestManager.IsQuestComplete(id)){questToolsStatus="Quest already complete. Reward progress is checked separately.";return true;}
-            if(QuestProviderRunning())throw new InvalidOperationException("Questionable is already running; its current task was left alone.");
-            var key=id.ToString(System.Globalization.CultureInfo.InvariantCulture);
-            if(Pi.GetIpcSubscriber<string,bool>("Questionable.IsQuestLocked").InvokeFunc(key))
-                throw new InvalidOperationException("Quest unavailable or not supported by the installed Questionable. Check its prerequisites and update its quest paths.");
-            if(!Pi.GetIpcSubscriber<string,bool>("Questionable.StartSingleQuest").InvokeFunc(key))
-                throw new InvalidOperationException("Questionable did not accept this quest. Record the missing steps instead.");
-            questionableOwnedQuest=id;questionableOwnedCharacter=Player.ContentId;
-            questionableStarted=DateTimeOffset.UtcNow;questionableNext=default;
-            questToolsStatus="Questionable started one quest: "+QuestTitle(id);
-            return true;
-        }
-        catch(Exception e){questToolsStatus="Quest not started: "+e.Message;return false;}
-    }
     private string QuestTitle(uint id)=>DataManager.GetExcelSheet<Lumina.Excel.Sheets.Quest>().GetRowOrDefault(65536+QuestToolsPolicy.ShortId(id))?.Name.ToString()??
         questCatalogue.FirstOrDefault(x=>x.Id==QuestToolsPolicy.ShortId(id))?.Name??id.ToString();
-    private void StopQuestionableQuest(string reason)
-    {
-        if(questionableOwnedQuest==0)return;
-        try
-        {
-            if(QuestProviderCurrent()==questionableOwnedQuest.ToString())
-                Pi.GetIpcSubscriber<string,bool>("Questionable.Stop").InvokeFunc("Equinox: "+reason);
-        }
-        catch(Exception e){Log.Warning(e,"Could not stop Equinox-owned Questionable quest");}
-        questionableOwnedQuest=0;questToolsStatus=reason;
-    }
     private unsafe void UpdateQuestTools(DateTimeOffset now)
     {
         if(questCatalogueTask?.IsCompleted==true){
@@ -96,21 +58,8 @@ public sealed partial class Plugin
             questCatalogueTask=null;
         }
         UpdateQuestRecorder(now);
-        if(questionableOwnedQuest!=0&&now>=questionableNext){
-            questionableNext=now.AddSeconds(1);
-            try{
-                if(!Player.IsLoaded||Player.ContentId!=questionableOwnedCharacter){StopQuestionableQuest("Quest stopped: character changed or logged out.");}
-                else if(QuestToolsOtherOperation()){StopQuestionableQuest("Quest stopped: another helper started.");}
-                else if(QuestProviderCurrent() is {} current&&current!=questionableOwnedQuest.ToString()){
-                    if(now-questionableStarted<TimeSpan.FromSeconds(5))questToolsStatus="Waiting for Questionable to load the selected quest";
-                    else{questionableOwnedQuest=0;questToolsStatus="Questionable switched quests outside this routine; assistance stopped.";}
-                }
-                else if(QuestManager.IsQuestComplete(questionableOwnedQuest)){StopQuestionableQuest("Quest completed; reward collection is separate.");}
-                else if(!QuestProviderRunning()&&now-questionableStarted>TimeSpan.FromSeconds(5)){questionableOwnedQuest=0;questToolsStatus="Questionable stopped before quest completion. Check its status; no restart was sent.";}
-                else if(now-questionableStarted>TimeSpan.FromHours(2)){StopQuestionableQuest("Quest session timed out.");}
-                else questToolsStatus=QuestTitle(questionableOwnedQuest)+" · quest sequence "+QuestManager.GetQuestSequence(questionableOwnedQuest)+" · Questionable running";
-            }catch(Exception e){StopQuestionableQuest("Questionable unavailable: "+e.Message);}
-        }
+        UpdateIndependentWalk(now);
+        UpdateIndependentQuest(now);
         UpdateNativeEventQuest(now);
         UpdateQuestChain(now);
         UpdateEventAccount(now);
@@ -122,19 +71,18 @@ public sealed partial class Plugin
         if(ImGui.BeginTabBar("QuestToolsTabs")){
             if(ImGui.BeginTabItem("Event quest")){DrawNativeEventQuest();ImGui.EndTabItem();}
             if(ImGui.BeginTabItem("Quest library")){
-                ImGui.TextWrapped("Keyward Bound uses Companion. Other indexed quests still use your installed Questionable and its requirements. Runs one quest at a time with the continuation options below; does not replace your priority list.");
+                ImGui.TextWrapped("Companion runs imported quest steps directly with local collision navigation. Questionable and vnavmesh are not required. Unsupported steps remain pending with a reason; duties are manual.");
                 ImGui.TextDisabled($"{questCatalogue.Length:N0} indexed quests · source snapshot 2 Nov 2026");
                 if(ImGui.InputTextWithHint("##QuestSearch","Quest name, ID, expansion or category",ref questSearch,160))FilterQuestCatalogue();
                 DrawQuestChainOptions();
                 ImGui.TextWrapped(questToolsStatus);
-                if(questionableOwnedQuest!=0&&ImGui.Button("Stop quest"))StopQuestionableQuest("Stopped by you.");
-                if(ImGui.CollapsingHeader("Questionable setup")){
-                    ImGui.TextWrapped("Install and enable Questionable with its required plugins. The catalogue is a reference; availability is checked against your installed version and this character.");
-                    if(ImGui.Button("Questionable installation"))Dalamud.Utility.Util.OpenLink("https://github.com/PunishXIV/Questionable");
-                }
+                if(independentQuestId!=0&&ImGui.Button("Stop quest"))StopIndependentQuest("Stopped by you.");
+                ImGui.TextDisabled($"Independent route data: {independentBook?.Routes.Count ?? 0:N0}");
+                if(independentQuestBookError.Length>0)ImGui.TextWrapped(independentQuestBookError);
+                ImGui.TextWrapped(independentWalkStatus);
                 if(ImGui.BeginChild("QuestCatalogue",Vector2.Zero,true)){
                     foreach(var q in questSearchRows){
-                        ImGui.PushID((int)q.Id);ImGui.BeginDisabled(nativeEventActive||questChainActive||questionableOwnedQuest!=0||eventAccountActive||questRecorderActive);
+                        ImGui.PushID((int)q.Id);ImGui.BeginDisabled(nativeEventActive||questChainActive||independentQuestId!=0||eventAccountActive||questRecorderActive);
                         if(ImGui.SmallButton("Start")){if(q.Id==NativeEventPolicy.Quest)StartNativeEventQuest();else BeginQuestChain(q.Id);}
                         ImGui.EndDisabled();ImGui.SameLine();ImGui.TextUnformatted(q.Name+" · "+q.Id);
                         if(ImGui.IsItemHovered())ImGui.SetTooltip(q.Group);
