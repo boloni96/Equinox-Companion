@@ -5,14 +5,16 @@ internal static class VerifiedWalkingOpening
 {
     public static Vector3[] Build(IWalkingCollision collision,Vector3 start,Vector3 goal,float range){
         var delta=goal-start;delta.Y=0;var length=delta.Length();
-        if(length<range+4)return [];
+        // Different floors require the planned stair/ramp route, not a direct opening.
+        if(length<range+8||MathF.Abs(goal.Y-start.Y)>1.2f)return [];
         var direction=delta/length;var path=new List<Vector3>{start};
-        for(var i=1;i<=6&&i<length-range;i++){
+        for(var i=1;i<=8;i++){
             var next=start+direction*i;next.Y=path[^1].Y;
-            if(!collision.Ground(next,out var floor)||!collision.Traverse(path[^1],floor))break;
+            if(!collision.Ground(next,out var floor)||!collision.Traverse(path[^1],floor))return [];
             path.Add(floor);
         }
-        return path.Count>=5?path.ToArray():[];
+        // Keep two checked yalms beyond the opening, so it does not end facing a wall.
+        return path.Take(7).ToArray();
     }
 }
 internal static class WalkingRouteMemory

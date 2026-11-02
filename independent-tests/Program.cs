@@ -80,9 +80,10 @@ Check(exact.Path!=null&&CollisionRouteSearch.Horizontal(exact.Path[^1],new(-.5f,
 var longLine=Enumerable.Range(0,10).Select(i=>new Vector3(i,0,0)).ToArray();
 Check(WalkingSteering.AdvanceWaypoint(new(3.2f,0,.2f),longLine,1,(_,_)=>true)>=4,"slow frame recovers onward waypoint instead of turning back");
 Check(Vector3.Distance(Vector3.Zero,WalkingSteering.PursuitTarget(Vector3.Zero,[new(4,0,0),new(5,0,0)],1,(_,_)=>false))<=2.21f,"fallback target stays inside collision query range");
-var opening=VerifiedWalkingOpening.Build(collision,Vector3.Zero,new(-7,0,0),.4f);
-Check(opening.Length>=5&&opening.Zip(opening.Skip(1)).All(p=>collision.Traverse(p.First,p.Second)),"opening is checked before streaming movement");
-Check(VerifiedWalkingOpening.Build(collision,Vector3.Zero,new(7,0,0),.4f).Length==0,"blocked opening waits for full planning");
+var opening=VerifiedWalkingOpening.Build(collision,Vector3.Zero,new(-12,0,0),.4f);
+Check(opening.Length==7&&opening.Zip(opening.Skip(1)).All(p=>collision.Traverse(p.First,p.Second)),"opening is checked before streaming movement");
+Check(VerifiedWalkingOpening.Build(collision,Vector3.Zero,new(12,0,0),.4f).Length==0,"blocked opening waits for full planning");
+Check(VerifiedWalkingOpening.Build(collision,Vector3.Zero,new(-12,4,0),.4f).Length==0,"different floor waits for stair planning");
 RememberedWalkingRoute[] remembered=[new(144,new(8,0,0),1,longLine)];
 Check(WalkingRouteMemory.Join(remembered,144,new(3.1f,0,0),new(8,0,0),1,(_,_)=>true)!=null,"saved route can join near current position");
 Check(WalkingRouteMemory.Join(remembered,1360,new(3.1f,0,0),new(8,0,0),1,(_,_)=>true)==null,"route memory isolates territories");

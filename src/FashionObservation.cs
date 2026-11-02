@@ -16,7 +16,7 @@ public sealed partial class Plugin
     private unsafe void ObserveNpcEvent(EventFramework* framework, NativeGameObject* target, EventId eventId, short scene, ulong flags, uint* values, byte count)
     {
         if(eventAccountActive||nativeEventActive){eventEntranceSceneOwned=target!=null&&target->BaseId==1058754&&DateTimeOffset.UtcNow-eventEntranceInteractionAt<TimeSpan.FromMinutes(2);}
-        if(nativeEventActive){try{ObserveNativeEventScene(eventId.Id,target==null?0:target->BaseId);}catch(Exception e){Log.Debug(e,"Native event quest observation");}}
+        if(nativeEventActive){try{ObserveNativeEventScene(eventId.Id,target==null?0:target->BaseId,scene);}catch(Exception e){Log.Debug(e,"Native event quest observation");}}
         if(independentQuestId!=0){try{ObserveIndependentQuest(eventId.Id,target==null?0:target->BaseId);}catch(Exception e){Log.Debug(e,"Independent quest scene");}}
         if(questRecorderActive){
             try{
