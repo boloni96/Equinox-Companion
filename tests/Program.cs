@@ -951,7 +951,7 @@ Check("FC membership groups before pending progress",SharedCharacterGrouping.Gro
 Check("tend bar blue attention",GardenOverview.Attention([carePlan with {Beds=[staleMature with {Ready=false,HarvestAt=null}]}],artNow),"tend");
 Check("harvest bar green attention",GardenOverview.Attention([carePlan with {Beds=[staleMature]}],artNow),"harvest");
 Check("mixed bar does not hide tending",GardenOverview.Attention([carePlan with {Beds=[staleMature,staleMature with {Ready=false,HarvestAt=null}]}],artNow),"tend");
-Check("estimated mature gets check color",GardenOverview.Attention([carePlan with {Beds=[staleMature with {Ready=false,Watered=artNow.AddHours(-1)}]}],artNow),"check");
+Check("buffered mature gets harvest color",GardenOverview.Attention([carePlan with {Beds=[staleMature with {Ready=false,Watered=artNow.AddHours(-1)}]}],artNow),"harvest");
 var fashionNow=DateTimeOffset.Parse("2026-10-03T20:00:00Z");
 var fashionActor=new Actor("123","Fashion Character",410,57,"Rafflesia","Siren");
 var fashionEvent=new SyncEvent("fashion39","fashion.observed",fashionNow.AddMinutes(-1),fashionActor,null,Fashion:new(80,3,0,FashionCompletion.Cycle(fashionNow).ToString("O")));
