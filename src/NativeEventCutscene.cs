@@ -5,6 +5,8 @@ namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
     private string nativeEventSceneIdentity="",nativeEventSkipAttempt="",nativeEventSkipConfirmed="",nativeEventEscapeScene="";
+    private int nativeEventSkipPulses;
+    private DateTimeOffset nativeEventSkipLastPulse;
     private bool NativeEventEscapeAllowed(int inputId)=>HelperNativeSkipPolicy.Escape(
         nativeEventActive&&nativeEventSceneOwned&&Player.IsLoaded&&Player.ContentId==nativeEventCharacter,
         nativeEventEscapeScene.Length>0,HelperInCutscene(),nativeEventEscapeScene,nativeEventSceneIdentity,
@@ -27,13 +29,25 @@ public sealed partial class Plugin
             TraceKeyboundRun(keyboundAccountRun,"event-cutscene-skip",nativeEventSceneIdentity,"event-quest",false);return true;
         }
         if(!inScene)return false;
-        nativeEventStatus="Event cutscene · waiting for its skip prompt";
-        if(nativeEventSkipAttempt==nativeEventSceneIdentity||HelperCutsceneReplayPolicy.BlockingAddons.Any(VisibleFollowAddon)||FollowStopTextEntryActive())return true;
+        if(nativeEventSkipAttempt!=nativeEventSceneIdentity){nativeEventSkipPulses=0;nativeEventSkipLastPulse=default;}
+        if(HelperCutsceneReplayPolicy.BlockingAddons.Any(VisibleFollowAddon)){
+            nativeEventStatus="Event scene · waiting for the open choice or confirmation";
+            return NativeEventDialogue(now);
+        }
+        if(FollowStopTextEntryActive()){nativeEventStatus="Event cutscene · waiting for text entry to close";return true;}
+        nativeEventStatus=$"Event cutscene · waiting for skip prompt ({nativeEventSkipPulses}/3 attempts)";
+        if(!EventCutsceneRetry.Ready(nativeEventSkipPulses,now,nativeEventSkipLastPulse)){
+            // Some event scenes are dialogue-only or unskippable. Keep their owned Talk advancing.
+            if(VisibleFollowAddon("Talk"))NativeEventDialogue(now);
+            return true;
+        }
         try{
             helperEscapeDownHook??=Interop.HookFromAddress<FollowInputRead>(InputData.MemberFunctionPointers.IsInputIdDown,ReadHelperEscapeDown);
             helperEscapePressedHook??=Interop.HookFromAddress<FollowInputRead>(InputData.MemberFunctionPointers.IsInputIdPressed,ReadHelperEscapePressed);
             nativeEventSkipAttempt=nativeEventEscapeScene=nativeEventSceneIdentity;
-            helperNativeEscapeReads=0;helperNativeEscapeUntil=now.AddMilliseconds(100);
+            nativeEventSkipPulses++;nativeEventSkipLastPulse=now;
+            helperNativeEscapeReads=0;helperNativeEscapeUntil=now.AddMilliseconds(250);
+            TraceKeyboundRun(keyboundAccountRun,"event-cutscene-escape",$"{nativeEventSceneIdentity}; attempt {nativeEventSkipPulses}","event-quest",false);
             if(!helperEscapeDownHook.IsEnabled)helperEscapeDownHook.Enable();
             if(!helperEscapePressedHook.IsEnabled)helperEscapePressedHook.Enable();
         }catch(Exception e){nativeEventEscapeScene="";EndHelperNativeEscape();nativeEventStatus="Cutscene skip unavailable · let it finish or skip manually";Log.Debug(e,"Event cutscene input");}

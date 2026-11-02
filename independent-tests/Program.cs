@@ -91,6 +91,26 @@ Check(WalkingRouteMemory.Join(remembered,144,new(3.1f,0,0),new(8,0,0),1,(_,_)=>f
 var json=System.Text.Json.JsonSerializer.Serialize(remembered,new System.Text.Json.JsonSerializerOptions{IncludeFields=true});
 var restoredRoutes=System.Text.Json.JsonSerializer.Deserialize<RememberedWalkingRoute[]>(json,new System.Text.Json.JsonSerializerOptions{IncludeFields=true})!;
 Check(restoredRoutes[0].Points[^1]==longLine[^1],"persisted route coordinates survive reload");
+var wallRoute=new CollisionRouteSearch(new WallPreferenceCollision(false),Vector3.Zero,new(6,0,0),.4f);
+for(var i=0;i<100&&!wallRoute.Finished;i++)wallRoute.Advance(100,1000);
+Check(wallRoute.Path!=null&&wallRoute.Path.Any(p=>p.Z>=1),"prefer space away from wall over shortest hugging route");
+var narrowRoute=new CollisionRouteSearch(new WallPreferenceCollision(true),Vector3.Zero,new(6,0,0),.4f);
+for(var i=0;i<100&&!narrowRoute.Finished;i++)narrowRoute.Advance(100,1000);
+Check(narrowRoute.Path!=null,"narrow passage remains usable despite wall preference");
+Check(!WalkingClearance.PreservesRoom(Vector3.Zero,new(2,0,0),p=>p.X>.4f&&p.X<1.6f?1:0),"rounded shortcut cannot approach wall between open endpoints");
+Check(WalkingClearance.PreservesRoom(Vector3.Zero,new(2,0,0),_=>1),"smoothing permits consistently narrow passage");
+var skipNow=DateTimeOffset.UtcNow;
+Check(EventCutsceneRetry.Ready(0,skipNow,default),"first skip pulse allowed");
+Check(!EventCutsceneRetry.Ready(1,skipNow,skipNow.AddSeconds(-1)),"skip pulses separated by release interval");
+Check(EventCutsceneRetry.Ready(1,skipNow,skipNow.AddSeconds(-2)),"missed early pulse may retry");
+Check(!EventCutsceneRetry.Ready(3,skipNow,skipNow.AddSeconds(-20)),"skip retries bounded");
+Console.WriteLine("Wall clearance and event skip retry checks passed.");
+sealed class WallPreferenceCollision(bool narrow):IWalkingCollision
+{
+    public bool Ground(Vector3 near,out Vector3 ground){ground=near;return near.X>=0&&near.X<=7&&near.Z>=0&&near.Z<=(narrow?0:3);}
+    public bool Traverse(Vector3 from,Vector3 to)=>true;
+    public float WallPenalty(Vector3 point)=>point.Z<.75f?1:0;
+}
 sealed class TestCollision:IWalkingCollision
 {
     public bool Ground(Vector3 near,out Vector3 ground){ground=new(near.X,0,near.Z);return MathF.Abs(near.Y)<1&&MathF.Abs(near.X)<=8&&MathF.Abs(near.Z)<=8;}

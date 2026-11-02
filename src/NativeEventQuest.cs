@@ -97,7 +97,7 @@ public sealed partial class Plugin
                 if(NativeEventButton((AtkUnitBase*)addon,addon->YesButton)){nativeEventYesSent=true;nativeEventActionAt=now;nativeEventStatus="Entering Keybound Square · waiting for arrival";}
                 return true;
             }
-            if(nativeEventStep==NativeEventStep.Complete&&nativeEventNpc==1058752&&!nativeEventYesSent&&addon!=null&&addon->PromptText!=null){
+            if(NativeEventPolicy.KeyboardStep(nativeEventStep,nativeEventNpc,Client.TerritoryType)&&!nativeEventYesSent&&addon!=null&&addon->PromptText!=null){
                 if(!nativeEventPromptLoaded){nativeEventPromptLoaded=true;nativeEventPrompt=ReadNativeEventPrompt();}
                 if(NativeEventPolicy.KeyboardConfirmation(nativeEventPrompt,TravelMenuText(addon->PromptText->NodeText.StringPtr)??"")){
                     var check=(AtkComponentButton*)addon->ConfirmCheckBox;

@@ -50,6 +50,10 @@ internal static class QuestTools373Tests
         Check("unowned square confirmation rejected",!NativeEventPolicy.EntranceConfirmation(NativeEventStep.EnterSquare,1058754,144,false,"Keybound Square","Proceed to Keybound Square?"));
         Check("other destination rejected",!NativeEventPolicy.EntranceConfirmation(NativeEventStep.EnterSquare,1058754,144,true,"Keybound Square","Proceed to another place?"));
         Check("keyboard warning format codes tolerated",NativeEventPolicy.KeyboardConfirmation("","A keyboard is required to participate in \u0002\u0010\u0001\u0003Keybound Brawler. The Gamepad and On-screen Keyboard cannot be used, so please ensure that you have a keyboard connected before registering for a game."));
+        Check("keyboard acknowledgement during master introduction",NativeEventPolicy.KeyboardStep(NativeEventStep.MeetMaster,1058752,1360));
+        Check("keyboard acknowledgement during completion",NativeEventPolicy.KeyboardStep(NativeEventStep.Complete,1058752,1360));
+        Check("keyboard acknowledgement rejects other NPC",!NativeEventPolicy.KeyboardStep(NativeEventStep.MeetMaster,1058754,1360));
+        Check("keyboard acknowledgement rejects other territory",!NativeEventPolicy.KeyboardStep(NativeEventStep.MeetMaster,1058752,144));
         Check("other warning not accepted",!NativeEventPolicy.KeyboardConfirmation("","Delete this item?"));
         Check("empty prompt rejected",!NativeEventPolicy.Prompt("",""));
         Check("different confirmation rejected",!NativeEventPolicy.Prompt("Continue?","Buy this item?"));

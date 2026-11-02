@@ -5,7 +5,7 @@ public sealed partial class Plugin
 {
     private List<RememberedWalkingRoute>? independentSavedRoutes;
     private static readonly JsonSerializerOptions WalkingMemoryJson=new(){IncludeFields=true};
-    private string WalkingMemoryPath=>Path.Combine(Pi.GetPluginConfigDirectory(),"walking-routes-v1.json");
+    private string WalkingMemoryPath=>Path.Combine(Pi.GetPluginConfigDirectory(),"walking-routes-v2.json");
     private void LoadIndependentRoutes(){
         if(independentSavedRoutes!=null)return;independentSavedRoutes=[];
         try{

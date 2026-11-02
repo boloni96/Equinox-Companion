@@ -6,6 +6,7 @@ public interface IWalkingCollision
 {
     bool Ground(Vector3 near,out Vector3 ground);
     bool Traverse(Vector3 from,Vector3 to);
+    float WallPenalty(Vector3 point)=>0;
 }
 public sealed class CollisionRouteSearch
 {
@@ -62,7 +63,7 @@ public sealed class CollisionRouteSearch
             if(Horizontal(candidate,origin)>160||Horizontal(candidate,goal)>Horizontal(origin,goal)+35)continue;
             if(!collision.Ground(candidate,out var point))continue;
             var key=Address(point);if(closed.Contains(key))continue;
-            var cost=parent.Cost+Vector3.Distance(parent.Point,point);
+            var cost=parent.Cost+Vector3.Distance(parent.Point,point)*(1+3*collision.WallPenalty(point));
             if(costs.TryGetValue(key,out var known)&&cost>=known)continue;
             if(!collision.Traverse(parent.Point,point))continue;
             costs[key]=cost;open.Enqueue(new(key,point,cost,parent),cost+1.25f*Heuristic(point));
