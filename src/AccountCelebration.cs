@@ -29,23 +29,28 @@ public sealed partial class Plugin
     }
     private void ObserveAccountFashionCompletion()
     {
-        if(!adventureFresh||!Player.IsLoaded)return;
+        if(!Player.IsLoaded)return;
         ResetCelebrationScope();
+        var now=DateTimeOffset.UtcNow;if(!FashionCompletion.IsOpen(now))return;
         var current=CurrentSharedCharacter();if(current==null||string.IsNullOrEmpty(current.AccountId))return;
         var person=(config.SharedRoster?.People??[]).SingleOrDefault(p=>p.Characters.Any(c=>c.Id==current.Id));
         if(person==null)return;
-        var characters=person.Characters.Where(c=>c.AccountId==current.AccountId).ToArray();
-        var ids=characters.Select(c=>c.Id).ToHashSet();
-        var now=DateTimeOffset.UtcNow;if(!FashionCompletion.IsOpen(now))return;
-        foreach(var board in adventureBoards){
-            var tasks=board.Stops.SelectMany(s=>s.Tasks).Where(t=>AdventurePolicy.IsFashion(t)&&ids.Contains(AdventurePolicy.TaskCharacterId(t,characters))).DistinctBy(t=>t.Id).ToArray();
-            if(tasks.Length==0)continue;
-            var key=$"fashion|{person.Id}|{current.AccountId}|{board.Id}|{board.Generation}|{FashionCompletion.Cycle(now):O}|"+string.Join(",",tasks.Select(t=>t.Id).Order());
-            var complete=AccountCelebrationPolicy.Complete(tasks.Length,tasks.Count(t=>t.Done));
-            bool? previous=accountCelebrationObserved.TryGetValue(key,out var was)?was:null;
-            accountCelebrationObserved[key]=complete;
-            if(AccountCelebrationPolicy.Transition(previous,complete))QueueAccountCelebration(key,current.Account,"Fashion Report");
+        var characters=person.Characters.Where(c=>c.AccountId==current.AccountId).DistinctBy(c=>c.Id).ToArray();
+        var tasks=adventureBoards.SelectMany(b=>b.Stops).SelectMany(s=>s.Tasks)
+            .Where(t=>AdventurePolicy.IsFashion(t)&&AdventurePolicy.TaskCharacterId(t,characters).Length>0).ToArray();
+        // A saved Adventure defines the participating Fashion characters. Without
+        // one, require completion for every character linked to this account.
+        var participants=tasks.Select(t=>AdventurePolicy.TaskCharacterId(t,characters)).ToHashSet();
+        if(participants.Count>0)characters=characters.Where(c=>participants.Contains(c.Id)).ToArray();
+        if(characters.Length==0)return;
+        var identity=$"fashion-account-v2|{person.Id}|{current.AccountId}|{FashionCompletion.Cycle(now):O}|"+string.Join(",",characters.Select(c=>c.Id).Order());
+        if(config.AccountCelebrationsShown?.Contains(CelebrationKey(config.PairingKey+"|"+identity))==true)return;
+        var observations=DiscoveryReads().Kind("fashion.observed").ToArray();
+        foreach(var c in characters){
+            var actor=new Actor(c.ContentId,c.Name,0,0,c.World,c.World);
+            if(!FashionCompletion.IsComplete(actor,observations,[person],now))return;
         }
+        QueueAccountCelebration(identity,current.Account,"Fashion Report");
     }
     private void CelebrateEventAccount()=>ObserveEventAccountCompletion();
     private unsafe void ObserveEventAccountCompletion()
@@ -82,6 +87,7 @@ public sealed partial class Plugin
         if(!Player.IsLoaded||Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51])return;
         if(DateTimeOffset.UtcNow>=eventCelebrationNext){
             eventCelebrationNext=DateTimeOffset.UtcNow.AddSeconds(2);
+            ObserveAccountFashionCompletion();
             ObserveEventAccountCompletion();
         }
         if(accountCelebration is null){if(accountCelebrations.Count==0)return;accountCelebration=accountCelebrations.Dequeue();accountCelebrationElapsed=0;}
