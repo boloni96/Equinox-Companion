@@ -31,11 +31,9 @@ public sealed partial class Plugin
     }
     private void DrawKeyboundHelper()
     {
-        ImGui.BeginDisabled(keyboundBuying&&!eventAccountActive);
-        if(ImGui.Button(eventAccountActive||keyboundEnabled?"Stop":"Start")){
-            if(eventAccountActive)StopEventAccount("Stopped by you.");else if(keyboundEnabled)StopKeybound("Stopped by you.");else{StopKeybound();keyboundBuyStatus="";keyboundGoalCheckAt=default;keyboundEnabled=true;keyboundTypingRun=Guid.NewGuid().ToString("N");TraceKeyboundRun(keyboundTypingRun,"typing-started","Typing started","user-button");keyboundNext=keyboundHold=keyboundMissing=default;keyboundStatus="Waiting for Keybound Brawler";}
+        if(ImGui.Button(eventAccountActive||keyboundEnabled||keyboundBuying?"Stop":"Start")){
+            if(eventAccountActive)StopEventAccount("Stopped by you.");else if(keyboundBuying)StopKeyboundBuying("Stopped by you.","user-button");else if(keyboundEnabled)StopKeybound("Stopped by you.");else{StopKeybound();keyboundBuyStatus="";keyboundGoalCheckAt=default;keyboundEnabled=true;keyboundTypingRun=Guid.NewGuid().ToString("N");TraceKeyboundRun(keyboundTypingRun,"typing-started","Typing started","user-button");keyboundNext=keyboundHold=keyboundMissing=default;keyboundStatus="Waiting for Keybound Brawler";}
         }
-        ImGui.EndDisabled();
         ImGui.SameLine();DrawKeyboundHelp();
         ImGui.SameLine();ImGui.TextUnformatted(eventAccountActive?"Account routine":keyboundBuying?(keyboundUsingRewards?"Using rewards":"Buying rewards"):keyboundEnabled?(keyboundStatus.StartsWith("Paused:",StringComparison.Ordinal)?"Paused":"Running"):"Stopped");
         // Reserve the same space for short phrases and long waiting/error text.
