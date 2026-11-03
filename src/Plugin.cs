@@ -1329,9 +1329,10 @@ public sealed partial class Plugin : IDalamudPlugin
         DisposeRetriever();
         DisposeGilTrader();
         DisposeBidSearch();
+        // Remove individual cutscene windows before Adventure clears the shared registry.
+        DisposeKeybound();
         DisposeAdventures();
         DisposeTesting();
-        DisposeKeybound();
         windows.RemoveAllWindows();
         welcomeWindows.RemoveAllWindows();
         fashionWindow.Dispose();
@@ -1350,6 +1351,7 @@ public sealed partial class Plugin : IDalamudPlugin
         FlushConfiguration();
     }
 }
+
 
 
 

@@ -15,7 +15,7 @@ public sealed partial class Plugin
         Framework.Update+=UpdateKeyboundBuying;
         keyboundCommandRegistered=Commands.AddHandler("/eqkeybound",new CommandInfo((_,_)=>OpenKeybound()){HelpMessage="Open the optional Keybound Brawler typing tool."});
     }
-    private void DisposeKeybound(){adventureCutsceneWindows.RemoveWindow(keyboundWindow);Framework.Update-=UpdateKeyboundBuying;StopKeyboundBuying("Plugin unloaded","plugin-unload");StopKeybound("Plugin unloaded");TraceKeyboundRun("","plugin-unloaded","Plugin unloaded");FlushKeyboundRunHistory();if(keyboundCommandRegistered)Commands.RemoveHandler("/eqkeybound");}
+    private void DisposeKeybound(){if(adventureCutsceneWindows.Windows.Contains(keyboundWindow))adventureCutsceneWindows.RemoveWindow(keyboundWindow);Framework.Update-=UpdateKeyboundBuying;StopKeyboundBuying("Plugin unloaded","plugin-unload");StopKeybound("Plugin unloaded");TraceKeyboundRun("","plugin-unloaded","Plugin unloaded");FlushKeyboundRunHistory();if(keyboundCommandRegistered)Commands.RemoveHandler("/eqkeybound");}
     private void OpenKeybound(){if(RequireOptionalTool("Keybound Brawler"))keyboundWindow.IsOpen=true;}
     private sealed class KeyboundToolWindow:Window
     {
@@ -29,5 +29,6 @@ public sealed partial class Plugin
         public override void Draw()=>plugin.DrawKeyboundHelper();
     }
 }
+
 
 
