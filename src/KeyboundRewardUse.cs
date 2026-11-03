@@ -56,7 +56,14 @@ public sealed partial class Plugin
                 keyboundCollectionRefreshItems.Add(pending.Item);keyboundUsed++;keyboundUseRemaining.Remove(pending.Item);keyboundUsePending=null;keyboundUseDeadline=now.AddSeconds(30);RequestStorageRefresh();
                 keyboundBuyStatus="Unlocked: "+pending.Name;keyboundBuyNext=now.AddSeconds(1);return;
             }
-            if(now>=keyboundUseDeadline)throw new InvalidOperationException("Item use not confirmed: "+pending.Name+". Use stopped; check inventory and collections.");
+            if(now>=keyboundUseDeadline){
+                var waiting="Waiting for item-use confirmation: "+pending.Name+". Checking inventory and collections automatically; no repeat use sent. Stop cancels this wait.";
+                if(keyboundBuyStatus!=waiting){
+                    keyboundBuyStatus=waiting;
+                    TraceKeyboundRun(keyboundBuyerRun,"item-use-confirmation-delayed",waiting);
+                    RequestStorageRefresh();
+                }
+            }
             return; // Never send the same use request again while awaiting its result.
         }
         if(now>=keyboundUseDeadline)throw new InvalidOperationException("Reward use stopped: "+keyboundBuyStatus+". No further item-use request sent.");
@@ -115,4 +122,5 @@ public sealed partial class Plugin
         StopKeyboundBuying($"Bought {keyboundBought} · unlocked {keyboundUsed}"+(keyboundCoffersOpened>0?$" · coffers opened {keyboundCoffersOpened}":"")+(keyboundUseSkipped>0?$" · {keyboundUseSkipped} unavailable in bags or unsupported.":" · Done.")+(keyboundHeldRewards.Count>0?$" {keyboundHeldRewards.Count} purchases held for verification.":""));
     }
 }
+
 
