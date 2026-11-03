@@ -139,7 +139,7 @@ public sealed partial class Plugin
             }
             nativeEventUnavailableAt=default;
             if(Player.ContentId!=nativeEventCharacter)throw new InvalidOperationException("Character changed.");
-            if(FollowMovementKeysHeld())throw new InvalidOperationException("Stopped by your movement. Restart when ready.");
+            if(QuestManualMovementHeld(now)){independentLease.Revoke();independentMoving=false;nativeEventStepAt=now;nativeEventStatus="Paused for your movement · resumes when released";return;}
             if(QuestToolsOtherOperation()||questChainActive||questRecorderActive||OptionalQuestRunning())throw new InvalidOperationException("Another helper started; the event quest was stopped.");
             if(Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51])return;
             if(Conditions[ConditionFlag.BoundByDuty]||Conditions[ConditionFlag.InDutyQueue])throw new InvalidOperationException("Duty or queue detected; complete it manually.");
@@ -182,3 +182,4 @@ public sealed partial class Plugin
         else {ImGui.BeginDisabled(eventAccountActive||questChainActive||independentQuestId!=0||questRecorderActive);if(ImGui.Button("Start Keyward Bound"))StartNativeEventQuest();ImGui.EndDisabled();}
     }
 }
+

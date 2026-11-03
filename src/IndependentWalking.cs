@@ -41,12 +41,20 @@ public sealed partial class Plugin
     private bool independentPositionChanged;
     private string independentInputBlock="",independentLastWalkFailure="";
     private string independentWalkStatus="Idle",independentWalkFailure="";
+    private readonly QuestMovementPause questMovementPause=new();
+    private bool independentUserPaused;
+    private bool QuestOwnsMovement=>independentQuestId!=0||nativeEventActive||eventAccountActive;
+    private bool QuestManualMovementHeld(DateTimeOffset now)=>questMovementPause.Observe(now,FollowMovementKeysHeld());
     private unsafe void IndependentGroundInput(nint controller,float* left,float* forward,float* turn,byte* strafe,byte* flags,byte additive)
     {
         independentForwardHook!.Original(controller,left,forward,turn,strafe,flags,additive);
         independentInputReads++;
         if(controller==0||left==null||forward==null||turn==null||additive!=0)return;
         independentForwardReads++;
+        if(QuestOwnsMovement&&!WalkingInputLease.CanSupplyGround(*left,*forward,*turn)){
+            questMovementPause.Observe(DateTimeOffset.UtcNow,true);
+            independentLease.Revoke();return;
+        }
         var decision=independentLease.Check(DateTimeOffset.UtcNow);
         if(decision==WalkingInputDecision.Expired){independentExpiredReads++;independentInputBlock="Movement pulse expired";return;}
         if(decision==WalkingInputDecision.Inactive){independentInactiveReads++;return;}
@@ -84,7 +92,7 @@ public sealed partial class Plugin
     private void StopIndependentWalk(string reason="Stopped",bool resetFailure=false)
     {
         if(independentSearch!=null||independentPath!=null)TraceKeyboundRun(independentNavigationRun,"navigation-stopped",reason,"companion-navigation",false);
-        independentGameGateBlocked=false;independentGatePauseSince=default;independentHeading=null;independentMoving=false;independentPulseUntil=default;independentLease.Revoke();independentForwardHook?.Disable();
+        independentUserPaused=false;independentGameGateBlocked=false;independentGatePauseSince=default;independentHeading=null;independentMoving=false;independentPulseUntil=default;independentLease.Revoke();independentForwardHook?.Disable();
         independentSearch=null;independentPath=null;independentPendingPath=null;independentArrived=false;independentWalkStatus=reason;independentWalkFailure="";
         if(resetFailure)independentLastWalkFailure="";
     }
@@ -121,11 +129,26 @@ public sealed partial class Plugin
         if(independentSearch==null&&independentPath==null)return;
         try{
             independentPulseUntil=default;independentLease.Revoke();independentMoving=false;
+            if(QuestOwnsMovement&&QuestManualMovementHeld(now)){
+                independentUserPaused=true;independentNativeManualReads=0;independentHeading=null;
+                independentProgressAt=independentSince=now;independentPhaseTimer.Begin(now);
+                independentWalkStatus="Paused for your movement · resumes when released";return;
+            }
+            if(independentUserPaused){
+                independentUserPaused=false;independentNativeManualReads=0;
+                if(Objects.LocalPlayer is {} moved){
+                    independentSearch=CreateIndependentSearch(moved.Position,independentGoal,independentRange);
+                    independentPath=independentPendingPath=null;independentWaypoint=0;independentCheckedWaypoint=-1;
+                    independentLastProgress=independentPrevious=moved.Position;independentReplans=0;
+                    independentProgressAt=independentPlanningSince=independentSince=now;independentPhaseTimer.Begin(now);
+                    independentWalkStatus="Resuming from your position · checking route";
+                }
+            }
             if(independentNativeManualReads>0)throw new InvalidOperationException("Navigation stopped: another movement input took priority.");
             if(independentNativeExceptions>0)throw new InvalidOperationException("Ground movement callback failed: "+independentInputBlock);
             if(IndependentOtherTravelBusy())throw new InvalidOperationException("Another travel task took control; local walking stopped.");
             if(!Player.IsLoaded||Player.ContentId!=independentCharacter||Client.TerritoryType!=independentTerritory)throw new InvalidOperationException("Navigation stopped: character or territory changed.");
-            if(FollowMovementKeysHeld())throw new InvalidOperationException("Navigation stopped by your movement.");
+            if(!QuestOwnsMovement&&FollowMovementKeysHeld())throw new InvalidOperationException("Navigation stopped by your movement.");
             if(Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]||Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.BoundByDuty]||Conditions[ConditionFlag.Mounted]||Conditions[ConditionFlag.InFlight])throw new InvalidOperationException("Navigation stopped for loading, combat, duty or mounted movement. Dismount for ground walking.");
             if(now-independentSince>TimeSpan.FromMinutes(5))throw new InvalidOperationException("Navigation exceeded its five-minute total limit.");
             if(independentPhaseTimer.Expired(now))throw new InvalidOperationException(independentSearch!=null?"Route calculation timed out after 90 seconds.":"Walking timed out after 90 seconds.");
@@ -215,3 +238,4 @@ public sealed partial class Plugin
     private bool IndependentOtherTravelBusy(){try{return LifestreamBusy();}catch{return false;}}
     private void DisposeIndependentWalk(){StopIndependentWalk("Plugin unloaded");independentForwardHook?.Dispose();independentForwardHook=null;}
 }
+
