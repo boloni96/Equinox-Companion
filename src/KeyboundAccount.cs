@@ -159,7 +159,7 @@ public sealed partial class Plugin
             if(now<eventAccountReadyAt||liveState==null||!liveState->PlayerState.IsLoaded||QuestManager.Instance()==null)return;
             if(followSession.Armed||TraderRunning||gardenCareRun?.Running==true||gearRouting||armoireRunning||organizeRunning||retrievalRun.Running||sellerRun.Running)
                 throw new InvalidOperationException("Another helper or inventory operation started.");
-            if(FollowMovementKeysHeld()){StopEventAccount("Stopped by your movement; progress and purchases are kept.");return;}
+            if(QuestManualMovementHeld(now)){independentLease.Revoke();independentMoving=false;eventAccountStageAt=now;eventAccountStatus="Paused for your movement · resumes when released";return;}
             if(now-eventAccountStageAt>TimeSpan.FromMinutes(5)&&eventAccountStage is not ("farm" or "quest"))throw new InvalidOperationException("No confirmed progress: "+eventAccountStatus);
             if(Player.CurrentWorld.Value.Name.ToString()!="Sophia"){
                 EventAccountStage("world","Travelling to Sophia");
@@ -219,5 +219,6 @@ public sealed partial class Plugin
         }catch(Exception e){StopEventAccount(e.Message.StartsWith("Stopped:",StringComparison.Ordinal)?e.Message:"Stopped: "+e.Message);}
     }
 }
+
 
 

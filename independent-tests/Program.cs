@@ -1,6 +1,12 @@
 using EquinoxCompanion;
 using System.Numerics;
 void Check(bool condition,string name){if(!condition)throw new Exception(name);}
+var manualPause=new QuestMovementPause();var pauseAt=DateTimeOffset.UtcNow;
+Check(!manualPause.Observe(pauseAt,false),"idle input does not pause quest");
+Check(manualPause.Observe(pauseAt,true),"movement yields immediately");
+Check(manualPause.Observe(pauseAt.AddMilliseconds(450),false),"release debounce prevents fighting input");
+Check(manualPause.Observe(pauseAt.AddSeconds(60),true),"held input can pause without stopping quest");
+Check(!manualPause.Observe(pauseAt.AddSeconds(60.5),false),"quiet input resumes automatically");
 using var stream=File.OpenRead(args[0]);var book=IndependentQuestBook.Load(stream);
 Check(book.Routes.Count==4388,"complete pinned import");
 var evt=book.Find("5466").Single();
@@ -163,3 +169,4 @@ sealed class TestCollision:IWalkingCollision
         return true;
     }
 }
+
