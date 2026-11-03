@@ -32,6 +32,11 @@ internal static class QuestTools373Tests
         Check("no celebration on initial sync",!AccountCelebrationPolicy.Transition(null,true));
         Check("completion transition celebrates",AccountCelebrationPolicy.Transition(false,true));
         Check("repeated completion stays quiet",!AccountCelebrationPolicy.Transition(true,true));
+        Check("event requires quest completion",!AccountCelebrationPolicy.EventGoalComplete(false,new[]{(true,true)}));
+        Check("unknown wishlist is not complete",!AccountCelebrationPolicy.EventGoalComplete(true,null));
+        Check("empty selection is not an account achievement",!AccountCelebrationPolicy.EventGoalComplete(true,new[]{(false,true)}));
+        Check("missing wanted reward blocks celebration",!AccountCelebrationPolicy.EventGoalComplete(true,new[]{(true,true),(true,false)}));
+        Check("unwanted rewards do not block celebration",AccountCelebrationPolicy.EventGoalComplete(true,new[]{(true,true),(false,false)}));
         Check("five second fade",AccountCelebrationPolicy.Alpha(0)==0&&AccountCelebrationPolicy.Alpha(.25)==.5f&&AccountCelebrationPolicy.Alpha(1)==1&&AccountCelebrationPolicy.Alpha(3)==1&&AccountCelebrationPolicy.Alpha(4.625)==.5f&&AccountCelebrationPolicy.Alpha(5)==0);
         Check("accept may use entrance shard",NativeEventPolicy.EntranceShortcut(NativeEventStep.Accept,false));
         Check("square step never uses entrance shard",!NativeEventPolicy.EntranceShortcut(NativeEventStep.EnterSquare,false));
@@ -76,5 +81,6 @@ internal static class QuestTools373Tests
         Console.WriteLine("Quest tools and account celebration tests passed.");
     }
 }
+
 
 
