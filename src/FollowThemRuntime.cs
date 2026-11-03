@@ -109,8 +109,9 @@ public sealed partial class Plugin
     {
         if (!config.EnableFollowThem) { followBar?.Remove(); followBar = null; followBarText = ""; return; }
         followBar ??= QuickLootBar.Get("Equinox FollowThem");
-        followBar.Shown = true;
         var followers=ActiveHelperFollowers();
+        followBar.Shown = followers.Length>0||followSession.Armed||followStopPending||followStopUnconfirmed;
+        if(!followBar.Shown)return;
         if(followers.Length>0){
             var leaderText="FollowThem: Followed by "+string.Join(", ",followers.Select(x=>x.Name));
             var now=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
@@ -376,5 +377,6 @@ public sealed partial class Plugin
         }
     }
 }
+
 
 

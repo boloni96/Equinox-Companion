@@ -112,10 +112,34 @@ public sealed partial class Plugin
         return slots.Length==1?slots[0]:-1;
     }
 
-    private static unsafe int CurrentLoginServiceAccount()
+    private unsafe int CurrentLoginServiceAccount()
     {
         var lobby = AgentLobby.Instance();
-        return lobby != null ? lobby->ServiceAccountIndex : -1;
+        var index=lobby != null ? (int)lobby->ServiceAccountIndex : -1;
+        if(index is >=0 and <=15)return index;
+        // Lobby selection can be cleared after entering the game. Recover only
+        // from this loaded character's observed slot, scoped to the pairing.
+        if(!Client.IsLoggedIn||!Player.IsLoaded||Player.ContentId==0||LoginPairingScope().Length!=64)return -1;
+        var local=Objects.LocalPlayer;
+        if(local==null)return -1;
+        var native=(FFXIVClientStructs.FFXIV.Client.Game.Character.Character*)local.Address;
+        if(native==null||native->ContentId!=Player.ContentId)return -1;
+        var saved=config.ObservedCharacterServiceAccounts.GetValueOrDefault(LoginPairingScope()+":"+Player.ContentId.ToString(System.Globalization.CultureInfo.InvariantCulture),-1);
+        if(saved is >=0 and <=15)return saved;
+        var current=CurrentSharedCharacter();
+        // A fresh client can also recover the slot from the paired account
+        // fingerprint, without assuming that every login uses slot zero.
+        if(current!=null&&native->AccountId!=0){
+            var scope=CharacterSwitchScope(current.Id);
+            var accountKey=SquareEnixLoginState.TargetAccountKey(config.SharedRoster,current,scope.PersonId,scope.AccountId);
+            for(var candidate=0;candidate<16;candidate++){
+                var identity=$"equinox-account-v1:{native->AccountId}:{candidate}";
+                var fingerprint=Convert.ToHexString(System.Security.Cryptography.HMACSHA256.HashData(
+                    System.Text.Encoding.UTF8.GetBytes(config.PairingKey),System.Text.Encoding.UTF8.GetBytes(identity))).ToLowerInvariant();
+                if(fingerprint==accountKey)return candidate;
+            }
+        }
+        return current==null?-1:RecordedCharacterServiceSlot(current);
     }
 
     private string LoginPairingScope()
@@ -207,4 +231,5 @@ public sealed partial class Plugin
             : CharacterSwitchScope("");
     }
 }
+
 

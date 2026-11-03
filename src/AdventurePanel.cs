@@ -15,7 +15,12 @@ public sealed partial class Plugin
  private readonly WindowSystem adventureCutsceneWindows=new("EquinoxCompanion");
  private AdventureWindow adventureWindow=null!;private readonly AdventureSync adventureSync=new();private bool adventureCommand;
  private Task<AdventureReply>? adventureRequest;private bool adventureMutation;private string adventureRequestKey="",adventureConnectionKey="",adventureMessage="Checking your paired Journal…";
- private string adventurePerson="",adventureAccount="";
+ private bool adventureFilterAll=true;
+ private readonly HashSet<string> adventureFilterAccounts=[];
+ private AdventureBoard? adventureFilterSource,adventureFilterBoard;
+ private SharedRoster? adventureFilterRoster;
+ private int[] adventureFilterIndices=[];
+ private string adventureFilterKey="";
  private readonly AdventureViewState adventureView=new();
  private AdventureBoard[] adventureBoards=[];private string adventureSelected="";private DateTimeOffset adventureNext,adventureFetched;private bool adventureFresh;
  private readonly Dictionary<string,bool> adventureCompletion=[];private string? adventurePrompt;private bool adventureFollow=true;private readonly AdventureLocationSession adventureFollowSession=new();
@@ -28,6 +33,7 @@ public sealed partial class Plugin
  private void AdventureAction(AdventureBoard b,int? index=null,AdventureTask? task=null,bool value=false)
  {
   if(index is {} localIndex){
+   if(ReferenceEquals(b,adventureFilterBoard))localIndex=localIndex>=adventureFilterIndices.Length?adventureFilterSource!.Stops.Length:adventureFilterIndices[Math.Max(0,localIndex)];
    ClearAdventureFollowIntent();
    var current=adventureBoards.FirstOrDefault(x=>x.Id==b.Id&&x.Generation==b.Generation);
    if(current is null)return;
@@ -48,7 +54,7 @@ public sealed partial class Plugin
  private void UpdateAdventureCore()
  {
   var now=DateTimeOffset.UtcNow;
-  if(adventureConnectionKey!=config.PairingKey){adventureConnectionKey=config.PairingKey;adventureView.Clear();ClearAdventureFollowIntent();adventureQueuedAction=null;adventureBoards=[];adventureSelected="";adventurePerson="";adventureAccount="";adventureCompletion.Clear();adventurePrompt=null;adventureFresh=false;adventureNext=default;
+  if(adventureConnectionKey!=config.PairingKey){adventureConnectionKey=config.PairingKey;adventureView.Clear();ClearAdventureFollowIntent();adventureQueuedAction=null;adventureBoards=[];adventureSelected="";adventureFilterAll=true;adventureFilterAccounts.Clear();adventureCompletion.Clear();adventurePrompt=null;adventureFresh=false;adventureNext=default;
    var hash=Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(config.PairingKey)));
    if(config.AdventurePairingHash==hash){adventureBoards=config.CachedAdventures.Where(AdventurePolicy.Valid).Select(adventureView.Apply).ToArray();adventureSelected=config.SelectedAdventure;}
   }
@@ -81,7 +87,7 @@ public sealed partial class Plugin
  {
   var progress=adventureProgress.Get(board,"",Environment.TickCount64,()=>AdventureProgress.Count(board));
   ImGui.ProgressBar(progress.Total==0?0:(float)progress.Done/progress.Total,new Vector2(-1,ImGui.GetFrameHeight()),$"{progress.Done} / {progress.Total} done");
-  if(ImGui.IsItemHovered())ImGui.SetTooltip(board.Title+"\nCompleted activities across the whole adventure. Shared activities count once.\n"+$"{progress.StopsDone} / {progress.Stops} stops complete. Visiting a stop does not complete its activities.");
+  if(ImGui.IsItemHovered())ImGui.SetTooltip(board.Title+"\nCompleted activities in the displayed account selection. Shared activities count once.\n"+$"{progress.StopsDone} / {progress.Stops} stops complete. Visiting a stop does not complete its activities.");
  }
  private void DrawAdventureNavigation(AdventureBoard board,float width)
  {
@@ -100,27 +106,44 @@ public sealed partial class Plugin
   if(ImGui.BeginCombo("##GardenHouse",AdventureText(Label(current)))){for(var i=0;i<board.Stops.Length;i++){var stop=board.Stops[i];if(stop.World!=current.World)continue;if(ImGui.Selectable(AdventureText(Label(stop))+"##house"+i,i==board.Index))AdventureAction(board,i);}ImGui.EndCombo();}
   if(ImGui.IsItemHovered())ImGui.SetTooltip(Label(current));
  }
- private bool AdventureInScope(AdventureBoard board)
+ private static string AdventureAccountKey(string person,string account)=>person+"|"+account;
+ private HashSet<string> AdventureFilterCharacters()=> (config.SharedRoster?.People??[])
+  .SelectMany(p=>p.Characters.Where(c=>adventureFilterAll||adventureFilterAccounts.Contains(AdventureAccountKey(p.Id,c.AccountId))))
+  .Select(c=>c.Id).ToHashSet();
+ private bool AdventureInScope(AdventureBoard board)=>adventureFilterAll||board.Stops.Any(s=>s.CharacterIds?.Any(AdventureFilterCharacters().Contains)==true);
+ private AdventureBoard FilterAdventure(AdventureBoard board)
  {
-  if(adventurePerson.Length==0&&adventureAccount.Length==0)return true;
-  var ids=(config.SharedRoster?.People??[]).Where(p=>adventurePerson.Length==0||p.Id==adventurePerson).SelectMany(p=>p.Characters).Where(c=>adventureAccount.Length==0||c.AccountId==adventureAccount).Select(c=>c.Id).ToHashSet();
-  return board.Stops.Any(s=>s.CharacterIds?.Any(ids.Contains)==true);
+  if(adventureFilterAll)return board;
+  var key=string.Join(",",adventureFilterAccounts.Order());
+  if(ReferenceEquals(board,adventureFilterSource)&&ReferenceEquals(config.SharedRoster,adventureFilterRoster)&&key==adventureFilterKey)return adventureFilterBoard!;
+  var ids=AdventureFilterCharacters();var characters=(config.SharedRoster?.People??[]).SelectMany(p=>p.Characters).ToArray();
+  var selected=board.Stops.Select((stop,index)=>(stop,index)).Where(x=>x.stop.CharacterIds?.Any(ids.Contains)==true).ToArray();
+  var stops=selected.Select(x=>x.stop with {
+   CharacterIds=x.stop.CharacterIds?.Where(ids.Contains).ToArray(),
+   Subtitle=string.Join(", ",characters.Where(c=>x.stop.CharacterIds?.Contains(c.Id)==true&&ids.Contains(c.Id)).Select(c=>c.Name+" · "+c.Account)),
+   Tasks=x.stop.Tasks.Where(t=>{var owner=AdventurePolicy.TaskCharacterId(t,characters);return owner.Length==0||ids.Contains(owner);}).ToArray()
+  }).ToArray();
+  adventureFilterSource=board;adventureFilterRoster=config.SharedRoster;adventureFilterKey=key;adventureFilterIndices=selected.Select(x=>x.index).ToArray();
+  var index=board.Index>=board.Stops.Length?stops.Length:Array.IndexOf(adventureFilterIndices,board.Index);
+  if(index<0)index=0;
+  return adventureFilterBoard=board with {Stops=stops,Index=index};
  }
+ private string AdventureFilterSummary()=>adventureFilterAll?"Showing: all people / accounts":"Showing: "+(adventureFilterAccounts.Count==0?"none":string.Join(", ",(config.SharedRoster?.People??[]).SelectMany(p=>(p.Accounts??[]).Where(a=>adventureFilterAccounts.Contains(AdventureAccountKey(p.Id,a.Id))).Select(a=>p.Name+" / "+a.Name))));
  private void DrawAdventureFilters()
  {
+  if(ImGui.SmallButton("Select all accounts")){adventureFilterAll=true;adventureFilterAccounts.Clear();adventureFollowSession.Reset();}
+  ImGui.SameLine();if(ImGui.SmallButton("Clear all")){adventureFilterAll=false;adventureFilterAccounts.Clear();adventureFollowSession.Reset();}
   var people=config.SharedRoster?.People??[];
-  ImGui.SetNextItemWidth(Math.Min(180,Math.Max(60,ImGui.GetContentRegionAvail().X-ButtonWidth("Person"))));
-  if(ImGui.BeginCombo("Person",people.FirstOrDefault(p=>p.Id==adventurePerson)?.Name??"All people")){
-   if(ImGui.Selectable("All people",adventurePerson.Length==0)){adventurePerson="";adventureAccount="";adventureSelected="";}
-   foreach(var p in people)if(ImGui.Selectable(AdventureText(p.Name)+"##"+p.Id,p.Id==adventurePerson)){adventurePerson=p.Id;adventureAccount="";adventureSelected="";}
-   ImGui.EndCombo();
-  }
-  var accounts=people.Where(p=>adventurePerson.Length==0||p.Id==adventurePerson).SelectMany(p=>(p.Accounts??[]).Select(a=>(Id:a.Id,Name:p.Name+" / "+a.Name))).ToArray();
-  ImGui.SetNextItemWidth(Math.Min(260,Math.Max(60,ImGui.GetContentRegionAvail().X-ButtonWidth("Account"))));
-  if(ImGui.BeginCombo("Account",accounts.FirstOrDefault(a=>a.Id==adventureAccount).Name??"All accounts")){
-   if(ImGui.Selectable("All accounts",adventureAccount.Length==0)){adventureAccount="";adventureSelected="";}
-   foreach(var a in accounts)if(ImGui.Selectable(AdventureText(a.Name)+"##"+a.Id,a.Id==adventureAccount)){adventureAccount=a.Id;adventureSelected="";}
-   ImGui.EndCombo();
+  foreach(var person in people){
+   ImGui.TextUnformatted(AdventureText(person.Name));
+   foreach(var account in person.Accounts??[]){
+    var key=AdventureAccountKey(person.Id,account.Id);var selected=adventureFilterAll||adventureFilterAccounts.Contains(key);
+    if(ImGui.Checkbox(AdventureText(account.Name)+"##scope"+key,ref selected)){
+     if(adventureFilterAll){foreach(var p in people)foreach(var a in p.Accounts??[])adventureFilterAccounts.Add(AdventureAccountKey(p.Id,a.Id));adventureFilterAll=false;}
+     if(selected)adventureFilterAccounts.Add(key);else adventureFilterAccounts.Remove(key);
+     adventureFollowSession.Reset();adventurePrompt=null;ClearAdventureFollowIntent();
+    }
+   }
   }
  }
  private bool DrawAdventureStepsHeader(AdventureTask[] tasks)
@@ -208,6 +231,7 @@ public sealed partial class Plugin
   SameLineIfFits(ButtonWidth("Open Journal"));if(ImGui.Button("Open Journal"))Dalamud.Utility.Util.OpenLink("https://equinoxjournal.pages.dev/#adventure");
   if(!adventureFresh)ImGui.TextWrapped(adventureMessage);
   if(ImGui.CollapsingHeader("People, accounts & connection")){ImGui.BeginDisabled(adventureRequest is not null);if(ImGui.SmallButton("Refresh"))adventureNext=default;ImGui.EndDisabled();DrawAdventureFilters();ImGui.TextWrapped(adventureMessage);if(adventureFetched!=default)ImGui.TextDisabled($"Last checked {adventureFetched.ToLocalTime():h:mm:ss tt}");}
+  ImGui.TextWrapped(AdventureFilterSummary());
   ImGui.Separator();
   var board=adventureBoards.FirstOrDefault(b=>b.Id==adventureSelected);
   if(board is null){
@@ -221,6 +245,8 @@ public sealed partial class Plugin
     ImGui.PopID();
    }ImGui.EndChild();return;
   }
+  board=FilterAdventure(board);
+  if(board.Stops.Length==0){ImGui.TextWrapped("No characters in this adventure match the selected accounts.");return;}
   DrawTendAdventure(board);
   DrawAdventureTotal(board);
   DrawAdventureLocation(board);
@@ -279,6 +305,7 @@ public sealed partial class Plugin
   }
  }
 }
+
 
 
 
