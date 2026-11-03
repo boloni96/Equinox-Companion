@@ -14,7 +14,8 @@ public sealed partial class Plugin
     private void UpdateWorkBar(DateTimeOffset now)
     {
         if(now<workBarNext)return;workBarNext=now.AddMilliseconds(250);
-        workBar??=QuickLootBar.Get("Equinox Work");workBar.Shown=Player.IsLoaded;
+        workBar??=QuickLootBar.Get("Equinox Work");
+        workBar.Shown=Player.IsLoaded&&(independentSearch!=null||independentPath!=null);
         var tone="working";navigationPhase="Ready";navigationDetail="Navigation system ready; no active route.";
         if(independentSearch!=null||independentPath!=null){
             if(!GameWalkingCollision.Available()){navigationPhase="Reading geometry";tone="waiting";}
@@ -64,3 +65,4 @@ public sealed partial class Plugin
         public override void Draw()=>p.DrawNavigationSystem();
     }
 }
+
