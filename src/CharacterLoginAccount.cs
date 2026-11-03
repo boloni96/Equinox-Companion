@@ -127,6 +127,18 @@ public sealed partial class Plugin
         var saved=config.ObservedCharacterServiceAccounts.GetValueOrDefault(LoginPairingScope()+":"+Player.ContentId.ToString(System.Globalization.CultureInfo.InvariantCulture),-1);
         if(saved is >=0 and <=15)return saved;
         var current=CurrentSharedCharacter();
+        // A fresh client can also recover the slot from the paired account
+        // fingerprint, without assuming that every login uses slot zero.
+        if(current!=null&&native->AccountId!=0){
+            var scope=CharacterSwitchScope(current.Id);
+            var accountKey=SquareEnixLoginState.TargetAccountKey(config.SharedRoster,current,scope.PersonId,scope.AccountId);
+            for(var candidate=0;candidate<16;candidate++){
+                var identity=$"equinox-account-v1:{native->AccountId}:{candidate}";
+                var fingerprint=Convert.ToHexString(System.Security.Cryptography.HMACSHA256.HashData(
+                    System.Text.Encoding.UTF8.GetBytes(config.PairingKey),System.Text.Encoding.UTF8.GetBytes(identity))).ToLowerInvariant();
+                if(fingerprint==accountKey)return candidate;
+            }
+        }
         return current==null?-1:RecordedCharacterServiceSlot(current);
     }
 
