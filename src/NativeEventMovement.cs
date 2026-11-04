@@ -41,8 +41,11 @@ public sealed partial class Plugin
         if(!NativeEventPolicy.EntranceShortcut(nativeEventStep,independentSearch!=null||independentPath!=null))return true;
         // Only request the aethernet while actually near the main plaza crystal.
         if(Vector3.Distance(self.Position,new(-.015319824f,3.4942627f,-.015319824f))>15)return true;
+        var unlocked=AethernetUnlocked(63);
+        if(unlocked==null){eventAccountStatus="Waiting for this character's aethernet unlock data";return false;}
+        if(unlocked==false){eventAccountStatus="Entrance shard not attuned · continuing on foot";return true;}
         if(LifestreamBusy())throw new InvalidOperationException("Another travel task is running.");
-        if(!Pi.GetIpcSubscriber<uint,bool>("Lifestream.AethernetTeleportById").InvokeFunc(63))throw new InvalidOperationException("Entrance aethernet travel was refused.");
+        if(!RequestUnlockedAethernet(63,out var reason))throw new InvalidOperationException(reason);
         eventSaucerTravelOwned=true;eventSaucerTravelAt=now;return false;
     }
 }

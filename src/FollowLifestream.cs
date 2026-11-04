@@ -30,7 +30,7 @@ public sealed partial class Plugin
         if(!config.FollowThem.UseLifestream)return false;
         try{
             if(LifestreamBusy()){TravelDiagnostic("Lifestream is busy; waiting without replacing its task.");return true;}
-            if(!Pi.GetIpcSubscriber<string,bool>("Lifestream.AethernetTeleport").InvokeFunc(signal.Destination))return false;
+            if(!RequestUnlockedAethernet(ResolveAethernetDestination(signal.Destination,signal.BaseId),out var reason)){TravelDiagnostic(reason);return false;}
             lastPortalSignalId=signal.Id;BeginLifestreamTravel(0);TravelDiagnostic("Lifestream requested aethernet: "+signal.Destination);return true;
         }catch(Exception){TravelDiagnostic("Lifestream integration unavailable; using the native aethernet menu.");return false;}
     }

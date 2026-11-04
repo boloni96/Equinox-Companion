@@ -58,9 +58,9 @@ public sealed partial class Plugin
         // Process aethernet before demanding the final territory: city shards can cross zones.
         if(netNeeded){
             if(netId==0||source==null){StopIndependentQuest("Imported aethernet destination is not mapped.",true);return false;}
-            var state=UIState.Instance();
-            if(state==null||!state->PlayerState.IsLoaded){questToolsStatus+=" · waiting for aethernet unlock data";return false;}
-            if(!state->IsAetheryteUnlocked(netId)){
+            var unlocked=AethernetUnlocked(netId);
+            if(unlocked==null){questToolsStatus+=" · waiting for aethernet unlock data";return false;}
+            if(unlocked==false){
                 if(IndependentStepPolicy.CanWalkWithoutShortcut(IndependentStepPolicy.Text(step,"InteractionType"),step.TryGetProperty("Position",out _),Client.TerritoryType,territory,sheet.GetRowOrDefault(netId)?.Territory.RowId??0)){
                     questToolsStatus+=" · shard not attuned; walking to the quest target";
                     return true;
@@ -84,7 +84,7 @@ public sealed partial class Plugin
                 }
                 if(LifestreamBusy())throw new InvalidOperationException("Another travel operation is running.");
                 StopIndependentWalk();
-                if(!Pi.GetIpcSubscriber<uint,bool>("Lifestream.AethernetTeleportById").InvokeFunc(netId))throw new InvalidOperationException("Aethernet request was refused.");
+                if(!RequestUnlockedAethernet(netId,out var travelReason))throw new InvalidOperationException(travelReason);
                 independentTravelSourceTerritory=Client.TerritoryType;independentTravelSourcePosition=self.Position;
                 independentTravelOwned=true;independentTravelDestination=netId;independentTravelAt=now;return false;
             }

@@ -128,11 +128,21 @@ public sealed partial class Plugin
         if(Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]){pendingAethernet=null;return;}
         if(now-aethernetAt>TimeSpan.FromSeconds(30)){FailFollowTrip("Aethernet timed out waiting for its destination menu.");return;}
         if(!travelStepReady||now<aethernetNext)return;
+        if(pending.SourceKind=="Aetheryte"){
+            var unlocked=AethernetUnlocked(ResolveAethernetDestination(pending.Destination,pending.BaseId));
+            if(unlocked==null){TravelDiagnostic("Waiting for this character's verified aethernet destination.");return;}
+            if(unlocked==false){FailFollowTrip("This character has not attuned to "+pending.Destination+". Attune before following that shortcut.");return;}
+        }
         RetryTravelInteraction(pending,now);
         var town=(AtkUnitBase*)GardenGui.GetAddonByName("TelepotTown").Address;
         if(town!=null&&town->IsVisible){
             var choices=AethernetChoices(town).Where(x=>x.Name.Trim()==pending.Destination.Trim()).ToArray();
             if(choices.Length!=1){TravelDiagnostic("Waiting for the selected destination in the aethernet menu.");return;}
+            var agent=FFXIVClientStructs.FFXIV.Client.UI.Agent.AgentTelepotTown.Instance();
+            var callback=choices[0].Callback;
+            if(agent==null||agent->Data==null||agent->Data->AetheryteCount>64||callback>=agent->Data->AetheryteCount){TravelDiagnostic("Waiting for verified aethernet menu availability.");return;}
+            var entry=agent->Data->Entries[(int)callback];
+            if(!AethernetTravelPolicy.CanUseMenuEntry(entry.IsLocked,entry.IsUnusable,entry.IsCurrent)){FailFollowTrip("Selected aethernet destination is locked, unavailable or already current on this character.");return;}
             var args=stackalloc AtkValue[2];args[0].Type=AtkValueType.Int;args[0].Int=11;args[1].Type=AtkValueType.UInt;args[1].UInt=choices[0].Callback;
             aethernetNext=now.AddSeconds(2);aethernetSelections++;if(aethernetSelections>=2)pendingAethernet=null;
             RecordAethernetSelection(pending,choices[0].Callback);
