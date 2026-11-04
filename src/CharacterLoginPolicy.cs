@@ -27,6 +27,9 @@ public static class CharacterLoginPolicy
         return mode == CharacterLoginMode.Title ? CharacterLoginAction.CheckList : CharacterLoginAction.Proceed;
     }
 
+    public static bool NeedsListRouting(int currentSlot,int targetSlot,bool ready,int exactMatches)=>
+        !ready||exactMatches!=1||(targetSlot>=0&&currentSlot!=targetSlot);
+
     // An offline confirmation must not become permission to log out a character
     // that appeared while the dialog was open, or to switch after another logout.
     public static bool SameSource(ulong expected, bool loaded, ulong current) =>

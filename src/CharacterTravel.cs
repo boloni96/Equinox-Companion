@@ -55,6 +55,14 @@ public sealed partial class Plugin
   if(CharacterLoginPolicy.IdentifyThroughDataCenter(mode,action)){StartCurrentLoginIdentification(character);return;}
   if(action==CharacterLoginAction.Confirm){characterTravelStatus="Confirm that this character is available on the current Square Enix login. A different login needs its own game client.";return;}
   if(action==CharacterLoginAction.CheckList){StartTitleLoginCheck(character);return;}
+  if(mode==CharacterLoginMode.CharacterSelect){
+   var target=TitleLoginTarget(character.Id);
+   var ready=TryReadReadyLoginList(out var entries);
+   var matches=target==null?0:entries.Count(e=>!e.Locked&&CharacterLoginProbe.ExactCharacter(target,e));
+   if(CharacterLoginPolicy.NeedsListRouting(CurrentLoginServiceAccount(),RecordedCharacterServiceSlot(character),ready,matches)){
+    StartCurrentLoginIdentification(character,true);return;
+   }
+  }
   // Prefer the observed game identity over a manually decorated Journal name.
   var observed=config.Discoveries.LastOrDefault(e=>e.Actor.ContentId==character.ContentId)?.Actor;
   var name=observed?.Name??character.Name;var world=string.IsNullOrWhiteSpace(observed?.HomeWorldName)?character.World:observed.HomeWorldName;
