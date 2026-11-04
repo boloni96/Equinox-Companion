@@ -533,6 +533,8 @@ public sealed partial class Plugin
         public bool IsLevelOneOutfit(uint item)=>p.IsSellerLevelOneOutfit(item);
         private (ulong Retainer,int Slot)? requestedEditor;
         private ulong requestedMarket;
+        private readonly SellerHistoryVisit historyVisit=new();
+        public SellerPreparation ReadSaleHistory(ulong id)=>p.ReadSellerSaleHistory(id,historyVisit);
         public bool ContextMatches(ulong c,uint w)=>p.SellerContext(c,w);
         public unsafe bool SelectRetainer(SellerRetainerRef r){
             if(SellerActive(r.Id))return true;
@@ -589,7 +591,7 @@ public sealed partial class Plugin
             var entry=new MarketPriceLog(DateTimeOffset.UtcNow,r.Id,r.Name,item.ItemId,item.Name,item.Hq,item.Price,d.Price,applied?"Updated":d.Status.ToString(),d.Reason);
             p.marketLedger=p.marketLedger with {Prices=[..p.marketLedger.Prices.TakeLast(1999),entry]};p.DirtyMarket();
         }
-        public unsafe void Release(){requestedEditor=null;requestedMarket=0;if(SellerAddon("RetainerSell")!=null)p.manualSuspendUntilClose=true;p.ReleaseSellerLocks();}
+        public unsafe void Release(){historyVisit.Reset();requestedEditor=null;requestedMarket=0;if(SellerAddon("RetainerSell")!=null)p.manualSuspendUntilClose=true;p.ReleaseSellerLocks();}
     }
     private unsafe void SellerRetainerTalk(ulong id)
     {

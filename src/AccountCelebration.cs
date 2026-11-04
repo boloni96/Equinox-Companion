@@ -14,6 +14,7 @@ public sealed partial class Plugin
     private DateTimeOffset eventCelebrationNext;
     private string accountCelebrationPairing="";
     private static string CelebrationKey(string value)=>Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
+    private string CelebrationImageKey(string identity)=>CelebrationKey(config.PairingKey+"|"+identity+"|image-size-2");
     private void ResetCelebrationScope()
     {
         if(accountCelebrationPairing==config.PairingKey)return;
@@ -22,12 +23,13 @@ public sealed partial class Plugin
     private void QueueAccountCelebration(string identity,string account,string activity,bool replay=false)
     {
         ResetCelebrationScope();
-        var key=CelebrationKey(config.PairingKey+"|"+identity);
+        var messageKey=CelebrationKey(config.PairingKey+"|"+identity);
+        var key=CelebrationImageKey(identity);
         config.AccountCelebrationsShown??=[];
         config.AccountCompletionMessagesShown??=[];
-        if(!replay&&!config.AccountCompletionMessagesShown.Contains(key)){
+        if(!replay&&!config.AccountCompletionMessagesShown.Contains(messageKey)){
             PrintEquinox(AccountCelebrationPolicy.CompletionMessage(account,activity));
-            config.AccountCompletionMessagesShown=new(config.AccountCompletionMessagesShown){key};SaveConfiguration();
+            config.AccountCompletionMessagesShown=new(config.AccountCompletionMessagesShown){messageKey};SaveConfiguration();
         }
         if(!replay&&config.AccountCelebrationsShown.Contains(key)||accountCelebration?.Key==key||accountCelebrations.Any(c=>c.Key==key))return;
         accountCelebrations.Enqueue((key,account,activity));
@@ -49,7 +51,7 @@ public sealed partial class Plugin
         if(participants.Count>0)characters=characters.Where(c=>participants.Contains(c.Id)).ToArray();
         if(characters.Length==0)return;
         var identity=$"fashion-account-v3|{person.Id}|{current.AccountId}|{FashionCompletion.Cycle(now):O}|"+string.Join(",",characters.Select(c=>c.Id).Order());
-        if(config.AccountCelebrationsShown?.Contains(CelebrationKey(config.PairingKey+"|"+identity))==true)return;
+        if(config.AccountCelebrationsShown?.Contains(CelebrationImageKey(identity))==true)return;
         var observations=DiscoveryReads().Kind("fashion.observed").ToArray();
         foreach(var c in characters){
             var actor=new Actor(c.ContentId,c.Name,0,0,c.World,c.World);
@@ -125,15 +127,20 @@ public sealed partial class Plugin
         var scale=Math.Clamp(ImGui.GetFontSize()/17f,.8f,1.6f);
         var draw=ImGui.GetForegroundDrawList();
         uint Color(float r,float g,float b,float a=1)=>ImGui.ColorConvertFloat4ToU32(new(r,g,b,a*alpha));
-        var h=210*scale;var w=image==null?h:h*image.Width/image.Height;
-        var top=center-new Vector2(w/2,165*scale);
+        var h=420*scale;var w=image==null?h:h*image.Width/image.Height;
+        var top=center-new Vector2(w/2,h/2+30*scale);
         if(image!=null)draw.AddImage(image.Handle,top,top+new Vector2(w,h),Vector2.Zero,Vector2.One,Color(1,1,1));
         var lines=new[]{"You completed all "+content.Activity+"!",content.Account+" · Good job!"};
-        var y=center.Y+58*scale;
+        var textScale=2f;
+        var widest=lines.Max(line=>ImGui.CalcTextSize(line).X);
+        if(widest>0)textScale=Math.Min(textScale,Math.Max(1f,(viewport.Size.X-48*scale)/widest));
+        var fontSize=ImGui.GetFontSize()*textScale;
+        var textHeight=lines.Sum(line=>ImGui.CalcTextSize(line).Y*textScale+12*scale);
+        var y=top.Y-textHeight-12*scale;
         foreach(var line in lines){
-            var size=ImGui.CalcTextSize(line);var p=new Vector2(center.X-size.X/2,y);
+            var size=ImGui.CalcTextSize(line)*textScale;var p=new Vector2(center.X-size.X/2,y);
             draw.AddRectFilled(p-new Vector2(12,5)*scale,p+size+new Vector2(12,5)*scale,Color(.025f,.06f,.12f,.86f),8*scale);
-            draw.AddText(p+new Vector2(1,1),Color(0,0,0),line);draw.AddText(p,Color(.79f,.91f,1),line);
+            draw.AddText(ImGui.GetFont(),fontSize,p+new Vector2(1,1),Color(0,0,0),line);draw.AddText(ImGui.GetFont(),fontSize,p,Color(.79f,.91f,1),line);
             y+=size.Y+12*scale;
         }
     }

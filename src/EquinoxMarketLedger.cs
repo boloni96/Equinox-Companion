@@ -94,6 +94,8 @@ public sealed partial class Plugin
             }
             var income=MarketRetainerHistory.Merge(marketLedger.Income,retainer,history.Sales,SearchItemName);
             if(!marketLedger.Income.SequenceEqual(income)){marketLedger=marketLedger with {Income=income};DirtyMarket();}
+            var historyKey=(history.Actor.Id,history.Retainer);marketHistoryVersions[historyKey]=marketHistoryVersions.GetValueOrDefault(historyKey)+1;
+            marketSharedNext=default;
             marketHistoryStatus=$"{history.Name}: {history.Sales.Length} recent sale records read · {DisplayTime.Local(DateTimeOffset.UtcNow)}";
         }
         while(marketPurchaseQueue.TryDequeue(out var purchase)){marketLedger=marketLedger with {Expenses=[..marketLedger.Expenses??[],purchase]};DirtyMarket();}
