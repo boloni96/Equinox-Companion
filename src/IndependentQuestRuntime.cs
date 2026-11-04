@@ -103,10 +103,14 @@ public sealed partial class Plugin
             if(step.TryGetProperty("CompletionQuestVariablesFlags",out var flags)&&IndependentStepPolicy.CompletedFlags(flags,IndependentWork())){NextIndependentStep(now);return;}
             if(now-independentStepSince>TimeSpan.FromMinutes(15))throw new InvalidOperationException("Quest step timed out: "+questToolsStatus);
             questToolsStatus=$"{QuestTitle(independentQuestId)} · sequence {sequence}, step {independentStep+1}/{steps.GetArrayLength()} · {kind}";
+            // Travel owns its menus. Keep arrival/timeout checks running even
+            // when those menus mark the character occupied in an event.
+            if(independentTravelOwned){IndependentQuestTravel(step,IndependentStepPolicy.Number(step,"TerritoryId"),now);return;}
             if(kind is "AttuneAetheryte" or "AttuneAethernetShard"){UpdateIndependentAttunement(step,kind,now);return;}
             if(UpdateOwnedQuestCutscene(now,false,()=>IndependentQuestDialogue(step,kind,now)))return;
             if(IndependentQuestDialogue(step,kind,now))return;
-            if(Conditions[ConditionFlag.OccupiedInEvent]||Conditions[ConditionFlag.OccupiedInQuestEvent]||HelperInCutscene()||Conditions[ConditionFlag.Casting])return;
+            if(VisibleFollowAddon("TelepotTown")){questToolsStatus+=" · close the open aethernet window to continue";return;}
+            if(Conditions[ConditionFlag.OccupiedInEvent]||Conditions[ConditionFlag.OccupiedInQuestEvent]||HelperInCutscene()||Conditions[ConditionFlag.Casting]){questToolsStatus+=" · waiting for the current game interaction / cast";return;}
             var territory=IndependentStepPolicy.Number(step,"TerritoryId");
             if(independentStepSent){
                 var changed=Convert.ToHexString(IndependentWork())!=independentWorkBefore;

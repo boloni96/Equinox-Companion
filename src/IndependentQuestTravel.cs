@@ -58,6 +58,15 @@ public sealed partial class Plugin
         // Process aethernet before demanding the final territory: city shards can cross zones.
         if(netNeeded){
             if(netId==0||source==null){StopIndependentQuest("Imported aethernet destination is not mapped.",true);return false;}
+            var state=UIState.Instance();
+            if(state==null||!state->PlayerState.IsLoaded){questToolsStatus+=" · waiting for aethernet unlock data";return false;}
+            if(!state->IsAetheryteUnlocked(netId)){
+                if(IndependentStepPolicy.CanWalkWithoutShortcut(IndependentStepPolicy.Text(step,"InteractionType"),step.TryGetProperty("Position",out _),Client.TerritoryType,territory,sheet.GetRowOrDefault(netId)?.Territory.RowId??0)){
+                    questToolsStatus+=" · shard not attuned; walking to the quest target";
+                    return true;
+                }
+                StopIndependentQuest("Required aethernet shard is not attuned: "+route[1].GetString()+". No supported walking connection to its territory is recorded.",true);return false;
+            }
             var group=source.Value.AethernetGroup;
             var crystal=Objects.Where(o=>o.ObjectKind==Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Aetheryte&&o.IsTargetable)
                 .Where(o=>sheet.GetRowOrDefault(o.BaseId) is {} row&&row.AethernetGroup==group&&group!=0)

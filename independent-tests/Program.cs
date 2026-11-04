@@ -1,6 +1,10 @@
 using EquinoxCompanion;
 using System.Numerics;
 void Check(bool condition,string name){if(!condition)throw new Exception(name);}
+Check(IndependentStepPolicy.CanWalkWithoutShortcut("CompleteQuest",true,132,132,132),"locked Archers Guild shortcut falls back to walking within New Gridania");
+Check(!IndependentStepPolicy.CanWalkWithoutShortcut("CompleteQuest",true,132,133,133),"locked cross-zone shortcut cannot walk coordinates in the wrong zone");
+Check(!IndependentStepPolicy.CanWalkWithoutShortcut("None",true,132,132,132),"explicit travel-only step is not silently completed");
+Check(!IndependentStepPolicy.CanWalkWithoutShortcut("CompleteQuest",false,132,132,132),"walking fallback needs a known position");
 var manualPause=new QuestMovementPause();var pauseAt=DateTimeOffset.UtcNow;
 Check(!manualPause.Observe(pauseAt,false),"idle input does not pause quest");
 Check(manualPause.Observe(pauseAt,true),"movement yields immediately");
