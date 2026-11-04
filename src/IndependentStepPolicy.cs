@@ -2,8 +2,8 @@ using System.Text.Json;
 namespace EquinoxCompanion;
 public static class IndependentStepPolicy
 {
-    public static readonly HashSet<string> Actions=["AcceptQuest","CompleteQuest","Interact","WalkTo","None","WaitForNpcAtPosition","EquipRecommended","UseItem","Emote","Say"];
-    private static readonly HashSet<string> Fields=["DataId","Position","TerritoryId","InteractionType","StopDistance","Comment","$","Disabled","DelaySecondsAtStart","AetheryteShortcut","AethernetShortcut","TargetTerritoryId","DialogueChoices","CompletionQuestVariablesFlags","NextQuestId","ItemId","Emote","ChatMessage","SkipConditions","Fly"];
+    public static readonly HashSet<string> Actions=["AttuneAetheryte","AttuneAethernetShard","AcceptQuest","CompleteQuest","Interact","WalkTo","None","WaitForNpcAtPosition","EquipRecommended","UseItem","Emote","Say"];
+    private static readonly HashSet<string> Fields=["Aetheryte","AethernetShard","DataId","Position","TerritoryId","InteractionType","StopDistance","Comment","$","Disabled","DelaySecondsAtStart","AetheryteShortcut","AethernetShortcut","TargetTerritoryId","DialogueChoices","CompletionQuestVariablesFlags","NextQuestId","ItemId","Emote","ChatMessage","SkipConditions","Fly"];
     public static string Review(JsonElement step)
     {
         var type=Text(step,"InteractionType");

@@ -3,6 +3,7 @@ namespace EquinoxCompanion;
 [Serializable]
 public sealed class Configuration : IPluginConfiguration
 {
+    public int QuestLevelingTarget { get; set; }
     public bool QuestLeveling { get; set; }
     public bool QuestLevelingIncludeMsq { get; set; } = true;
     public HashSet<string> AccountCelebrationsShown { get; set; } = [];

@@ -10,7 +10,7 @@ public sealed partial class Plugin
     private uint independentTravelDestination,independentTravelSourceTerritory;
     private Vector3 independentTravelSourcePosition;
     private DateTimeOffset independentTravelAt;
-    private unsafe bool IndependentSkip(JsonElement step,string group)=>Objects.LocalPlayer is {} player&&IndependentSkipPolicy.Matches(step,group,Client.TerritoryType,player.Position,IndependentWork(),id=>QuestManager.Instance()!=null&&QuestManager.Instance()->IsQuestAccepted(id),id=>QuestManager.IsQuestComplete(id));
+    private unsafe bool IndependentSkip(JsonElement step,string group)=>Objects.LocalPlayer is {} player&&IndependentSkipPolicy.Matches(step,group,Client.TerritoryType,player.Position,IndependentWork(),id=>QuestManager.Instance()!=null&&QuestManager.Instance()->IsQuestAccepted(id),id=>QuestManager.IsQuestComplete(id),IndependentCrystalUnlocked);
     private void CancelIndependentQuestTravel(){
         if(independentTravelOwned){try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}}
         independentTravelOwned=false;independentTravelDestination=0;
@@ -36,6 +36,8 @@ public sealed partial class Plugin
             var expected=sheet.GetRowOrDefault(independentTravelDestination)?.Territory.RowId??0;
             if(expected!=0&&Client.TerritoryType!=expected)return false;
             if(Client.TerritoryType==independentTravelSourceTerritory&&Objects.LocalPlayer is {} arriving&&Vector3.Distance(arriving.Position,independentTravelSourcePosition)<8){questToolsStatus+=" · waiting for destination position";return false;}
+            var destinationPosition=IndependentCrystalPosition(independentTravelDestination);
+            if(destinationPosition==null||Objects.LocalPlayer is not {} arrived||Vector3.Distance(arrived.Position,destinationPosition.Value)>30){questToolsStatus+=" · waiting for the requested shard's position";return false;}
             independentTravelOwned=false;independentTravelDestination=0;independentAethernetSent=true;
             return true; // Some imported None steps name the source territory.
         }

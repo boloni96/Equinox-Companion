@@ -8,6 +8,7 @@ public sealed partial class Plugin
     private string questLevelingRecommendation="";
     private unsafe uint NextLevelingQuest()
     {
+        if(!CanStartLevelingGoal())return 0;
         var self=Objects.LocalPlayer;var qm=QuestManager.Instance();
         if(self==null||qm==null||independentBook==null)return 0;
         var choices=new List<QuestLevelingCandidate>();
