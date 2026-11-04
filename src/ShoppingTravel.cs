@@ -40,7 +40,7 @@ public sealed partial class Plugin
    if(LifestreamBusy())return;
    if(trip.Stage==0){if(!Pi.GetIpcSubscriber<uint,byte,bool>("Lifestream.Teleport").InvokeFunc(ShoppingDestination.Aetheryte(trip.City),0)){shoppingTravel=null;marketTravelStatus="City teleport unavailable. Check that the aetheryte is unlocked.";return;}shoppingTravel=trip with{Stage=1,NotBefore=now.AddSeconds(10)};return;}
    if(trip.Stage==1){var active=Pi.GetIpcSubscriber<uint>("Lifestream.GetActiveAetheryte").InvokeFunc();if(active!=ShoppingDestination.Aetheryte(trip.City)){if(now>trip.NotBefore.AddSeconds(20)){shoppingTravel=null;marketTravelStatus="City arrival could not be confirmed. Travel stopped.";}return;}
-    if(trip.Shard.Length>0){if(!Pi.GetIpcSubscriber<string,bool>("Lifestream.AethernetTeleport").InvokeFunc(trip.Shard)){shoppingTravel=null;marketTravelStatus="Shard travel unavailable. Check that the shard is unlocked.";return;}marketTravelStatus="Lifestream is taking you to "+trip.Shard+".";}else marketTravelStatus="Arrived at "+ShoppingDestination.Cities[trip.City]+".";shoppingTravel=null;
+    if(trip.Shard.Length>0){if(!RequestUnlockedAethernet(ResolveAethernetDestination(trip.Shard,ShoppingDestination.Aetheryte(trip.City)),out var reason)){shoppingTravel=null;marketTravelStatus="Arrived at the city aetheryte. "+reason+" Walk to "+trip.Shard+" and attune first.";return;}marketTravelStatus="Lifestream is taking you to "+trip.Shard+".";}else marketTravelStatus="Arrived at "+ShoppingDestination.Cities[trip.City]+".";shoppingTravel=null;
    }
   }catch(Exception){shoppingTravel=null;marketTravelStatus="Lifestream travel became unavailable.";}
  }
