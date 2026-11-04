@@ -13,8 +13,10 @@ public static class IndependentSkipPolicy
             if(group.Value.ValueKind==JsonValueKind.Null)continue;
             if(group.Value.ValueKind!=JsonValueKind.Object)return "Invalid skip group: "+group.Name;
             foreach(var field in group.Value.EnumerateObject()){
-                if(field.Name is not ("Never" or "InSameTerritory" or "InTerritory" or "NotInTerritory" or "NearPosition" or "NotNearPosition" or "QuestsAccepted" or "QuestsCompleted" or "CompletionQuestVariablesFlags"))
+                if(field.Name is not ("AetheryteUnlocked" or "AethernetShardUnlocked" or "Never" or "InSameTerritory" or "InTerritory" or "NotInTerritory" or "NearPosition" or "NotNearPosition" or "QuestsAccepted" or "QuestsCompleted" or "CompletionQuestVariablesFlags"))
                     if(IndependentStepPolicy.Meaningful(field.Value)||field.Value.ValueKind==JsonValueKind.False)return "Skip condition needs support: "+field.Name;
+                if(field.Name is "AetheryteUnlocked" or "AethernetShardUnlocked")
+                    if(field.Value.ValueKind!=JsonValueKind.String||string.IsNullOrWhiteSpace(field.Value.GetString()))return "Invalid crystal unlock condition";
                 if(field.Name is "NearPosition" or "NotNearPosition"){
                     if(field.Value.ValueKind!=JsonValueKind.Object||field.Value.EnumerateObject().Any(p=>p.Name is not ("Position" or "TerritoryId" or "MaximumDistance")))return "Invalid position skip condition";
                 }
@@ -22,12 +24,13 @@ public static class IndependentSkipPolicy
         }
         return "";
     }
-    public static bool Matches(JsonElement step,string group,uint territory,Vector3 position,byte[] work,Func<uint,bool> accepted,Func<uint,bool> completed)
+    public static bool Matches(JsonElement step,string group,uint territory,Vector3 position,byte[] work,Func<uint,bool> accepted,Func<uint,bool> completed,Func<string,bool>? crystalUnlocked=null)
     {
         if(!step.TryGetProperty("SkipConditions",out var all)||!all.TryGetProperty(group,out var condition)||condition.ValueKind!=JsonValueKind.Object)return false;
         if(condition.TryGetProperty("Never",out var never)&&never.ValueKind==JsonValueKind.True)return false;
         foreach(var p in condition.EnumerateObject()){
             bool match=p.Name switch {
+                "AetheryteUnlocked" or "AethernetShardUnlocked"=>p.Value.ValueKind==JsonValueKind.String&&crystalUnlocked?.Invoke(p.Value.GetString()??"")==true,
                 "InSameTerritory"=>p.Value.ValueKind==JsonValueKind.True&&territory==IndependentStepPolicy.Number(step,"TerritoryId"),
                 "InTerritory"=>p.Value.EnumerateArray().Any(v=>v.GetUInt32()==territory),
                 "NotInTerritory"=>p.Value.GetArrayLength()>0&&!p.Value.EnumerateArray().Any(v=>v.GetUInt32()==territory),

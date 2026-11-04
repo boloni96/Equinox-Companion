@@ -184,6 +184,26 @@ Check(QuestLevelingPolicy.Score(starter,[starter,followup],_=>false)>1000,"level
 var lockedFollowup=followup with { Previous=[1,3] };
 Check(QuestLevelingPolicy.Score(starter,[starter,lockedFollowup],_=>false)==20,"unmet extra prerequisites do not inflate starter XP score");
 Console.WriteLine("Quest leveling route suitability and chain scoring passed.");
+long Cost(int level)=>level switch{1=>100,2=>200,3=>300,_=>0};
+Check(QuestLevelingProgress.Remaining(1,40,3,Cost)==260,"target includes current partial XP and intervening levels");
+Check(QuestLevelingProgress.Remaining(3,20,3,Cost)==0,"reached target needs no XP");
+Check(QuestLevelingProgress.Remaining(1,0,6,Cost)==null,"unknown level costs cannot produce false ETA");
+Check(QuestLevelingProgress.Remaining(1,120,3,Cost)==null,"inconsistent level-up XP waits for fresh observation");
+var pace=new QuestLevelingProgress();var at=DateTimeOffset.UtcNow;pace.Begin(40,at);
+pace.Observe(140,at.AddMinutes(1));pace.Complete();
+Check(pace.SecondsRemaining(200,at.AddMinutes(1))==null,"one quest is not enough for ETA");
+pace.Observe(240,at.AddMinutes(2));pace.Complete();
+Check(pace.SecondsRemaining(200,at.AddMinutes(2))==120,"observed pace estimates remaining time across level boundaries");
+Check(pace.SecondsRemaining(200,at.AddMinutes(13))==null,"stalled progress expires ETA");
+pace.Observe(10,at.AddMinutes(14));Check(pace.SecondsRemaining(200,at.AddMinutes(15))==null,"XP reset discards pace");
+using(var attune=System.Text.Json.JsonDocument.Parse("""
+{"InteractionType":"AttuneAethernetShard","AethernetShard":"[Gridania] Archers' Guild","SkipConditions":{"StepIf":{"AethernetShardUnlocked":"[Gridania] Archers' Guild"}}}
+""")){
+ Check(IndependentStepPolicy.Review(attune.RootElement)=="","shard attunement is supported explicitly");
+ Check(!IndependentSkipPolicy.Matches(attune.RootElement,"StepIf",132,Vector3.Zero,new byte[6],_=>false,_=>false,_=>false),"locked shard is not skipped");
+ Check(IndependentSkipPolicy.Matches(attune.RootElement,"StepIf",132,Vector3.Zero,new byte[6],_=>false,_=>false,_=>true),"confirmed unlocked shard is skipped");
+}
+Console.WriteLine("Level targets, observed ETA and attunement checks passed.");
 sealed class NoAir:IFlightCollision {public bool Clear(Vector3 a,Vector3 b)=>false;}
 sealed class AirObstacle:IFlightCollision {
  public bool Clear(Vector3 a,Vector3 b){for(var i=0;i<=40;i++){var p=Vector3.Lerp(a,b,i/40f);if(p.X>5&&p.X<11&&MathF.Abs(p.Z)<3&&p.Y<10)return false;}return true;}

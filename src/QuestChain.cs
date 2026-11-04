@@ -20,6 +20,7 @@ public sealed partial class Plugin
         ImGui.BeginDisabled(questChainActive);
         if(ImGui.Checkbox("Quest leveling",ref questLeveling)){config.QuestLeveling=questLeveling;SaveConfiguration();}
         if(questLeveling){
+            DrawLevelingGoal();
             if(ImGui.Checkbox("Include MSQ",ref questLevelingIncludeMsq)){config.QuestLevelingIncludeMsq=questLevelingIncludeMsq;SaveConfiguration();}
             ImGui.TextWrapped("Finds supported XP quests, including ones not accepted yet. Checks current job, level and prerequisites. Combat, duties, leves and unverified special requirements stay manual.");
         }
@@ -47,6 +48,8 @@ public sealed partial class Plugin
         if(nativeEventActive||questChainActive||eventAccountActive||questRecorderActive||QuestToolsOtherOperation()||!Player.IsLoaded){questToolsStatus="Finish the other operation first.";return;}
         if(QuestProviderRunning()){questToolsStatus="Another quest is running.";return;}
         if(independentBook==null){questToolsStatus="Independent quest data is still loading.";return;}
+        if(questLeveling&&!CanStartLevelingGoal()){questChainStatus=questLevelingRecommendation;return;}
+        if(questLeveling)BeginLevelingProgress();
         ResetDeferredCharacter();questChainActive=true;questChainStartedQuest=false;questChainCharacter=Player.ContentId;
         questChainCandidate=QuestToolsPolicy.ShortId(id);questChainLast=0;questChainVisited.Clear();questChainNext=default;
         questLevelingJob=Objects.LocalPlayer?.ClassJob.RowId??0;
@@ -102,6 +105,7 @@ public sealed partial class Plugin
                     if(independentDeferred){questChainDeferred[questChainCandidate]=questToolsStatus;questChainDeferredSequence[questChainCandidate]=QuestManager.GetQuestSequence(questChainCandidate);questChainCandidate=0;independentDeferred=false;}
                     else {StopQuestChain("Quest stopped before completion: "+questToolsStatus);return;}
                 }
+                if(questLeveling&&questChainCandidate!=0)levelingProgress.Complete();
                 questChainLast=questChainCandidate;questChainCandidate=0;
             }
             if(questChainCandidate==0){

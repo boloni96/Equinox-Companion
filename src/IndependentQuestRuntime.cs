@@ -103,6 +103,7 @@ public sealed partial class Plugin
             if(step.TryGetProperty("CompletionQuestVariablesFlags",out var flags)&&IndependentStepPolicy.CompletedFlags(flags,IndependentWork())){NextIndependentStep(now);return;}
             if(now-independentStepSince>TimeSpan.FromMinutes(15))throw new InvalidOperationException("Quest step timed out: "+questToolsStatus);
             questToolsStatus=$"{QuestTitle(independentQuestId)} · sequence {sequence}, step {independentStep+1}/{steps.GetArrayLength()} · {kind}";
+            if(kind is "AttuneAetheryte" or "AttuneAethernetShard"){UpdateIndependentAttunement(step,kind,now);return;}
             if(UpdateOwnedQuestCutscene(now,false,()=>IndependentQuestDialogue(step,kind,now)))return;
             if(IndependentQuestDialogue(step,kind,now))return;
             if(Conditions[ConditionFlag.OccupiedInEvent]||Conditions[ConditionFlag.OccupiedInQuestEvent]||HelperInCutscene()||Conditions[ConditionFlag.Casting])return;

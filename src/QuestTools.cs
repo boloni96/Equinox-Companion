@@ -60,6 +60,7 @@ public sealed partial class Plugin
             questCatalogueTask=null;
         }
         UpdateQuestRecorder(now);
+        UpdateLevelingGoal(now);
         UpdateIndependentWalk(now);
         UpdateIndependentQuest(now);
         UpdateNativeEventQuest(now);
