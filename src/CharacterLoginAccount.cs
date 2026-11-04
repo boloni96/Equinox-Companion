@@ -104,6 +104,9 @@ public sealed partial class Plugin
     private int RecordedCharacterServiceSlot(SharedCharacter target)
     {
         var scope=CharacterSwitchScope(target.Id);
+        var from=Player.IsLoaded?CharacterSwitchScope(CurrentSharedCharacter()?.Id??""):characterAccountScope;
+        var defaultSlot=CharacterLoginPolicy.DefaultServiceSlot(scope.AccountName,LoginRelationship(target,from,scope));
+        if(defaultSlot>=0)return defaultSlot;
         var key=SquareEnixLoginState.TargetAccountKey(config.SharedRoster,target,scope.PersonId,scope.AccountId);
         var index=CurrentLoginIdentification.RecordedIndex(key,config.ObservedServiceAccountIndices);
         if(index>=0)return index;

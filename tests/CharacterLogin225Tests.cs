@@ -8,6 +8,11 @@ internal static class CharacterLogin225Tests
     {
         var checks = 0;
         void Check(bool value, string why) { checks++; if (!value) throw new Exception("Character login: " + why); }
+        Check(CharacterLoginPolicy.DefaultServiceSlot("MAIN",CharacterLoginRelationship.SameSquareEnixLogin)==0,"Verified shared login MAIN selects slot 1");
+        Check(CharacterLoginPolicy.DefaultServiceSlot(" alt ",CharacterLoginRelationship.SameSquareEnixLogin)==1,"Verified shared login ALT selects slot 2");
+        Check(CharacterLoginPolicy.DefaultServiceSlot("ALT",CharacterLoginRelationship.Unverified)==-1,"Separate-email ALT must not infer slot 2");
+        Check(CharacterLoginPolicy.DefaultServiceSlot("ALT",CharacterLoginRelationship.SameServiceAccount)==-1,"Current separate-email ALT retains its observed slot");
+        Check(CharacterLoginPolicy.DefaultServiceSlot("Other",CharacterLoginRelationship.SameSquareEnixLogin)==-1,"Other accounts keep explicit observed mapping");
         var calls = new List<string>();
         bool Request(CharacterLoginMode mode, bool accept = true, string name = "Leonis Verelle", string world = "Rafflesia")
         {

@@ -55,6 +55,10 @@ public sealed partial class Plugin
   if(CharacterLoginPolicy.IdentifyThroughDataCenter(mode,action)){StartCurrentLoginIdentification(character);return;}
   if(action==CharacterLoginAction.Confirm){characterTravelStatus="Confirm that this character is available on the current Square Enix login. A different login needs its own game client.";return;}
   if(action==CharacterLoginAction.CheckList){StartTitleLoginCheck(character);return;}
+  if(mode==CharacterLoginMode.InGame){
+   // Route through the explicit target slot, never Lifestream's remembered default.
+   StartAssignedCharacterSwitch(character,true);return;
+  }
   if(mode==CharacterLoginMode.CharacterSelect){
    var target=TitleLoginTarget(character.Id);
    var ready=TryReadReadyLoginList(out var entries);
@@ -205,7 +209,7 @@ public sealed partial class Plugin
   ImGui.TextUnformatted("Target: "+(targetKnown?to.PersonName+" / "+to.AccountName:"Not verified"));
   ImGui.Separator();
   ImGui.TextWrapped(Player.IsLoaded?"Log out and switch using Lifestream.":"Log in using Lifestream and the current game login.");
-  if(relationship==CharacterLoginRelationship.SameSquareEnixLogin)ImGui.TextWrapped("Service accounts verified under this login. The link covers every character in those Person/accounts. Lifestream selects the configured service account.");
+  if(relationship==CharacterLoginRelationship.SameSquareEnixLogin)ImGui.TextWrapped("Service accounts verified under this login. The link covers every character in those Person/accounts. Equinox selects the target service-account slot; MAIN defaults to 1 and ALT to 2 within this verified shared login.");
   else if(!same)ImGui.TextWrapped("A successful login from each service account in this game client links their whole Person/accounts locally. No Journal refresh is needed. A different Square Enix login requires exiting and signing in again.");
   if(!targetKnown)ImGui.TextWrapped("Sync this character's Person/account information first.");
   if(titleLoginProbe.Active)ImGui.TextWrapped($"Checking the current character list before login. Stops in {Math.Max(0,(int)Math.Ceiling((titleLoginProbe.Deadline-DateTimeOffset.UtcNow).TotalSeconds))}s. Stop check cancels this request.");
