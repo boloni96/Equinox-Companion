@@ -72,8 +72,8 @@ public static class GardenOverview
         var next=first?bed.Planted:bed.Watered?.AddHours(12)??bed.NextTend;
         var due=next<=now || state is "wilted" or "wilt-estimated" or "at-risk" or "dead-estimated";
         var care=first?"First tend due":next is null?"No tend recorded":next<=now?"Due now":"In "+Remaining(next.Value,now);
-        var harvest=bed.HarvestAt is null?"Unknown":bed.HarvestAt<=now?(GardenTiming.MaturityEstimateDue(bed.HarvestAt,bed.GrowingObservedAt,now)?"Check maturity":"Timing needs checking"):"~"+Remaining(bed.HarvestAt.Value,now);
-        var status=state switch {"wet"=>"Cared for","due"=>"Tending due","wilted"=>"Wilting · confirmed","wilt-estimated"=>"Wilting · estimated","dead-estimated"=>"Death risk · check in game","at-risk"=>"At risk","check-maturity"=>"Check maturity",_=>"Growing"};
+        var harvest=bed.HarvestAt is null?"Unknown":bed.HarvestAt<=now?(GardenTiming.MaturityEstimateDue(bed.HarvestAt,bed.GrowingObservedAt,now)?"Maturing":"Timing needs checking"):"~"+Remaining(bed.HarvestAt.Value,now);
+        var status=state switch {"wet"=>"Cared for","due"=>"Tending due","wilted"=>"Wilting · confirmed","wilt-estimated"=>"Wilting · estimated","dead-estimated"=>"Death risk · check in game","at-risk"=>"At risk","check-maturity"=>"Maturing",_=>"Growing"};
         if(plan.CompletedAt is null&&bed.Status=="different")status+=" · differs from plan";
         return Row(status,care,harvest,due,next,bed.HarvestAt);
     }
@@ -90,7 +90,7 @@ public static class GardenOverview
         Count("replace",b=>b.Status=="Replace starter");
         Count("ready",b=>b.State is "ready" or "mature-estimated");
         Count("tend due",b=>b.TendDue);
-        Count("check maturity",b=>b.State=="check-maturity");
+        Count("maturing",b=>b.State=="check-maturity");
         Count("unsynced",b=>b.State=="unknown");
         var tend=beds.Where(b=>b.NextTend>now).Select(b=>b.NextTend).Min();
         var harvest=beds.Where(b=>b.HarvestAt>now).Select(b=>b.HarvestAt).Min();
@@ -106,7 +106,7 @@ public static class GardenOverview
         var parts=new List<string>();
         void Count(string text,Func<GardenOverviewBed,bool> match){var n=beds.Count(match);if(n>0)parts.Add($"{n} {text}");}
         Count("replace starter",b=>b.Status=="Replace starter");Count("dead",b=>b.State=="dead");Count("tend due",b=>b.TendDue);Count("ready",b=>b.State is "ready" or "mature-estimated");Count("kept mature",b=>b.State=="keep-mature");
-        Count("check maturity",b=>b.State=="check-maturity");Count("awaiting sync",b=>b.State=="unknown");Count("empty",b=>b.State=="empty");
+        Count("maturing",b=>b.State=="check-maturity");Count("awaiting sync",b=>b.State=="unknown");Count("empty",b=>b.State=="empty");
         var next=beds.Where(b=>b.NextTend>now).Select(b=>b.NextTend).Min();
         var harvest=beds.Where(b=>b.HarvestAt>now).Select(b=>b.HarvestAt).Min();
         if(next is {} tend)parts.Add("Tend in "+Remaining(tend,now));

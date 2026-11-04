@@ -86,7 +86,7 @@ public sealed record GardenChatNotice(string HouseId,string HouseName,int Batch,
 public static class GardenCareStatus
 {
     public static string WebsiteUrl(string houseId,int batch) => "https://equinoxjournal.pages.dev/#house="+Uri.EscapeDataString(houseId)+"&section=gardening&batch="+Math.Clamp(batch,1,3);
-    private static string Label(string kind) => kind switch {"dead"=>"Dead crop confirmed","harvest"=>"Ready to harvest","wilt"=>"Wilting · tend urgently","tend"=>"Tending due","check maturity"=>"Check maturity",_=>"Check tending"};
+    private static string Label(string kind) => kind switch {"dead"=>"Dead crop confirmed","harvest"=>"Ready to harvest","wilt"=>"Wilting · tend urgently","tend"=>"Tending due","check maturity" or "maturing"=>"Maturing",_=>"Check tending"};
     // Current UIColor rows: 43 green, 37 blue, 32 orange, 17 red.
     public static ushort ChatColor(string kind,DateTimeOffset? deathAt,DateTimeOffset now) => kind=="dead"?(ushort)17:kind=="harvest"?(ushort)43:kind is "tend" or "check care"?(deathAt is {} deadline&&deadline<=now.AddHours(4)?(ushort)32:(ushort)37):(ushort)32;
     public static (string Text,ushort Color)[] ChatSummary(IEnumerable<GardenChatNotice> values,DateTimeOffset now)

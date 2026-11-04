@@ -880,7 +880,7 @@ Check("overview temporary starter suppresses care",GardenOverview.Bed(newlyPlant
 Check("overview final step nine restores care",GardenOverview.Bed(localDone,localDone.Beds[0],ovNow).TendDue.ToString(),"True");
 var ovUnknown=GardenOverview.Bed(livePlan,livePlan.Beds[0] with {ActualCrop="Not synced yet",Planted=null,Watered=null,Ready=false,NextTend=null,HarvestAt=null},ovNow);
 Check("overview unknown never becomes empty",ovUnknown.Status,"Awaiting sync");
-Check("overview predicted maturity is not confirmed ready",GardenOverview.Bed(localDone,localDone.Beds[0] with {Watered=ovNow,HarvestAt=ovNow},ovNow).Harvest,"Check maturity");
+Check("overview predicted maturity is not confirmed ready",GardenOverview.Bed(localDone,localDone.Beds[0] with {Watered=ovNow,HarvestAt=ovNow},ovNow).Harvest,"Maturing");
 Check("overview countdown days",GardenOverview.Remaining(ovNow.AddDays(2).AddHours(3).AddMinutes(4),ovNow),"2d 3h 4m");
 Check("overview no negative countdown",GardenOverview.Remaining(ovNow.AddSeconds(-1),ovNow),"now");
 Check("overview empty summary remains honest",GardenOverview.Summary([fullyHarvested],ovNow.AddMinutes(15)),"8 empty");
