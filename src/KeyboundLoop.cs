@@ -8,6 +8,7 @@ namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
     private bool keyboundQueueOwned,keyboundRegistrarOwned;
+    private ulong keyboundRegistrarCharacter;
     private const bool keyboundAntiAfk=true;
     private DateTimeOffset keyboundLoopNext;
     private static unsafe AtkUnitBase* KeyboundAddon(string name){
@@ -18,6 +19,13 @@ public sealed partial class Plugin
     private static unsafe void KeyboundCallback(AtkUnitBase* addon,int command){
         var value=new AtkValue{Type=AtkValueType.Int,Int=command};
         addon->FireCallback(1,&value,true);
+    }
+    private unsafe void CloseOwnedKeyboundRegistration(){
+        var registration=KeyboundAddon("KTGEnterDialogue");
+        var queued=Conditions[ConditionFlag.InDutyQueue]||Conditions[ConditionFlag.WaitingForDuty]||Conditions[ConditionFlag.WaitingForDutyFinder]||Conditions[ConditionFlag.WaitingForRaceOrMatch]||Conditions[ConditionFlag.RegisteringForRaceOrMatch];
+        if(!KeyboundPolicy.CanCloseRegistration(keyboundRegistrarOwned,keyboundRegistrarCharacter,Player.ContentId,registration!=null,queued,Client.TerritoryType==1359))return;
+        registration->Close(true);
+        TraceKeyboundRun(keyboundTypingRun,"registration-closed","Closed owned registration before stopping farming","system");
     }
     private unsafe bool UpdateKeyboundLoop(DateTimeOffset now)
     {
@@ -75,7 +83,7 @@ public sealed partial class Plugin
         var registrar=Objects.Where(o=>o.BaseId==1058751&&Vector3.Distance(o.Position,player.Position)<=7).OrderBy(o=>Vector3.DistanceSquared(o.Position,player.Position)).FirstOrDefault();
         if(registrar==null){keyboundStatus="Waiting: move within 7 yalms of the Keybound registrar";return true;}
         var target=TargetSystem.Instance();if(target==null)return true;
-        Targets.Target=registrar;keyboundRegistrarOwned=true;keyboundQueueOwned=false;
+        Targets.Target=registrar;keyboundRegistrarOwned=true;keyboundRegistrarCharacter=Player.ContentId;keyboundQueueOwned=false;
         target->InteractWithObject((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)registrar.Address,false);
         keyboundLoopNext=now.AddSeconds(2);keyboundStatus="Opening Keybound registration";
         return true;

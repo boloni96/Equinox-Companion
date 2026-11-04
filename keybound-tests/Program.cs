@@ -269,3 +269,11 @@ Check(!KeyboundUsePolicy.NeedsUnlockData("brawler-top",false,3),"gear uses owner
 Check(!KeyboundUsePolicy.NeedsUnlockData("framer",true,3),"confirmed ownership does not wait on unlock data");
 Check(KeyboundUsePolicy.NeedsUnlockData("framer",false,3),"unresolved collectible blocks duplicate spending");
 Check(KeyboundUsePolicy.RetryPlan(false,true)&&!KeyboundUsePolicy.RetryPlan(false,false)&&!KeyboundUsePolicy.RetryPlan(true,true),"only pending data retries; permanent errors retain verification stop");
+
+Check(KeyboundPolicy.CanCloseRegistration(true,10,10,true,false,false),"owned registration closes at farming handoff");
+Check(!KeyboundPolicy.CanCloseRegistration(false,10,10,true,false,false),"manual registration is preserved");
+Check(!KeyboundPolicy.CanCloseRegistration(true,10,11,true,false,false),"another character's window is preserved");
+Check(!KeyboundPolicy.CanCloseRegistration(true,10,10,true,true,false),"existing queue is not cancelled by stop cleanup");
+Check(!KeyboundPolicy.CanCloseRegistration(true,10,10,true,false,true),"active round is not closed by registration cleanup");
+Check(!KeyboundPolicy.FarmingStoppedUnexpectedly(true,false,false),"goal reached may transition to shopping after typing stops");
+Check(KeyboundPolicy.FarmingStoppedUnexpectedly(true,false,true),"real stopped farming remains an error while more MGC is needed");
