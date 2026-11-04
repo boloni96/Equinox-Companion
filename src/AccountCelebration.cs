@@ -17,14 +17,19 @@ public sealed partial class Plugin
     private void ResetCelebrationScope()
     {
         if(accountCelebrationPairing==config.PairingKey)return;
-        accountCelebrationPairing=config.PairingKey;accountCelebrationObserved.Clear();accountCelebrations.Clear();accountCelebration=null;eventCelebrationNext=default;
+        accountCelebrationPairing=config.PairingKey;accountCelebrationObserved.Clear();accountCelebrations.Clear();accountCelebration=null;completedEventCelebration=null;eventCelebrationStatus="Waiting for account completion data.";eventCelebrationNext=default;
     }
-    private void QueueAccountCelebration(string identity,string account,string activity)
+    private void QueueAccountCelebration(string identity,string account,string activity,bool replay=false)
     {
         ResetCelebrationScope();
         var key=CelebrationKey(config.PairingKey+"|"+identity);
         config.AccountCelebrationsShown??=[];
-        if(config.AccountCelebrationsShown.Contains(key)||accountCelebration?.Key==key||accountCelebrations.Any(c=>c.Key==key))return;
+        config.AccountCompletionMessagesShown??=[];
+        if(!replay&&!config.AccountCompletionMessagesShown.Contains(key)){
+            PrintEquinox(AccountCelebrationPolicy.CompletionMessage(account,activity));
+            config.AccountCompletionMessagesShown=new(config.AccountCompletionMessagesShown){key};SaveConfiguration();
+        }
+        if(!replay&&config.AccountCelebrationsShown.Contains(key)||accountCelebration?.Key==key||accountCelebrations.Any(c=>c.Key==key))return;
         accountCelebrations.Enqueue((key,account,activity));
     }
     private void ObserveAccountFashionCompletion()
@@ -43,39 +48,51 @@ public sealed partial class Plugin
         var participants=tasks.Select(t=>AdventurePolicy.TaskCharacterId(t,characters)).ToHashSet();
         if(participants.Count>0)characters=characters.Where(c=>participants.Contains(c.Id)).ToArray();
         if(characters.Length==0)return;
-        var identity=$"fashion-account-v2|{person.Id}|{current.AccountId}|{FashionCompletion.Cycle(now):O}|"+string.Join(",",characters.Select(c=>c.Id).Order());
+        var identity=$"fashion-account-v3|{person.Id}|{current.AccountId}|{FashionCompletion.Cycle(now):O}|"+string.Join(",",characters.Select(c=>c.Id).Order());
         if(config.AccountCelebrationsShown?.Contains(CelebrationKey(config.PairingKey+"|"+identity))==true)return;
         var observations=DiscoveryReads().Kind("fashion.observed").ToArray();
         foreach(var c in characters){
             var actor=new Actor(c.ContentId,c.Name,0,0,c.World,c.World);
             if(!FashionCompletion.IsComplete(actor,observations,[person],now))return;
         }
-        QueueAccountCelebration(identity,current.Account,"Fashion Report");
+        QueueAccountCelebration(identity,person.Name+" / "+current.Account,$"Fashion Report (week of {FashionCompletion.Cycle(now):yyyy-MM-dd})");
     }
     private void CelebrateEventAccount()=>ObserveEventAccountCompletion();
     private unsafe void ObserveEventAccountCompletion()
     {
-        if(!Player.IsLoaded||keyboundBuying)return;
+        completedEventCelebration=null;
+        eventCelebrationStatus="Waiting for a linked character and account.";
+        if(!Player.IsLoaded)return;
+        if(keyboundBuying){eventCelebrationStatus="Waiting for buying / reward use to finish.";return;}
         var current=CurrentSharedCharacter();if(current==null||string.IsNullOrEmpty(current.AccountId))return;
         var person=(config.SharedRoster?.People??[]).SingleOrDefault(p=>p.Characters.Any(c=>c.Id==current.Id));
         if(person==null)return;
         // Wanted rewards define the account's event participants, independently of
         // which characters were selected for an automatic routine.
         var characters=person.Characters.Where(c=>c.AccountId==current.AccountId&&c.KeyboundWishlist?.Any(w=>w.Wanted)==true).DistinctBy(c=>c.Id).ToArray();
-        if(characters.Length==0)return;
-        var identity=$"keybound-5466-wishlist-v2|{person.Id}|{current.AccountId}|"+string.Join(",",characters.Select(c=>c.Id).Order());
-        if(config.AccountCelebrationsShown?.Contains(CelebrationKey(config.PairingKey+"|"+identity))==true)return;
+        if(characters.Length==0){eventCelebrationStatus="No wanted event rewards are selected for this account.";return;}
+        var identity=$"keybound-5466-wishlist-v3|{person.Id}|{current.AccountId}|"+string.Join(",",characters.Select(c=>c.Id).Order());
         var tasks=adventureBoards.SelectMany(b=>b.Stops).SelectMany(s=>s.Tasks).Where(t=>t.Rule?.Kind=="event"&&t.Rule.Quests?.Any(q=>QuestToolsPolicy.ShortId(q)==QuestToolsPolicy.KeywardBound)==true).ToArray();
-        var quests=DiscoveryReads().Kind("collection.observed").Where(e=>e.Collection?.Category=="quest").ToArray();
-        foreach(var c in characters){
-            var quest=c.Id==current.Id?QuestManager.IsQuestComplete(QuestToolsPolicy.KeywardBound):
-                tasks.Any(t=>t.Done&&t.ServerConfirmed&&AdventurePolicy.TaskCharacterId(t,characters)==c.Id)||
-                (!string.IsNullOrEmpty(c.ContentId)&&quests.Any(e=>e.Actor.ContentId==c.ContentId&&e.Collection!.Unlocked.Any(q=>QuestToolsPolicy.ShortId(q)==QuestToolsPolicy.KeywardBound)));
-            if(!AccountCelebrationPolicy.EventGoalComplete(quest,c.KeyboundWishlist?.Select(w=>(w.Wanted,w.Obtained))))return;
-        }
+        try{
+            LoadKeyboundOffers();keyboundPurchases!.Reload();
+            config.EventCelebrationEvidence??=[];
+            var pending=new List<string>();var done=0;
+            foreach(var c in characters){
+                var evidence=ReadEventCelebrationEvidence(c,current,tasks);
+                var missing=c.KeyboundWishlist!.Where(w=>w.Wanted&&!AccountCelebrationPolicy.RewardComplete(w.Obtained,
+                    keyboundOffers!.Any(o=>o.Key==KeyboundShoppingPolicy.PrizeKey(w.Name)&&evidence.Items.Contains(o.Item)))).ToArray();
+                if(!evidence.QuestComplete)pending.Add(c.Name+": event quest completion not confirmed");
+                if(missing.Length>0)pending.Add(c.Name+": "+missing.Length+" reward(s) not confirmed ("+string.Join(", ",missing.Take(2).Select(w=>w.Name))+")");
+                if(evidence.QuestComplete&&missing.Length==0)done++;
+            }
+            eventCelebrationStatus=$"{current.Account}: {done}/{characters.Length} event characters complete.";
+            if(pending.Count>0){eventCelebrationStatus+="\n"+string.Join("\n",pending.Take(6));if(pending.Count>6)eventCelebrationStatus+="\nMore characters still need confirmation.";return;}
+        }catch(Exception e){eventCelebrationStatus="Completion check is waiting: "+e.Message;return;}
+        completedEventCelebration=(identity,person.Name+" / "+current.Account);
+        eventCelebrationStatus+=" Good Job is ready; it waits until this game client is in front. You can replay it below.";
         // Catch up once when the first synchronized observation is already complete.
         // The durable shown key prevents repeating this on login or every poll.
-        QueueAccountCelebration(identity,current.Account,"Keybound Brawler + reward list");
+        QueueAccountCelebration(identity,person.Name+" / "+current.Account,"Keybound Brawler + reward list");
     }
     private void DrawAccountCelebration()
     {
@@ -93,10 +110,13 @@ public sealed partial class Plugin
         if(accountCelebration is null){if(accountCelebrations.Count==0)return;accountCelebration=accountCelebrations.Dequeue();accountCelebrationElapsed=0;}
         var image=Textures.GetFromFile(Path.Combine(Pi.AssemblyLocation.DirectoryName!,"goddess-complete.png")).GetWrapOrDefault();
         if(image==null)return; // Do not spend the display time while the texture loads.
-        accountCelebrationElapsed+=delta;
+        var focused=ShortcutKeyboard.OwnGameFocused();
+        accountCelebrationElapsed+=AccountCelebrationPolicy.VisibleDelta(delta,focused,true,image!=null);
+        if(!focused)return; // A background client must not consume the celebration.
+
         if(accountCelebrationElapsed>=AccountCelebrationPolicy.DurationSeconds){
             config.AccountCelebrationsShown??=[];
-            if(config.AccountCelebrationsShown.Add(accountCelebration.Value.Key))SaveConfiguration();
+            if(!config.AccountCelebrationsShown.Contains(accountCelebration.Value.Key)){config.AccountCelebrationsShown=new(config.AccountCelebrationsShown){accountCelebration.Value.Key};SaveConfiguration();}
             accountCelebration=null;return;
         }
         var alpha=AccountCelebrationPolicy.Alpha(accountCelebrationElapsed);if(alpha<=0)return;

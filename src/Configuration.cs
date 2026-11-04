@@ -6,6 +6,8 @@ public sealed class Configuration : IPluginConfiguration
     public int QuestLevelingTarget { get; set; }
     public bool QuestLeveling { get; set; }
     public bool QuestLevelingIncludeMsq { get; set; } = true;
+    public Dictionary<string,AccountEventEvidence> EventCelebrationEvidence { get; set; } = [];
+    public HashSet<string> AccountCompletionMessagesShown { get; set; } = [];
     public HashSet<string> AccountCelebrationsShown { get; set; } = [];
     public Dictionary<ulong,OrganizerDresserSnapshot> OrganizerDresserSnapshots { get; set; } = [];
     public bool ProtectOrganizerGearSets { get; set; } = true;

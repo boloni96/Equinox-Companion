@@ -79,6 +79,7 @@ public sealed partial class Plugin
         }
         if(ImGui.IsItemHovered())ImGui.SetTooltip("Show the account event routine below. Enabling this does not start it; choose characters and press Start selected characters.");
         }
+        DrawEventCelebrationStatus();
         if(config.KeyboundUseRoutines)DrawEventAccount();
     }
     private void DrawKeyboundHelp()

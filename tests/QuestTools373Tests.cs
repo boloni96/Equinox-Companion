@@ -54,6 +54,13 @@ internal static class QuestTools373Tests
         Check("empty selection is not an account achievement",!AccountCelebrationPolicy.EventGoalComplete(true,new[]{(false,true)}));
         Check("missing wanted reward blocks celebration",!AccountCelebrationPolicy.EventGoalComplete(true,new[]{(true,true),(true,false)}));
         Check("unwanted rewards do not block celebration",AccountCelebrationPolicy.EventGoalComplete(true,new[]{(true,true),(false,false)}));
+        Check("event chat names account and wishlist completion",AccountCelebrationPolicy.CompletionMessage("Sir / ALT","Keybound Brawler + reward list").Contains("Sir / ALT: Keybound Brawler")&&AccountCelebrationPolicy.CompletionMessage("Sir / ALT","Keybound Brawler + reward list").Contains("all wishlist rewards obtained"));
+        Check("fashion chat identifies week",AccountCelebrationPolicy.CompletionMessage("Equinox / MAIN","Fashion Report (week of 2026-11-03)").Contains("Fashion Report (week of 2026-11-03)"));
+        Check("local ownership fills delayed Journal marks",AccountCelebrationPolicy.RewardComplete(false,true));
+        Check("unknown reward evidence stays pending",!AccountCelebrationPolicy.RewardComplete(false,false));
+        Check("background client cannot consume celebration",AccountCelebrationPolicy.VisibleDelta(.1,false,true,true)==0);
+        Check("unloaded texture cannot consume celebration",AccountCelebrationPolicy.VisibleDelta(.1,true,true,false)==0);
+        Check("focused display consumes actual frame time",AccountCelebrationPolicy.VisibleDelta(.05,true,true,true)==.05);
         Check("five second fade",AccountCelebrationPolicy.Alpha(0)==0&&AccountCelebrationPolicy.Alpha(.25)==.5f&&AccountCelebrationPolicy.Alpha(1)==1&&AccountCelebrationPolicy.Alpha(3)==1&&AccountCelebrationPolicy.Alpha(4.625)==.5f&&AccountCelebrationPolicy.Alpha(5)==0);
         Check("accept may use entrance shard",NativeEventPolicy.EntranceShortcut(NativeEventStep.Accept,false));
         Check("square step never uses entrance shard",!NativeEventPolicy.EntranceShortcut(NativeEventStep.EnterSquare,false));
