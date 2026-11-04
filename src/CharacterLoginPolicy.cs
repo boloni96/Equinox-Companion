@@ -5,6 +5,12 @@ internal enum CharacterLoginAction { Wait, Proceed, Confirm, CheckList, Identify
 
 public static class CharacterLoginPolicy
 {
+    // MAIN/ALT labels describe slots only within an already verified shared login.
+    // An ALT on another email may itself use slot 1.
+    internal static int DefaultServiceSlot(string account,CharacterLoginRelationship relationship) =>
+        relationship!=CharacterLoginRelationship.SameSquareEnixLogin?-1:
+        account.Trim().ToUpperInvariant() switch {"MAIN"=>0,"ALT"=>1,_=>-1};
+
     public static string Label(bool loaded) => loaded ? "Switch to this character" : "Log in as this character";
 
     internal static CharacterLoginAction InitialAction(CharacterLoginMode mode,
