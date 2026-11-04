@@ -101,7 +101,7 @@ public sealed partial class Plugin
             var reason=IndependentStepPolicy.Review(step);if(reason.Length>0){StopIndependentQuest(reason,true);return;}
             if(IndependentSkip(step,"StepIf")){NextIndependentStep(now);return;}
             if(step.TryGetProperty("CompletionQuestVariablesFlags",out var flags)&&IndependentStepPolicy.CompletedFlags(flags,IndependentWork())){NextIndependentStep(now);return;}
-            if(now-independentStepSince>TimeSpan.FromMinutes(4))throw new InvalidOperationException("Quest step timed out: "+questToolsStatus);
+            if(now-independentStepSince>TimeSpan.FromMinutes(15))throw new InvalidOperationException("Quest step timed out: "+questToolsStatus);
             questToolsStatus=$"{QuestTitle(independentQuestId)} · sequence {sequence}, step {independentStep+1}/{steps.GetArrayLength()} · {kind}";
             if(UpdateOwnedQuestCutscene(now,false,()=>IndependentQuestDialogue(step,kind,now)))return;
             if(IndependentQuestDialogue(step,kind,now))return;
@@ -123,7 +123,7 @@ public sealed partial class Plugin
             if(position==null&&step.TryGetProperty("Position",out var p))position=new(p.GetProperty("X").GetSingle(),p.GetProperty("Y").GetSingle(),p.GetProperty("Z").GetSingle());
             var range=kind=="WalkTo"?.35f:2.5f;
             if(step.TryGetProperty("StopDistance",out var dist))range=Math.Clamp(dist.GetSingle(),.25f,5);
-            if(position is {} goal&&!IndependentWalk(goal,range,now)){questToolsStatus+=" · "+independentWalkStatus;return;}
+            if(position is {} goal&&!IndependentWalk(goal,range,now,!step.TryGetProperty("Fly",out var flightPreference)||flightPreference.ValueKind!=JsonValueKind.False,step.TryGetProperty("Fly",out var requestedFlight)&&requestedFlight.ValueKind==JsonValueKind.True)){questToolsStatus+=" · "+independentWalkStatus;return;}
             if(kind is "None" or "WalkTo"){NextIndependentStep(now);return;}
             if(kind=="WaitForNpcAtPosition"){if(npc!=null)NextIndependentStep(now);return;}
             if(kind is "AcceptQuest" or "CompleteQuest" or "Interact"){

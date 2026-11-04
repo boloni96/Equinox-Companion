@@ -29,3 +29,6 @@ Ground movement adapter: native walking callback ABI and movement-enable signatu
 references from https://github.com/awgil/ffxiv_navmesh/blob/master/vnavmesh/Movement/OverrideMovement.cs .
 Only native interface facts are used; Companion implements its own short-lived,
 ground-only forward adapter and retains its own planner and stop conditions.
+
+Quest leveling base XP formula reference: https://github.com/xivapi/ffxiv-datamining/blob/master/docs/QuestExpReward.md
+Independent flight-input ABI reference: https://github.com/awgil/ffxiv_navmesh/blob/master/vnavmesh/Movement/OverrideMovement.cs

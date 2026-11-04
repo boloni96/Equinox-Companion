@@ -146,6 +146,48 @@ Check(longRoute.Path!=null&&longRoute.Path.Length>160,"ground route spans former
 var stairs=new CollisionRouteSearch(new StairCollision(),Vector3.Zero,new(5,4.5f,0),.3f);
 for(var i=0;i<100&&!stairs.Finished;i++)stairs.Advance(100,10000);
 Check(stairs.Path!=null&&MathF.Abs(stairs.Path[^1].Y-4.5f)<.1f,"stair endpoint above first ground probe remains reachable through verified edges");
+// Navigation expansion, route stitching, progress recovery and flight regression cases.
+var extended=new CollisionRouteSearch(new OpenCollision(),Vector3.Zero,new(600,0,0),1);
+for(var i=0;i<100&&!extended.Finished;i++)extended.Advance(100,10000);
+Check(extended.Path!=null,"ground navigation exceeds the former 512-yalm cap");
+var networkRoutes=new[]{new RememberedWalkingRoute(1,new(3,0,0),1,[new(0,0,0),new(1,0,0),new(2,0,0),new(3,0,0)]),new RememberedWalkingRoute(1,new(3,0,3),1,[new(3,0,0),new(3,0,1),new(3,0,2),new(3,0,3)])};
+var stitched=WalkingRouteNetwork.Find(networkRoutes,1,Vector3.Zero,new(3,0,3),.5f,(a,b)=>Vector3.Distance(a,b)<.01f);
+Check(stitched!=null&&stitched.Any(p=>p==new Vector3(3,0,0)),"recorded routes stitch at shared samples without inventing a diagonal");
+Check(WalkingRouteNetwork.Find(networkRoutes,2,Vector3.Zero,new(3,0,3),.5f,(a,b)=>true)==null,"route network does not cross territories");
+Check(WalkingRouteNetwork.Find(networkRoutes,1,new(0,8,0),new(3,0,3),.5f,(a,b)=>true)==null,"overlapping upper floor is not a route join");
+var recovery=new WalkingRecoveryBudget();
+Check(recovery.Try(Vector3.Zero)&&recovery.Try(Vector3.Zero)&&recovery.Try(Vector3.Zero)&&recovery.Try(Vector3.Zero)&&!recovery.Try(Vector3.Zero),"recovery stops after four failures at the same obstruction");
+Check(recovery.Try(new(10,0,0)),"meaningful movement restores recovery budget for a different obstacle");
+Check(FlightNavigationPolicy.Prefer(true,true,false,100),"long unlocked routes prefer flight");
+Check(!FlightNavigationPolicy.Prefer(false,true,true,100),"flight request cannot override unlock restrictions");
+Check(!FlightNavigationPolicy.Prefer(true,false,true,100),"explicit ground preference remains ground");
+Check(!FlightNavigationPolicy.CanSupply(0,0,.1f,0)&&!FlightNavigationPolicy.CanSupply(float.NaN,0,0,0),"manual vertical input and invalid input are never overwritten");
+Check(!FlightNavigationPolicy.Arrived(new(0,5,0),Vector3.Zero,2),"above destination is not a confirmed landing");
+var air=new FlightRouteSearch(new AirObstacle(),new(0,4,0),new(16,4,0));
+for(var i=0;i<100&&air.Path==null&&air.Error.Length==0;i++)air.Advance(100,10000);
+Check(air.Path!=null&&air.Path.Zip(air.Path.Skip(1)).All(p=>new AirObstacle().Clear(p.First,p.Second)),"flight detours around a solid obstacle with every edge checked");
+var sealedAir=new FlightRouteSearch(new NoAir(),Vector3.Zero,new(12,0,0));sealedAir.Advance(100,10000);
+Check(sealedAir.Path==null&&sealedAir.Error.Length>0,"blocked flight never falls back to unchecked straight movement");
+Console.WriteLine("Extended ground maps, recovery and flight policy checks passed.");
+using(var levelingRoute=System.Text.Json.JsonDocument.Parse("""
+{"QuestSequence":[{"Sequence":0,"Steps":[{"InteractionType":"Interact"}]},{"Sequence":1,"Steps":[{"InteractionType":"Combat"}]},{"Sequence":255,"Steps":[{"InteractionType":"CompleteQuest"}]}]}
+""")){
+    var start=QuestLevelingPolicy.Assess(levelingRoute.RootElement,0);
+    Check(start.SupportedNow&&!start.FullySupported,"leveling can progress MSQ until manual combat");
+    Check(!QuestLevelingPolicy.Assess(levelingRoute.RootElement,1).SupportedNow,"leveling skips a current combat step");
+    Check(QuestLevelingPolicy.Assess(levelingRoute.RootElement,255).FullySupported,"completed manual combat allows turn-in");
+    Check(!QuestLevelingPolicy.Assess(levelingRoute.RootElement,42).SupportedNow,"unknown sequence cannot be selected for leveling");
+}
+var starter=new QuestLevelingCandidate(1,100,5,[]);
+var followup=new QuestLevelingCandidate(2,10000,5,[1]);
+Check(QuestLevelingPolicy.Score(starter,[starter,followup],_=>false)>1000,"leveling values a starter unlocking a strong automatic follow-up");
+var lockedFollowup=followup with { Previous=[1,3] };
+Check(QuestLevelingPolicy.Score(starter,[starter,lockedFollowup],_=>false)==20,"unmet extra prerequisites do not inflate starter XP score");
+Console.WriteLine("Quest leveling route suitability and chain scoring passed.");
+sealed class NoAir:IFlightCollision {public bool Clear(Vector3 a,Vector3 b)=>false;}
+sealed class AirObstacle:IFlightCollision {
+ public bool Clear(Vector3 a,Vector3 b){for(var i=0;i<=40;i++){var p=Vector3.Lerp(a,b,i/40f);if(p.X>5&&p.X<11&&MathF.Abs(p.Z)<3&&p.Y<10)return false;}return true;}
+}
 sealed class StairCollision:IWalkingCollision {
  public bool Ground(Vector3 p,out Vector3 ground){ground=new(p.X,.9f*p.X,p.Z);return p.X>=0&&p.X<=5&&MathF.Abs(p.Z)<.1f&&MathF.Abs(p.Y-ground.Y)<=.7f;}
  public bool Traverse(Vector3 a,Vector3 b)=>Vector3.Distance(a,b)<1.5f;

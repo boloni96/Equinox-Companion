@@ -15,10 +15,11 @@ public sealed partial class Plugin
     {
         if(now<workBarNext)return;workBarNext=now.AddMilliseconds(250);
         workBar??=QuickLootBar.Get("Equinox Work");
-        workBar.Shown=Player.IsLoaded&&(independentSearch!=null||independentPath!=null);
+        workBar.Shown=Player.IsLoaded&&(FlightActive||independentSearch!=null||independentPath!=null);
         var tone="working";navigationPhase="Ready";navigationDetail="Navigation system ready; no active route.";
-        if(independentSearch!=null||independentPath!=null){
-            if(!GameWalkingCollision.Available()){navigationPhase="Reading geometry";tone="waiting";}
+        if(FlightActive||independentSearch!=null||independentPath!=null){
+            if(FlightActive){navigationPhase=flightPhase=="plan"?"Calculating flight":flightPhase=="cruise"?"Flying":flightPhase=="land"?"Landing":flightPhase=="mount"?"Mounting":flightPhase=="takeoff"?"Taking off":"Dismounting";tone="working";}
+            else if(!GameWalkingCollision.Available()){navigationPhase="Reading geometry";tone="waiting";}
             else if(independentSearch!=null){navigationPhase="Calculating";tone="waiting";}
             else if(!independentMoving){navigationPhase="Paused";tone="waiting";}
             else navigationPhase=independentPositionChanged?"Walking":"Ready to move";
@@ -37,7 +38,7 @@ public sealed partial class Plugin
         ImGui.TextUnformatted("Navigation system · "+navigationPhase);
         ImGui.TextWrapped(navigationDetail);
         ImGui.Separator();
-        ImGui.TextUnformatted("Local ground geometry · collision-checked routes");
+        ImGui.TextUnformatted("Ground and flight · collision-checked routes");
         if(independentNavigationRun.Length>0){
             ImGui.TextUnformatted($"Areas checked: {independentSearch?.Expanded??independentLastExpanded:N0}");
             ImGui.TextUnformatted($"Calculation: {independentPlanningSeconds:F1} seconds");
@@ -46,7 +47,7 @@ public sealed partial class Plugin
             ImGui.TextDisabled($"Territory {independentTerritory} · destination {independentGoal.X:F1}, {independentGoal.Y:F1}, {independentGoal.Z:F1}");
         }
         ImGui.TextWrapped("The camera stays under your control. Nearby route points are skipped only after a live collision check. Planning caches are local to one search; walking checks the route again.");
-        ImGui.BeginDisabled(independentSearch==null&&independentPath==null);
+        ImGui.BeginDisabled(!FlightActive&&independentSearch==null&&independentPath==null);
         if(ImGui.Button("Stop current navigation")){
             if(eventAccountActive)StopEventAccount("Navigation stopped by you.");
             else if(nativeEventActive)StopNativeEventQuest("Navigation stopped by you.");
