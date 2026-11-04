@@ -26,7 +26,8 @@ public sealed partial class Plugin
     {
         if(keyboundEnabled)TraceKeyboundRun(keyboundTypingRun,"typing-stopped",reason,reason=="Stopped by you."?"user-button":"system");
         keyboundLastSubmitted=keyboundPendingSubmission="";keyboundRecallTried=keyboundRecalling=keyboundClearing=false;
-        keyboundQueueOwned=false;keyboundRegistrarOwned=false;keyboundSubmitAt=default;
+        try{CloseOwnedKeyboundRegistration();}catch(Exception e){Log.Warning(e,"Could not close owned Keybound registration");}
+        keyboundQueueOwned=false;keyboundRegistrarOwned=false;keyboundRegistrarCharacter=0;keyboundSubmitAt=default;
         keyboundEnabled=false;keyboundSeen=false;keyboundAwaiting=false;keyboundWord=keyboundSent=keyboundExpected="";keyboundTarget=0;keyboundRecent.Clear();keyboundOpenAttempts=0;keyboundStatus=reason;
     }
     private void DrawKeyboundHelper()

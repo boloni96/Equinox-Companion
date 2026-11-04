@@ -199,12 +199,12 @@ public sealed partial class Plugin
                 if(keyboundMissingPlan==null||keyboundMissingPlan.Count>0||keyboundUseReady>0||keyboundHeldRewards.Count>0)
                     throw new InvalidOperationException("Purchases/use need attention: "+keyboundBuyStatus);
             }
-            if(eventAccountFarmStarted&&!keyboundEnabled)throw new InvalidOperationException("Event farming stopped: "+keyboundStatus);
             RefreshKeyboundBuyPlan();
             if(WaitEventRewardData(now))return;
             var decision=QuestToolsPolicy.Next(true,keyboundMissingPlan!=null,keyboundMissingPlan==null?0:KeyboundShoppingPolicy.Total(keyboundMissingPlan),
                 KeyboundWallet(),keyboundUseReady,keyboundHeldRewards.Count);
             if(decision==EventRoutineAction.Verify)throw new InvalidOperationException(keyboundPlanError.Length>0?keyboundPlanError:"Purchases are held for verification; no duplicate was bought.");
+            if(KeyboundPolicy.FarmingStoppedUnexpectedly(eventAccountFarmStarted,keyboundEnabled,decision==EventRoutineAction.Farm))throw new InvalidOperationException("Event farming stopped: "+keyboundStatus);
             if(decision==EventRoutineAction.Next){
                 BeginEventReturnHome(now);return;
             }

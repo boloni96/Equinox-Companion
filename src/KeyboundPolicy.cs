@@ -1,6 +1,9 @@
 namespace EquinoxCompanion;
 public static class KeyboundPolicy
 {
+    public static bool CanCloseRegistration(bool owned,ulong owner,ulong current,bool visible,bool queued,bool inRound)=>
+        owned&&owner!=0&&owner==current&&visible&&!queued&&!inRound;
+    public static bool FarmingStoppedUnexpectedly(bool started,bool running,bool needsMoreMgc)=>started&&!running&&needsMoreMgc;
     // Unknown party identity must wait rather than registering as a follower.
     public static bool CanRegister(int members,long partyId,ulong localId,ulong leaderId)=>
         localId!=0&&((members<=1&&partyId==0)||(leaderId!=0&&localId==leaderId));
