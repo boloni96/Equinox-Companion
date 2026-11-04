@@ -85,7 +85,10 @@ public sealed partial class Plugin
         var available=lobby->LobbyData.LobbyUIClient.CurrentDataCenterWorlds;if(available.LongCount is <=0 or >32)return true;
         if(loginWorldPending!=0){if(lobby->WorldId!=loginWorldPending){if(now-loginWorldSentAt>TimeSpan.FromSeconds(15))throw new InvalidOperationException("World list change timed out; no login was requested.");return true;}loginWorldPending=0;loginWorldSample=lobby->WorldId;loginWorldStableAt=now;return true;}
         if(loginWorldSample!=lobby->WorldId){loginWorldSample=lobby->WorldId;loginWorldStableAt=now;return true;}
-        if(now-loginWorldStableAt<TimeSpan.FromSeconds(2))return true;
+        // Populated, ready lists can advance promptly. Empty/unready lists
+        // retain the longer settling window so loading is not mistaken for empty.
+        var populated=TryReadReadyLoginList(out var worldEntries)&&worldEntries.Length>0;
+        if(!CurrentLoginIdentification.WorldSettled(now-loginWorldStableAt,populated))return true;
         var module=FFXIVClientStructs.FFXIV.Client.UI.RaptureAtkModule.Instance();
         if(module==null||module->AtkArrayDataHolder.StringArrayCount<=1||module->AtkArrayDataHolder.StringArrays==null)return true;
         var menuStrings=module->AtkArrayDataHolder.StringArrays[1];
@@ -104,7 +107,7 @@ public sealed partial class Plugin
         loginWorldChecked.Add(lobby->WorldId);
         var next=worlds.Where(w=>!loginWorldChecked.Contains(w.Id)).OrderByDescending(w=>w.Priority).ThenBy(w=>w.Index).FirstOrDefault();
         if(next.Id==0)return false;
-        LoginCallback(addon,25,0,next.Index);loginWorldPending=next.Id;loginWorldSentAt=now;loginWorldChecked.Add(next.Id);loginWorldNext=now.AddSeconds(2);
+        LoginCallback(addon,25,0,next.Index);loginWorldPending=next.Id;loginWorldSentAt=now;loginWorldChecked.Add(next.Id);loginWorldNext=now.AddMilliseconds(500);
         characterTravelStatus="Checking "+next.Name+" on the selected service account…";return true;
     }
     private void CancelAssignedLogin(string reason)

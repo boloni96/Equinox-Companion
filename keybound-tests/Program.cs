@@ -259,3 +259,13 @@ Check(!KeyboundPolicy.CanRegister(0,42,10,0),"temporarily empty party list waits
 Check(!KeyboundPolicy.CanRegister(0,0,0,0),"missing local identity waits");
 Check(!KeyboundPolicy.CanRegister(4,42,10,20)&&KeyboundPolicy.CanRegister(4,42,10,10),"promotion permits next registration");
 Check(KeyboundPolicy.CanRegister(4,42,10,10)&&!KeyboundPolicy.CanRegister(4,42,10,20),"demotion blocks next registration");
+
+Check(KeyboundUsePolicy.ResolveUnlock(3,true)==1,"loaded collection prevents duplicate buying when generic unlock is unknown");
+Check(KeyboundUsePolicy.ResolveUnlock(3,false)==2,"loaded collection permits missing reward planning");
+Check(KeyboundUsePolicy.ResolveUnlock(3,null)==3,"unknown collection remains unknown");
+Check(KeyboundUsePolicy.ResolveUnlock(1,false)==1,"positive native unlock is preserved");
+Check(!KeyboundUsePolicy.NeedsUnlockData("coffer",false,3),"coffer has no collectible unlock requirement");
+Check(!KeyboundUsePolicy.NeedsUnlockData("brawler-top",false,3),"gear uses ownership rather than collectible unlock loading");
+Check(!KeyboundUsePolicy.NeedsUnlockData("framer",true,3),"confirmed ownership does not wait on unlock data");
+Check(KeyboundUsePolicy.NeedsUnlockData("framer",false,3),"unresolved collectible blocks duplicate spending");
+Check(KeyboundUsePolicy.RetryPlan(false,true)&&!KeyboundUsePolicy.RetryPlan(false,false)&&!KeyboundUsePolicy.RetryPlan(true,true),"only pending data retries; permanent errors retain verification stop");

@@ -55,6 +55,14 @@ public sealed partial class Plugin
   if(CharacterLoginPolicy.IdentifyThroughDataCenter(mode,action)){StartCurrentLoginIdentification(character);return;}
   if(action==CharacterLoginAction.Confirm){characterTravelStatus="Confirm that this character is available on the current Square Enix login. A different login needs its own game client.";return;}
   if(action==CharacterLoginAction.CheckList){StartTitleLoginCheck(character);return;}
+  if(mode==CharacterLoginMode.CharacterSelect){
+   var target=TitleLoginTarget(character.Id);
+   var ready=TryReadReadyLoginList(out var entries);
+   var matches=target==null?0:entries.Count(e=>!e.Locked&&CharacterLoginProbe.ExactCharacter(target,e));
+   if(CharacterLoginPolicy.NeedsListRouting(CurrentLoginServiceAccount(),RecordedCharacterServiceSlot(character),ready,matches)){
+    StartCurrentLoginIdentification(character,true);return;
+   }
+  }
   // Prefer the observed game identity over a manually decorated Journal name.
   var observed=config.Discoveries.LastOrDefault(e=>e.Actor.ContentId==character.ContentId)?.Actor;
   var name=observed?.Name??character.Name;var world=string.IsNullOrWhiteSpace(observed?.HomeWorldName)?character.World:observed.HomeWorldName;
@@ -65,7 +73,7 @@ public sealed partial class Plugin
     command=>Pi.GetIpcSubscriber<string,object>("Lifestream.ExecuteCommand").InvokeAction(command),
     (n,w)=>Pi.GetIpcSubscriber<string,string,bool>("Lifestream.ConnectAndLogin").InvokeFunc(n,w),
     (n,w)=>Pi.GetIpcSubscriber<string,string,bool>("Lifestream.InitiateLoginFromCharaSelectScreen").InvokeFunc(n,w));
-   if(!accepted){characterTravelStatus=mode==CharacterLoginMode.CharacterSelect?"Lifestream could not find this character in the current list. Return to the title screen and choose Log in as this character again.":"Lifestream could not start login from this screen. Wait for the title menu and try again.";return;}
+   if(!accepted){characterTravelStatus=mode==CharacterLoginMode.CharacterSelect?"Lifestream could not find "+name+" @ "+world+" in the currently loaded character list. Target remains "+to.PersonName+" / "+to.AccountName+". Return to the game title screen (not your MAIN account), then choose Log in as this character again so the service account and world can be checked.":"Lifestream could not start login from this screen. Wait for the title menu and try again.";return;}
    characterSwitchFrom=mode==CharacterLoginMode.InGame?Player.ContentId:0;characterSwitchTarget=character;characterSwitchUntil=DateTimeOffset.UtcNow.AddMinutes(5);
    characterTravelStatus=$"{(mode==CharacterLoginMode.InGame?"Switch":"Login")} requested: {name} @ {world}. Lifestream uses this game login and its service-account settings.";
    PrintEquinox("[Equinox] "+characterTravelStatus);

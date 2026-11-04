@@ -9,7 +9,7 @@ public sealed partial class Plugin
     private readonly Queue<int> loginUncheckedAccounts=[];
     private bool loginDiscoverAccounts,loginReturnForAccount,loginAccountReturnSent;
     private void ResetServiceAccountDiscovery(){loginUncheckedAccounts.Clear();loginDiscoverAccounts=loginReturnForAccount=loginAccountReturnSent=false;}
-    private void StartCurrentLoginIdentification(SharedCharacter character)
+    private void StartCurrentLoginIdentification(SharedCharacter character,bool fromCharacterSelect=false)
     {
         var now = DateTimeOffset.UtcNow;
         if (titleLoginProbe.Active || now < characterSwitchUntil || followSession.Armed || shoppingTravel is not null || bringTrip is not null) return;
@@ -17,7 +17,9 @@ public sealed partial class Plugin
         var from = CurrentCharacterSwitchScope(mode, true);
         var to = CharacterSwitchScope(character.Id);
         var action = CharacterLoginPolicy.InitialAction(mode, LoginRelationship(character, from, to), from.PersonId.Length > 0 && from.AccountId.Length > 0);
-        if (!CharacterLoginPolicy.IdentifyThroughDataCenter(mode, action)
+        var selectionRoute=fromCharacterSelect&&mode==CharacterLoginMode.CharacterSelect&&
+            CharacterLoginPolicy.Action(mode,LoginRelationship(character,from,to),true,CharacterSwitchConsentCurrent(character,from,to))==CharacterLoginAction.Proceed;
+        if ((!CharacterLoginPolicy.IdentifyThroughDataCenter(mode, action)&&!selectionRoute)
                 || Player.IsLoaded || Client.IsLoggedIn || LifestreamBusy()) return;
         var target = TitleLoginTarget(character.Id);
         if (target is null || !titleLoginProbe.Begin(target, config.PairingKey, now))
@@ -30,6 +32,11 @@ public sealed partial class Plugin
         characterTravelStatusOwner = character.Id;
         try
         {
+            if(selectionRoute){
+                loginReturnForAccount=true;loginAccountReturnSent=false;
+                characterTravelStatus="Preparing "+to.PersonName+" / "+to.AccountName+" for "+target.Name+" · returning to the title screen to select its account and world.";
+                return;
+            }
             // Open Data Center explicitly, then select the target's recorded account slot.
             if (!VisibleFollowAddon("SelectString") && (VisibleFollowAddon("TitleDCWorldMap") || VisibleFollowAddon("TitleConnect") || !ClickLoginMenuButton("_TitleMenu", 5)))
             { StopTitleLoginCheck("Wait for the main title menu, then choose Log in as this character again."); return; }

@@ -15,6 +15,9 @@ internal sealed class CurrentLoginIdentification
         key.Length == 64 && key.All(char.IsAsciiHexDigit)
             && indices.TryGetValue(key, out var index) && index is >= 0 and <= 15 ? index : -1;
 
+    public static bool WorldSettled(TimeSpan elapsed,bool populatedReady)=>
+        elapsed>=TimeSpan.FromMilliseconds(populatedReady?500:2000);
+
     public static int WorldMenuIndex(IReadOnlyList<string> names,string world)
     {
         var match=-1;

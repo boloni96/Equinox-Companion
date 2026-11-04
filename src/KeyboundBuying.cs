@@ -29,6 +29,7 @@ public sealed partial class Plugin
     private readonly HashSet<uint> keyboundOwned=[];
     private Dictionary<string,int>? keyboundMissingPlan;
     private string keyboundPlanError="";
+    private bool keyboundPlanDataPending;
     private readonly HashSet<string> keyboundHeldRewards=[];
     private Dictionary<string,int>? keyboundReadyPlan;
     private int keyboundBought,keyboundGreetingCount;
@@ -49,7 +50,7 @@ public sealed partial class Plugin
     }
     private unsafe void RefreshKeyboundBuyPlan()
     {
-        keyboundUseCandidates.Clear();keyboundUseReady=0;keyboundMissingPlan=null;keyboundReadyPlan=null;keyboundPlanError="";keyboundHeldRewards.Clear();
+        keyboundUseCandidates.Clear();keyboundUseReady=0;keyboundMissingPlan=null;keyboundReadyPlan=null;keyboundPlanError="";keyboundPlanDataPending=false;keyboundHeldRewards.Clear();
         try{
             if(!Client.IsLoggedIn||!Player.IsLoaded||Player.ContentId==0)return;
             LoadKeyboundOffers();keyboundPurchases!.Reload();var character=Player.ContentId;keyboundOwned.Clear();
@@ -68,7 +69,7 @@ public sealed partial class Plugin
             var wanted=new Dictionary<string,int>();
             foreach(var offer in keyboundOffers!){
                 var receipt=keyboundPurchases!.Find(character,offer.Item);
-                var row=ExdModule.GetItemRowById(offer.Item);var unlocked=row==null?3:state->IsItemActionUnlocked(row);
+                var unlocked=KeyboundUnlockState(offer.Item);
                 var owned=ArmoireInventory(offer.Item).Held>0||unlocked==1||observed.Contains(offer.Item)||receipt?.Confirmed==true||
                     wishes?.Any(w=>w.Obtained&&KeyboundShoppingPolicy.PrizeKey(w.Name)==offer.Key)==true;
                 if(!owned&&armoireRows!.TryGetValue(offer.Item,out var cabinet)&&state->Cabinet.IsCabinetLoaded())owned=state->Cabinet.IsItemInCabinet(cabinet);
@@ -85,7 +86,10 @@ public sealed partial class Plugin
                 }
                 if(KeyboundShoppingPolicy.Quantity(plan,offer.Key)>0&&!owned){
                     if(!KeyboundBuyingPolicy.CanSelect(receipt,KeyboundWallet(),ArmoireInventory(offer.Item).Held)&&!(receipt!=null&&CanResumeKeyboundPurchase(offer,receipt,out _,out _)))keyboundHeldRewards.Add(offer.Key);
-                    if(unlocked==3)throw new InvalidOperationException("Waiting for reward unlock information.");
+                    if(KeyboundUsePolicy.NeedsUnlockData(offer.Key,owned,unlocked)){
+                        keyboundPlanDataPending=true;keyboundCollectionRefreshItems.Add(offer.Item);
+                        throw new InvalidOperationException("Waiting for reward unlock information: "+offer.Name+" · rechecking automatically.");
+                    }
                     wanted[offer.Key]=1;
                 }
             }
