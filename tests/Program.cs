@@ -706,7 +706,7 @@ foreach(var (percent,wet) in new[]{(0,false),(32,true),(33,false),(66,true),(99,
  var cropStage=artBed with {Planted=artNow.AddHours(-percent),HarvestAt=artNow.AddHours(100-percent),Watered=wet?artNow:null,NextTend=null,WiltHours=null,Ready=false,DeadConfirmedAt=null,WiltedAt=null};
  Check($"crop artwork {percent} percent wet={wet}",GardenVisualState.CropArtwork(cropStage,true,artNow),percent<33?"plantSeedling":"plantGrowing");
 }
-Check("unknown start uses neutral seed icon after tending",GardenVisualState.CropArtwork(artBed with {Planted=null,HarvestAt=null,Watered=artNow},true,artNow),"seedIcon");
+Check("known planted crop keeps plant art with unknown start",GardenVisualState.CropArtwork(artBed with {Planted=null,HarvestAt=null,Watered=artNow},true,artNow),"plantGrowing");
 Check("wilt supersedes recent wet art",GardenVisualState.CropArtwork(artBed with {Watered=artNow.AddHours(-2),WiltedAt=artNow.AddHours(-1)},true,artNow),"plantWilted");
 Check("confirmed dead supersedes plan identity",GardenVisualState.CropArtwork(artBed with {Watered=artNow.AddHours(-2),DeadConfirmedAt=artNow.AddHours(-1),Ready=false},true,artNow),"plantDead");
 

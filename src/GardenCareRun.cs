@@ -17,11 +17,12 @@ public static class GardenCarePolicy
         var required=(plan.Definition?.Steps??[]).Where(s=>s.Neighbour==bed.Bed && plan.Beds.FirstOrDefault(b=>b.Bed==s.Bed)?.Status!="confirmed").Select(s=>s.Bed).Distinct().ToArray();
         return required.Length>0?"Needed beside Bed "+string.Join(", ",required)+" until its planting is confirmed.":"";
     }
+    public static bool MatureForCare(SharedGardenBed bed,DateTimeOffset now) => GardenVisualState.For(bed,false,now) is "ready" or "keep-mature" or "mature-estimated";
     public static bool Eligible(SharedGardenPlan plan,SharedGardenBed bed,GardenCareAction action,DateTimeOffset now,bool tendAll=false)
     {
         if(!GardenVisualState.HasActualCrop(bed)||bed.DeadConfirmedAt!=null||bed.Queued)return false;
-        if(action==GardenCareAction.Harvest)return Protection(plan,bed).Length==0 && (bed.Ready || GardenTiming.MaturityEstimateDue(bed.HarvestAt,bed.GrowingObservedAt,now));
-        if(bed.Ready || bed.KeepMature || GardenPlantRequirement.SuppressTending(bed))return false;
+        if(action==GardenCareAction.Harvest)return Protection(plan,bed).Length==0 && MatureForCare(bed,now);
+        if(MatureForCare(bed,now) || bed.KeepMature || GardenPlantRequirement.SuppressTending(bed))return false;
         return action==GardenCareAction.Tend ? tendAll&&bed.ObservedAt!=null||bed.NextTend==null||bed.NextTend<=now : bed.LastFertilized==null||now-bed.LastFertilized>=TimeSpan.FromHours(1);
     }
     public static string Certainty(SharedGardenBed bed) => bed.Ready?"Confirmed ready":bed.Planted==null?"Planting time unknown":bed.HarvestAt is {} at?$"Estimated maturity from {at.LocalDateTime:g} · check in game; actual readiness can be later":"Harvest timing unknown";
@@ -122,10 +123,8 @@ public static class GardenAutoPlant
         if(required.All(b=>b!.ActualCrop=="Empty"))return(true,null,[],"");
         var active=plan.Beds.Where(GardenVisualState.HasActualCrop).ToArray();
         var occupied=required.OfType<SharedGardenBed>().Where(b=>b.ActualCrop!="Empty").ToArray();
-        if(harvest&&active.Length>0&&active.All(b=>b.Ready)&&occupied.All(b=>GardenCarePolicy.Eligible(plan,b,GardenCareAction.Harvest,now)))
+        if(harvest&&active.Length>0&&active.All(b=>GardenCarePolicy.MatureForCare(b,now))&&occupied.All(b=>GardenCarePolicy.Eligible(plan,b,GardenCareAction.Harvest,now)))
             return(false,GardenCareAction.Harvest,occupied.Select(b=>b.Bed).ToArray(),"Harvesting ready crops before planting");
-        if(inspect&&harvest&&active.Any(b=>!b.Ready&&GardenTiming.MaturityEstimateDue(b.HarvestAt,b.GrowingObservedAt,now)))
-            return(false,GardenCareAction.Inspect,plan.Beds.Select(b=>b.Bed).ToArray(),"Checking whole-batch maturity before planting");
         var due=plan.Beds.Where(b=>GardenCarePolicy.Eligible(plan,b,GardenCareAction.Tend,now)).Select(b=>b.Bed).ToArray();
         if(tend&&due.Length>0)return(false,GardenCareAction.Tend,due,"Tending while waiting to plant");
         return(false,null,[],!harvest?"Enable Harvest full batches to clear ready crops before planting":
