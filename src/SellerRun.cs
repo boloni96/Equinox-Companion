@@ -7,6 +7,7 @@ public interface ISellerPort
     bool IsLevelOneOutfit(uint item)=>false;
     bool ContextMatches(ulong character,uint world);
     bool SelectRetainer(SellerRetainerRef retainer);
+    SellerPreparation ReadSaleHistory(ulong retainer)=>new(true);
     bool OpenMarket(ulong retainer);
     MarketStock[]? ReadStock(ulong retainer);
     bool OpenEditor(ulong retainer,MarketStock item);
@@ -22,7 +23,7 @@ public interface ISellerPort
 }
 public sealed class SellerRun(ISellerPort port)
 {
-    public enum Phase { Idle, Prepare, Select, OpenMarket, ReadStock, NextItem, OpenEditor, Compare, ReadComparison, Commit, Close }
+    public enum Phase { Idle, Prepare, Select, ReadHistory, OpenMarket, ReadStock, NextItem, OpenEditor, Compare, ReadComparison, Commit, Close }
     public Phase State { get; private set; }
     public bool Running => State!=Phase.Idle;
     public bool Paused { get; private set; }
@@ -68,7 +69,7 @@ public sealed class SellerRun(ISellerPort port)
         port.Release();
     }
     private static string Describe(Phase phase)=>phase switch {
-        Phase.Prepare=>"Pausing other retainer work",Phase.Select=>"Selecting retainer",Phase.OpenMarket=>"Opening selling list",Phase.ReadStock=>"Reading listings",Phase.NextItem=>"Choosing next listing",
+        Phase.Prepare=>"Pausing other retainer work",Phase.Select=>"Selecting retainer",Phase.ReadHistory=>"Reading retainer sale history",Phase.OpenMarket=>"Opening selling list",Phase.ReadStock=>"Reading listings",Phase.NextItem=>"Choosing next listing",
         Phase.OpenEditor=>"Opening price editor",Phase.Compare=>"Opening comparison",Phase.ReadComparison=>"Waiting for live prices",Phase.Commit=>"Waiting for confirmed price",Phase.Close=>"Returning to retainer list",_=>"Ready"
     };
     private void Move(Phase phase,DateTimeOffset now){State=phase;deadline=now.AddSeconds(phase==Phase.Prepare?45:25);next=now.AddMilliseconds(500);Status=Describe(phase)+"…";}
@@ -101,7 +102,12 @@ public sealed class SellerRun(ISellerPort port)
                 if(preparation.Ready)Move(Phase.Select,now);else Status=preparation.Status;
                 break;
             case Phase.Select:
-                if(port.SelectRetainer(retainer))Move(Phase.OpenMarket,now);break;
+                if(port.SelectRetainer(retainer))Move(Phase.ReadHistory,now);break;
+            case Phase.ReadHistory:
+                var history=port.ReadSaleHistory(retainer.Id);
+                if(history.Error.Length>0){Stop(history.Error);break;}
+                if(history.Ready)Move(Phase.OpenMarket,now);else if(history.Status.Length>0)Status=history.Status;
+                break;
             case Phase.OpenMarket:
                 if(port.OpenMarket(retainer.Id))Move(Phase.ReadStock,now);break;
             case Phase.ReadStock:

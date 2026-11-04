@@ -54,6 +54,9 @@ void Step(int n=1){for(var i=0;i<n;i++){p.Now=p.Now.AddSeconds(1);run.Tick(p.Now
 void Until(SellerRun.Phase phase){for(var i=0;i<100&&run.Running&&run.State!=phase;i++)Step();if(run.State!=phase)throw new Exception("Did not reach "+phase);}
 Start();Step(100);Check("all retainers finish",!run.Running&&p.Closed==2);Check("one listing per stack, not per unit",p.Writes==2&&run.Updated==2);Check("stack quantities unchanged",p.Stocks.Values.All(x=>x.Quantity==99));Check("locks released at completion",p.Releases==1);
 Start(false);Step(100);Check("check mode performs no writes",p.Writes==0&&p.Reviews.Count==2);
+Check("check prices reads each retainer sale history",p.Histories.SetEquals(new ulong[]{1,2}));
+Start(false);p.HistoryReady=false;Until(SellerRun.Phase.ReadHistory);Step(5);Check("history loading blocks price checks",p.Compares==0&&p.Writes==0&&run.Running);run.Stop("stop");Step(50);Check("stop during history prevents later work",p.Compares==0);
+Start(false);p.HistoryError=true;Step(10);Check("history failure preserves prices and stops clearly",!run.Running&&p.Writes==0&&run.Status.Contains("history"));
 Start();Until(SellerRun.Phase.ReadComparison);run.Stop("stop");Step(100);Check("stop during comparison no late write",p.Writes==0&&p.Releases==1);
 Start();Until(SellerRun.Phase.ReadComparison);run.Pause(p.Now);Step(600);Check("pause does not act or timeout",run.Running&&run.Paused&&p.Writes==0);run.Pause(p.Now);Step(100);Check("resume does fresh comparison",p.Compares>=3&&p.Writes==2);
 Start();Until(SellerRun.Phase.Commit);var writes=p.Writes;run.Pause(p.Now);Step(60);run.Pause(p.Now);Step(100);Check("pause after submit never resubmits",p.Writes==2&&writes==1);
@@ -127,7 +130,9 @@ sealed class FakePort(DateTimeOffset now,MarketStock stock):ISellerPort
  public Dictionary<ulong,MarketStock> Stocks=new(){[1]=stock,[2]=stock};public List<SellerDecision> Reviews=[];
  public bool ContextMatches(ulong c,uint w)=>Context;
  public bool SelectRetainer(SellerRetainerRef r){Current=r.Id;return true;}
- public bool OpenMarket(ulong r)=>Current==r;
+ public HashSet<ulong> Histories=[];public bool HistoryReady=true,HistoryError;
+ public SellerPreparation ReadSaleHistory(ulong r){if(HistoryError)return new(false,Error:"history unavailable");if(!HistoryReady)return new(false);Histories.Add(r);return new(true);}
+ public bool OpenMarket(ulong r){if(!Histories.Contains(r))throw new Exception("price checks before history");return Current==r;}
  public MarketStock[]? ReadStock(ulong r)=>[Stocks[r]];
  public bool OpenEditor(ulong r,MarketStock item){if(!Stocks[r].SameItem(item))return false;Editor=true;return true;}
  public bool EditorMatches(ulong r,MarketStock item)=>Editor&&EditorValid&&Stocks[r].SameItem(item)&&Stocks[r].Price==item.Price;
