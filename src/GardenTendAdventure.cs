@@ -7,7 +7,8 @@ public sealed partial class Plugin
 {
     private sealed record GardenAdventureWork(string TaskId,string Character,string House,int Batch,AdventureTaskRule Rule,bool TendOnly=false,bool InspectOnly=false);
     private Queue<GardenAdventureWork>? gardenTendRoute;
-    private ulong gardenTendOwner;
+    private ulong gardenTendOwner,gardenVisitedCharacter;
+    private string gardenVisitedHouse="";
     private readonly AdventureConnectionRecovery gardenConnection=new();
     private string gardenConnectionKey="";
     private string gardenTendBoard="",gardenTendGeneration="",gardenTendStatus="";
@@ -39,7 +40,7 @@ public sealed partial class Plugin
             optionsChanged|=ImGui.Checkbox("Switch assigned characters on this login",ref switchCharacters);
             if(optionsChanged){config.GardenAdventureInspect=inspect;config.GardenAdventureTend=tend;config.GardenAdventurePlant=plant;config.GardenAdventureHarvest=harvest;config.GardenAdventureSwitch=switchCharacters;SaveConfiguration();}
             var walk=config.GardenCareWalk;if(ImGui.Checkbox("Walk to mapped beds (Lifestream)",ref walk)){config.GardenCareWalk=walk;SaveConfiguration();}
-            ImGui.TextWrapped("Inspection and tending prefer the starting character where regional travel permits. Planting and harvesting use assigned gardeners. Switching stays within the starting person and verified Square Enix login. The growing adventure pauses when no work is ready; resume it later. Planting uses its exact saved seed, soil and bed order; with Harvest full batches enabled, ready crops are harvested before the next route layout is applied. Mixed maturity and protected neighbours wait. Each batch visit starts with house travel, even when already on the plot. After travel finishes, Walk to mapped beds makes a short approach through the plot entrance. Stop remains available during active work.");
+            ImGui.TextWrapped("Work is grouped by plot and gardener. When planting or harvesting is selected, that plot’s assigned gardener also handles eligible inspection and tending where travel permits. Care-only work prefers the starting character. Switching stays within the starting person and verified Square Enix login. The growing adventure pauses when no work is ready; resume it later. Planting uses its exact saved seed, soil and bed order; with Harvest full batches enabled, ready crops are harvested before the next route layout is applied. Mixed maturity and protected neighbours wait. After reaching a plot, the routine rechecks all selected batches and finishes eligible work there before leaving. Confirmed arrival is reused between actions and batches on that plot. New plot visits use house travel and the short entrance approach. Stop remains available during active work.");
             ImGui.BeginDisabled(!adventureFresh||gardenCareRun?.Running==true||!Player.IsLoaded||!(gardenAdventureTend||gardenAdventurePlant||gardenAdventureHarvest||config.GardenAdventureInspect));
             if(ImGui.Button("Resume automatic gardening"))StartTendAdventure(board);ImGui.EndDisabled();ImGui.EndDisabled();
         }
@@ -51,7 +52,7 @@ public sealed partial class Plugin
     {
         var current=CurrentSharedCharacter();if(current==null||gardenCareRun?.Running==true)return;
         var person=config.SharedRoster?.People.FirstOrDefault(p=>p.Characters.Any(c=>c.Id==current.Id));
-        gardenAdventureMain=current.Id;
+        gardenAdventureMain=current.Id;gardenVisitedHouse="";gardenVisitedCharacter=0;
         RememberLoadedLoginAccount();
         gardenAdventureCharacters=(person?.Characters??[]).Where(c=>c.Id==current.Id||gardenAdventureSwitch&&GardenServiceAccount(c)>=0).Select(c=>c.Id).ToHashSet();
         gardenConnection.Reset();gardenConnectionKey=config.PairingKey;
@@ -63,7 +64,7 @@ public sealed partial class Plugin
     private void StopTendAdventure(string reason)
     {
         if(gardenTendRoute==null)return;
-        gardenConnection.Reset();gardenConnectionKey="";
+        gardenConnection.Reset();gardenConnectionKey="";gardenVisitedHouse="";gardenVisitedCharacter=0;
         CancelAssignedLogin(reason);gardenPlotApproaching=false;gardenTendRoute=null;gardenAutoPlantPlan=null;gardenCareRun?.Stop(reason);gardenTendStatus=reason;
         goSeeHomeTrip=null;goSeeFriendTrip=null;gardenArrival.Reset();
         if(gardenAdventureSwitchSent){characterSwitchUntil=default;characterSwitchTarget=null;gardenAdventureSwitchSent=false;}
@@ -95,12 +96,12 @@ public sealed partial class Plugin
     }
     private static bool SameGardenDefinition(GardenPlanDefinition? a,GardenPlanDefinition? b)=>a!=null&&b!=null&&a.Draft.Target==b.Draft.Target&&
         a.Steps.OrderBy(s=>s.Bed).Select(s=>(s.Bed,s.Order,s.Crop,s.Soil,s.ReplantOrder,s.StarterSoil,s.Neighbour)).SequenceEqual(b.Steps.OrderBy(s=>s.Bed).Select(s=>(s.Bed,s.Order,s.Crop,s.Soil,s.ReplantOrder,s.StarterSoil,s.Neighbour)));
-    private string GardenAdventureTender(SharedGardenPlan plan,string assigned,SharedCharacter[] characters)
+    private string GardenAdventureTender(SharedGardenPlan plan,string assigned,SharedCharacter[] characters,AdventureTaskRule rule)
     {
         EnsureBidWorlds();
         int Region(string world)=>bidWorlds!.FirstOrDefault(w=>string.Equals(w.Name,world,StringComparison.OrdinalIgnoreCase)).Region;
         var candidates=characters.Where(c=>gardenAdventureCharacters.Contains(c.Id)).Select(c=>new GardenTender(c.Id,Region(c.Id==CurrentSharedCharacter()?.Id?WorldName(Player.HomeWorld.RowId):c.World))).ToArray();
-        return GardenAdventureJobs.Tender(gardenAdventureMain,assigned,Region(plan.World),candidates);
+        return GardenAdventureJobs.Tender(gardenAdventureMain,assigned,Region(plan.World),candidates,GardenAdventureJobs.NeedsAssignedWork(rule,gardenAdventurePlant,gardenAdventureHarvest));
     }
     private bool GardenInspectionDue(SharedGardenPlan plan,AdventureTaskRule rule,DateTimeOffset now)
     {
@@ -158,7 +159,7 @@ public sealed partial class Plugin
                     var source=GardenPlanSources().FirstOrDefault(p=>p.HouseId==rule.HouseId&&(rule.Kind!="growingcycle"||p.Batch==rule.Batch)&&p.Batch==rule.Batch);if(source==null)continue;
                     var live=EffectiveGardenPlan(source);
                     if(GardenInspectionDue(live,rule,now)){
-                        var inspector=GardenAdventureTender(live,cid,chars);
+                        var inspector=GardenAdventureTender(live,cid,chars,rule);
                         if(inspector.Length==0){blocked.Add("Inspection needs a reachable character on this login for "+live.World);continue;}
                         if(!gardenTendRoute.Any(w=>w.House==rule.HouseId&&w.Batch==rule.Batch))
                             gardenTendRoute.Enqueue(new(task.Id,inspector,rule.HouseId,rule.Batch,rule,InspectOnly:true));
@@ -166,7 +167,7 @@ public sealed partial class Plugin
                     }
                     // Route dependencies gate planting, not care of crops already in this selected batch.
                     if(GardenAdventureJobs.AllowsTending(rule)&&gardenAdventureTend&&live.Beds.Any(b=>GardenCarePolicy.Eligible(live,b,GardenCareAction.Tend,now))){
-                        var tender=GardenAdventureTender(live,cid,chars);
+                        var tender=GardenAdventureTender(live,cid,chars,rule);
                         if(tender.Length==0){blocked.Add("Tending needs an available character on this login for "+live.World);continue;}
                         if(!gardenTendRoute.Any(w=>w.House==rule.HouseId&&w.Batch==rule.Batch))
                             gardenTendRoute.Enqueue(new(task.Id,tender,rule.HouseId,rule.Batch,rule,TendOnly:true));
@@ -188,6 +189,7 @@ public sealed partial class Plugin
                     var detail=!config.SyncCollections?"Inventory tracking is disabled; enable collection/inventory tracking for supplies.":reasons.Length>0?string.Join(" · ",reasons):assigned.Length==0?"No eligible visitor work or assigned garden work is available on this login.":"Assigned tasks have no eligible recorded garden action; inspect the selected batches.";
                     StopTendAdventure("Paused · "+detail+" Saved progress is kept.");return;
                 }
+                gardenTendRoute=new Queue<GardenAdventureWork>(GardenAdventureJobs.OrderForVisit(gardenTendRoute,w=>w.House,w=>w.Character,gardenVisitedHouse,CurrentSharedCharacter()?.Id??""));
                 gardenTendDeadline=now.AddMinutes(10);gardenTendPreparing=false;gardenTendTravelSent=gardenTendStarted=gardenAdventureSwitchSent=false;gardenPlotApproaching=gardenPlotApproachAttempted=false;
             }
             if(now>=gardenTendDeadline)throw new InvalidOperationException("Travel or garden action timed out. Review before restarting.");
@@ -222,10 +224,17 @@ public sealed partial class Plugin
                 if(gardenCareRun?.Status.StartsWith("Stopped")==true)throw new InvalidOperationException(gardenCareRun.Status);
                 if(gardenTendPreparing){gardenTendPreparing=false;gardenTendStarted=false;gardenTendStatus="Preparation confirmed · continuing this batch";gardenAdventureNext=now.AddSeconds(1);return;}
                 RequestStorageRefresh();nextRosterRead=default;if(syncFailures==0)nextSync=default;adventureNext=default;
+                gardenTendStatus="Checking remaining work on this plot · "+sourcePlan.HouseName;
                 gardenTendRoute.Clear();gardenSupplyRefreshUntil=now.AddSeconds(20);gardenPlotApproaching=gardenPlotApproachAttempted=false;gardenTendStarted=gardenTendTravelSent=false;gardenTendDeadline=now.AddMinutes(10);gardenAdventureNext=now.AddSeconds(3);return;
             }
-            // Every new batch visit starts via the estate arrival route, even if already
-            // inside its plot: a straight line from behind the building is not a safe approach.
+            // Only a plot this run has actually reached can reuse arrival. A
+            // different character/address still takes the full estate approach.
+            var reuseArrival=GardenAdventureJobs.ReuseArrival(gardenVisitedHouse,gardenVisitedCharacter,work.House,Player.ContentId,
+                atOutdoorEstate&&SharedGardenLocation.Match(currentAddress,[sourcePlan])==sourcePlan.HouseId);
+            if(!gardenTendTravelSent&&reuseArrival&&!LifestreamBusy()&&goSeeHomeTrip==null&&goSeeFriendTrip==null){
+                gardenTendTravelSent=true;gardenArrival.Reset();
+                gardenTendStatus="Continuing on this plot · "+sourcePlan.HouseName+" · Batch "+work.Batch;
+            }
             if(!gardenTendTravelSent){
                 if(LifestreamBusy())throw new InvalidOperationException("Another Lifestream journey is active.");EnsureBidWorlds();var world=bidWorlds!.FirstOrDefault(w=>w.Name==sourcePlan.World);if(world.Id==0)throw new InvalidOperationException("Destination world unavailable.");gardenArrival.Reset();GoSeeBid(world.Id,sourcePlan.District,sourcePlan.Ward,sourcePlan.Plot);if(now>=goSeeNativeUntil&&goSeeHomeTrip==null&&goSeeFriendTrip==null&&!LifestreamBusy())
                     throw new InvalidOperationException("House travel did not start: "+bidTravelMessage);
@@ -263,6 +272,7 @@ public sealed partial class Plugin
                 return;
             }
             if(LifestreamBusy()||goSeeHomeTrip!=null)return;
+            gardenVisitedHouse=work.House;gardenVisitedCharacter=Player.ContentId;
             DiscoverGardenBedMappings(sourcePlan,now);
             var plan=EffectiveGardenPlan(sourcePlan);
             if(work.Rule.PhysicalPatch>0&&(plan.PhysicalPatch>0?plan.PhysicalPatch:plan.Batch)!=work.Rule.PhysicalPatch)throw new InvalidOperationException("Batch labels changed. Refresh the route before restarting.");
@@ -303,3 +313,4 @@ public sealed partial class Plugin
         }catch(Exception e){StopTendAdventure(e.Message.StartsWith("Stopped:")?e.Message:"Stopped: "+e.Message);PrintEquinox(gardenTendStatus);}
     }
 }
+

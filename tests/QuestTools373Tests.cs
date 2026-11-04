@@ -3,6 +3,23 @@ internal static class QuestTools373Tests
 {
     internal static void Run(){
         void Check(string name,bool good){if(!good)throw new Exception(name);}
+        var plotJobs=new[]{(House:"A",Character:"one",Batch:1),(House:"B",Character:"one",Batch:1),(House:"A",Character:"two",Batch:2),(House:"A",Character:"one",Batch:3)};
+        var grouped=GardenAdventureJobs.OrderForVisit(plotJobs,w=>w.House,w=>w.Character,"A","one");
+        Check("finish plot and current gardener before leaving",grouped.SequenceEqual(new[]{plotJobs[0],plotJobs[3],plotJobs[2],plotJobs[1]}));
+        Check("rebuild stays on active plot",GardenAdventureJobs.OrderForVisit(plotJobs,w=>w.House,w=>w.Character,"B","one")[0]==plotJobs[1]);
+        Check("grouping preserves every job",grouped.Length==plotJobs.Length&&grouped.Distinct().Count()==plotJobs.Length);
+        Check("same confirmed plot reuses arrival",GardenAdventureJobs.ReuseArrival("A",12,"A",12,true));
+        Check("different plot travels",!GardenAdventureJobs.ReuseArrival("A",12,"B",12,true));
+        Check("different character travels",!GardenAdventureJobs.ReuseArrival("A",12,"A",13,true));
+        Check("stale plot observation cannot reuse arrival",!GardenAdventureJobs.ReuseArrival("A",12,"A",12,false));
+        Check("initial visit still approaches entrance",!GardenAdventureJobs.ReuseArrival("",0,"A",12,true));
+        var gardeners=new[]{new GardenTender("main",2),new GardenTender("assigned",2)};
+        Check("combined work uses assigned gardener",GardenAdventureJobs.Tender("main","assigned",2,gardeners,true)=="assigned");
+        Check("care-only keeps starting gardener",GardenAdventureJobs.Tender("main","assigned",2,gardeners)=="main");
+        Check("unreachable assignment falls back",GardenAdventureJobs.Tender("main","assigned",2,new[]{gardeners[0],new GardenTender("assigned",3)},true)=="main");
+        Check("growing route groups enabled planting",GardenAdventureJobs.NeedsAssignedWork(new AdventureTaskRule(Kind:"growingcycle"),true,false));
+        Check("care-only rule does not request planter",!GardenAdventureJobs.NeedsAssignedWork(new AdventureTaskRule(Kind:"care"),true,true));
+        Check("disabled planting keeps care gardener",!GardenAdventureJobs.NeedsAssignedWork(new AdventureTaskRule(Kind:"plant"),false,false));
         Check("current character needs no login slot",QuestToolsPolicy.EventCharacterReady("current","current",-1));
         Check("switch waits without login slot",!QuestToolsPolicy.EventCharacterReady("current","next",-1));
         Check("known slot permits switch",QuestToolsPolicy.EventCharacterReady("current","next",0));
@@ -81,6 +98,7 @@ internal static class QuestTools373Tests
         Console.WriteLine("Quest tools and account celebration tests passed.");
     }
 }
+
 
 
 
