@@ -31,6 +31,7 @@ public sealed partial class Plugin
             var path=Path.Combine(directory,"questionable-quests.json");
             return JsonSerializer.Deserialize<QuestCatalogueRow[]>(File.ReadAllText(path))??[];
         });
+        questLeveling=config.QuestLeveling;questLevelingIncludeMsq=config.QuestLevelingIncludeMsq;
         InitializeIndependentQuests(directory);
         InitializeQuestRecorder();
     }

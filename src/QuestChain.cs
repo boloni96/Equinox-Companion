@@ -5,6 +5,7 @@ namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
     private bool questContinueLine=true,questNextAccepted=true,questChainActive,questChainStartedQuest;
+    private bool questLeveling,questLevelingIncludeMsq=true;
     private uint questChainCandidate,questChainLast;
     private ulong questChainCharacter;
     private readonly HashSet<uint> questChainVisited=[];
@@ -17,16 +18,24 @@ public sealed partial class Plugin
     private string questChainStatus="";
     private void DrawQuestChainOptions(){
         ImGui.BeginDisabled(questChainActive);
+        if(ImGui.Checkbox("Quest leveling",ref questLeveling)){config.QuestLeveling=questLeveling;SaveConfiguration();}
+        if(questLeveling){
+            if(ImGui.Checkbox("Include MSQ",ref questLevelingIncludeMsq)){config.QuestLevelingIncludeMsq=questLevelingIncludeMsq;SaveConfiguration();}
+            ImGui.TextWrapped("Finds supported XP quests, including ones not accepted yet. Checks current job, level and prerequisites. Combat, duties, leves and unverified special requirements stay manual.");
+        }
+        ImGui.BeginDisabled(questLeveling);
         ImGui.Checkbox("Continue quest line",ref questContinueLine);
         ImGui.Checkbox("Then do other accepted quests",ref questNextAccepted);
         ImGui.EndDisabled();
+        ImGui.EndDisabled();
         ImGui.TextDisabled("Duty / solo-duty routes stay pending. No AutoDuty required.");
         ImGui.BeginDisabled(nativeEventActive||questChainActive||eventAccountActive||independentQuestId!=0);
-        if(ImGui.Button("Work on accepted quests")){
+        if(ImGui.Button(questLeveling?"Start recommended quest leveling":"Work on accepted quests")){
             ResetDeferredCharacter();questChainVisited.Clear();var id=NextAcceptedQuest();
-            if(id!=0)BeginQuestChain(id);else questChainStatus="No indexed accepted quests were found on this character.";
+            if(id!=0)BeginQuestChain(id);else questChainStatus=questLeveling?questLevelingRecommendation:"No indexed accepted quests were found on this character.";
         }
         ImGui.EndDisabled();
+        if(questLeveling&&questLevelingRecommendation.Length>0)ImGui.TextWrapped(questLevelingRecommendation);
         if(questChainStatus.Length>0)ImGui.TextWrapped(questChainStatus);
         if(questChainActive&&ImGui.Button("Stop quest routine"))StopQuestChain("Stopped by you.");
         if(questChainDeferred.Count>0&&ImGui.CollapsingHeader("Quests left pending")){
@@ -40,6 +49,7 @@ public sealed partial class Plugin
         if(independentBook==null){questToolsStatus="Independent quest data is still loading.";return;}
         ResetDeferredCharacter();questChainActive=true;questChainStartedQuest=false;questChainCharacter=Player.ContentId;
         questChainCandidate=QuestToolsPolicy.ShortId(id);questChainLast=0;questChainVisited.Clear();questChainNext=default;
+        questLevelingJob=Objects.LocalPlayer?.ClassJob.RowId??0;
         questChainStatus="Checking the selected quest route before starting.";
     }
     private void StopQuestChain(string reason){
@@ -57,7 +67,7 @@ public sealed partial class Plugin
                 var row=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Quest>().GetRowOrDefault(q.Id+65536);
                 return row.HasValue&&row.Value.PreviousQuest.Any(p=>QuestToolsPolicy.ShortId(p.RowId)==previous);
             }).Select(q=>q.Id).ToArray();
-        var available=candidates.Where(id=>id!=previous&&!questChainVisited.Contains(id)&&!QuestStillDeferred(id)&&!QuestManager.IsQuestComplete(id)&&
+        var available=candidates.Where(id=>(!questLeveling||questLevelingIncludeMsq||!questCatalogue.Any(q=>q.Id==id&&q.Group.Contains("/MSQ",StringComparison.OrdinalIgnoreCase)))&&id!=previous&&!questChainVisited.Contains(id)&&!QuestStillDeferred(id)&&!QuestManager.IsQuestComplete(id)&&
             independentBook?.Find(id.ToString()).Length==1).ToArray();
         var accepted=available.Where(id=>QuestManager.Instance()->IsQuestAccepted(id)).ToArray();
         // Do not choose between unaccepted branches on the player's behalf.
@@ -69,8 +79,9 @@ public sealed partial class Plugin
         var qm=QuestManager.Instance();if(qm==null)return 0;
         foreach(ref var quest in qm->NormalQuests){
             var id=(uint)quest.QuestId;
-            if(id!=0&&!questChainVisited.Contains(id)&&!QuestStillDeferred(id)&&questCatalogue.Any(q=>q.Id==id))return id;
+            if(!questLeveling&&id!=0&&!questChainVisited.Contains(id)&&!QuestStillDeferred(id)&&questCatalogue.Any(q=>q.Id==id))return id;
         }
+        if(questLeveling)return NextLevelingQuest();
         return 0;
     }
     private unsafe void UpdateQuestChain(DateTimeOffset now){
@@ -80,6 +91,7 @@ public sealed partial class Plugin
         if(!questChainActive||now<questChainNext)return;questChainNext=now.AddSeconds(1);
         try{
             if(!Player.IsLoaded||Player.ContentId!=questChainCharacter){StopQuestChain("Stopped: character changed.");return;}
+            if(questLeveling&&Objects.LocalPlayer?.ClassJob.RowId!=questLevelingJob){StopQuestChain("Job changed; restart leveling to select quests for this job.");return;}
             if(QuestToolsOtherOperation()||eventAccountActive||questRecorderActive){StopQuestChain("Stopped: another helper started.");return;}
             if(Conditions[Dalamud.Game.ClientState.Conditions.ConditionFlag.BoundByDuty]||Conditions[Dalamud.Game.ClientState.Conditions.ConditionFlag.InDutyQueue]){StopQuestChain("Duty / queue detected; continue it manually.");return;}
             if(independentQuestId!=0){questChainStatus=questToolsStatus;return;}
@@ -93,9 +105,9 @@ public sealed partial class Plugin
                 questChainLast=questChainCandidate;questChainCandidate=0;
             }
             if(questChainCandidate==0){
-                if(questContinueLine&&questChainLast!=0)questChainCandidate=QuestChainSuccessor(questChainLast);
+                if(!questLeveling&&questContinueLine&&questChainLast!=0)questChainCandidate=QuestChainSuccessor(questChainLast);
                 questChainLast=0;
-                if(questChainCandidate==0&&questNextAccepted)questChainCandidate=NextAcceptedQuest();
+                if(questChainCandidate==0&&(questNextAccepted||questLeveling))questChainCandidate=NextAcceptedQuest();
                 if(questChainCandidate==0){StopQuestChain("No eligible non-duty quests remain in this routine. "+questChainDeferred.Count+" left pending.");return;}
             }
             var id=questChainCandidate;
