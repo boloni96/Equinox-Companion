@@ -34,7 +34,23 @@ public sealed partial class Plugin
     private unsafe int KeyboundUnlockState(uint item)
     {
         var state=UIState.Instance();var row=ExdModule.GetItemRowById(item);
-        return state==null||!state->PlayerState.IsLoaded||row==null?3:(int)state->IsItemActionUnlocked(row);
+        if(state==null||!state->PlayerState.IsLoaded||row==null)return 3;
+        var native=(int)state->IsItemActionUnlocked(row);
+        if(native!=3||catalogueBase==null)return native;
+        var entries=catalogueBase.SelectMany(g=>g).Where(e=>e.ItemId==item&&e.Category is "mount" or "minion" or "orchestrion" or "emote" or "ornament" or "framerkit")
+            .DistinctBy(e=>(e.Category,e.Id)).Take(2).ToArray();
+        if(entries.Length!=1)return native;
+        var entry=entries[0];
+        bool? unlocked=entry.Category switch{
+            "mount"=>state->PlayerState.IsMountUnlocked(entry.Id),
+            "minion"=>state->IsCompanionUnlocked(entry.Id),
+            "orchestrion"=>state->PlayerState.IsOrchestrionRollUnlocked(entry.Id),
+            "emote" when entry.Id<=ushort.MaxValue=>state->IsEmoteUnlocked((ushort)entry.Id),
+            "ornament"=>state->PlayerState.IsOrnamentUnlocked(entry.Id),
+            "framerkit"=>state->PlayerState.IsFramersKitUnlocked(entry.Id),
+            _=>null
+        };
+        return KeyboundUsePolicy.ResolveUnlock(native,unlocked);
     }
     private unsafe void UpdateKeyboundRewardUse(DateTimeOffset now)
     {

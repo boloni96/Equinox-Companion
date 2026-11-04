@@ -65,7 +65,7 @@ public sealed partial class Plugin
     command=>Pi.GetIpcSubscriber<string,object>("Lifestream.ExecuteCommand").InvokeAction(command),
     (n,w)=>Pi.GetIpcSubscriber<string,string,bool>("Lifestream.ConnectAndLogin").InvokeFunc(n,w),
     (n,w)=>Pi.GetIpcSubscriber<string,string,bool>("Lifestream.InitiateLoginFromCharaSelectScreen").InvokeFunc(n,w));
-   if(!accepted){characterTravelStatus=mode==CharacterLoginMode.CharacterSelect?"Lifestream could not find this character in the current list. Return to the title screen and choose Log in as this character again.":"Lifestream could not start login from this screen. Wait for the title menu and try again.";return;}
+   if(!accepted){characterTravelStatus=mode==CharacterLoginMode.CharacterSelect?"Lifestream could not find "+name+" @ "+world+" in the currently loaded character list. Target remains "+to.PersonName+" / "+to.AccountName+". Return to the game title screen (not your MAIN account), then choose Log in as this character again so the service account and world can be checked.":"Lifestream could not start login from this screen. Wait for the title menu and try again.";return;}
    characterSwitchFrom=mode==CharacterLoginMode.InGame?Player.ContentId:0;characterSwitchTarget=character;characterSwitchUntil=DateTimeOffset.UtcNow.AddMinutes(5);
    characterTravelStatus=$"{(mode==CharacterLoginMode.InGame?"Switch":"Login")} requested: {name} @ {world}. Lifestream uses this game login and its service-account settings.";
    PrintEquinox("[Equinox] "+characterTravelStatus);

@@ -49,6 +49,13 @@ public sealed partial class Plugin
         ImGui.EndDisabled();
         ImGui.TextWrapped(eventAccountStatus);
     }
+    private bool WaitEventRewardData(DateTimeOffset now){
+        if(!KeyboundUsePolicy.RetryPlan(keyboundMissingPlan!=null,keyboundPlanDataPending))return false;
+        StopKeybound();CancelEventAccountMovement();eventAccountFarmStarted=false;
+        eventAccountStatus=keyboundPlanError;eventAccountStageAt=now;
+        eventAccountNext=now.AddSeconds(2);
+        return true;
+    }
     private void EventAccountStage(string stage,string message){
         if(nativeEventActive&&eventAccountStage=="quest"){eventAccountStatus=message;return;}
         if(eventAccountStage!=stage){eventAccountStage=stage;eventAccountStageAt=DateTimeOffset.UtcNow;eventAccountActionAt=default;}
@@ -186,13 +193,15 @@ public sealed partial class Plugin
             }
             if(keyboundBuying){eventAccountStatus=keyboundBuyStatus;return;}
             if(eventAccountBuyingStarted){
-                eventAccountBuyingStarted=false;
                 RefreshKeyboundBuyPlan();
+                if(WaitEventRewardData(now))return;
+                eventAccountBuyingStarted=false;
                 if(keyboundMissingPlan==null||keyboundMissingPlan.Count>0||keyboundUseReady>0||keyboundHeldRewards.Count>0)
                     throw new InvalidOperationException("Purchases/use need attention: "+keyboundBuyStatus);
             }
             if(eventAccountFarmStarted&&!keyboundEnabled)throw new InvalidOperationException("Event farming stopped: "+keyboundStatus);
             RefreshKeyboundBuyPlan();
+            if(WaitEventRewardData(now))return;
             var decision=QuestToolsPolicy.Next(true,keyboundMissingPlan!=null,keyboundMissingPlan==null?0:KeyboundShoppingPolicy.Total(keyboundMissingPlan),
                 KeyboundWallet(),keyboundUseReady,keyboundHeldRewards.Count);
             if(decision==EventRoutineAction.Verify)throw new InvalidOperationException(keyboundPlanError.Length>0?keyboundPlanError:"Purchases are held for verification; no duplicate was bought.");
