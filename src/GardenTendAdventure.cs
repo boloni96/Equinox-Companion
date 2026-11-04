@@ -7,8 +7,8 @@ public sealed partial class Plugin
 {
     private sealed record GardenAdventureWork(string TaskId,string Character,string House,int Batch,AdventureTaskRule Rule,bool TendOnly=false,bool InspectOnly=false);
     private Queue<GardenAdventureWork>? gardenTendRoute;
-    private ulong gardenTendOwner,gardenVisitedCharacter;
-    private string gardenVisitedHouse="";
+    private ulong gardenTendOwner,gardenVisitedCharacter,gardenTravelCharacter;
+    private string gardenVisitedHouse="",gardenTravelHouse="";
     private readonly AdventureConnectionRecovery gardenConnection=new();
     private string gardenConnectionKey="";
     private string gardenTendBoard="",gardenTendGeneration="",gardenTendStatus="";
@@ -227,18 +227,22 @@ public sealed partial class Plugin
                 gardenTendStatus="Checking remaining work on this plot · "+sourcePlan.HouseName;
                 gardenTendRoute.Clear();gardenSupplyRefreshUntil=now.AddSeconds(20);gardenPlotApproaching=gardenPlotApproachAttempted=false;gardenTendStarted=gardenTendTravelSent=false;gardenTendDeadline=now.AddMinutes(10);gardenAdventureNext=now.AddSeconds(3);return;
             }
+            if(gardenTendTravelSent&&(gardenTravelHouse!=work.House||gardenTravelCharacter!=Player.ContentId)){
+                if(LifestreamBusy()||goSeeHomeTrip!=null||goSeeFriendTrip!=null||now<goSeeNativeUntil)return;
+                gardenTendTravelSent=false;gardenPlotApproaching=gardenPlotApproachAttempted=false;gardenArrival.Reset();
+            }
             // Only a plot this run has actually reached can reuse arrival. A
             // different character/address still takes the full estate approach.
             var reuseArrival=GardenAdventureJobs.ReuseArrival(gardenVisitedHouse,gardenVisitedCharacter,work.House,Player.ContentId,
                 atOutdoorEstate&&SharedGardenLocation.Match(currentAddress,[sourcePlan])==sourcePlan.HouseId);
             if(!gardenTendTravelSent&&reuseArrival&&!LifestreamBusy()&&goSeeHomeTrip==null&&goSeeFriendTrip==null){
-                gardenTendTravelSent=true;gardenArrival.Reset();
+                gardenTendTravelSent=true;gardenTravelHouse=work.House;gardenTravelCharacter=Player.ContentId;gardenArrival.Reset();
                 gardenTendStatus="Continuing on this plot · "+sourcePlan.HouseName+" · Batch "+work.Batch;
             }
             if(!gardenTendTravelSent){
                 if(LifestreamBusy())throw new InvalidOperationException("Another Lifestream journey is active.");EnsureBidWorlds();var world=bidWorlds!.FirstOrDefault(w=>w.Name==sourcePlan.World);if(world.Id==0)throw new InvalidOperationException("Destination world unavailable.");gardenArrival.Reset();GoSeeBid(world.Id,sourcePlan.District,sourcePlan.Ward,sourcePlan.Plot);if(now>=goSeeNativeUntil&&goSeeHomeTrip==null&&goSeeFriendTrip==null&&!LifestreamBusy())
                     throw new InvalidOperationException("House travel did not start: "+bidTravelMessage);
-                gardenTendTravelSent=true;gardenTendStatus="Travelling to "+sourcePlan.HouseName;
+                gardenTendTravelSent=true;gardenTravelHouse=work.House;gardenTravelCharacter=Player.ContentId;gardenTendStatus="Travelling to "+sourcePlan.HouseName;
                 return;
             }
             if(gardenTendTravelSent&&!gardenPlotApproaching){
