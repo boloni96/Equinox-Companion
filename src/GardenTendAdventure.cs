@@ -116,9 +116,7 @@ public sealed partial class Plugin
         if(gardenAdventurePlant&&(cycle||scope.Contains("planplant")||scope.Contains("plant")||rule.Kind=="garden"&&rule.Jobs==null)&&GardenGuidance.Next(plan)!=null)return GardenCareAction.Plant;
         var active=plan.Beds.Where(EquinoxCompanion.GardenVisualState.HasActualCrop).ToArray();
         if(gardenAdventureHarvest&&(cycle||scope.Contains("harvest")||rule.Kind=="garden"&&rule.Jobs==null)&&active.Length>0){
-            if(active.All(b=>b.Ready)&&active.Any(b=>GardenCarePolicy.Eligible(plan,b,GardenCareAction.Harvest,now)))return GardenCareAction.Harvest;
-            var key=plan.HouseId+":"+plan.Batch;
-            if(active.Any(b=>!b.Ready&&GardenTiming.MaturityEstimateDue(b.HarvestAt,b.GrowingObservedAt,now))&&(!gardenAdventureInspected.TryGetValue(key,out var checkedAt)||now-checkedAt>TimeSpan.FromMinutes(10)))return GardenCareAction.Inspect;
+            if(active.All(b=>GardenCarePolicy.MatureForCare(b,now))&&active.Any(b=>GardenCarePolicy.Eligible(plan,b,GardenCareAction.Harvest,now)))return GardenCareAction.Harvest;
         }
         if(gardenAdventureTend&&(cycle||scope.Contains("care")||rule.Kind=="garden"&&rule.Jobs==null)&&active.Any(b=>GardenCarePolicy.Eligible(plan,b,GardenCareAction.Tend,now)))return GardenCareAction.Tend;
         return null;

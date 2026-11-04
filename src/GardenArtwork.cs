@@ -56,7 +56,7 @@ public sealed partial class Plugin
         "empty" => "Empty · follow the planting plan when you are ready to plant.",
         "unknown" => "Crop or bed state unknown · open this numbered bed in game to inspect it.",
         "mature-estimated" => "Mature · estimated growth time plus a two-hour buffer. A newer growing observation restarts the buffer. Harvest readiness is still checked in game.",
-        "check-maturity" => "Estimated ready · mature appearance is based on timing. Open this bed in game to confirm readiness.",
+        "check-maturity" => "Maturing · waiting for the two-hour timing buffer; no separate maturity inspection is needed.",
         "at-risk" => "At risk (estimated) · check the crop and tend it if still growing.",
         "wilting" => "Wilting (estimated) · inspect the crop in game and tend it if alive.",
         "dead" => "Dead · confirmed. Remove the dead crop before replanting.",

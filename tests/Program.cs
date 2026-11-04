@@ -706,7 +706,7 @@ foreach(var (percent,wet) in new[]{(0,false),(32,true),(33,false),(66,true),(99,
  var cropStage=artBed with {Planted=artNow.AddHours(-percent),HarvestAt=artNow.AddHours(100-percent),Watered=wet?artNow:null,NextTend=null,WiltHours=null,Ready=false,DeadConfirmedAt=null,WiltedAt=null};
  Check($"crop artwork {percent} percent wet={wet}",GardenVisualState.CropArtwork(cropStage,true,artNow),percent<33?"plantSeedling":"plantGrowing");
 }
-Check("unknown start uses neutral seed icon after tending",GardenVisualState.CropArtwork(artBed with {Planted=null,HarvestAt=null,Watered=artNow},true,artNow),"seedIcon");
+Check("known planted crop keeps plant art with unknown start",GardenVisualState.CropArtwork(artBed with {Planted=null,HarvestAt=null,Watered=artNow},true,artNow),"plantGrowing");
 Check("wilt supersedes recent wet art",GardenVisualState.CropArtwork(artBed with {Watered=artNow.AddHours(-2),WiltedAt=artNow.AddHours(-1)},true,artNow),"plantWilted");
 Check("confirmed dead supersedes plan identity",GardenVisualState.CropArtwork(artBed with {Watered=artNow.AddHours(-2),DeadConfirmedAt=artNow.AddHours(-1),Ready=false},true,artNow),"plantDead");
 
@@ -880,7 +880,7 @@ Check("overview temporary starter suppresses care",GardenOverview.Bed(newlyPlant
 Check("overview final step nine restores care",GardenOverview.Bed(localDone,localDone.Beds[0],ovNow).TendDue.ToString(),"True");
 var ovUnknown=GardenOverview.Bed(livePlan,livePlan.Beds[0] with {ActualCrop="Not synced yet",Planted=null,Watered=null,Ready=false,NextTend=null,HarvestAt=null},ovNow);
 Check("overview unknown never becomes empty",ovUnknown.Status,"Awaiting sync");
-Check("overview predicted maturity is not confirmed ready",GardenOverview.Bed(localDone,localDone.Beds[0] with {Watered=ovNow,HarvestAt=ovNow},ovNow).Harvest,"Check maturity");
+Check("overview predicted maturity is not confirmed ready",GardenOverview.Bed(localDone,localDone.Beds[0] with {Watered=ovNow,HarvestAt=ovNow},ovNow).Harvest,"Maturing");
 Check("overview countdown days",GardenOverview.Remaining(ovNow.AddDays(2).AddHours(3).AddMinutes(4),ovNow),"2d 3h 4m");
 Check("overview no negative countdown",GardenOverview.Remaining(ovNow.AddSeconds(-1),ovNow),"now");
 Check("overview empty summary remains honest",GardenOverview.Summary([fullyHarvested],ovNow.AddMinutes(15)),"8 empty");

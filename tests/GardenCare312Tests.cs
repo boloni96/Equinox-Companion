@@ -111,9 +111,9 @@ internal static class GardenCare312Tests
         Check(!GardenAutoPlant.PrepareRouteBeds(growingWait328,definition,now,true,true).Empty&&GardenAutoPlant.PrepareRouteBeds(growingWait328,definition,now,true,true).Action==null,"Growing watered batch has no work and must not trigger travel");
         Check(GardenAutoPlant.PrepareRouteBeds(growingWait328,definition,now.AddHours(13),true,true).Action==GardenCareAction.Tend,"Growing batch becomes tendable next day without waiting for maturity");
         var estimated=growingWait328 with{Beds=growingWait328.Beds.Select(b=>b with{HarvestAt=now.AddMinutes(-1)}).ToArray()};
-        Check(GardenAutoPlant.PrepareRouteBeds(estimated,definition,now,true,true).Action==GardenCareAction.Inspect,"Estimated maturity can request a real inspection");
+        Check(GardenAutoPlant.PrepareRouteBeds(estimated,definition,now,true,true).Action==null,"Maturity buffer does not schedule a separate inspection");
         Check(GardenAutoPlant.PrepareRouteBeds(estimated,definition,now,true,true,false).Action==null,"Recent not-ready inspection does not trigger another trip");
-        Check(GardenAutoPlant.PrepareRouteBeds(estimated,definition,now.AddHours(13),true,true,false).Action==GardenCareAction.Tend,"Inspection cooldown cannot suppress due tending");
+        Check(GardenAutoPlant.PrepareRouteBeds(estimated,definition,now.AddHours(13),true,true,false).Action==GardenCareAction.Harvest,"Buffered mature batch proceeds to harvest without separate inspection");
 
         Check(GardenAutoPlant.PrepareRouteBeds(matureBatch with{Beds=[Bed(1) with{KeepMature=true},Bed(2)]},definition,now,true,false).Action==null,"Explicit protected neighbour blocks preparation harvest");
         Check(GardenAutoPlant.PrepareRouteBeds(plan,definition,now,true,false).Action==null,"Unfinished outgoing cross is preserved");
@@ -175,6 +175,12 @@ internal static class GardenCare312Tests
         Check(GardenTiming.MatureEstimate(now.AddHours(-4),now.AddHours(-2),now),"Growing observation gets its own two hour buffer");
         var matureArt=Bed(1) with {Ready=false,HarvestAt=now.AddHours(-2),Watered=now,DeadConfirmedAt=null,GrowingObservedAt=null};
         Check(GardenVisualState.CropArtwork(matureArt,false,now)=="plantMature"&&!matureArt.Ready,"Estimated mature sprite does not invent a confirmed harvest receipt");
+        Check(!GardenCarePolicy.Eligible(done,matureArt,GardenCareAction.Tend,now,true),"Tend all skips timer-mature crops");
+        Check(!GardenCarePolicy.Eligible(done,matureArt,GardenCareAction.Fertilize,now),"Fertilizer skips timer-mature crops");
+        Check(!GardenCarePolicy.MatureForCare(matureArt with{GrowingObservedAt=now.AddMinutes(-1)},now),"Fresh growing evidence prevents automatic maturity");
+        Check(!GardenCarePolicy.MatureForCare(matureArt with{DeadConfirmedAt=now},now),"Dead crop never counts as mature");
+        Check(GardenVisualState.CropArtwork(matureArt with{HarvestAt=now.AddDays(1),Planted=null},false,now)=="plantGrowing","Unknown planting date does not turn a planted crop into a seed bag");
+        Check(GardenVisualState.CropArtwork(matureArt with{GrowingObservedAt=now},false,now)=="plantGrowing","Contradicted timer keeps plant artwork");
         var reconnect=new AdventureConnectionRecovery();
         Check(reconnect.Check(false,now,now)==AdventureConnectionState.Waiting,"First failed refresh waits instead of stopping");
         Check(reconnect.Check(false,now,now.AddSeconds(89))==AdventureConnectionState.Waiting,"Recovery remains bounded but allows temporary outages");
