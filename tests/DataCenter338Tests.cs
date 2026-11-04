@@ -20,6 +20,10 @@ internal static class DataCenter338Tests
   Check(CharacterLoginPolicy.NeedsListRouting(1,1,true,2),"Ambiguous matches cannot authorize login");
   Check(!CharacterLoginPolicy.NeedsListRouting(1,1,true,1),"Verified exact ALT list does not loop back to title");
   Check(!CharacterLoginPolicy.NeedsListRouting(1,-1,true,1),"Exact live character can verify previously unknown slot");
+  Check(CurrentLoginIdentification.WorldSettled(TimeSpan.FromMilliseconds(500),true),"Ready populated world advances after half a second");
+  Check(!CurrentLoginIdentification.WorldSettled(TimeSpan.FromMilliseconds(499),true),"Populated world still gets a stable sample");
+  Check(!CurrentLoginIdentification.WorldSettled(TimeSpan.FromMilliseconds(500),false),"Empty/loading world is not skipped on fast timing");
+  Check(CurrentLoginIdentification.WorldSettled(TimeSpan.FromSeconds(2),false),"Settled empty world can advance");
   Console.WriteLine("PASS Data Center routing for known and unknown title accounts");
  }
 }
