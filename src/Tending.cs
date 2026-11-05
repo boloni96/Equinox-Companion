@@ -1,6 +1,12 @@
 using System.Text.RegularExpressions;
 namespace EquinoxCompanion;
 
+// Match the care runner's confirmation window; keep receipts bound to the exact action and target.
+public static class GardenActionConfirmation
+{
+    public static readonly TimeSpan Window=TimeSpan.FromSeconds(20);
+}
+
 public sealed record TendingRecord(string EventId, DateTimeOffset SelectedAt, DateTimeOffset ConfirmedAt,
     Actor Actor, Address Address, int Patch, int Bed, string Kind = "garden.tended");
 
@@ -23,7 +29,7 @@ public sealed record TendIntent(string EventId, DateTimeOffset At, GardenSnapsho
     }
     public TendingRecord? Confirm(uint logId, DateTimeOffset at, GardenSnapshot? target)
     {
-        if (logId != (Kind == "garden.fertilized" ? 4016u : 4017u) || at < At || at - At > TimeSpan.FromSeconds(Kind == "garden.fertilized" ? 15 : 3) || target is null ||
+        if (logId != (Kind == "garden.fertilized" ? 4016u : 4017u) || at < At || at - At > GardenActionConfirmation.Window || target is null ||
             target.Actor != Target.Actor || target.Address != Target.Address || target.TargetId != Target.TargetId) return null;
         return new(EventId, At, at, Target.Actor, Target.Address!, Patch, Bed, Kind);
     }
