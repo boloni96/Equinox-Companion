@@ -4,6 +4,14 @@ public sealed record GardenPersonNotice(string PersonId, string PersonName, stri
 
 public static class GardenLoginSummary
 {
+    // Use the same projected bed and care policy as the Gardening panel.
+    public static string? Kind(SharedGardenPlan plan, SharedGardenBed bed, DateTimeOffset now)
+    {
+        var row = GardenOverview.Bed(plan, bed, now);
+        if (row.State is "dead" or "wilted" or "wilt-estimated" or "at-risk" or "dead-estimated") return "check";
+        return row.TendDue ? "tend" : null;
+    }
+
     public static string? Kind(SharedGardenCareBed bed, DateTimeOffset now)
     {
         if (bed.Empty || bed.Ready) return null;

@@ -48,7 +48,9 @@ public sealed partial class Plugin
                             DeathAt=projected.Ready||GardenVisualState(projected,false,now)=="dead"?null:projected.Watered is {} care&&projected.WiltHours is {} wilt?care.AddHours(wilt+24):null};
                     }
                     else if (lastPlant > (bed.Watered ?? DateTimeOffset.MinValue)) effective = effective with { Ready = false, KeepMature = false, HarvestAt = null, DeathAt = null };
-                    var kind = GardenLoginSummary.Kind(effective, now);
+                    var kind = projection is not null && projected is not null
+                        ? GardenLoginSummary.Kind(projection, projected, now)
+                        : GardenLoginSummary.Kind(effective, now);
                     if (kind == "tend" && config.NotifyGardenTending || kind == "check" && config.NotifyGardenRisk)
                         notices.Add(new(person.Id, person.Name, kind!));
                 }

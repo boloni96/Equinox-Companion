@@ -1820,3 +1820,5 @@ AdventureFollow371Tests.Run();
 ItemQuantity372Tests.Run();
 
 QuestTools373Tests.Run();
+
+GardenNotice420Tests.Run();
