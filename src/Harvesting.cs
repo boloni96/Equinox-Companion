@@ -54,13 +54,13 @@ public sealed record HarvestIntent(string EventId, DateTimeOffset At, GardenSnap
 
     public TendingRecord? Confirm(uint logId, uint? receivedItem, DateTimeOffset at, GardenSnapshot? target)
     {
-        if (logId is not (750 or 751) || receivedItem != CropItemId || CropItemId == 0 || at < At || at - At > TimeSpan.FromSeconds(10) || target is null || !Same(Target, target)) return null;
+        if (logId is not (750 or 751) || receivedItem != CropItemId || CropItemId == 0 || at < At || at - At > GardenActionConfirmation.Window || target is null || !Same(Target, target)) return null;
         return new(EventId, At, at, Target.Actor, Target.Address!, Patch, Bed, "garden.empty");
     }
 
     public TendingRecord? ConfirmChat(uint? receivedItem, DateTimeOffset at, GardenSnapshot? current)
     {
-        if(receivedItem!=CropItemId||CropItemId==0||at<At||at-At>TimeSpan.FromSeconds(10)||current is null||
+        if(receivedItem!=CropItemId||CropItemId==0||at<At||at-At>GardenActionConfirmation.Window||current is null||
             at<current.ObservedAt||at-current.ObservedAt>TimeSpan.FromMilliseconds(500)||
             current.Actor!=Target.Actor||current.Address is null||current.Address!=Target.Address||
             current.TargetId is not null&&current.TargetId!=Target.TargetId)return null;

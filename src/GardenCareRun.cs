@@ -53,7 +53,7 @@ public sealed class GardenCareRun(IGardenCarePort port)
     {
         if(Running)throw new InvalidOperationException("Finish or stop garden care first.");
         beds=selected.Where(b=>b is >=1 and <=8).Distinct().ToArray();index=phase=Completed=Skipped=0;LastSkip="";Action=action;
-        Running=beds.Length>0;deadline=now.AddSeconds(20);Status=Running?$"{action} · 0/{Total}":"No eligible beds.";
+        Running=beds.Length>0;deadline=now+GardenActionConfirmation.Window;Status=Running?$"{action} · 0/{Total}":"No eligible beds.";
     }
     public void Stop(string reason){Running=false;Status=reason;port.Release();}
     public void Tick(DateTimeOffset now,bool pauseBeforeNextBed=false)
@@ -61,12 +61,12 @@ public sealed class GardenCareRun(IGardenCarePort port)
         if(!Running)return;
         try{
             port.Validate();
-            if(phase==0&&pauseBeforeNextBed){deadline=now.AddSeconds(20);Status="Waiting for Adventure connection before the next bed";return;}
+            if(phase==0&&pauseBeforeNextBed){deadline=now+GardenActionConfirmation.Window;Status="Waiting for Adventure connection before the next bed";return;}
             if(phase==0&&port.MovementRecoveryUntil is {} recoveryUntil&&recoveryUntil>deadline)deadline=recoveryUntil;
             if(now>=deadline)throw new InvalidOperationException($"Timed out during {Action}, Bed {beds[index]} ({(phase==0?"opening":phase==1?"sending action":phase==2?"waiting for confirmation":"closing menu")}); the last action was not retried. Resume to recheck remaining beds.");
             var bed=beds[index];Status=$"{Action} · Bed {bed} · {Completed}/{Total}";
             if(phase==1&&port.SkipReason(bed,Action) is {} reason){
-                Skipped++;LastSkip=$"Bed {bed}: {reason}";phase=3;deadline=now.AddSeconds(20);
+                Skipped++;LastSkip=$"Bed {bed}: {reason}";phase=3;deadline=now+GardenActionConfirmation.Window;
                 Status=$"Skipping {LastSkip} · {Completed} confirmed · {Skipped} skipped";return;
             }
             bool advance=phase switch{0=>port.Open(bed),1=>port.Act(bed,Action),2=>port.Confirmed(bed,Action,sent),_=>port.Close(bed)};
@@ -74,7 +74,7 @@ public sealed class GardenCareRun(IGardenCarePort port)
             if(phase==1)sent=now;
             if(phase==2)Completed++;
             if(++phase==4){phase=0;index++;if(index==beds.Length){Stop($"Complete · {Completed}/{Total} beds confirmed"+(Skipped>0?$" · {Skipped} skipped. Last: {LastSkip}":"."));return;}}
-            deadline=now.AddSeconds(20);
+            deadline=now+GardenActionConfirmation.Window;
         }catch(Exception e){Stop("Stopped: "+e.Message);}
     }
 }

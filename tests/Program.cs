@@ -93,7 +93,7 @@ Check("failure cannot confirm tend", intent.Confirm(4010, time.AddMilliseconds(4
 Check("wrong target cannot confirm", intent.Confirm(4017, time.AddMilliseconds(400), Sample(400, "bed-b"))?.EventId, null);
 Check("wrong house cannot confirm", intent.Confirm(4017, time.AddMilliseconds(400), Sample(400, "bed-a", address with { HouseId = "other" }))?.EventId, null);
 Check("wrong character cannot confirm", intent.Confirm(4017, time.AddMilliseconds(400), Sample(400, "bed-a") with { Actor = actor with { ContentId = "other" } })?.EventId, null);
-Check("stale intent cannot confirm", intent.Confirm(4017, time.AddSeconds(4), Sample(4000, "bed-a"))?.EventId, null);
+Check("stale intent cannot confirm", intent.Confirm(4017, time.AddSeconds(21), Sample(21000, "bed-a"))?.EventId, null);
 Check("earlier log cannot confirm", intent.Confirm(4017, time.AddMilliseconds(-1), Sample(0, "bed-a"))?.EventId, null);
 Check("missing target cannot confirm", intent.Confirm(4017, time.AddMilliseconds(400), null)?.EventId, null);
 Check("duplicate response has same dedupe key", intent.Confirm(4017, time.AddMilliseconds(450), Sample(450, "bed-a"))?.EventId, intent.EventId);
@@ -808,7 +808,7 @@ foreach(uint failure in new uint[]{4013,4014,4017,4018})Check("harvest non-succe
 Check("harvest wrong character rejected",harvestIntent.Confirm(751,4810,time.AddSeconds(1),plantTarget with {Actor=actor with {ContentId="other"}})?.EventId,null);
 Check("harvest wrong house rejected",harvestIntent.Confirm(751,4810,time.AddSeconds(1),plantTarget with {Address=address with {Plot=16}})?.EventId,null);
 Check("harvest wrong target rejected",harvestIntent.Confirm(751,4810,time.AddSeconds(1),plantTarget with {TargetId="next-bed"})?.EventId,null);
-Check("harvest stale response rejected",harvestIntent.Confirm(751,4810,time.AddSeconds(11),plantTarget)?.EventId,null);
+Check("harvest stale response rejected",harvestIntent.Confirm(751,4810,time.AddSeconds(21),plantTarget)?.EventId,null);
 Check("harvest earlier reward rejected",harvestIntent.Confirm(751,4810,time.AddMilliseconds(49),plantTarget)?.EventId,null);
 Check("harvest missing context rejected",harvestIntent.Confirm(751,4810,time.AddSeconds(1),null)?.EventId,null);
 Check("obtain chat links plural rewards",HarvestReceipt.FromChat("You obtain 12 mirror apples.","",[4810])?.ToString(),"4810");
@@ -831,7 +831,7 @@ Check("chat harvest rejects unrelated crop",harvestIntent.ConfirmChat(12896,rece
 Check("chat harvest rejects wrong actor",harvestIntent.ConfirmChat(4810,receiptAt,droppedHarvestTarget with {Actor=actor with {ContentId="other"}})?.EventId,null);
 Check("chat harvest rejects wrong house",harvestIntent.ConfirmChat(4810,receiptAt,droppedHarvestTarget with {Address=address with {Plot=16}})?.EventId,null);
 Check("chat harvest rejects stale observation",harvestIntent.ConfirmChat(4810,receiptAt,droppedHarvestTarget with {ObservedAt=receiptAt.AddSeconds(-1)})?.EventId,null);
-Check("chat harvest rejects stale reward",harvestIntent.ConfirmChat(4810,time.AddSeconds(11),droppedHarvestTarget with {ObservedAt=time.AddSeconds(11)})?.EventId,null);
+Check("chat harvest rejects stale reward",harvestIntent.ConfirmChat(4810,time.AddSeconds(21),droppedHarvestTarget with {ObservedAt=time.AddSeconds(21)})?.EventId,null);
 Check("chat harvest rejects missing observation",harvestIntent.ConfirmChat(4810,receiptAt,null)?.EventId,null);
 Check("chat harvest rejects reward before submitted action",harvestIntent.ConfirmChat(4810,time.AddMilliseconds(49),droppedHarvestTarget with {ObservedAt=time.AddMilliseconds(49)})?.EventId,null);
 var harvestEvents=Enumerable.Range(1,8).Select(n=>new SyncEvent("harvest-"+n,"garden.empty",liveAt.AddMinutes(20).AddSeconds(n),liveActor,liveAddress,1,n)).ToArray();
