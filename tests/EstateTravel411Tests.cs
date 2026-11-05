@@ -29,6 +29,13 @@ internal static class EstateTravel411Tests
             !EstateTravelCommand.WaitForEntrance(TimeSpan.FromSeconds(14))||
             EstateTravelCommand.WaitForEntrance(TimeSpan.FromSeconds(15)))
             throw new Exception("Estate entrance loading and localized name policy failed.");
+        for(var steps=0;steps<6;steps++)
+            if(!EstateTravelCommand.CanExtendEntry(false,steps,0))
+                throw new Exception("A plot farther than three yalms must allow another checked segment.");
+        if(EstateTravelCommand.CanExtendEntry(false,6,0)||
+            !EstateTravelCommand.CanExtendEntry(true,6,0)||
+            EstateTravelCommand.CanExtendEntry(true,1,1))
+            throw new Exception("Plot entry and the extra door-reveal segment need separate bounded budgets.");
         Console.WriteLine("Estate travel command modes passed.");
     }
 }

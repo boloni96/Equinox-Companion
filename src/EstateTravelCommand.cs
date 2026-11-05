@@ -17,7 +17,8 @@ public sealed partial class Plugin
         public required int Mode;
         public required string Label;
         public required DateTimeOffset Started;
-        public int Stage;
+        public int Stage,EntrySteps,DoorRevealSteps;
+        public Vector3? EntryDirection;
         public DateTimeOffset ActionAt,DoorMissingSince;
         public Vector3? Forward,DoorApproach;
         public ulong Door;
@@ -104,18 +105,28 @@ public sealed partial class Plugin
                 if(SameEstate(outside,trip.Destination)){trip.Stage=2;}
                 else{
                     if(outside!=null)throw new InvalidOperationException("Teleport arrived on a different plot.");
-                    // Same settled three-yalm entrance step as gardening, using our navigator.
-                    trip.Forward=GardenPlotApproachPolicy.Path(self.Position,self.Position,null,self.Rotation)[0];trip.Stage=1;
+                    // Keep the settled inward heading across successive checked segments.
+                    trip.EntryDirection=new Vector3(MathF.Sin(self.Rotation),0,MathF.Cos(self.Rotation));
+                    trip.Forward=null;trip.Stage=1;
                 }
             }
             if(trip.Stage==1){
-                // Entering the plot is the goal; do not insist on the last fraction of
-                // a three-yalm step once the housing manager confirms this estate.
-                if(!SameEstate(outside,trip.Destination)&&
-                    !IndependentWalk(trip.Forward!.Value,.3f,now,allowFlight:false,directOnly:true))return;
-                StopIndependentWalk("Plot entrance step complete");
-                if(!SameEstate(AddressOf(manager->GetCurrentHouseId()),trip.Destination))throw new InvalidOperationException("The entrance step did not reach the requested plot.");
-                trip.Stage=2;
+                if(outside!=null&&!SameEstate(outside,trip.Destination))
+                    throw new InvalidOperationException("Forward approach reached a different plot; stopped.");
+                if(SameEstate(outside,trip.Destination)){
+                    StopIndependentWalk("Requested plot confirmed");trip.Forward=null;trip.Stage=2;
+                }else{
+                    if(trip.Forward==null){
+                        if(!EstateTravelCommand.CanExtendEntry(false,trip.EntrySteps,trip.DoorRevealSteps))
+                            throw new InvalidOperationException("The requested plot was not reached after six checked forward steps.");
+                        trip.EntrySteps++;trip.Forward=self.Position+trip.EntryDirection!.Value*3;
+                    }
+                    if(!IndependentWalk(trip.Forward.Value,.3f,now,allowFlight:false,directOnly:true))return;
+                    StopIndependentWalk("Forward segment complete · checking plot");
+                    trip.Forward=null;
+                    // Re-read the physical plot next frame; completing a segment is not arrival.
+                    return;
+                }
             }
             if(trip.Stage==2&&trip.Mode==0){StopEstateTravel("Arrived at the "+trip.Label+".");return;}
             if(trip.Stage==4||trip.Stage==7){
@@ -151,6 +162,21 @@ public sealed partial class Plugin
                 .Where(o=>Vector3.Distance(o.Position,self.Position)<40).OrderBy(o=>Vector3.DistanceSquared(o.Position,self.Position)).ToArray();
             var door=trip.Door==0?doors.FirstOrDefault():doors.FirstOrDefault(o=>o.GameObjectId==trip.Door);
             if(door==null){
+                if(!workshop&&SameEstate(outside,trip.Destination)&&trip.Door==0){
+                    // Some entrances only become targetable farther inside the yard.
+                    // Scan again every frame and hand off immediately when the door appears.
+                    if(trip.Forward!=null||EstateTravelCommand.CanExtendEntry(true,trip.EntrySteps,trip.DoorRevealSteps)){
+                        if(trip.Forward==null){
+                            trip.EntryDirection??=new Vector3(MathF.Sin(self.Rotation),0,MathF.Cos(self.Rotation));
+                            trip.DoorRevealSteps++;trip.Forward=self.Position+trip.EntryDirection.Value*3;
+                        }
+                        if(!IndependentWalk(trip.Forward.Value,.3f,now,allowFlight:false,directOnly:true))return;
+                        StopIndependentWalk("Extra approach complete · checking house entrance");
+                        trip.Forward=null;trip.DoorMissingSince=now;return;
+                    }
+                }
+                if(!workshop&&trip.Forward!=null&&!SameEstate(outside,trip.Destination))
+                    throw new InvalidOperationException("The forward approach left the requested plot; stopped.");
                 if(trip.DoorMissingSince==default)trip.DoorMissingSince=now;
                 if(EstateTravelCommand.WaitForEntrance(now-trip.DoorMissingSince)){
                     independentWalkStatus="Waiting for the "+(workshop?"additional chambers":"house")+" entrance to load";return;
@@ -158,6 +184,7 @@ public sealed partial class Plugin
                 throw new InvalidOperationException("No "+(workshop?"additional chambers / workshop":"house")+" entrance became available nearby after waiting for loading.");
             }
             trip.DoorMissingSince=default;
+            if(trip.Forward!=null){StopIndependentWalk("House entrance available");trip.Forward=null;}
             if(trip.Door==0&&doors.Length>1&&Vector3.Distance(doors[1].Position,self.Position)-Vector3.Distance(door.Position,self.Position)<3)
                 throw new InvalidOperationException("Multiple entrances are equally close. Move nearer the correct door and retry.");
             trip.Door=door.GameObjectId;
