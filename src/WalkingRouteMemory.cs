@@ -86,7 +86,8 @@ internal sealed class EntranceForwardProgress
         var delta=current-start;var along=delta.X*direction.X+delta.Z*direction.Z;
         var sideways=new Vector2(delta.X-direction.X*along,delta.Z-direction.Z*along).Length();
         if(sideways>.75f||along<-.5f||along>length+1||delta.Y>2.5f||delta.Y<-.7f)return EntranceProgress.OutsideCorridor;
-        if(along>=length-.3f)return EntranceProgress.Arrived;
+        if(new Vector2(delta.X-direction.X*length,delta.Z-direction.Z*length).Length()<=.3f)return EntranceProgress.Arrived;
+        if(along>=length)return EntranceProgress.OutsideCorridor;
         if(now-began>=TimeSpan.FromSeconds(8))return EntranceProgress.Expired;
         if(along>=best+.1f){best=along;progressed=now;}
         return now-progressed>=TimeSpan.FromSeconds(1.5)?EntranceProgress.Blocked:EntranceProgress.Walking;

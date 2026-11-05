@@ -186,7 +186,7 @@ public sealed partial class Plugin
                 if(dialog!=null&&dialog->PromptText!=null&&target!=null&&ulong.TryParse(target.ContentId,out var cid)&&
                     EstateTravelCommand.CanConfirmLogin(true,cid,lobby->SelectedCharacterContentId,run.ServiceAccount,lobby->ServiceAccountIndex,target.Name,TravelMenuText(dialog->PromptText->NodeText.StringPtr)??""))
                     NativeEventButton((AtkUnitBase*)dialog,dialog->YesButton);
-                else if(dialog!=null)characterTravelStatus=$"Waiting for verified login confirmation · selected {lobby->SelectedCharacterContentId}, target {run.Target.ContentId}, service account {lobby->ServiceAccountIndex+1}.";
+                else if(dialog!=null)characterTravelStatus=$"Waiting for the game to confirm {run.Target.Name} on service account {run.ServiceAccount+1}; no other character will be accepted.";
                 return;
             }
             if(lobby->TemporaryLocked||SellerAddon("_CharaSelectListMenu")==null||now<loginWorldNext)return;
