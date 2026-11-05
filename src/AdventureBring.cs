@@ -17,7 +17,7 @@ public sealed partial class Plugin
   if(ImGui.SmallButton("Bring here")){bringDestination=new AdventurePresence(world,DateTimeOffset.UtcNow.ToString("O"),world==PublicAdventureWorld()?CurrentAdventureArea():"",world==PublicAdventureWorld()?(uint)Client.TerritoryType:0,house);bringChoice=CurrentSharedCharacter()?.Id??"";bringOpenedActor=Player.ContentId;bringOpenedPairing=config.PairingKey;bringMessage="";ImGui.OpenPopup("Bring character");}
   ImGui.EndDisabled();
   if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))ImGui.SetTooltip("Bring a paired character to the world selected above. When it is your current world, also return to your current area or estate entrance. Travel does not complete tasks or add characters to the route.");
-  if(bringTrip is not null){SameLineIfFits(ButtonWidth("Cancel bring"));if(ImGui.SmallButton("Cancel bring")){bringTrip=null;try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}characterSwitchUntil=default;bringMessage="Bring character cancelled.";}}
+  if(bringTrip is not null){SameLineIfFits(ButtonWidth("Cancel bring"));if(ImGui.SmallButton("Cancel bring")){bringTrip=null;CancelAssignedLogin("Bring character cancelled.");try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}characterSwitchUntil=default;bringMessage="Bring character cancelled.";}}
   if(!ImGui.BeginPopupModal("Bring character",ImGuiWindowFlags.AlwaysAutoResize))return;
   var report=bringDestination;
   ImGui.TextUnformatted("Bring a character to this location");

@@ -49,6 +49,13 @@ public static class GardenTargetMap
                 Crop=e.Crop is null?null:e.Crop with {Evidence="garden-menu-and-system-message"}};
         };
     }
+    public static bool ActionReceipt(SyncEvent raw,Func<SyncEvent,SyncEvent> resolve,SharedGardenPlan plan,int bed,string kind,string owner,DateTimeOffset after)
+    {
+        var e=resolve(raw);
+        return e.Kind==kind&&e.At>=after&&e.Actor.ContentId==owner&&
+            e.Patch==(plan.PhysicalPatch>0?plan.PhysicalPatch:plan.Batch)&&e.Bed==bed&&
+            SharedGardenLocation.Match(e.Address,[plan])==plan.HouseId;
+    }
     public static SyncEvent Resolve(SyncEvent e,IEnumerable<SharedGardenTarget> mappings) => CreateResolver(mappings)(e);
 
     public static (string House,int Batch,int Bed)? SelectedBatch(GardenSnapshot target,IEnumerable<SharedGardenTarget> mappings,IEnumerable<SharedGardenPlan> plans)

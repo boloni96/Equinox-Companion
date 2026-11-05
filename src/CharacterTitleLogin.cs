@@ -5,7 +5,6 @@ public sealed partial class Plugin
 {
     private readonly CharacterLoginProbe titleLoginProbe = new();
     private DateTimeOffset nextTitleLoginCheck;
-    private bool titleLoginOwnsLifestream;
     private CurrentLoginIdentification? currentLoginIdentification;
     private string queuedLoginConfirmation = "";
 
@@ -21,7 +20,7 @@ public sealed partial class Plugin
             string.IsNullOrWhiteSpace(observed?.HomeWorldName) ? character.World : observed.HomeWorldName);
     }
 
-    private void StartTitleLoginCheck(SharedCharacter character)
+    private unsafe void StartTitleLoginCheck(SharedCharacter character)
     {
         if (titleLoginProbe.Active || DateTimeOffset.UtcNow < characterSwitchUntil) return;
         var mode = ReadCharacterLoginMode(true);
@@ -29,7 +28,7 @@ public sealed partial class Plugin
         var to = CharacterSwitchScope(character.Id);
         if (mode != CharacterLoginMode.Title || CharacterLoginPolicy.Action(mode, LoginRelationship(character, from, to),
                 true, CharacterSwitchConsentCurrent(character, from, to)) != CharacterLoginAction.CheckList)
-        { characterTravelStatus = "Confirm the current login before checking another account. No Lifestream request was sent."; return; }
+        { characterTravelStatus = "Confirm the current login before checking another account. No login was requested."; return; }
         var target = TitleLoginTarget(character.Id);
         if (target is null) { characterTravelStatus = "This character is no longer in the paired roster. Choose it again."; return; }
         if (followSession.Armed || shoppingTravel is not null || bringTrip is not null)
@@ -37,12 +36,12 @@ public sealed partial class Plugin
         try
         {
             if (Player.IsLoaded || Client.IsLoggedIn || LifestreamBusy()
-                || !Pi.GetIpcSubscriber<bool>("Lifestream.CanAutoLogin").InvokeFunc())
+                || SellerAddon("_TitleMenu")==null)
             { characterTravelStatus = "Wait for the title screen and the current trip to finish."; return; }
             if (!titleLoginProbe.Begin(target, config.PairingKey, DateTimeOffset.UtcNow))
             { characterTravelStatus = "A paired account and complete in-game character name and home world are needed."; return; }
             ResetServiceAccountDiscovery();currentLoginIdentification = new();identificationDcSent=false;loginWorldChecked.Clear();loginWorldNext=default;loginWorldPending=loginWorldSample=0;
-            titleLoginOwnsLifestream = false;
+            
             if(!ClickLoginMenuButton("_TitleMenu",5)){StopTitleLoginCheck("Open Data Center in game, choose this client's service account, then retry.");return;}
             characterSwitchFrom = 0; characterSwitchTarget = character;
             nextTitleLoginCheck = default;
@@ -52,7 +51,7 @@ public sealed partial class Plugin
         }
         catch
         {
-            StopTitleLoginCheck("Character-list checking is unavailable. Enable or update Lifestream and try again.");
+            StopTitleLoginCheck("Character-list checking is unavailable. Wait for the game menus and try again.");
         }
     }
 
@@ -60,7 +59,7 @@ public sealed partial class Plugin
     {
         entries = [];
         if (Player.IsLoaded || Client.IsLoggedIn
-            || !Pi.GetIpcSubscriber<bool>("Lifestream.CanInitiateTravelFromCharaSelectList").InvokeFunc()) return false;
+            || SellerAddon("_CharaSelectListMenu")==null || SellerAddon("SelectYesno")!=null || SellerAddon("SelectOk")!=null || SellerAddon("SelectString")!=null) return false;
         var lobby = AgentLobby.Instance();
         if (lobby == null || lobby->TemporaryLocked || lobby->ServiceAccountIndex < 0) return false;
         var native = lobby->LobbyData.CharaSelectEntries;
@@ -81,13 +80,11 @@ public sealed partial class Plugin
     private void StopTitleLoginCheck(string message)
     {
         var active = titleLoginProbe.Active;
-        var owned = active && titleLoginOwnsLifestream;
         titleLoginProbe.Cancel();
-        titleLoginOwnsLifestream = false;
+        
         currentLoginIdentification = null;
         if (active)
         {
-            if (owned) try { Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction(); } catch { }
             characterSwitchUntil = default; characterSwitchTarget = null;
         }
         characterTravelStatus = message;
@@ -121,8 +118,8 @@ public sealed partial class Plugin
                 StopTitleLoginCheck(result switch
                 {
                     LoginProbeResult.Cancelled => "Login check stopped because the character, pairing or game state changed.",
-                    LoginProbeResult.NotFound => "This character is not available in the current list. Check Lifestream’s service-account selection, or launch the character’s Square Enix login.",
-                    _ => "Could not verify this character within 45 seconds. Check the game’s connection message and Lifestream’s service-account selection, then try again."
+                    LoginProbeResult.NotFound => "This character is not available in the current list. Check the selected service account, or launch the character’s Square Enix login.",
+                    _ => "Could not verify this character within 45 seconds. Check the game’s connection message and the selected service account, then try again."
                 });
                 return;
             }
@@ -132,7 +129,7 @@ public sealed partial class Plugin
             ObserveLoginAccountList(entries.Where(e => !e.Locked).Select(e => ulong.Parse(e.ContentId)).ToArray());
             var from = CurrentCharacterSwitchScope(CharacterLoginMode.CharacterSelect, true);
             var to = CharacterSwitchScope(character.Id);
-            titleLoginProbe.Cancel(); titleLoginOwnsLifestream = false; characterSwitchUntil = default; characterSwitchTarget = null;
+            titleLoginProbe.Cancel();  characterSwitchUntil = default; characterSwitchTarget = null;
             characterSwitchConfirmFrom = 0; characterSwitchConfirmServiceAccount = CurrentLoginServiceAccount();
             characterSwitchConfirmKey = config.PairingKey; characterSwitchConfirmTarget = character.Id;
             characterSwitchConfirmScope = SwitchScopeKey(from) + ">" + SwitchScopeKey(to);
