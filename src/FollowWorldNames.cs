@@ -39,6 +39,9 @@ public static class EstateTravelCommand
     public static string EntranceName(string name) =>
         System.Text.RegularExpressions.Regex.Replace(name,@"\[.*?\]","").Trim();
     public static bool WaitForEntrance(TimeSpan missingFor) => missingFor<TimeSpan.FromSeconds(15);
+    public static bool CanConfirmDisplayedLogin(bool requested,ulong expectedCharacter,ulong displayedCharacter,
+        int expectedSlot,int selectedSlot,int matchingEntries,string name,string prompt) =>
+        matchingEntries==1&&CanConfirmLogin(requested,expectedCharacter,displayedCharacter,expectedSlot,selectedSlot,name,prompt);
     public static bool CanConfirmLogin(bool requested,ulong expectedCharacter,ulong selectedCharacter,
         int expectedSlot,int selectedSlot,string name,string prompt)
     {
