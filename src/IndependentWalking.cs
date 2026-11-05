@@ -122,6 +122,13 @@ public sealed partial class Plugin
         independentGoal=destination;independentRange=range;independentCharacter=Player.ContentId;independentTerritory=Client.TerritoryType;
         independentWalkFailure="";independentArrived=false;independentReplans=0;independentSince=independentPlanningSince=independentProgressAt=now;
         independentPrevious=independentLastProgress=self.Position;
+        // Short verified approaches (including the shared three-yalm estate step)
+        // do not need an area search or a detour to satisfy preferred wall clearance.
+        var direct=VerifiedWalkingOpening.ShortDirect(independentCollision,self.Position,destination);
+        if(direct.Length>1){
+            independentPath=direct;independentWaypoint=1;independentCheckedWaypoint=-1;
+            independentPhaseTimer.SetPlanning(false,now);independentWalkStatus="Short approach ready";return false;
+        }
         var cached=RecallIndependentRoute(self.Position,destination,range);
         if(cached!=null){independentPath=cached;independentWaypoint=1;independentCheckedWaypoint=-1;independentPhaseTimer.SetPlanning(false,now);independentWalkStatus="Using a saved route · checking the next section";return false;}
         // The opening is fully checked; the remainder starts at its fixed endpoint.

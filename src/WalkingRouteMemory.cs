@@ -3,6 +3,18 @@ namespace EquinoxCompanion;
 internal sealed record RememberedWalkingRoute(uint Territory,Vector3 Goal,float Range,Vector3[] Points);
 internal static class VerifiedWalkingOpening
 {
+    public static Vector3[] ShortDirect(IWalkingCollision collision,Vector3 start,Vector3 goal){
+        var distance=CollisionRouteSearch.Horizontal(start,goal);
+        if(distance>4||MathF.Abs(start.Y-goal.Y)>1.2f)return [];
+        var steps=Math.Max(1,(int)MathF.Ceiling(distance/.5f));
+        var path=new List<Vector3>{start};
+        for(var i=1;i<=steps;i++){
+            var near=Vector3.Lerp(start,goal,(float)i/steps);near.Y=path[^1].Y;
+            if(!collision.Ground(near,out var floor)||!collision.Traverse(path[^1],floor))return [];
+            path.Add(floor);
+        }
+        return MathF.Abs(path[^1].Y-goal.Y)<=1.2f?path.ToArray():[];
+    }
     public static Vector3[] Build(IWalkingCollision collision,Vector3 start,Vector3 goal,float range){
         var delta=goal-start;delta.Y=0;var length=delta.Length();
         // Different floors require the planned stair/ramp route, not a direct opening.

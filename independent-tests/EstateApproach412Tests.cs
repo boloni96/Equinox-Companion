@@ -22,6 +22,11 @@ internal static class EstateApproach412Tests
         var near=new Vector3(3,0,0);
         if(EstateDoorApproach.Find(c,near,marker,_=>true)!=near)
             throw new Exception("Already in interaction range should keep the current standing point.");
+        var direct=VerifiedWalkingOpening.ShortDirect(c,Vector3.Zero,new(3,0,0));
+        if(direct.Length<2||direct[^1]!=new Vector3(3,0,0)||direct.Any(p=>p.Z!=0))
+            throw new Exception("Three-yalm entry must keep a checked straight path.");
+        if(VerifiedWalkingOpening.ShortDirect(c,new(4,0,0),new(7,0,0)).Length!=0)
+            throw new Exception("Short approach must reject unsupported ground.");
         Console.WriteLine("Estate door floor approach passed.");
     }
 }
