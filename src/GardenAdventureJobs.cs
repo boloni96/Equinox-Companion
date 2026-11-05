@@ -26,6 +26,31 @@ public static class GardenAdventureJobs
             return GardenCareAction.Tend;
         return null;
     }
+    public static bool StalledPlanting(SharedGardenPlan plan,AdventureTaskRule rule,bool plant,bool harvest,bool tend,DateTimeOffset now)=>
+        rule.Kind=="growingcycle"&&rule.Phase=="plant"&&plant&&Action(plan,rule,plant,harvest,tend,now)==null;
+    public static string NoActionReason(SharedGardenPlan plan,AdventureTaskRule rule,bool plant,bool harvest,bool tend,DateTimeOffset now)
+    {
+        var prefix=plan.HouseName+" · Batch "+plan.Batch+": ";
+        var active=plan.Beds.Where(GardenVisualState.HasActualCrop).ToArray();
+        var mature=active.Where(b=>GardenCarePolicy.MatureForCare(b,now)).ToArray();
+        if(mature.Length>0){
+            if(!harvest)return prefix+"Harvest full batches is disabled";
+            var protectedBeds=mature.Where(b=>GardenCarePolicy.Protection(plan,b).Length>0).ToArray();
+            if(protectedBeds.Length==mature.Length)return prefix+"Harvest protected · "+string.Join("; ",protectedBeds.Select(b=>"Bed "+b.Bed+": "+GardenCarePolicy.Protection(plan,b)));
+            if(active.Any(b=>!GardenCarePolicy.MatureForCare(b,now)))return prefix+"Waiting for the whole batch to mature";
+        }
+        if(rule.Kind=="growingcycle"&&rule.Phase is "waiting" or "review")return prefix+"Next planting stage is "+rule.Phase+"; no eligible current crop care";
+        if(rule.Kind=="growingcycle"&&rule.Phase=="plant"){
+            if(!plant)return prefix+"Plant saved plans is disabled";
+            if(plan.CompletedAt!=null)return prefix+"Saved planting plan is marked complete; route still requests planting";
+            if(!GardenGuidance.ValidOrder(plan))return prefix+"Saved planting order is missing or invalid";
+            try{
+                if(GardenAutoPlant.Next(plan)==null)return prefix+"No unfinished planting step in the live plan; route progress differs";
+            }catch(InvalidOperationException e){return prefix+e.Message;}
+        }
+        if(active.Length==0)return prefix+"No active crops or eligible planting step";
+        return prefix+"Crops are growing; no enabled care action is due";
+    }
     public static bool AllowsTending(AdventureTaskRule rule)=>rule.Kind=="growingcycle"||
         rule.Kind=="care"||rule.Kind=="garden"&&(rule.Jobs==null||rule.Jobs.Contains("care"));
     public static bool InspectionDue(AdventureTaskRule rule,bool enabled,bool unknownBeds,DateTimeOffset lastInspection,DateTimeOffset now)
