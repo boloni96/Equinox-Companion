@@ -59,10 +59,11 @@ public sealed partial class Plugin
     }
     private void StartSharedWorldTravel(string worldName)
     {
+        if(EstateTravelCommand.Parse(worldName) is {} estate){StartEstateTravelCommand(estate);return;}
         var world=ResolveFollowWorld(worldName);
         if(world==0){
             var matches=FollowWorldNames.Matches(DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().Where(x=>x.IsPublic).Select(x=>(x.RowId,x.Name.ToString())),worldName);
-            FollowChatNotice(matches.Length>1?"TRAVEL — Ambiguous World: "+string.Join(", ",matches.Select(x=>x.Name)):"TRAVEL — Use /eqtravel WorldName or a unique prefix, for example /eqtravel sir.");return;
+            FollowChatNotice(matches.Length>1?"TRAVEL — Ambiguous World: "+string.Join(", ",matches.Select(x=>x.Name)):"TRAVEL — /et WorldName, fc, priv/private, efc, epriv/eprivate, or workshop.");return;
         }
         try{
             if(LifestreamBusy()){FollowChatNotice("TRAVEL — Lifestream is already busy.");return;}

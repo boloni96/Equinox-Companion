@@ -27,3 +27,17 @@ public static class FollowWorldReplayPolicy
         FollowThemSession.Matches(name,home,s.Name,s.HomeWorld) && s.SentAt>=armedAt && s.SentAt>=now-120000 && s.SentAt<=now+5000 &&
         s.ExpiresAt>now && s.ExpiresAt<=now+125000;
 }
+
+public static class EstateTravelCommand
+{
+    // Lifestream PropertyType: Home=1, FC=2. HouseEnterMode: None=0, Enter_house=2, Enter_workshop=3.
+    public static (int Property,int Mode,string Label)? Parse(string input) => input.Trim().ToLowerInvariant() switch
+    {
+        "fc" => (2,0,"FC plot"),
+        "priv" or "private" => (1,0,"private plot"),
+        "efc" => (2,2,"inside the FC house"),
+        "epriv" or "eprivate" => (1,2,"inside the private house"),
+        "workshop" => (2,3,"inside the FC workshop"),
+        _ => null
+    };
+}
