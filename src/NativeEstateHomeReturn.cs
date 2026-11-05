@@ -16,7 +16,7 @@ public sealed partial class Plugin
         public required (int Property,int Mode,string Label) Destination;
         public required DateTimeOffset Started;
         public DateTimeOffset Next;
-        public bool DcSelected,ContextSent,ReturnRequested,LoginSent,LogoutConfirmed;
+        public bool DcSelected,ContextSent,ReturnRequested,LoginSent,LoginConfirmed,LogoutConfirmed;
         public ushort WorldRequested;
     }
     private EstateHomeReturn? estateHomeReturn;
@@ -49,7 +49,9 @@ public sealed partial class Plugin
                 if(logout!=null&&logout->PromptText!=null&&NativeEventPolicy.Prompt(expected,TravelMenuText(logout->PromptText->NodeText.StringPtr)??"")&&NativeEventButton((AtkUnitBase*)logout,logout->YesButton))run.LogoutConfirmed=true;
                 return;
             }
-            if(Client.IsLoggedIn)return;
+            // Once login is accepted, queue/loading dialogs belong to the game.
+            // In particular, the queue's single button must never be treated as OK.
+            if(run.LoginConfirmed||Client.IsLoggedIn)return;
             if(SellerAddon("SelectString")!=null){SelectVerifiedServiceAccount(run.ServiceSlot);return;}
             var dcWorld=WorldName(run.ReturnRequested?run.HomeWorld:run.VisitingWorld)??"";
             if(SelectLoginDataCenter(dcWorld,ref run.DcSelected))return;
@@ -58,7 +60,7 @@ public sealed partial class Plugin
             if(lobby->ServiceAccountIndex>=0&&lobby->ServiceAccountIndex!=run.ServiceSlot)
                 throw new InvalidOperationException("The game selected a different service account. No login was requested.");
             if(SellerAddon("SelectYesno")!=null){
-                ConfirmNativeLogin(run.LoginSent,run.Character,WorldName(run.HomeWorld)??"",run.ServiceSlot,run.Name,run.HomeWorld);
+                if(ConfirmNativeLogin(run.LoginSent,run.Character,WorldName(run.HomeWorld)??"",run.ServiceSlot,run.Name,run.HomeWorld))run.LoginConfirmed=true;
                 return;
             }
             if(lobby->TemporaryLocked)return;
