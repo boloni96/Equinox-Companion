@@ -27,3 +27,19 @@ public static class FollowWorldReplayPolicy
         FollowThemSession.Matches(name,home,s.Name,s.HomeWorld) && s.SentAt>=armedAt && s.SentAt>=now-120000 && s.SentAt<=now+5000 &&
         s.ExpiresAt>now && s.ExpiresAt<=now+125000;
 }
+
+public static class EstateTravelCommand
+{
+    public static bool CanResume(ulong expectedCharacter,ulong character,uint homeWorld,uint currentWorld) =>
+        expectedCharacter!=0&&expectedCharacter==character&&homeWorld!=0&&homeWorld==currentWorld;
+    // Explicit destinations: private=1, FC=2; plot=0, house interior=2, workshop=3.
+    public static (int Property,int Mode,string Label)? Parse(string input) => input.Trim().ToLowerInvariant() switch
+    {
+        "fc" => (2,0,"FC plot"),
+        "priv" or "private" => (1,0,"private plot"),
+        "efc" => (2,2,"inside the FC house"),
+        "epriv" or "eprivate" => (1,2,"inside the private house"),
+        "workshop" => (2,3,"inside the FC workshop"),
+        _ => null
+    };
+}

@@ -214,9 +214,9 @@ public sealed partial class Plugin : IDalamudPlugin
         itemSearchCommandRegistered=Commands.AddHandler("/doihaveit",new CommandInfo((_,args)=>OpenItemSearch(args)){HelpMessage="Search recorded item locations across paired characters."});
         InitializeCameraCommand();
         Commands.AddHandler("/equinox", new CommandInfo(OnCommand) { HelpMessage = "Open Equinox Companion, shared profiles, housing and settings." });
-        shortTravelCommandRegistered = Commands.AddHandler("/et", new CommandInfo((command,args)=>StartSharedWorldTravel(args)) { HelpMessage = "Alias for /equinox travel: /et sir, /et raff, or a full World name." });
+        shortTravelCommandRegistered = Commands.AddHandler("/et", new CommandInfo((command,args)=>StartSharedWorldTravel(args)) { HelpMessage = "Travel: /et World, fc, priv/private, efc, epriv/eprivate, workshop. e-prefixed estates enter the house." });
         if(!shortTravelCommandRegistered)Log.Warning("/et is already registered; use /eqtravel or /equinox travel.");
-        travelCommandRegistered = Commands.AddHandler("/eqtravel", new CommandInfo((command,args)=>StartSharedWorldTravel(args)) { HelpMessage = "Travel with FollowThem: /eqtravel WorldName or a unique World prefix." });
+        travelCommandRegistered = Commands.AddHandler("/eqtravel", new CommandInfo((command,args)=>StartSharedWorldTravel(args)) { HelpMessage = "Travel: World name/prefix, fc, priv/private, efc, epriv/eprivate, workshop." });
         gardeningCommandRegistered = Commands.AddHandler("/gardening", new CommandInfo(OnPlantingCommand) { HelpMessage = "Open this house’s Gardening guide; follows selected synced beds." });
         if (!gardeningCommandRegistered) Log.Warning("/gardening is already registered. Use /equinox gardening instead.");
         plantingCommandRegistered = Commands.AddHandler("/planting", new CommandInfo(OnPlantingCommand) { HelpMessage = "Alias for /gardening." });
@@ -328,6 +328,7 @@ public sealed partial class Plugin : IDalamudPlugin
         var now = DateTimeOffset.UtcNow;
         UpdateQuestTools(now);
         UpdateAssignedLogin(now);
+        UpdateEstateTravel(now);
         var gardenStarted=System.Diagnostics.Stopwatch.GetTimestamp();UpdateGardenCare(now);RecordPerformanceElapsed("garden automation",gardenStarted);
         UpdateItemDelivery(now);
         // The login cancellation/deadline runs before account observations and

@@ -1,0 +1,161 @@
+using System.Numerics;
+using Dalamud.Game.ClientState.Conditions;
+using Dalamud.Game.ClientState.Objects.Enums;
+using FFXIVClientStructs.FFXIV.Client.Game;
+using FFXIVClientStructs.FFXIV.Client.Game.UI;
+using FFXIVClientStructs.FFXIV.Client.Game.Control;
+using FFXIVClientStructs.FFXIV.Client.UI;
+using FFXIVClientStructs.FFXIV.Component.GUI;
+namespace EquinoxCompanion;
+
+public sealed partial class Plugin
+{
+    private sealed class EstateTrip
+    {
+        public required Address Destination;
+        public required ulong Character;
+        public required int Mode;
+        public required string Label;
+        public required DateTimeOffset Started;
+        public int Stage;
+        public DateTimeOffset ActionAt;
+        public Vector3? Forward;
+        public ulong Door;
+        public readonly GardenArrivalGate Arrival=new();
+    }
+    private EstateTrip? estateTrip;
+    private void StopEstateTravel(string reason)
+    {
+        if(estateHomeReturn!=null){estateHomeReturn=null;FollowChatNotice("TRAVEL — Home return stopped. Any transfer already accepted by the game may finish.");}
+        if(estateTrip==null)return;
+        estateTrip=null;StopIndependentWalk("Estate travel: "+reason);
+        FollowChatNotice("TRAVEL — "+reason);
+    }
+    private static bool SameEstate(Address? a,Address b)=>a!=null&&a.WorldId==b.WorldId&&a.TerritoryTypeId==b.TerritoryTypeId&&a.Ward==b.Ward&&a.Plot==b.Plot;
+
+    private unsafe void StartEstateTravelCommand((int Property,int Mode,string Label) destination)
+    {
+        if(estateTrip!=null||estateHomeReturn!=null){FollowChatNotice("TRAVEL — Estate travel is running. Use /et stop first.");return;}
+        if(!Player.IsLoaded||Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]){
+            FollowChatNotice("TRAVEL — Wait until your character has loaded.");return;
+        }
+        if(Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.BoundByDuty]||Conditions[ConditionFlag.Casting]||HelperInCutscene()||QuestConversationVisible()||VisibleFollowAddon("SelectYesno")){
+            FollowChatNotice("TRAVEL — Finish the current combat, duty, cast or conversation first.");return;
+        }
+        if(followSession.Armed||independentMoving||independentSearch!=null||independentQuestId!=0||assignedLogin!=null||eventAccountActive||gardenTendRoute!=null||shoppingTravel!=null||goSeeHomeTrip!=null||goSeeFriendTrip!=null){
+            FollowChatNotice("TRAVEL — Stop the active follower, routine or journey first.");return;
+        }
+        try{
+            if(Player.CurrentWorld.RowId!=Player.HomeWorld.RowId){BeginEstateHomeReturn(destination);return;}
+            var owned=HousingManager.GetOwnedHouseId(destination.Property==1?EstateType.PersonalEstate:EstateType.FreeCompanyEstate);
+            var address=AddressOf(owned);
+            if(address==null||address.WorldId!=Player.HomeWorld.RowId||address.Apartment)throw new InvalidOperationException("This character has no verified "+(destination.Property==1?"private":"FC")+" plot.");
+            var manager=HousingManager.Instance();var inside=manager==null?null:AddressOf(manager->GetCurrentIndoorHouseId());
+            var trip=new EstateTrip{Destination=address,Character=Player.ContentId,Mode=destination.Mode,Label=destination.Label,Started=DateTimeOffset.UtcNow};
+            if(SameEstate(inside,address)&&inside!.Room==0&&destination.Mode!=0){
+                if(destination.Mode==3&&inside.Workshop||destination.Mode==2&&!inside.Workshop){FollowChatNotice("TRAVEL — Already "+destination.Label+".");return;}
+                if(destination.Mode==3&&!inside.Workshop){trip.Stage=5;estateTrip=trip;FollowChatNotice("TRAVEL — Walking to the FC workshop entrance.");return;}
+            }
+            var outside=manager==null?null:AddressOf(manager->GetCurrentHouseId());
+            if(manager!=null&&manager->GetCurrentHousingTerritoryType()==HousingTerritoryType.Outdoor&&SameEstate(outside,address)){
+                trip.Stage=2;estateTrip=trip;FollowChatNotice("TRAVEL — Going to "+destination.Label+".");return;
+            }
+            var telepo=Telepo.Instance();if(telepo==null||telepo->ActiveTeleportRequest)throw new InvalidOperationException("Teleport is not ready.");
+            telepo->UpdateAetheryteList();
+            foreach(var entry in telepo->TeleportList){
+                if(entry.HouseId.Id!=owned.Id||entry.AetheryteId==0)continue;
+                if(!telepo->Teleport(entry.AetheryteId,entry.SubIndex))throw new InvalidOperationException("The game refused the estate teleport.");
+                trip.ActionAt=trip.Started;estateTrip=trip;FollowChatNotice("TRAVEL — Teleporting to "+destination.Label+". /et stop cancels the remaining route.");return;
+            }
+            throw new InvalidOperationException("The exact estate teleport is not available on this character.");
+        }catch(Exception ex){FollowChatNotice("TRAVEL — "+ex.Message);}
+    }
+
+    private unsafe void UpdateEstateTravel(DateTimeOffset now)
+    {
+        if(estateHomeReturn!=null){UpdateEstateHomeReturn(now);return;}
+        if(estateTrip is not {} trip)return;
+        try{
+            if(followSession.Armed||independentQuestId!=0||eventAccountActive||gardenTendRoute!=null||assignedLogin!=null)throw new InvalidOperationException("Another routine started; estate travel stopped.");
+            if(now-trip.Started>TimeSpan.FromMinutes(5))throw new InvalidOperationException("Estate travel timed out.");
+            if(!Player.IsLoaded)return;
+            if(Player.ContentId!=trip.Character||Player.CurrentWorld.RowId!=trip.Destination.WorldId)throw new InvalidOperationException("Character or world changed; estate travel stopped.");
+            if(Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]){trip.Arrival.Reset();StopIndependentWalk("Loading estate");return;}
+            if(Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.BoundByDuty])throw new InvalidOperationException("Estate travel stopped for combat or duty.");
+            if(Conditions[ConditionFlag.Casting]||HelperInCutscene())return;
+            if(Objects.LocalPlayer is not {} self)return;
+            var manager=HousingManager.Instance();if(manager==null)return;
+            var inside=AddressOf(manager->GetCurrentIndoorHouseId());
+            var outside=AddressOf(manager->GetCurrentHouseId());
+            var indoors=manager->GetCurrentHousingTerritoryType()!=HousingTerritoryType.Outdoor&&SameEstate(inside,trip.Destination);
+            if(indoors&&inside!.Workshop&&trip.Mode==3){StopEstateTravel("Arrived inside the FC workshop.");return;}
+            if(indoors&&!inside!.Workshop&&inside.Room==0){
+                if(trip.Mode==2){StopEstateTravel("Arrived "+trip.Label+".");return;}
+                if(trip.Mode==3&&trip.Stage<5){trip.Stage=5;trip.Door=0;trip.Arrival.Reset();}
+            }
+            if(trip.Stage>=5){
+                if(!indoors||inside!.Workshop||inside.Room!=0)throw new InvalidOperationException("The expected FC house interior is not confirmed.");
+            }else if(trip.Stage<4){
+                if(Client.TerritoryType!=trip.Destination.TerritoryTypeId||manager->GetCurrentWard()!=trip.Destination.Ward-1)return;
+                if(manager->GetCurrentHousingTerritoryType()!=HousingTerritoryType.Outdoor)return;
+            }
+            if(trip.Stage==0){
+                if(now-trip.ActionAt<TimeSpan.FromSeconds(3)||!trip.Arrival.Ready(false,self.Position,now))return;
+                if(SameEstate(outside,trip.Destination)){trip.Stage=2;}
+                else{
+                    if(outside!=null)throw new InvalidOperationException("Teleport arrived on a different plot.");
+                    // Same settled three-yalm entrance step as gardening, using our navigator.
+                    trip.Forward=GardenPlotApproachPolicy.Path(self.Position,self.Position,null,self.Rotation)[0];trip.Stage=1;
+                }
+            }
+            if(trip.Stage==1){
+                if(!IndependentWalk(trip.Forward!.Value,.3f,now,allowFlight:false))return;
+                StopIndependentWalk("Plot entrance step complete");
+                if(!SameEstate(AddressOf(manager->GetCurrentHouseId()),trip.Destination))throw new InvalidOperationException("The entrance step did not reach the requested plot.");
+                trip.Stage=2;
+            }
+            if(trip.Stage==2&&trip.Mode==0){StopEstateTravel("Arrived at the "+trip.Label+".");return;}
+            if(trip.Stage==4||trip.Stage==7){
+                if(now-trip.ActionAt>TimeSpan.FromSeconds(30))throw new InvalidOperationException("The game did not confirm entry into "+trip.Label+".");
+                return;
+            }
+            if(trip.Stage is 3 or 6){
+                if(now-trip.ActionAt>TimeSpan.FromSeconds(20))throw new InvalidOperationException("The expected entrance prompt was not available.");
+                if(Targets.Target?.GameObjectId!=trip.Door)return;
+                if(trip.Stage==3){
+                    var prompt=(AddonSelectYesno*)KeyboundAddon("SelectYesno");
+                    var expected=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Warp>().GetRowOrDefault(131148)?.Question.ToString()??"";
+                    if(prompt!=null&&prompt->PromptText!=null&&NativeEventPolicy.Prompt(expected,TravelMenuText(prompt->PromptText->NodeText.StringPtr)??"")&&NativeEventButton((AtkUnitBase*)prompt,prompt->YesButton)){
+                        trip.Stage=4;trip.ActionAt=now;
+                    }
+                }else{
+                    var addon=KeyboundAddon("SelectString");if(addon==null||!addon->IsVisible||!addon->IsReady)return;
+                    var expected=DataManager.GetExcelSheet<NativeEventQuestText>(name:"custom/001/CmnDefHousingPersonalRoomEntrance_00178").GetRowOrDefault(11)?.Text??"";
+                    if(string.IsNullOrWhiteSpace(expected))throw new InvalidOperationException("Workshop menu text could not be verified.");
+                    var matches=HelperChoices(addon,"SelectString").Select((text,index)=>(text,index)).Where(x=>NativeEventPolicy.Prompt(expected,x.text)).ToArray();
+                    if(matches.Length==1){SelectTravelChoice(addon,matches[0].index);trip.Stage=7;trip.ActionAt=now;}
+                }
+                return;
+            }
+            if(QuestConversationVisible()||VisibleFollowAddon("SelectYesno"))return;
+            if(Conditions[ConditionFlag.Mounted])throw new InvalidOperationException("Dismount and run the estate command again.");
+            var workshop=trip.Stage==5;
+            var ids=workshop?new uint[]{2004353}:new uint[]{2002737,2002739};
+            var names=ids.Select(id=>DataManager.GetExcelSheet<Lumina.Excel.Sheets.EObjName>().GetRowOrDefault(id)?.Singular.ToString()??"").Where(n=>n.Length>0).ToArray();
+            var doors=Objects.Where(o=>o.ObjectKind==ObjectKind.EventObj&&o.IsTargetable&&(ids.Contains(o.BaseId)||names.Contains(o.Name.ToString())))
+                .Where(o=>Vector3.Distance(o.Position,self.Position)<40).OrderBy(o=>Vector3.DistanceSquared(o.Position,self.Position)).ToArray();
+            var door=trip.Door==0?doors.FirstOrDefault():doors.FirstOrDefault(o=>o.GameObjectId==trip.Door);
+            if(door==null)throw new InvalidOperationException("No "+(workshop?"workshop":"house")+" entrance is loaded nearby.");
+            if(trip.Door==0&&doors.Length>1&&Vector3.Distance(doors[1].Position,self.Position)-Vector3.Distance(door.Position,self.Position)<3)
+                throw new InvalidOperationException("Multiple entrances are equally close. Move nearer the correct door and retry.");
+            trip.Door=door.GameObjectId;
+            if(!IndependentWalk(door.Position,2.5f,now,allowFlight:false))return;
+            StopIndependentWalk("At estate door");
+            if(Vector3.Distance(self.Position,door.Position)>4)return;
+            var targetSystem=TargetSystem.Instance();if(targetSystem==null)return;
+            Targets.Target=door;
+            targetSystem->InteractWithObject((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)door.Address,false);
+            trip.Stage=workshop?6:3;trip.ActionAt=now;
+        }catch(Exception ex){StopEstateTravel(ex.Message);}
+    }
+}
