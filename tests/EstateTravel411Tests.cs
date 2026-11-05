@@ -18,6 +18,12 @@ internal static class EstateTravel411Tests
             EstateTravelCommand.CanResume(42,42,100,101)||
             EstateTravelCommand.CanResume(0,0,0,0))
             throw new Exception("Estate continuation must require the same character on its home world.");
+        bool Confirm(bool sent=true,ulong selected=42,int slot=1,string prompt="Log in with Gideon Bulwark?") =>
+            EstateTravelCommand.CanConfirmLogin(sent,42,selected,1,slot,"Gideon Bulwark",prompt);
+        if(!Confirm()||!Confirm(prompt:"Mit Gideon Bulwark einloggen?")||
+            Confirm(sent:false)||Confirm(selected:43)||Confirm(selected:0)||Confirm(slot:0)||Confirm(slot:-1)||
+            Confirm(prompt:"Log in with Another Character?")||Confirm(prompt:"Log in with Gideon Bulwarkson?"))
+            throw new Exception("Estate login confirmation must accept name-only prompts for the reserved identity only.");
         Console.WriteLine("Estate travel command modes passed.");
     }
 }
