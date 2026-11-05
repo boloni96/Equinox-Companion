@@ -13,6 +13,11 @@ internal static class EstateTravel411Tests
         Check(" EPRIVATE ",1,2);
         foreach(var world in new[]{"Siren","raff","private extra","","fc@Other"})
             if(EstateTravelCommand.Parse(world)!=null)throw new Exception("Estate parser consumed world or invalid input");
+        if(!EstateTravelCommand.CanResume(42,42,100,100)||
+            EstateTravelCommand.CanResume(42,43,100,100)||
+            EstateTravelCommand.CanResume(42,42,100,101)||
+            EstateTravelCommand.CanResume(0,0,0,0))
+            throw new Exception("Estate continuation must require the same character on its home world.");
         Console.WriteLine("Estate travel command modes passed.");
     }
 }

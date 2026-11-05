@@ -328,6 +328,7 @@ public sealed partial class Plugin : IDalamudPlugin
         var now = DateTimeOffset.UtcNow;
         UpdateQuestTools(now);
         UpdateAssignedLogin(now);
+        UpdateEstateTravel(now);
         var gardenStarted=System.Diagnostics.Stopwatch.GetTimestamp();UpdateGardenCare(now);RecordPerformanceElapsed("garden automation",gardenStarted);
         UpdateItemDelivery(now);
         // The login cancellation/deadline runs before account observations and

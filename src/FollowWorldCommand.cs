@@ -59,6 +59,7 @@ public sealed partial class Plugin
     }
     private void StartSharedWorldTravel(string worldName)
     {
+        if(worldName.Trim().Equals("stop",StringComparison.OrdinalIgnoreCase)){StopEstateTravel("Stopped");return;}
         if(EstateTravelCommand.Parse(worldName) is {} estate){StartEstateTravelCommand(estate);return;}
         var world=ResolveFollowWorld(worldName);
         if(world==0){

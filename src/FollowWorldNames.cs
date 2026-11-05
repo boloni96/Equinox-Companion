@@ -30,7 +30,9 @@ public static class FollowWorldReplayPolicy
 
 public static class EstateTravelCommand
 {
-    // Lifestream PropertyType: Home=1, FC=2. HouseEnterMode: None=0, Enter_house=2, Enter_workshop=3.
+    public static bool CanResume(ulong expectedCharacter,ulong character,uint homeWorld,uint currentWorld) =>
+        expectedCharacter!=0&&expectedCharacter==character&&homeWorld!=0&&homeWorld==currentWorld;
+    // Explicit destinations: private=1, FC=2; plot=0, house interior=2, workshop=3.
     public static (int Property,int Mode,string Label)? Parse(string input) => input.Trim().ToLowerInvariant() switch
     {
         "fc" => (2,0,"FC plot"),
