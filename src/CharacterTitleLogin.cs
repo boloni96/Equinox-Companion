@@ -5,7 +5,6 @@ public sealed partial class Plugin
 {
     private readonly CharacterLoginProbe titleLoginProbe = new();
     private DateTimeOffset nextTitleLoginCheck;
-    private bool titleLoginOwnsLifestream;
     private CurrentLoginIdentification? currentLoginIdentification;
     private string queuedLoginConfirmation = "";
 
@@ -42,7 +41,7 @@ public sealed partial class Plugin
             if (!titleLoginProbe.Begin(target, config.PairingKey, DateTimeOffset.UtcNow))
             { characterTravelStatus = "A paired account and complete in-game character name and home world are needed."; return; }
             ResetServiceAccountDiscovery();currentLoginIdentification = new();identificationDcSent=false;loginWorldChecked.Clear();loginWorldNext=default;loginWorldPending=loginWorldSample=0;
-            titleLoginOwnsLifestream = false;
+            
             if(!ClickLoginMenuButton("_TitleMenu",5)){StopTitleLoginCheck("Open Data Center in game, choose this client's service account, then retry.");return;}
             characterSwitchFrom = 0; characterSwitchTarget = character;
             nextTitleLoginCheck = default;
@@ -81,13 +80,11 @@ public sealed partial class Plugin
     private void StopTitleLoginCheck(string message)
     {
         var active = titleLoginProbe.Active;
-        var owned = active && titleLoginOwnsLifestream;
         titleLoginProbe.Cancel();
-        titleLoginOwnsLifestream = false;
+        
         currentLoginIdentification = null;
         if (active)
         {
-            if (owned) try { Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction(); } catch { }
             characterSwitchUntil = default; characterSwitchTarget = null;
         }
         characterTravelStatus = message;
@@ -132,7 +129,7 @@ public sealed partial class Plugin
             ObserveLoginAccountList(entries.Where(e => !e.Locked).Select(e => ulong.Parse(e.ContentId)).ToArray());
             var from = CurrentCharacterSwitchScope(CharacterLoginMode.CharacterSelect, true);
             var to = CharacterSwitchScope(character.Id);
-            titleLoginProbe.Cancel(); titleLoginOwnsLifestream = false; characterSwitchUntil = default; characterSwitchTarget = null;
+            titleLoginProbe.Cancel();  characterSwitchUntil = default; characterSwitchTarget = null;
             characterSwitchConfirmFrom = 0; characterSwitchConfirmServiceAccount = CurrentLoginServiceAccount();
             characterSwitchConfirmKey = config.PairingKey; characterSwitchConfirmTarget = character.Id;
             characterSwitchConfirmScope = SwitchScopeKey(from) + ">" + SwitchScopeKey(to);

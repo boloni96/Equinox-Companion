@@ -24,7 +24,6 @@ public sealed partial class Plugin
         var target = TitleLoginTarget(character.Id);
         if (target is null || !titleLoginProbe.Begin(target, config.PairingKey, now))
         { characterTravelStatus = "A paired account and complete character identity are needed."; return; }
-        titleLoginOwnsLifestream = false;
         ResetServiceAccountDiscovery();currentLoginIdentification = new();identificationDcSent=false;loginWorldChecked.Clear();loginWorldNext=default;loginWorldPending=loginWorldSample=0;
         queuedLoginConfirmation = "";
         characterSwitchFrom = 0; characterSwitchTarget = character;
@@ -177,7 +176,7 @@ public sealed partial class Plugin
         {
             // The current native account identifies the selected character's
             // whole account or a learned service-account link. Only now may
-            // Lifestream navigate to that verified target from the title screen.
+            // Equinox navigate to that verified target from the title screen.
             if(!SelectNextKnownLoginWorld(target.ContentId,target.World,now))StopTitleLoginCheck("Account identified, but the target character was not found on this data center. Check its visiting world.");
         }
     }
