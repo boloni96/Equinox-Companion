@@ -337,7 +337,7 @@ public sealed partial class Plugin
                 dialog->FireCallbackInt(0);confirmationSent=true;return false;
             }
             var kind=action==GardenCareAction.Plant?"garden.planted":action==GardenCareAction.Tend?"garden.tended":action==GardenCareAction.Fertilize?"garden.fertilized":"garden.empty";
-            return p.LocalGardenActions().Any(e=>e.Kind==kind&&e.At>=actionAt&&e.Actor.ContentId==owner.ToString()&&e.Patch==(original.PhysicalPatch>0?original.PhysicalPatch:original.Batch)&&e.Bed==bed&&SharedGardenLocation.Match(e.Address,[original])==original.HouseId);
+            return p.LocalGardenActions().Select(p.GardenResolver()).Any(e=>e.Kind==kind&&e.At>=actionAt&&e.Actor.ContentId==owner.ToString()&&e.Patch==(original.PhysicalPatch>0?original.PhysicalPatch:original.Batch)&&e.Bed==bed&&SharedGardenLocation.Match(e.Address,[original])==original.HouseId);
         }
         public bool Close(int bed)
         {

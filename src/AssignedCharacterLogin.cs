@@ -1,3 +1,5 @@
+using FFXIVClientStructs.FFXIV.Client.System.String;
+using Dalamud.Game.ClientState.Conditions;
 using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using FFXIVClientStructs.FFXIV.Component.GUI;
@@ -6,7 +8,7 @@ public sealed partial class Plugin
 {
     private sealed record AssignedLogin(SharedCharacter Target,ulong From,int ServiceAccount,string Pairing,string World,DateTimeOffset Deadline);
     private AssignedLogin? assignedLogin;
-    private bool assignedDcSent,assignedServiceSent,assignedLoginSent;
+    private bool assignedDcSent,assignedServiceSent,assignedLoginSent,assignedLogoutConfirmed;
     private DateTimeOffset assignedLoginNext,loginWorldNext;
     private readonly HashSet<ushort> loginWorldChecked=[];
     private ushort loginWorldPending,loginWorldSample;private DateTimeOffset loginWorldSentAt,loginWorldStableAt;
@@ -29,19 +31,46 @@ public sealed partial class Plugin
         var key=SquareEnixLoginState.TargetAccountKey(config.SharedRoster,target,to.PersonId,to.AccountId);
         return RecordedCharacterServiceSlot(target);
     }
-    private bool StartAssignedCharacterSwitch(SharedCharacter target,bool allowLinkedAccounts=false)
+    private unsafe bool StartAssignedCharacterSwitch(SharedCharacter target,bool allowLinkedAccounts=false)
     {
         if(assignedLogin!=null)return assignedLogin.Target.Id==target.Id;
         var current=CurrentSharedCharacter();var index=GardenServiceAccount(target);
         if(current==null||index is <0 or >15||(!allowLinkedAccounts&&current.AccountId!=target.AccountId)||!DeliveryCharacters().Any(x=>x.Character.Id==target.Id&&x.Person.Characters.Any(c=>c.Id==current.Id))){characterTravelStatus="Verify this client's current service account before automatic switching.";return false;}
-        if(LifestreamBusy()||followSession.Armed||TraderRunning||HelperInCutscene()){characterTravelStatus="Finish the active operation before switching.";return false;}
+        if(estateHomeReturn!=null||estateTrip!=null||LifestreamBusy()||followSession.Armed||TraderRunning||HelperInCutscene()){characterTravelStatus="Finish the active operation before switching.";return false;}
         try{
-            Pi.GetIpcSubscriber<object>("Lifestream.Logout").InvokeFunc();
+            var ui=UIModule.Instance();if(ui==null)throw new InvalidOperationException("Game menu unavailable.");
             assignedLogin=new(target,Player.ContentId,index,config.PairingKey,LastLoginWorld(target),DateTimeOffset.UtcNow.AddMinutes(5));
-            assignedDcSent=assignedServiceSent=assignedLoginSent=false;assignedLoginNext=default;loginWorldChecked.Clear();loginWorldNext=default;loginWorldPending=loginWorldSample=0;assignedLoginError="";
+            assignedDcSent=assignedServiceSent=assignedLoginSent=assignedLogoutConfirmed=false;assignedLoginNext=default;loginWorldChecked.Clear();loginWorldNext=default;loginWorldPending=loginWorldSample=0;assignedLoginError="";
+            using var command=new Utf8String();command.SetString("/logout");ui->ProcessChatBoxEntry(&command,0,false);
             characterSwitchFrom=Player.ContentId;characterSwitchTarget=target;characterSwitchUntil=assignedLogin.Deadline;
             characterTravelStatus=$"Switching using this client's verified service account {index+1}: {target.Name} @ {target.World}.";return true;
-        }catch(Exception){characterTravelStatus="Lifestream logout is unavailable; no automatic login was requested.";return false;}
+        }catch(Exception){assignedLogin=null;characterTravelStatus="Native logout is unavailable; no automatic login was requested.";return false;}
+    }
+    private bool StartAssignedLoginFromList(SharedCharacter target)
+    {
+        var slot=CurrentLoginServiceAccount();
+        if(slot is <0 or >15||assignedLogin!=null)return false;
+        assignedLogin=new(target,0,slot,config.PairingKey,LastLoginWorld(target),DateTimeOffset.UtcNow.AddMinutes(5));
+        assignedDcSent=assignedServiceSent=assignedLoginSent=assignedLogoutConfirmed=false;
+        assignedLoginNext=default;loginWorldChecked.Clear();loginWorldNext=default;loginWorldPending=loginWorldSample=0;assignedLoginError="";
+        characterSwitchFrom=0;characterSwitchTarget=target;characterSwitchUntil=assignedLogin.Deadline;
+        return true;
+    }
+    private unsafe bool BeginNativeCharacterLogin(SharedCharacter character,int slot)
+    {
+        var target=TitleLoginTarget(character.Id);var lobby=AgentLobby.Instance();var menu=SellerAddon("_CharaSelectListMenu");
+        if(target==null||lobby==null||lobby->TemporaryLocked||lobby->ServiceAccountIndex!=slot||menu==null||
+            SellerAddon("SelectYesno")!=null||SellerAddon("SelectOk")!=null||SellerAddon("SelectString")!=null)return false;
+        var entries=lobby->LobbyData.CharaSelectEntries;if(entries.LongCount is <=0 or >512)return false;
+        var index=-1;var current=0;var matches=0;
+        foreach(var item in entries){
+            var entry=item.Value;
+            if(entry!=null&&entry->ContentId.ToString()==target.ContentId&&entry->NameString==target.Name&&WorldName(entry->HomeWorldId)==target.World&&
+                (entry->LoginFlags&CharaSelectCharacterEntryLoginFlags.Locked)==0){index=current;matches++;}
+            current++;
+        }
+        if(matches!=1||index<0||index>250)return false;
+        LoginCallback(menu,29,0,index);return true;
     }
     private static unsafe void LoginCallback(AtkUnitBase* addon,params int[] args)
     {
@@ -113,7 +142,6 @@ public sealed partial class Plugin
     private void CancelAssignedLogin(string reason)
     {
         if(assignedLogin==null)return;assignedLogin=null;assignedLoginError=reason;characterSwitchTarget=null;characterSwitchUntil=default;
-        try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}
         characterTravelStatus=reason;
     }
     private unsafe void UpdateAssignedLogin(DateTimeOffset now)
@@ -121,18 +149,31 @@ public sealed partial class Plugin
         if(assignedLogin is not {} run||now<assignedLoginNext)return;assignedLoginNext=now.AddMilliseconds(500);
         try{
             if(config.PairingKey!=run.Pairing||now>=run.Deadline)throw new InvalidOperationException("Assigned login expired or pairing changed.");
-            if(Player.IsLoaded){if(Player.ContentId==run.From)return;if(Player.ContentId.ToString()!=run.Target.ContentId)throw new InvalidOperationException("An unexpected character logged in.");assignedLogin=null;characterSwitchUntil=default;characterSwitchTarget=null;return;}
-            if(LifestreamBusy())return;
+            if(Player.IsLoaded){if(Player.ContentId==run.From){
+                if(assignedLogoutConfirmed||Conditions[ConditionFlag.LoggingOut])return;
+                var logout=(AddonSelectYesno*)SellerAddon("SelectYesno");
+                var expected=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Addon>().GetRowOrDefault(115)?.Text.ToString()??"";
+                if(logout!=null&&logout->PromptText!=null&&NativeEventPolicy.Prompt(expected,TravelMenuText(logout->PromptText->NodeText.StringPtr)??"")&&NativeEventButton((AtkUnitBase*)logout,logout->YesButton))assignedLogoutConfirmed=true;
+                return;
+            }if(Player.ContentId.ToString()!=run.Target.ContentId)throw new InvalidOperationException("An unexpected character logged in.");assignedLogin=null;characterSwitchUntil=default;characterSwitchTarget=null;return;}
+            if(Client.IsLoggedIn||LifestreamBusy())return;
             if(SellerAddon("SelectString")!=null){if(!assignedServiceSent)assignedServiceSent=SelectVerifiedServiceAccount(run.ServiceAccount);return;}
             if(SelectLoginDataCenter(run.World,ref assignedDcSent))return;
             if(SellerAddon("_TitleMenu")!=null&&!assignedDcSent){ClickLoginMenuButton("_TitleMenu",5);return;}
             if(SellerAddon("SelectOk")!=null)throw new InvalidOperationException("The game reported a login message. Review it before continuing.");
             var lobby=AgentLobby.Instance();if(lobby==null||lobby->TemporaryLocked||SellerAddon("_CharaSelectListMenu")==null)return;
             if(lobby->ServiceAccountIndex!=run.ServiceAccount)throw new InvalidOperationException("The selected service account differs from this client's reserved account.");
-            if(assignedLoginSent)return;
+            if(assignedLoginSent){
+                var dialog=(AddonSelectYesno*)SellerAddon("SelectYesno");
+                var target=TitleLoginTarget(run.Target.Id);
+                if(dialog!=null&&dialog->PromptText!=null&&target!=null&&ulong.TryParse(target.ContentId,out var cid)&&
+                    EstateTravelCommand.CanConfirmLogin(true,cid,lobby->SelectedCharacterContentId,run.ServiceAccount,lobby->ServiceAccountIndex,target.Name,TravelMenuText(dialog->PromptText->NodeText.StringPtr)??""))
+                    NativeEventButton((AtkUnitBase*)dialog,dialog->YesButton);
+                return;
+            }
             if(now<loginWorldNext)return;
             if(TryReadReadyLoginList(out var entries)&&entries.FirstOrDefault(e=>!e.Locked&&e.ContentId==run.Target.ContentId&&e.World==run.Target.World) is {} verified){
-                if(!Pi.GetIpcSubscriber<string,string,bool>("Lifestream.InitiateLoginFromCharaSelectScreen").InvokeFunc(verified.Name,verified.World))throw new InvalidOperationException("Verified character login was refused.");assignedLoginSent=true;return;
+                assignedLoginSent=BeginNativeCharacterLogin(run.Target,run.ServiceAccount);return;
             }
             if(!SelectNextKnownLoginWorld(run.Target.ContentId,run.Target.World,now))throw new InvalidOperationException("No matching character found on the selected account and data center. No alternate account was tried.");
         }catch(Exception e){CancelAssignedLogin(e.Message);}

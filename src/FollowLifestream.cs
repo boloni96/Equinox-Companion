@@ -8,7 +8,7 @@ public sealed partial class Plugin
     private uint lifestreamDestination;
     private FollowPortalSignal? worldSource;
     private DateTimeOffset worldSourceAt;
-    private bool LifestreamBusy()=>Pi.GetIpcSubscriber<bool>("Lifestream.IsBusy").InvokeFunc();
+    private bool LifestreamBusy(){try{return Pi.GetIpcSubscriber<bool>("Lifestream.IsBusy").InvokeFunc();}catch{return false;}}
     private void DrawLifestreamSettings()
     {
         MessageToggle("Use Lifestream for supported travel",config.FollowThem.UseLifestream,v=>config.FollowThem.UseLifestream=v);

@@ -13,7 +13,7 @@ public sealed partial class Plugin
  private SharedCharacter? characterSwitchTarget;
  private CharacterLoginMode characterLoginMode;
  private DateTimeOffset characterLoginProbeAt;
- private CharacterLoginMode ReadCharacterLoginMode(bool refresh=false)
+ private unsafe CharacterLoginMode ReadCharacterLoginMode(bool refresh=false)
  {
   if(Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]||Conditions[ConditionFlag.BoundByDuty])return CharacterLoginMode.Unavailable;
   if(Player.IsLoaded&&Player.ContentId!=0)return CharacterLoginMode.InGame;
@@ -23,8 +23,8 @@ public sealed partial class Plugin
   characterLoginProbeAt=now.AddMilliseconds(500);characterLoginMode=CharacterLoginMode.Unavailable;
   try{
    if(LifestreamBusy())return characterLoginMode;
-   if(Pi.GetIpcSubscriber<bool>("Lifestream.CanAutoLogin").InvokeFunc())characterLoginMode=CharacterLoginMode.Title;
-   else if(Pi.GetIpcSubscriber<bool>("Lifestream.CanInitiateTravelFromCharaSelectList").InvokeFunc())characterLoginMode=CharacterLoginMode.CharacterSelect;
+   if(SellerAddon("_TitleMenu")!=null)characterLoginMode=CharacterLoginMode.Title;
+   else if(SellerAddon("_CharaSelectListMenu")!=null&&LoginMenuUnlocked())characterLoginMode=CharacterLoginMode.CharacterSelect;
   }catch{/* Optional Lifestream login IPC is unavailable; keep the saved roster usable. */}
   return characterLoginMode;
  }
@@ -44,7 +44,7 @@ public sealed partial class Plugin
  {
   if(loginMenuReturn.Active){characterTravelStatus="Returning to the main menu. Wait or stop the return before choosing a character.";return;}
   var mode=ReadCharacterLoginMode(true);
-  if(mode==CharacterLoginMode.Unavailable){characterTravelStatus=Player.IsLoaded?"Leave combat, loading or your duty before switching characters.":"Wait for the title or character-selection screen and enable Lifestream before logging in.";return;}
+  if(mode==CharacterLoginMode.Unavailable){characterTravelStatus=Player.IsLoaded?"Leave combat, loading or your duty before switching characters.":"Wait for the title or character-selection screen  before logging in.";return;}
   if(DateTimeOffset.UtcNow<characterSwitchUntil){characterTravelStatus="A character switch is already requested.";return;}
   if(followSession.Armed){characterTravelStatus="Stop FollowThem before switching characters.";return;}
   if(mode==CharacterLoginMode.InGame&&CharacterTravelPolicy.IsCurrent(character,ReadActor())){characterTravelStatus="You are already on this character.";return;}
@@ -73,15 +73,12 @@ public sealed partial class Plugin
   if(!CharacterTravelPolicy.ValidTarget(name,world)){characterTravelStatus="A complete in-game character name and home world are needed. Sync this character first.";return;}
   try{
    if(shoppingTravel is not null||LifestreamBusy()){characterTravelStatus="Travel is already in progress.";return;}
-   var accepted=CharacterLoginPolicy.Request(mode,name,world,
-    command=>Pi.GetIpcSubscriber<string,object>("Lifestream.ExecuteCommand").InvokeAction(command),
-    (n,w)=>Pi.GetIpcSubscriber<string,string,bool>("Lifestream.ConnectAndLogin").InvokeFunc(n,w),
-    (n,w)=>Pi.GetIpcSubscriber<string,string,bool>("Lifestream.InitiateLoginFromCharaSelectScreen").InvokeFunc(n,w));
-   if(!accepted){characterTravelStatus=mode==CharacterLoginMode.CharacterSelect?"Lifestream could not find "+name+" @ "+world+" in the currently loaded character list. Target remains "+to.PersonName+" / "+to.AccountName+". Return to the game title screen (not your MAIN account), then choose Log in as this character again so the service account and world can be checked.":"Lifestream could not start login from this screen. Wait for the title menu and try again.";return;}
+   var accepted=mode==CharacterLoginMode.CharacterSelect&&StartAssignedLoginFromList(character);
+   if(!accepted){characterTravelStatus="The verified character list is not ready. Wait for the game list and retry.";return;}
    characterSwitchFrom=mode==CharacterLoginMode.InGame?Player.ContentId:0;characterSwitchTarget=character;characterSwitchUntil=DateTimeOffset.UtcNow.AddMinutes(5);
-   characterTravelStatus=$"{(mode==CharacterLoginMode.InGame?"Switch":"Login")} requested: {name} @ {world}. Lifestream uses this game login and its service-account settings.";
+   characterTravelStatus=$"{(mode==CharacterLoginMode.InGame?"Switch":"Login")} requested: {name} @ {world}. Equinox uses this client's verified service account.";
    PrintEquinox("[Equinox] "+characterTravelStatus);
-  }catch(Exception){characterTravelStatus="Lifestream's character login is unavailable. Update or enable Lifestream and try again.";}
+  }catch(Exception){characterTravelStatus="Native character login is unavailable. Wait for the game list and try again.";}
  }
  private DateTimeOffset goSeeNativeUntil;
  private unsafe bool TryGoSeeEstateTeleport(uint world,string district,int ward,int plot)
@@ -171,7 +168,7 @@ public sealed partial class Plugin
      bringTrip=null;
      if(titleLoginProbe.Active)StopTitleLoginCheck("Login check stopped. No login was requested.");
      else{
-      try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}
+      CancelAssignedLogin("Character switch stopped.");
       characterSwitchUntil=default;characterSwitchTarget=null;
       characterTravelStatus="Switch queue stopped. If already logged out, select a character in game.";
      }
@@ -208,7 +205,7 @@ public sealed partial class Plugin
   ImGui.TextUnformatted("Current: "+(currentKnown?from.PersonName+" / "+from.AccountName:"Not verified"));
   ImGui.TextUnformatted("Target: "+(targetKnown?to.PersonName+" / "+to.AccountName:"Not verified"));
   ImGui.Separator();
-  ImGui.TextWrapped(Player.IsLoaded?"Log out and switch using Lifestream.":"Log in using Lifestream and the current game login.");
+  ImGui.TextWrapped(Player.IsLoaded?"Log out and switch using Equinox.":"Log in using Equinox and the current game login.");
   if(relationship==CharacterLoginRelationship.SameSquareEnixLogin)ImGui.TextWrapped("Service accounts verified under this login. The link covers every character in those Person/accounts. Equinox selects the target service-account slot; MAIN defaults to 1 and ALT to 2 within this verified shared login.");
   else if(!same)ImGui.TextWrapped("A successful login from each service account in this game client links their whole Person/accounts locally. No Journal refresh is needed. A different Square Enix login requires exiting and signing in again.");
   if(!targetKnown)ImGui.TextWrapped("Sync this character's Person/account information first.");
@@ -216,8 +213,8 @@ public sealed partial class Plugin
   else if(loginMenuReturn.Active)ImGui.TextWrapped("Cancel is returning to the main menu. Stop return cancels this request.");
   else if(switching)ImGui.TextWrapped("A character switch is already requested.");
   else if(mode==CharacterLoginMode.Title&&!currentKnown&&!same)ImGui.TextWrapped("Opens Data Center, selects the recorded service account and reads this game's character list first. Your verified login continues automatically; an unverified account needs confirmation before any target search or login.");
-  else if(mode==CharacterLoginMode.Title&&!same)ImGui.TextWrapped("Shows a warning before sending anything to Lifestream. If you confirm this is the same login, checks the exact character in the game list before requesting login. A different Square Enix login needs its own game client.");
-  else if(mode==CharacterLoginMode.Unavailable)ImGui.TextWrapped(Player.IsLoaded?"Unavailable during combat, duties or loading.":"Wait for the title or character-selection screen and enable Lifestream.");
+  else if(mode==CharacterLoginMode.Title&&!same)ImGui.TextWrapped("Shows a warning before starting a login. If you confirm this is the same login, checks the exact character in the game list before requesting login. A different Square Enix login needs its own game client.");
+  else if(mode==CharacterLoginMode.Unavailable)ImGui.TextWrapped(Player.IsLoaded?"Unavailable during combat, duties or loading.":"Wait for the title or character-selection screen .");
   else if(mode==CharacterLoginMode.CharacterSelect)ImGui.TextWrapped("The character must be in the loaded list. Use the title screen for another world or service account.");
   ImGui.PopTextWrapPos();ImGui.EndTooltip();
  }
