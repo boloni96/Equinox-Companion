@@ -32,6 +32,17 @@ public sealed partial class Plugin
         estateTrip=null;StopIndependentWalk("Estate travel: "+reason);
         FollowChatNotice("TRAVEL — "+reason);
     }
+    private unsafe Address? ReadEstateInterior(HousingManager* manager)
+    {
+        if(manager==null)return null;
+        if(manager->GetCurrentHousingTerritoryType()==HousingTerritoryType.Workshop){
+            if(manager->WorkshopTerritory==null)return null;
+            var workshop=AddressOf(manager->WorkshopTerritory->HouseId);
+            return workshop is null?null:workshop with { Workshop=true };
+        }
+        return manager->GetCurrentHousingTerritoryType()==HousingTerritoryType.Indoor
+            ?AddressOf(manager->GetCurrentIndoorHouseId()):null;
+    }
     private static bool SameEstate(Address? a,Address b)=>a!=null&&a.WorldId==b.WorldId&&a.TerritoryTypeId==b.TerritoryTypeId&&a.Ward==b.Ward&&a.Plot==b.Plot;
 
     private unsafe void StartEstateTravelCommand((int Property,int Mode,string Label) destination)
@@ -51,11 +62,14 @@ public sealed partial class Plugin
             var owned=HousingManager.GetOwnedHouseId(destination.Property==1?EstateType.PersonalEstate:EstateType.FreeCompanyEstate);
             var address=AddressOf(owned);
             if(address==null||address.WorldId!=Player.HomeWorld.RowId||address.Apartment)throw new InvalidOperationException("This character has no verified "+(destination.Property==1?"private":"FC")+" plot.");
-            var manager=HousingManager.Instance();var inside=manager==null?null:AddressOf(manager->GetCurrentIndoorHouseId());
+            var manager=HousingManager.Instance();var inside=ReadEstateInterior(manager);
             var trip=new EstateTrip{Destination=address,Character=Player.ContentId,Mode=destination.Mode,Label=destination.Label,Started=DateTimeOffset.UtcNow};
-            if(SameEstate(inside,address)&&inside!.Room==0&&destination.Mode!=0){
-                if(destination.Mode==3&&inside.Workshop||destination.Mode==2&&!inside.Workshop){FollowChatNotice("TRAVEL — Already "+destination.Label+".");return;}
-                if(destination.Mode==3&&!inside.Workshop){trip.Stage=5;trip.ActionAt=trip.Started;estateTrip=trip;FollowChatNotice("TRAVEL — Walking to the FC workshop entrance.");return;}
+            if(SameEstate(inside,address)&&destination.Mode!=0){
+                if(EstateTravelCommand.InteriorArrived(destination.Mode,true,inside!.Workshop,inside.Room)){FollowChatNotice("TRAVEL — Already "+destination.Label+".");return;}
+                if(destination.Mode==3&&!inside!.Workshop&&inside.Room==0){trip.Stage=5;trip.ActionAt=trip.Started;estateTrip=trip;FollowChatNotice("TRAVEL — Walking to the FC workshop entrance.");return;}
+            }
+            if(destination.Mode==3&&manager!=null&&manager->GetCurrentHousingTerritoryType()==HousingTerritoryType.Workshop&&inside==null){
+                FollowChatNotice("TRAVEL — Workshop details are still loading. No teleport was started.");return;
             }
             var outside=manager==null?null:AddressOf(manager->GetCurrentHouseId());
             if(manager!=null&&manager->GetCurrentHousingTerritoryType()==HousingTerritoryType.Outdoor&&SameEstate(outside,address)){
@@ -86,13 +100,18 @@ public sealed partial class Plugin
             if(Conditions[ConditionFlag.Casting]||HelperInCutscene())return;
             if(Objects.LocalPlayer is not {} self)return;
             var manager=HousingManager.Instance();if(manager==null)return;
-            var inside=AddressOf(manager->GetCurrentIndoorHouseId());
+            var inside=ReadEstateInterior(manager);
             var outside=AddressOf(manager->GetCurrentHouseId());
             var indoors=manager->GetCurrentHousingTerritoryType()!=HousingTerritoryType.Outdoor&&SameEstate(inside,trip.Destination);
-            if(indoors&&inside!.Workshop&&trip.Mode==3){StopEstateTravel("Arrived inside the FC workshop.");return;}
+            if(EstateTravelCommand.InteriorArrived(trip.Mode,indoors,inside?.Workshop??false,inside?.Room??-1)&&trip.Mode==3){StopEstateTravel("Arrived inside the FC workshop.");return;}
             if(indoors&&!inside!.Workshop&&inside.Room==0){
                 if(trip.Mode==2){StopEstateTravel("Arrived "+trip.Label+".");return;}
                 if(trip.Mode==3&&trip.Stage<5){trip.Stage=5;trip.Door=0;trip.DoorApproach=null;trip.ActionAt=now;trip.DoorMissingSince=default;trip.Arrival.Reset();StopIndependentWalk("Loading FC interior");}
+            }
+            // A submitted workshop entry changes territory before its housing record is ready.
+            if(trip.Stage==7){
+                if(now-trip.ActionAt>TimeSpan.FromSeconds(30))throw new InvalidOperationException("The game did not confirm entry into the FC workshop.");
+                return;
             }
             if(trip.Stage>=5){
                 if(!indoors||inside!.Workshop||inside.Room!=0)throw new InvalidOperationException("The expected FC house interior is not confirmed.");

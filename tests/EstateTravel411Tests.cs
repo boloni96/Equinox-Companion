@@ -36,6 +36,13 @@ internal static class EstateTravel411Tests
             !EstateTravelCommand.CanExtendEntry(true,6,0)||
             EstateTravelCommand.CanExtendEntry(true,1,1))
             throw new Exception("Plot entry and the extra door-reveal segment need separate bounded budgets.");
+        if(!EstateTravelCommand.InteriorArrived(3,true,true,1023)||
+            EstateTravelCommand.InteriorArrived(3,false,true,1023)||
+            EstateTravelCommand.InteriorArrived(3,true,false,0)||
+            EstateTravelCommand.InteriorArrived(2,true,true,1023)||
+            EstateTravelCommand.InteriorArrived(2,true,false,7)||
+            !EstateTravelCommand.InteriorArrived(2,true,false,0))
+            throw new Exception("Workshop completion must allow its special room number and require the requested estate.");
         Console.WriteLine("Estate travel command modes passed.");
     }
 }
