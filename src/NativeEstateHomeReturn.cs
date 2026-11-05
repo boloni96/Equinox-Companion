@@ -54,20 +54,9 @@ public sealed partial class Plugin
             var dcWorld=WorldName(run.ReturnRequested?run.HomeWorld:run.VisitingWorld)??"";
             if(SelectLoginDataCenter(dcWorld,ref run.DcSelected))return;
             if(SellerAddon("_TitleMenu")!=null){run.DcSelected=false;ClickLoginMenuButton("_TitleMenu",5);return;}
-            var lobby=AgentLobby.Instance();if(lobby==null||lobby->TemporaryLocked)return;
+            var lobby=AgentLobby.Instance();if(lobby==null)return;
             if(lobby->ServiceAccountIndex>=0&&lobby->ServiceAccountIndex!=run.ServiceSlot)
                 throw new InvalidOperationException("The game selected a different service account. No login was requested.");
-            // These dedicated game dialogs are handled only after our exact character's return action.
-            if(run.ReturnRequested){
-                var check=SellerAddon("LobbyWKTCheckHome");
-                if(check!=null){NativeEventButton(check,check->GetComponentButtonById(3));return;}
-                var list=SellerAddon("LobbyDKTWorldList");
-                if(list!=null){if(list->GetComponentButtonById(25)!=null&&list->GetComponentButtonById(25)->IsEnabled)LoginCallback(list,4);return;}
-                var execute=SellerAddon("LobbyDKTCheckExec");
-                if(execute!=null){if(execute->GetComponentButtonById(3)!=null&&execute->GetComponentButtonById(3)->IsEnabled)LoginCallback(execute,0);return;}
-                var ok=(AddonSelectOk*)SellerAddon("SelectOk");
-                if(ok!=null){NativeEventButton((AtkUnitBase*)ok,ok->OkButton);return;}
-            }
             var login=(AddonSelectYesno*)SellerAddon("SelectYesno");
             if(login!=null){
                 if(run.LoginSent&&login->PromptText!=null){
@@ -87,6 +76,18 @@ public sealed partial class Plugin
                         NativeEventButton((AtkUnitBase*)login,login->YesButton);
                 }
                 return;
+            }
+            if(lobby->TemporaryLocked)return;
+            // These dedicated game dialogs are handled only after our exact character's return action.
+            if(run.ReturnRequested){
+                var check=SellerAddon("LobbyWKTCheckHome");
+                if(check!=null){NativeEventButton(check,check->GetComponentButtonById(3));return;}
+                var list=SellerAddon("LobbyDKTWorldList");
+                if(list!=null){if(list->GetComponentButtonById(25)!=null&&list->GetComponentButtonById(25)->IsEnabled)LoginCallback(list,4);return;}
+                var execute=SellerAddon("LobbyDKTCheckExec");
+                if(execute!=null){if(execute->GetComponentButtonById(3)!=null&&execute->GetComponentButtonById(3)->IsEnabled)LoginCallback(execute,0);return;}
+                var ok=(AddonSelectOk*)SellerAddon("SelectOk");
+                if(ok!=null){NativeEventButton((AtkUnitBase*)ok,ok->OkButton);return;}
             }
             var menu=SellerAddon("_CharaSelectListMenu");if(menu==null)return;
             var entries=lobby->LobbyData.CharaSelectEntries;

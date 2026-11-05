@@ -62,3 +62,34 @@ internal static class WalkingRouteMemory
         return null;
     }
 }
+
+internal enum EntranceProgress { Walking, Arrived, Blocked, OutsideCorridor, Expired }
+// A small normal-input attempt at a verified estate landing. The game still
+// applies its collision and movement gates; never writes position or jumps.
+internal sealed class EntranceForwardProgress
+{
+    private readonly Vector3 start,direction;
+    private readonly float length;
+    private readonly DateTimeOffset began;
+    private DateTimeOffset progressed;
+    private float best;
+    public float Heading=>MathF.Atan2(direction.X,direction.Z);
+    public EntranceForwardProgress(Vector3 start,Vector3 goal,DateTimeOffset now){
+        var delta=goal-start;delta.Y=0;length=delta.Length();
+        if(!Finite(start)||!Finite(goal)||length<.3f||length>3.1f||MathF.Abs(goal.Y-start.Y)>.1f)
+            throw new InvalidOperationException("Forward entrance attempt must be a short, level-requested segment.");
+        this.start=start;direction=delta/length;began=progressed=now;
+    }
+    private static bool Finite(Vector3 p)=>float.IsFinite(p.X)&&float.IsFinite(p.Y)&&float.IsFinite(p.Z);
+    public EntranceProgress Observe(Vector3 current,DateTimeOffset now){
+        if(!Finite(current))return EntranceProgress.OutsideCorridor;
+        var delta=current-start;var along=delta.X*direction.X+delta.Z*direction.Z;
+        var sideways=new Vector2(delta.X-direction.X*along,delta.Z-direction.Z*along).Length();
+        if(sideways>.75f||along<-.5f||along>length+1||delta.Y>2.5f||delta.Y<-.7f)return EntranceProgress.OutsideCorridor;
+        if(new Vector2(delta.X-direction.X*length,delta.Z-direction.Z*length).Length()<=.3f)return EntranceProgress.Arrived;
+        if(along>=length)return EntranceProgress.OutsideCorridor;
+        if(now-began>=TimeSpan.FromSeconds(8))return EntranceProgress.Expired;
+        if(along>=best+.1f){best=along;progressed=now;}
+        return now-progressed>=TimeSpan.FromSeconds(1.5)?EntranceProgress.Blocked:EntranceProgress.Walking;
+    }
+}
