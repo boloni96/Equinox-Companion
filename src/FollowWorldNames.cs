@@ -32,6 +32,8 @@ public static class EstateTravelCommand
 {
     public static bool CanResume(ulong expectedCharacter,ulong character,uint homeWorld,uint currentWorld) =>
         expectedCharacter!=0&&expectedCharacter==character&&homeWorld!=0&&homeWorld==currentWorld;
+    public static bool CanExtendEntry(bool plotConfirmed,int entrySteps,int doorRevealSteps) =>
+        plotConfirmed?doorRevealSteps<1:entrySteps<6;
     public static string EntranceName(string name) =>
         System.Text.RegularExpressions.Regex.Replace(name,@"\[.*?\]","").Trim();
     public static bool WaitForEntrance(TimeSpan missingFor) => missingFor<TimeSpan.FromSeconds(15);
