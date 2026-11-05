@@ -32,6 +32,20 @@ public static class EstateTravelCommand
 {
     public static bool CanResume(ulong expectedCharacter,ulong character,uint homeWorld,uint currentWorld) =>
         expectedCharacter!=0&&expectedCharacter==character&&homeWorld!=0&&homeWorld==currentWorld;
+    public static string EntranceName(string name) =>
+        System.Text.RegularExpressions.Regex.Replace(name,@"\[.*?\]","").Trim();
+    public static bool WaitForEntrance(TimeSpan missingFor) => missingFor<TimeSpan.FromSeconds(15);
+    public static bool CanConfirmLogin(bool requested,ulong expectedCharacter,ulong selectedCharacter,
+        int expectedSlot,int selectedSlot,string name,string prompt)
+    {
+        if(!requested||expectedCharacter==0||expectedCharacter!=selectedCharacter||
+            expectedSlot<0||expectedSlot!=selectedSlot||string.IsNullOrWhiteSpace(name))return false;
+        var start=prompt.IndexOf(name,StringComparison.Ordinal);
+        if(start<0)return false;
+        var end=start+name.Length;
+        return (start==0||!char.IsLetterOrDigit(prompt[start-1]))&&
+            (end==prompt.Length||!char.IsLetterOrDigit(prompt[end]));
+    }
     // Explicit destinations: private=1, FC=2; plot=0, house interior=2, workshop=3.
     public static (int Property,int Mode,string Label)? Parse(string input) => input.Trim().ToLowerInvariant() switch
     {

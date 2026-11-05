@@ -72,7 +72,18 @@ public sealed partial class Plugin
             if(login!=null){
                 if(run.LoginSent&&login->PromptText!=null){
                     var prompt=TravelMenuText(login->PromptText->NodeText.StringPtr)??"";
-                    if(prompt.Contains(run.Name,StringComparison.Ordinal)&&prompt.Contains(WorldName(run.HomeWorld)??"\u0000",StringComparison.Ordinal))
+                    // Login prompts name the character, not necessarily its world.
+                    // Verify the selected identity and world from the lobby instead.
+                    var loginEntries=lobby->LobbyData.CharaSelectEntries;
+                    if(loginEntries.LongCount>512)return;
+                    var loginMatches=0;
+                    foreach(var item in loginEntries){
+                        var entry=item.Value;
+                        if(entry!=null&&entry->ContentId==run.Character&&entry->HomeWorldId==run.HomeWorld&&
+                            entry->CurrentWorldId==run.HomeWorld&&entry->NameString==run.Name)loginMatches++;
+                    }
+                    if(loginMatches==1&&EstateTravelCommand.CanConfirmLogin(run.LoginSent,run.Character,lobby->SelectedCharacterContentId,
+                        run.ServiceSlot,lobby->ServiceAccountIndex,run.Name,prompt))
                         NativeEventButton((AtkUnitBase*)login,login->YesButton);
                 }
                 return;
