@@ -2,6 +2,30 @@ namespace EquinoxCompanion;
 public sealed record GardenTender(string Id,int Region);
 public static class GardenAdventureJobs
 {
+    public static bool FullBatchHarvest(SharedGardenPlan plan, AdventureTaskRule rule, bool enabled, DateTimeOffset now)
+    {
+        var scope = rule.Jobs ?? new[] { rule.Kind };
+        if (!enabled || !(rule.Kind == "growingcycle" || scope.Contains("harvest") || rule.Kind == "garden" && rule.Jobs == null)) return false;
+        var active = plan.Beds.Where(GardenVisualState.HasActualCrop).ToArray();
+        return active.Length > 0 && active.All(b => GardenCarePolicy.MatureForCare(b, now))
+            && active.Any(b => GardenCarePolicy.Eligible(plan, b, GardenCareAction.Harvest, now));
+    }
+    public static GardenCareAction? Action(SharedGardenPlan plan, AdventureTaskRule rule, bool plant, bool harvest, bool tend, DateTimeOffset now)
+    {
+        if (FullBatchHarvest(plan, rule, harvest, now)) return GardenCareAction.Harvest;
+        var scope = rule.Jobs ?? new[] { rule.Kind };
+        var cycle = rule.Kind == "growingcycle";
+        if (plant && !(cycle && rule.Phase is "waiting" or "review") &&
+            (cycle || scope.Contains("planplant") || scope.Contains("plant") || rule.Kind == "garden" && rule.Jobs == null))
+        {
+            // An occupied or invalid next step blocks only planting in this batch.
+            try { if (GardenAutoPlant.Next(plan) != null) return GardenCareAction.Plant; }
+            catch (InvalidOperationException) { }
+        }
+        if (tend && AllowsTending(rule) && plan.Beds.Any(b => GardenCarePolicy.Eligible(plan,b,GardenCareAction.Tend,now)))
+            return GardenCareAction.Tend;
+        return null;
+    }
     public static bool AllowsTending(AdventureTaskRule rule)=>rule.Kind=="growingcycle"||
         rule.Kind=="care"||rule.Kind=="garden"&&(rule.Jobs==null||rule.Jobs.Contains("care"));
     public static bool InspectionDue(AdventureTaskRule rule,bool enabled,bool unknownBeds,DateTimeOffset lastInspection,DateTimeOffset now)

@@ -78,3 +78,18 @@ public sealed class CollisionRouteSearch
     public static float Horizontal(Vector3 a,Vector3 b)=>new Vector2(a.X-b.X,a.Z-b.Z).Length();
     private static bool Finite(Vector3 p)=>float.IsFinite(p.X)&&float.IsFinite(p.Y)&&float.IsFinite(p.Z);
 }
+
+internal sealed class WalkingGroundReadiness
+{
+    private DateTimeOffset? since;
+    private Vector3 position;
+    private uint territory;
+    private ulong character;
+    public void Reset()=>since=null;
+    public bool MayWait(Vector3 current,uint area,ulong actor,DateTimeOffset now)
+    {
+        if(since==null||area!=territory||actor!=character||Vector3.DistanceSquared(position,current)>.25f)
+        {since=now;position=current;territory=area;character=actor;}
+        return now-since.Value<TimeSpan.FromSeconds(10);
+    }
+}

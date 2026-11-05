@@ -9,6 +9,7 @@ public sealed partial class Plugin
     private CollisionRouteSearch? independentSearch;
     private EntranceForwardProgress? independentEntranceForward;
     private readonly GameWalkingCollision independentCollision=new();
+    private readonly WalkingGroundReadiness independentGroundReadiness=new();
     private unsafe delegate void GroundMovementRead(nint controller,float* left,float* forward,float* turn,byte* strafe,byte* flags,byte additive);
     private delegate byte GroundMovementEnabled(nint controller);
     private Hook<GroundMovementRead>? independentForwardHook;
@@ -95,7 +96,7 @@ public sealed partial class Plugin
     private void StopIndependentWalk(string reason="Stopped",bool resetFailure=false)
     {
         if(independentSearch!=null||independentPath!=null||independentEntranceForward!=null)TraceKeyboundRun(independentNavigationRun,"navigation-stopped",reason,"companion-navigation",false);
-        independentEntranceForward=null;
+        independentEntranceForward=null;independentGroundReadiness.Reset();
         StopIndependentFlight();
         independentUserPaused=false;independentGameGateBlocked=false;independentGatePauseSince=default;independentHeading=null;independentMoving=false;independentPulseUntil=default;independentLease.Revoke();independentForwardHook?.Disable();
         independentSearch=null;independentPath=null;independentPendingPath=null;independentArrived=false;independentDirectOnly=false;independentWalkStatus=reason;independentWalkFailure="";
@@ -116,6 +117,14 @@ public sealed partial class Plugin
         }
         if(FlightNavigationPolicy.Prefer(Control.CanFly,allowFlight,preferFlight||Conditions[ConditionFlag.InFlight],Vector3.Distance(self.Position,destination))&&StartIndependentFlight(destination,range,now))return false;
         if(Conditions[ConditionFlag.InFlight])throw new InvalidOperationException("No supported landing corridor at this destination; flight remains under your control.");
+        // Geometry can report loaded before support at the teleport landing is queryable.
+        // Retry fresh collision reads without sending movement or caching a failed origin.
+        if(!directOnly&&!independentCollision.Ground(self.Position,out _)){
+            independentWalkStatus="Waiting for walkable ground at the arrival point (up to 10s)";
+            if(independentGroundReadiness.MayWait(self.Position,Client.TerritoryType,Player.ContentId,now))return false;
+            throw new InvalidOperationException($"No walkable ground beneath the character after 10s · territory {Client.TerritoryType} · position {self.Position}.");
+        }
+        independentGroundReadiness.Reset();
         independentNavigationRun=Guid.NewGuid().ToString("N");independentInputReads=independentInputOverrides=0;
         independentForwardReads=independentExpiredReads=independentInactiveReads=0;independentNativeGateRejects=independentNativeManualReads=independentNativeExceptions=0;
         independentInputBlock=independentLastWalkFailure="";independentPositionChanged=false;independentLastRoutePoints=independentLastExpanded=0;independentPlanningSeconds=0;independentLease.Revoke();
