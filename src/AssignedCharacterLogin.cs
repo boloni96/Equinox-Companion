@@ -161,7 +161,7 @@ public sealed partial class Plugin
             if(SelectLoginDataCenter(run.World,ref assignedDcSent))return;
             if(SellerAddon("_TitleMenu")!=null&&!assignedDcSent){ClickLoginMenuButton("_TitleMenu",5);return;}
             if(SellerAddon("SelectOk")!=null)throw new InvalidOperationException("The game reported a login message. Review it before continuing.");
-            var lobby=AgentLobby.Instance();if(lobby==null||lobby->TemporaryLocked||SellerAddon("_CharaSelectListMenu")==null)return;
+            var lobby=AgentLobby.Instance();if(lobby==null||lobby->TemporaryLocked)return;
             if(lobby->ServiceAccountIndex!=run.ServiceAccount)throw new InvalidOperationException("The selected service account differs from this client's reserved account.");
             if(assignedLoginSent){
                 var dialog=(AddonSelectYesno*)SellerAddon("SelectYesno");
@@ -171,7 +171,7 @@ public sealed partial class Plugin
                     NativeEventButton((AtkUnitBase*)dialog,dialog->YesButton);
                 return;
             }
-            if(now<loginWorldNext)return;
+            if(SellerAddon("_CharaSelectListMenu")==null||now<loginWorldNext)return;
             if(TryReadReadyLoginList(out var entries)&&entries.FirstOrDefault(e=>!e.Locked&&e.ContentId==run.Target.ContentId&&e.World==run.Target.World) is {} verified){
                 assignedLoginSent=BeginNativeCharacterLogin(run.Target,run.ServiceAccount);return;
             }
