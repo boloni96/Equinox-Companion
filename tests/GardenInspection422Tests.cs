@@ -10,7 +10,8 @@ internal static class GardenInspection422Tests
   void Check(bool value,string label){if(!value)throw new Exception(label);Console.WriteLine("PASS "+label);}
   var stale=GardenAdventureJobs.StalledPlanting(plan,rule,true,true,true,now);
   Check(stale,"known empty batch with completed plan and pending route needs recheck");
-  Check(GardenAdventureJobs.InspectionDue(rule,true,stale,default,now),"enabled inspection includes stalled known beds");
+  Check(!GardenAdventureJobs.InspectionDue(rule,true,false,default,now),"known empty beds do not need inspection for a route mismatch");
+  Check(GardenAdventureJobs.InspectionDue(rule,true,true,default,now),"unknown beds still need inspection");
   Check(!GardenAdventureJobs.InspectionDue(rule,true,stale,now.AddMinutes(-2),now),"recheck does not loop after fresh inspection");
   Check(!GardenAdventureJobs.InspectionDue(rule,false,stale,default,now),"disabled inspection stays disabled");
   Check(!GardenAdventureJobs.StalledPlanting(plan,rule,false,true,true,now),"disabled planting does not force recheck");

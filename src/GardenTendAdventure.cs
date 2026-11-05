@@ -109,7 +109,7 @@ public sealed partial class Plugin
     private bool GardenInspectionDue(SharedGardenPlan plan,AdventureTaskRule rule,DateTimeOffset now)
     {
         gardenAdventureInspected.TryGetValue(plan.HouseId+":"+plan.Batch,out var at);
-        return GardenAdventureJobs.InspectionDue(rule,config.GardenAdventureInspect,plan.Beds.Any(b=>!b.ObservedAt.HasValue)||GardenAdventureJobs.StalledPlanting(plan,rule,gardenAdventurePlant,gardenAdventureHarvest,gardenAdventureTend,now),at,now);
+        return GardenAdventureJobs.InspectionDue(rule,config.GardenAdventureInspect,plan.Beds.Any(b=>!b.ObservedAt.HasValue),at,now);
     }
     private GardenCareAction? GardenAdventureAction(SharedGardenPlan plan,AdventureTaskRule rule,DateTimeOffset now)
     {
