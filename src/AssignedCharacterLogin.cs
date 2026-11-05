@@ -70,7 +70,57 @@ public sealed partial class Plugin
             current++;
         }
         if(matches!=1||index<0||index>250)return false;
-        LoginCallback(menu,29,0,index);return true;
+        ClickNativeLoginCharacter(menu,index);return true;
+    }
+    // The character-list UI tracks its displayed selection in HoveredCharacterContentId.
+    // SelectedCharacterContentId is not the pre-login selection identity.
+    private static unsafe void ClickNativeLoginCharacter(AtkUnitBase* menu,int index)
+    {
+        if(menu==null||index<0||index>250)throw new InvalidOperationException("Invalid character-list entry.");
+        var eventIndex=(byte)(5+index);
+        var evt=new AtkEvent{Listener=(AtkEventListener*)menu,Target=&AtkStage.Instance()->AtkEventTarget,
+            State=new(){StateFlags=(AtkEventStateFlags)eventIndex}};
+        var data=new AtkEventData();((byte*)&data)[6]=0;
+        menu->ReceiveEvent(AtkEventType.MouseClick,eventIndex,&evt,&data);
+    }
+    private unsafe bool ConfirmNativeLogin(bool requested,ulong character,string homeWorld,int slot,string name,ushort? currentWorld=null)
+    {
+        var lobby=AgentLobby.Instance();var dialog=(AddonSelectYesno*)SellerAddon("SelectYesno");
+        if(lobby==null||dialog==null||dialog->PromptText==null)return false;
+        var entries=lobby->LobbyData.CharaSelectEntries;if(entries.LongCount is <=0 or >512)return false;
+        var matches=0;
+        foreach(var item in entries){
+            var entry=item.Value;
+            if(entry!=null&&entry->ContentId==character&&entry->NameString==name&&WorldName(entry->HomeWorldId)==homeWorld&&
+                (currentWorld==null||entry->CurrentWorldId==currentWorld.Value)&&
+                (entry->LoginFlags&CharaSelectCharacterEntryLoginFlags.Locked)==0)matches++;
+        }
+        if(!EstateTravelCommand.CanConfirmDisplayedLogin(requested,character,lobby->HoveredCharacterContentId,
+            slot,lobby->ServiceAccountIndex,matches,name,TravelMenuText(dialog->PromptText->NodeText.StringPtr)??""))return false;
+        return NativeEventButton((AtkUnitBase*)dialog,dialog->YesButton);
+    }
+    private unsafe object CaptureNativeLoginDiagnostic()
+    {
+        var lobby=AgentLobby.Instance();
+        var target=assignedLogin?.Target is {} c?TitleLoginTarget(c.Id):null;
+        var expected=target?.ContentId??estateHomeReturn?.Character.ToString()??"";
+        var rows=new List<object>();
+        if(lobby!=null&&lobby->LobbyData.CharaSelectEntries.LongCount is >0 and <=512)
+            foreach(var item in lobby->LobbyData.CharaSelectEntries){
+                var entry=item.Value;
+                if(entry!=null&&(entry->ContentId.ToString()==expected||entry->ContentId==lobby->HoveredCharacterContentId))
+                    rows.Add(new{character=entry->ContentId.ToString(),name=entry->NameString,homeWorld=entry->HomeWorldId,currentWorld=entry->CurrentWorldId,flags=(int)entry->LoginFlags});
+            }
+        var dialog=(AddonSelectYesno*)SellerAddon("SelectYesno");
+        return new{status=characterTravelStatus,expectedCharacter=expected,expectedName=target?.Name??estateHomeReturn?.Name,
+            expectedSlot=assignedLogin?.ServiceAccount??estateHomeReturn?.ServiceSlot,
+            requested=assignedLogin!=null?assignedLoginSent:estateHomeReturn?.LoginSent??false,
+            currentSlot=lobby==null?-1:(int)lobby->ServiceAccountIndex,
+            displayedCharacter=lobby==null?"":lobby->HoveredCharacterContentId.ToString(),
+            selectedCharacter=lobby==null?"":lobby->SelectedCharacterContentId.ToString(),
+            locked=lobby!=null&&lobby->TemporaryLocked,
+            prompt=dialog==null||dialog->PromptText==null?"":TravelMenuText(dialog->PromptText->NodeText.StringPtr),
+            matchingEntries=rows.ToArray()};
     }
     private static unsafe void LoginCallback(AtkUnitBase* addon,params int[] args)
     {
@@ -181,12 +231,11 @@ public sealed partial class Plugin
                 return;
             }
             if(assignedLoginSent){
-                var dialog=(AddonSelectYesno*)SellerAddon("SelectYesno");
                 var target=TitleLoginTarget(run.Target.Id);
-                if(dialog!=null&&dialog->PromptText!=null&&target!=null&&ulong.TryParse(target.ContentId,out var cid)&&
-                    EstateTravelCommand.CanConfirmLogin(true,cid,lobby->SelectedCharacterContentId,run.ServiceAccount,lobby->ServiceAccountIndex,target.Name,TravelMenuText(dialog->PromptText->NodeText.StringPtr)??""))
-                    NativeEventButton((AtkUnitBase*)dialog,dialog->YesButton);
-                else if(dialog!=null)characterTravelStatus=$"Waiting for the game to confirm {run.Target.Name} on service account {run.ServiceAccount+1}; no other character will be accepted.";
+                if(target!=null&&ulong.TryParse(target.ContentId,out var cid)&&ConfirmNativeLogin(true,cid,target.World,run.ServiceAccount,target.Name))
+                    characterTravelStatus=$"Login confirmed for {target.Name}; waiting for the game.";
+                else if(SellerAddon("SelectYesno")!=null)
+                    characterTravelStatus=$"Waiting for the displayed character to match {run.Target.Name} on service account {run.ServiceAccount+1}.";
                 return;
             }
             if(lobby->TemporaryLocked||SellerAddon("_CharaSelectListMenu")==null||now<loginWorldNext)return;

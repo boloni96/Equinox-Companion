@@ -57,24 +57,8 @@ public sealed partial class Plugin
             var lobby=AgentLobby.Instance();if(lobby==null)return;
             if(lobby->ServiceAccountIndex>=0&&lobby->ServiceAccountIndex!=run.ServiceSlot)
                 throw new InvalidOperationException("The game selected a different service account. No login was requested.");
-            var login=(AddonSelectYesno*)SellerAddon("SelectYesno");
-            if(login!=null){
-                if(run.LoginSent&&login->PromptText!=null){
-                    var prompt=TravelMenuText(login->PromptText->NodeText.StringPtr)??"";
-                    // Login prompts name the character, not necessarily its world.
-                    // Verify the selected identity and world from the lobby instead.
-                    var loginEntries=lobby->LobbyData.CharaSelectEntries;
-                    if(loginEntries.LongCount>512)return;
-                    var loginMatches=0;
-                    foreach(var item in loginEntries){
-                        var entry=item.Value;
-                        if(entry!=null&&entry->ContentId==run.Character&&entry->HomeWorldId==run.HomeWorld&&
-                            entry->CurrentWorldId==run.HomeWorld&&entry->NameString==run.Name)loginMatches++;
-                    }
-                    if(loginMatches==1&&EstateTravelCommand.CanConfirmLogin(run.LoginSent,run.Character,lobby->SelectedCharacterContentId,
-                        run.ServiceSlot,lobby->ServiceAccountIndex,run.Name,prompt))
-                        NativeEventButton((AtkUnitBase*)login,login->YesButton);
-                }
+            if(SellerAddon("SelectYesno")!=null){
+                ConfirmNativeLogin(run.LoginSent,run.Character,WorldName(run.HomeWorld)??"",run.ServiceSlot,run.Name,run.HomeWorld);
                 return;
             }
             if(lobby->TemporaryLocked)return;
@@ -107,7 +91,7 @@ public sealed partial class Plugin
                 return;
             }
             if(run.ReturnRequested&&atWorld==run.HomeWorld){
-                if(!run.LoginSent){LoginCallback(menu,29,0,index);run.LoginSent=true;}
+                if(!run.LoginSent){ClickNativeLoginCharacter(menu,index);run.LoginSent=true;}
                 return;
             }
             if(run.ReturnRequested)return;
