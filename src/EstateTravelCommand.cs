@@ -109,7 +109,10 @@ public sealed partial class Plugin
                 }
             }
             if(trip.Stage==1){
-                if(!IndependentWalk(trip.Forward!.Value,.3f,now,allowFlight:false))return;
+                // Entering the plot is the goal; do not insist on the last fraction of
+                // a three-yalm step once the housing manager confirms this estate.
+                if(!SameEstate(outside,trip.Destination)&&
+                    !IndependentWalk(trip.Forward!.Value,.3f,now,allowFlight:false,directOnly:true))return;
                 StopIndependentWalk("Plot entrance step complete");
                 if(!SameEstate(AddressOf(manager->GetCurrentHouseId()),trip.Destination))throw new InvalidOperationException("The entrance step did not reach the requested plot.");
                 trip.Stage=2;
