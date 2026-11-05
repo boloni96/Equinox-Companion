@@ -75,7 +75,14 @@ public sealed partial class Plugin
                 return;
             }
             var port=new GardenCarePort(this,plan);port.Validate();
-            port.CheckPlantSupplies(plan.Beds.First(b=>b.Bed==next.Value.Bed));
+            var supplyIssue=port.PlantSupplyIssue(plan.Beds.First(b=>b.Bed==next.Value.Bed));
+            if(supplyIssue is not null){
+                if(gardenTendRoute is null)throw new InvalidOperationException(supplyIssue);
+                gardenDeferredPlanting[(plan.HouseId,plan.Batch)]=plan.HouseName+" · Batch "+plan.Batch+" · "+supplyIssue;
+                gardenAutoPlantPlan=null;gardenCareRun=null;
+                gardenTendStatus="Planting deferred · checking other selected batches";
+                return;
+            }
             gardenCareRun=new(port);gardenCareRun.Start([next.Value.Bed],next.Value.Action,DateTimeOffset.UtcNow);
         }catch(Exception e){StopHousePlant("Stopped: "+e.Message);PrintEquinox("Auto plant: "+e.Message);}
     }
@@ -291,10 +298,15 @@ public sealed partial class Plugin
         }
         public void CheckPlantSupplies(SharedGardenBed bed)
         {
+            if(PlantSupplyIssue(bed) is {} issue)throw new InvalidOperationException(issue);
+        }
+        public string? PlantSupplyIssue(SharedGardenBed bed)
+        {
             var names=new[]{p.GardenSeedItemName(bed.Crop),GardenPlantRequirement.Soil(bed)};
             var sheet=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>(Dalamud.Game.ClientLanguage.English);
             plantSeed=sheet.FirstOrDefault(i=>i.Name.ToString()==names[0]).RowId;plantSoil=sheet.FirstOrDefault(i=>i.Name.ToString()==names[1]).RowId;
-            if(plantSeed==0||plantSoil==0||!FindBagItem(plantSeed,out _)||!FindBagItem(plantSoil,out _))throw new InvalidOperationException("Missing exact seed / soil for the next step: "+string.Join(" + ",names));
+            if(plantSeed==0||plantSoil==0||!FindBagItem(plantSeed,out _)||!FindBagItem(plantSoil,out _))return "Missing exact seed / soil for the next step: "+string.Join(" + ",names);
+            return null;
         }
         private static bool FindBagItem(uint id,out AgentHousingPlant.SelectedItem result)
         {
