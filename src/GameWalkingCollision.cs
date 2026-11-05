@@ -62,6 +62,14 @@ internal sealed class GameWalkingCollision:IWalkingCollision
         if(Hit(ground+new Vector3(0,.12f,0),Vector3.UnitY,Height-.12f,out _))return false;
         return true;
     }
+    internal bool InteractionVisible(Vector3 floor,Vector3 marker)
+    {
+        Ready();
+        var eye=floor+new Vector3(0,1.1f,0);
+        var delta=marker-eye;var length=delta.Length();
+        // Ignore the marker's own surface, but do not interact through intervening walls.
+        return length<.3f||!Hit(eye,delta/length,length-.25f,out _);
+    }
     public bool Traverse(Vector3 from,Vector3 to)
     {
         Ready();LastBlockedAt=null;var horizontal=CollisionRouteSearch.Horizontal(from,to);

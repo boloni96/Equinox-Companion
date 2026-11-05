@@ -19,7 +19,7 @@ public sealed partial class Plugin
         public required DateTimeOffset Started;
         public int Stage;
         public DateTimeOffset ActionAt,DoorMissingSince;
-        public Vector3? Forward;
+        public Vector3? Forward,DoorApproach;
         public ulong Door;
         public readonly GardenArrivalGate Arrival=new();
     }
@@ -91,7 +91,7 @@ public sealed partial class Plugin
             if(indoors&&inside!.Workshop&&trip.Mode==3){StopEstateTravel("Arrived inside the FC workshop.");return;}
             if(indoors&&!inside!.Workshop&&inside.Room==0){
                 if(trip.Mode==2){StopEstateTravel("Arrived "+trip.Label+".");return;}
-                if(trip.Mode==3&&trip.Stage<5){trip.Stage=5;trip.Door=0;trip.ActionAt=now;trip.DoorMissingSince=default;trip.Arrival.Reset();StopIndependentWalk("Loading FC interior");}
+                if(trip.Mode==3&&trip.Stage<5){trip.Stage=5;trip.Door=0;trip.DoorApproach=null;trip.ActionAt=now;trip.DoorMissingSince=default;trip.Arrival.Reset();StopIndependentWalk("Loading FC interior");}
             }
             if(trip.Stage>=5){
                 if(!indoors||inside!.Workshop||inside.Room!=0)throw new InvalidOperationException("The expected FC house interior is not confirmed.");
@@ -158,7 +158,11 @@ public sealed partial class Plugin
             if(trip.Door==0&&doors.Length>1&&Vector3.Distance(doors[1].Position,self.Position)-Vector3.Distance(door.Position,self.Position)<3)
                 throw new InvalidOperationException("Multiple entrances are equally close. Move nearer the correct door and retry.");
             trip.Door=door.GameObjectId;
-            if(!IndependentWalk(door.Position,2.5f,now,allowFlight:false))return;
+            if(!GameWalkingCollision.Available())return;
+            trip.DoorApproach??=EstateDoorApproach.Find(independentCollision,self.Position,door.Position,
+                point=>independentCollision.InteractionVisible(point,door.Position));
+            if(trip.DoorApproach is not {} approach)throw new InvalidOperationException("No clear standing point within range of the estate entrance. Move nearer the door and retry.");
+            if(!IndependentWalk(approach,.35f,now,allowFlight:false))return;
             StopIndependentWalk("At estate door");
             if(Vector3.Distance(self.Position,door.Position)>4)return;
             var targetSystem=TargetSystem.Instance();if(targetSystem==null)return;
