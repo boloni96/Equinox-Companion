@@ -79,7 +79,7 @@ public sealed partial class Plugin
             }
             var menu=SellerAddon("_CharaSelectListMenu");if(menu==null)return;
             var entries=lobby->LobbyData.CharaSelectEntries;
-            if(entries.LongCount is <=0 or >512)return;
+            if(entries.LongCount>512)return;
             int index=-1,current=0;ushort atWorld=0;int matches=0;
             foreach(var item in entries){
                 var entry=item.Value;

@@ -76,6 +76,7 @@ public sealed partial class Plugin
         if(estateHomeReturn!=null){UpdateEstateHomeReturn(now);return;}
         if(estateTrip is not {} trip)return;
         try{
+            if(followSession.Armed||independentQuestId!=0||eventAccountActive||gardenTendRoute!=null||assignedLogin!=null)throw new InvalidOperationException("Another routine started; estate travel stopped.");
             if(now-trip.Started>TimeSpan.FromMinutes(5))throw new InvalidOperationException("Estate travel timed out.");
             if(!Player.IsLoaded)return;
             if(Player.ContentId!=trip.Character||Player.CurrentWorld.RowId!=trip.Destination.WorldId)throw new InvalidOperationException("Character or world changed; estate travel stopped.");
