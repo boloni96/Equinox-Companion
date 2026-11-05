@@ -7,6 +7,7 @@ namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
     private CollisionRouteSearch? independentSearch;
+    private EntranceForwardProgress? independentEntranceForward;
     private readonly GameWalkingCollision independentCollision=new();
     private unsafe delegate void GroundMovementRead(nint controller,float* left,float* forward,float* turn,byte* strafe,byte* flags,byte additive);
     private delegate byte GroundMovementEnabled(nint controller);
@@ -93,7 +94,8 @@ public sealed partial class Plugin
     }
     private void StopIndependentWalk(string reason="Stopped",bool resetFailure=false)
     {
-        if(independentSearch!=null||independentPath!=null)TraceKeyboundRun(independentNavigationRun,"navigation-stopped",reason,"companion-navigation",false);
+        if(independentSearch!=null||independentPath!=null||independentEntranceForward!=null)TraceKeyboundRun(independentNavigationRun,"navigation-stopped",reason,"companion-navigation",false);
+        independentEntranceForward=null;
         StopIndependentFlight();
         independentUserPaused=false;independentGameGateBlocked=false;independentGatePauseSince=default;independentHeading=null;independentMoving=false;independentPulseUntil=default;independentLease.Revoke();independentForwardHook?.Disable();
         independentSearch=null;independentPath=null;independentPendingPath=null;independentArrived=false;independentDirectOnly=false;independentWalkStatus=reason;independentWalkFailure="";
@@ -107,8 +109,8 @@ public sealed partial class Plugin
         if(!GameWalkingCollision.Available()){independentWalkStatus="Waiting for collision geometry to load";return false;}
         if(IndependentOtherTravelBusy())throw new InvalidOperationException("Another travel task is running; local walking was not started.");
         if(independentWalkFailure.Length>0&&Vector3.DistanceSquared(independentGoal,destination)<1)throw new InvalidOperationException(independentWalkFailure);
-        if(independentArrived&&Vector3.DistanceSquared(independentGoal,destination)<1&&CollisionRouteSearch.Horizontal(self.Position,destination)<=range&&MathF.Abs(self.Position.Y-destination.Y)<1.2f)return true;
-        if(independentSearch!=null||independentPath!=null){
+        if(independentArrived&&Vector3.DistanceSquared(independentGoal,destination)<1&&CollisionRouteSearch.Horizontal(self.Position,destination)<=range&&(directOnly||MathF.Abs(self.Position.Y-destination.Y)<1.2f))return true;
+        if(independentSearch!=null||independentPath!=null||independentEntranceForward!=null){
             if(Vector3.DistanceSquared(independentGoal,destination)<1&&independentTerritory==Client.TerritoryType)return false;
             StopIndependentWalk("Destination changed");
         }
@@ -129,7 +131,12 @@ public sealed partial class Plugin
             independentPath=direct;independentWaypoint=1;independentCheckedWaypoint=-1;
             independentPhaseTimer.SetPlanning(false,now);independentWalkStatus="Short approach ready";return false;
         }
-        if(directOnly)throw new InvalidOperationException("The plot entrance is blocked, including nearby gate alignments. Open or clear the gate, or move inside the plot and retry.");
+        if(directOnly){
+            independentEntranceForward=new(self.Position,destination,now);
+            independentPhaseTimer.SetPlanning(false,now);
+            TraceKeyboundRun(independentNavigationRun,"entrance-forward-attempt",$"Collision model rejected entry; normal game movement from {self.Position} toward {destination}; max 3 yalms, stall limit 1.5s","estate-entry",false);
+            independentWalkStatus="Trying the short entrance step · watching actual movement";return false;
+        }
         var cached=RecallIndependentRoute(self.Position,destination,range);
         if(cached!=null){independentPath=cached;independentWaypoint=1;independentCheckedWaypoint=-1;independentPhaseTimer.SetPlanning(false,now);independentWalkStatus="Using a saved route · checking the next section";return false;}
         // The opening is fully checked; the remainder starts at its fixed endpoint.
@@ -141,7 +148,7 @@ public sealed partial class Plugin
     private unsafe void UpdateIndependentWalk(DateTimeOffset now)
     {
         if(FlightActive){TickIndependentFlight(now);return;}
-        if(independentSearch==null&&independentPath==null)return;
+        if(independentSearch==null&&independentPath==null&&independentEntranceForward==null)return;
         try{
             independentPulseUntil=default;independentLease.Revoke();independentMoving=false;
             if(QuestOwnsMovement&&QuestManualMovementHeld(now)){
@@ -179,6 +186,19 @@ public sealed partial class Plugin
                 independentWalkStatus="Paused · game movement locked; waiting for scene or transition";return;
             }
             independentGatePauseSince=default;
+            if(independentEntranceForward is {} entrance){
+                var progress=entrance.Observe(self.Position,now);
+                if(progress==EntranceProgress.Arrived){
+                    StopIndependentWalk("Forward entrance segment complete");independentArrived=true;return;
+                }
+                if(progress!=EntranceProgress.Walking)
+                    throw new InvalidOperationException($"Entrance forward step stopped: {progress}; position {self.Position}. No circling or repeated push was started.");
+                independentHeading=entrance.Heading;independentSpeed=.5f;
+                EnsureIndependentGroundInput();
+                if(!independentForwardHook!.IsEnabled)independentForwardHook.Enable();
+                independentMoving=true;independentLease.Arm(DateTimeOffset.UtcNow);independentPulseUntil=independentLease.Until;
+                independentWalkStatus="Walking forward into the plot · watching actual progress";return;
+            }
             if(independentSearch!=null){
                 independentMoving=false;independentSearch.Advance(milliseconds:6,edgeBudget:192);
                 independentLastExpanded=independentSearch.Expanded;independentPlanningSeconds=(DateTimeOffset.UtcNow-independentPlanningSince).TotalSeconds;

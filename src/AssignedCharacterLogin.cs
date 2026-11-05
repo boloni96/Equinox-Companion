@@ -8,7 +8,7 @@ public sealed partial class Plugin
 {
     private sealed record AssignedLogin(SharedCharacter Target,ulong From,int ServiceAccount,string Pairing,string World,DateTimeOffset Deadline);
     private AssignedLogin? assignedLogin;
-    private bool assignedDcSent,assignedServiceSent,assignedLoginSent,assignedLogoutConfirmed;
+    private bool assignedDcSent,assignedServiceSent,assignedLoginSent,assignedLogoutConfirmed,assignedAccountReturnSent;
     private DateTimeOffset assignedLoginNext,loginWorldNext;
     private readonly HashSet<ushort> loginWorldChecked=[];
     private ushort loginWorldPending,loginWorldSample;private DateTimeOffset loginWorldSentAt,loginWorldStableAt;
@@ -40,7 +40,7 @@ public sealed partial class Plugin
         try{
             var ui=UIModule.Instance();if(ui==null)throw new InvalidOperationException("Game menu unavailable.");
             assignedLogin=new(target,Player.ContentId,index,config.PairingKey,LastLoginWorld(target),DateTimeOffset.UtcNow.AddMinutes(5));
-            assignedDcSent=assignedServiceSent=assignedLoginSent=assignedLogoutConfirmed=false;assignedLoginNext=default;loginWorldChecked.Clear();loginWorldNext=default;loginWorldPending=loginWorldSample=0;assignedLoginError="";
+            assignedDcSent=assignedServiceSent=assignedLoginSent=assignedLogoutConfirmed=assignedAccountReturnSent=false;assignedLoginNext=default;loginWorldChecked.Clear();loginWorldNext=default;loginWorldPending=loginWorldSample=0;assignedLoginError="";
             using var command=new Utf8String();command.SetString("/logout");ui->ProcessChatBoxEntry(&command,0,false);
             characterSwitchFrom=Player.ContentId;characterSwitchTarget=target;characterSwitchUntil=assignedLogin.Deadline;
             characterTravelStatus=$"Switching using this client's verified service account {index+1}: {target.Name} @ {target.World}.";return true;
@@ -51,7 +51,7 @@ public sealed partial class Plugin
         var slot=CurrentLoginServiceAccount();
         if(slot is <0 or >15||assignedLogin!=null)return false;
         assignedLogin=new(target,0,slot,config.PairingKey,LastLoginWorld(target),DateTimeOffset.UtcNow.AddMinutes(5));
-        assignedDcSent=assignedServiceSent=assignedLoginSent=assignedLogoutConfirmed=false;
+        assignedDcSent=assignedServiceSent=assignedLoginSent=assignedLogoutConfirmed=assignedAccountReturnSent=false;
         assignedLoginNext=default;loginWorldChecked.Clear();loginWorldNext=default;loginWorldPending=loginWorldSample=0;assignedLoginError="";
         characterSwitchFrom=0;characterSwitchTarget=target;characterSwitchUntil=assignedLogin.Deadline;
         return true;
@@ -159,19 +159,37 @@ public sealed partial class Plugin
             if(Client.IsLoggedIn||LifestreamBusy())return;
             if(SellerAddon("SelectString")!=null){if(!assignedServiceSent)assignedServiceSent=SelectVerifiedServiceAccount(run.ServiceAccount);return;}
             if(SelectLoginDataCenter(run.World,ref assignedDcSent))return;
-            if(SellerAddon("_TitleMenu")!=null&&!assignedDcSent){ClickLoginMenuButton("_TitleMenu",5);return;}
+            if(SellerAddon("_TitleMenu")!=null){
+                assignedDcSent=false;
+                if(ClickLoginMenuButton("_TitleMenu",5))assignedAccountReturnSent=false;
+                return;
+            }
             if(SellerAddon("SelectOk")!=null)throw new InvalidOperationException("The game reported a login message. Review it before continuing.");
-            var lobby=AgentLobby.Instance();if(lobby==null||lobby->TemporaryLocked)return;
-            if(lobby->ServiceAccountIndex!=run.ServiceAccount)throw new InvalidOperationException("The selected service account differs from this client's reserved account.");
+            var lobby=AgentLobby.Instance();if(lobby==null)return;
+            if(lobby->ServiceAccountIndex!=run.ServiceAccount){
+                if(lobby->TemporaryLocked)return;
+                if(assignedServiceSent||assignedLoginSent)throw new InvalidOperationException("The game did not select the requested service account; no other account was used.");
+                if(lobby->ServiceAccountIndex<0||SellerAddon("_CharaSelectListMenu")==null)return;
+                if(SellerAddon("SelectYesno")!=null||SellerAddon("ContextMenu")!=null)return;
+                if(!assignedAccountReturnSent){
+                    assignedAccountReturnSent=ClickLoginMenuButton("_CharaSelectReturn",4);
+                    if(assignedAccountReturnSent){
+                        assignedDcSent=false;loginWorldChecked.Clear();loginWorldPending=loginWorldSample=0;loginWorldNext=default;
+                        characterTravelStatus=$"Returning through Data Center to select verified service account {run.ServiceAccount+1} for {run.Target.Name}.";
+                    }
+                }
+                return;
+            }
             if(assignedLoginSent){
                 var dialog=(AddonSelectYesno*)SellerAddon("SelectYesno");
                 var target=TitleLoginTarget(run.Target.Id);
                 if(dialog!=null&&dialog->PromptText!=null&&target!=null&&ulong.TryParse(target.ContentId,out var cid)&&
                     EstateTravelCommand.CanConfirmLogin(true,cid,lobby->SelectedCharacterContentId,run.ServiceAccount,lobby->ServiceAccountIndex,target.Name,TravelMenuText(dialog->PromptText->NodeText.StringPtr)??""))
                     NativeEventButton((AtkUnitBase*)dialog,dialog->YesButton);
+                else if(dialog!=null)characterTravelStatus=$"Waiting for verified login confirmation · selected {lobby->SelectedCharacterContentId}, target {run.Target.ContentId}, service account {lobby->ServiceAccountIndex+1}.";
                 return;
             }
-            if(SellerAddon("_CharaSelectListMenu")==null||now<loginWorldNext)return;
+            if(lobby->TemporaryLocked||SellerAddon("_CharaSelectListMenu")==null||now<loginWorldNext)return;
             if(TryReadReadyLoginList(out var entries)&&entries.FirstOrDefault(e=>!e.Locked&&e.ContentId==run.Target.ContentId&&e.World==run.Target.World) is {} verified){
                 assignedLoginSent=BeginNativeCharacterLogin(run.Target,run.ServiceAccount);return;
             }
