@@ -32,6 +32,9 @@ public static class EstateTravelCommand
 {
     public static bool CanResume(ulong expectedCharacter,ulong character,uint homeWorld,uint currentWorld) =>
         expectedCharacter!=0&&expectedCharacter==character&&homeWorld!=0&&homeWorld==currentWorld;
+    public static string EntranceName(string name) =>
+        System.Text.RegularExpressions.Regex.Replace(name,@"\[.*?\]","").Trim();
+    public static bool WaitForEntrance(TimeSpan missingFor) => missingFor<TimeSpan.FromSeconds(15);
     public static bool CanConfirmLogin(bool requested,ulong expectedCharacter,ulong selectedCharacter,
         int expectedSlot,int selectedSlot,string name,string prompt)
     {

@@ -24,6 +24,11 @@ internal static class EstateTravel411Tests
             Confirm(sent:false)||Confirm(selected:43)||Confirm(selected:0)||Confirm(slot:0)||Confirm(slot:-1)||
             Confirm(prompt:"Log in with Another Character?")||Confirm(prompt:"Log in with Gideon Bulwarkson?"))
             throw new Exception("Estate login confirmation must accept name-only prompts for the reserved identity only.");
+        if(EstateTravelCommand.EntranceName("[en]Additional Chambers")!="Additional Chambers"||
+            EstateTravelCommand.EntranceName("Additional Chambers")!="Additional Chambers"||
+            !EstateTravelCommand.WaitForEntrance(TimeSpan.FromSeconds(14))||
+            EstateTravelCommand.WaitForEntrance(TimeSpan.FromSeconds(15)))
+            throw new Exception("Estate entrance loading and localized name policy failed.");
         Console.WriteLine("Estate travel command modes passed.");
     }
 }

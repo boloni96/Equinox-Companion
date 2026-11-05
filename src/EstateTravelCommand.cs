@@ -18,7 +18,7 @@ public sealed partial class Plugin
         public required string Label;
         public required DateTimeOffset Started;
         public int Stage;
-        public DateTimeOffset ActionAt;
+        public DateTimeOffset ActionAt,DoorMissingSince;
         public Vector3? Forward;
         public ulong Door;
         public readonly GardenArrivalGate Arrival=new();
@@ -54,7 +54,7 @@ public sealed partial class Plugin
             var trip=new EstateTrip{Destination=address,Character=Player.ContentId,Mode=destination.Mode,Label=destination.Label,Started=DateTimeOffset.UtcNow};
             if(SameEstate(inside,address)&&inside!.Room==0&&destination.Mode!=0){
                 if(destination.Mode==3&&inside.Workshop||destination.Mode==2&&!inside.Workshop){FollowChatNotice("TRAVEL — Already "+destination.Label+".");return;}
-                if(destination.Mode==3&&!inside.Workshop){trip.Stage=5;estateTrip=trip;FollowChatNotice("TRAVEL — Walking to the FC workshop entrance.");return;}
+                if(destination.Mode==3&&!inside.Workshop){trip.Stage=5;trip.ActionAt=trip.Started;estateTrip=trip;FollowChatNotice("TRAVEL — Walking to the FC workshop entrance.");return;}
             }
             var outside=manager==null?null:AddressOf(manager->GetCurrentHouseId());
             if(manager!=null&&manager->GetCurrentHousingTerritoryType()==HousingTerritoryType.Outdoor&&SameEstate(outside,address)){
@@ -91,7 +91,7 @@ public sealed partial class Plugin
             if(indoors&&inside!.Workshop&&trip.Mode==3){StopEstateTravel("Arrived inside the FC workshop.");return;}
             if(indoors&&!inside!.Workshop&&inside.Room==0){
                 if(trip.Mode==2){StopEstateTravel("Arrived "+trip.Label+".");return;}
-                if(trip.Mode==3&&trip.Stage<5){trip.Stage=5;trip.Door=0;trip.Arrival.Reset();}
+                if(trip.Mode==3&&trip.Stage<5){trip.Stage=5;trip.Door=0;trip.ActionAt=now;trip.DoorMissingSince=default;trip.Arrival.Reset();StopIndependentWalk("Loading FC interior");}
             }
             if(trip.Stage>=5){
                 if(!indoors||inside!.Workshop||inside.Room!=0)throw new InvalidOperationException("The expected FC house interior is not confirmed.");
@@ -140,12 +140,21 @@ public sealed partial class Plugin
             if(QuestConversationVisible()||VisibleFollowAddon("SelectYesno"))return;
             if(Conditions[ConditionFlag.Mounted])throw new InvalidOperationException("Dismount and run the estate command again.");
             var workshop=trip.Stage==5;
+            // Housing identity can arrive before its targetable entrances.
+            if(workshop&&now-trip.ActionAt<TimeSpan.FromSeconds(3))return;
             var ids=workshop?new uint[]{2004353}:new uint[]{2002737,2002739};
-            var names=ids.Select(id=>DataManager.GetExcelSheet<Lumina.Excel.Sheets.EObjName>().GetRowOrDefault(id)?.Singular.ToString()??"").Where(n=>n.Length>0).ToArray();
-            var doors=Objects.Where(o=>o.ObjectKind==ObjectKind.EventObj&&o.IsTargetable&&(ids.Contains(o.BaseId)||names.Contains(o.Name.ToString())))
+            var names=ids.Select(id=>DataManager.GetExcelSheet<Lumina.Excel.Sheets.EObjName>().GetRowOrDefault(id)?.Singular.ToString()??"").Select(EstateTravelCommand.EntranceName).Where(n=>n.Length>0).ToArray();
+            var doors=Objects.Where(o=>o.ObjectKind==ObjectKind.EventObj&&o.IsTargetable&&(ids.Contains(o.BaseId)||names.Contains(EstateTravelCommand.EntranceName(o.Name.ToString()),StringComparer.OrdinalIgnoreCase)))
                 .Where(o=>Vector3.Distance(o.Position,self.Position)<40).OrderBy(o=>Vector3.DistanceSquared(o.Position,self.Position)).ToArray();
             var door=trip.Door==0?doors.FirstOrDefault():doors.FirstOrDefault(o=>o.GameObjectId==trip.Door);
-            if(door==null)throw new InvalidOperationException("No "+(workshop?"workshop":"house")+" entrance is loaded nearby.");
+            if(door==null){
+                if(trip.DoorMissingSince==default)trip.DoorMissingSince=now;
+                if(EstateTravelCommand.WaitForEntrance(now-trip.DoorMissingSince)){
+                    independentWalkStatus="Waiting for the "+(workshop?"additional chambers":"house")+" entrance to load";return;
+                }
+                throw new InvalidOperationException("No "+(workshop?"additional chambers / workshop":"house")+" entrance became available nearby after waiting for loading.");
+            }
+            trip.DoorMissingSince=default;
             if(trip.Door==0&&doors.Length>1&&Vector3.Distance(doors[1].Position,self.Position)-Vector3.Distance(door.Position,self.Position)<3)
                 throw new InvalidOperationException("Multiple entrances are equally close. Move nearer the correct door and retry.");
             trip.Door=door.GameObjectId;
