@@ -8,7 +8,7 @@ public sealed partial class Plugin
 {
     private sealed record AssignedLogin(SharedCharacter Target,ulong From,int ServiceAccount,string Pairing,string World,DateTimeOffset Deadline);
     private AssignedLogin? assignedLogin;
-    private bool assignedDcSent,assignedServiceSent,assignedLoginSent,assignedLogoutConfirmed,assignedAccountReturnSent;
+    private bool assignedDcSent,assignedServiceSent,assignedLoginSent,assignedLoginConfirmed,assignedLogoutConfirmed,assignedAccountReturnSent;
     private DateTimeOffset assignedLoginNext,loginWorldNext;
     private readonly HashSet<ushort> loginWorldChecked=[];
     private ushort loginWorldPending,loginWorldSample;private DateTimeOffset loginWorldSentAt,loginWorldStableAt;
@@ -40,7 +40,7 @@ public sealed partial class Plugin
         try{
             var ui=UIModule.Instance();if(ui==null)throw new InvalidOperationException("Game menu unavailable.");
             assignedLogin=new(target,Player.ContentId,index,config.PairingKey,LastLoginWorld(target),DateTimeOffset.UtcNow.AddMinutes(5));
-            assignedDcSent=assignedServiceSent=assignedLoginSent=assignedLogoutConfirmed=assignedAccountReturnSent=false;assignedLoginNext=default;loginWorldChecked.Clear();loginWorldNext=default;loginWorldPending=loginWorldSample=0;assignedLoginError="";
+            assignedDcSent=assignedServiceSent=assignedLoginSent=assignedLoginConfirmed=assignedLogoutConfirmed=assignedAccountReturnSent=false;assignedLoginNext=default;loginWorldChecked.Clear();loginWorldNext=default;loginWorldPending=loginWorldSample=0;assignedLoginError="";
             using var command=new Utf8String();command.SetString("/logout");ui->ProcessChatBoxEntry(&command,0,false);
             characterSwitchFrom=Player.ContentId;characterSwitchTarget=target;characterSwitchUntil=assignedLogin.Deadline;
             characterTravelStatus=$"Switching using this client's verified service account {index+1}: {target.Name} @ {target.World}.";return true;
@@ -51,7 +51,7 @@ public sealed partial class Plugin
         var slot=CurrentLoginServiceAccount();
         if(slot is <0 or >15||assignedLogin!=null)return false;
         assignedLogin=new(target,0,slot,config.PairingKey,LastLoginWorld(target),DateTimeOffset.UtcNow.AddMinutes(5));
-        assignedDcSent=assignedServiceSent=assignedLoginSent=assignedLogoutConfirmed=assignedAccountReturnSent=false;
+        assignedDcSent=assignedServiceSent=assignedLoginSent=assignedLoginConfirmed=assignedLogoutConfirmed=assignedAccountReturnSent=false;
         assignedLoginNext=default;loginWorldChecked.Clear();loginWorldNext=default;loginWorldPending=loginWorldSample=0;assignedLoginError="";
         characterSwitchFrom=0;characterSwitchTarget=target;characterSwitchUntil=assignedLogin.Deadline;
         return true;
@@ -115,6 +115,7 @@ public sealed partial class Plugin
         return new{status=characterTravelStatus,expectedCharacter=expected,expectedName=target?.Name??estateHomeReturn?.Name,
             expectedSlot=assignedLogin?.ServiceAccount??estateHomeReturn?.ServiceSlot,
             requested=assignedLogin!=null?assignedLoginSent:estateHomeReturn?.LoginSent??false,
+            confirmed=assignedLogin!=null?assignedLoginConfirmed:estateHomeReturn?.LoginConfirmed??false,
             currentSlot=lobby==null?-1:(int)lobby->ServiceAccountIndex,
             displayedCharacter=lobby==null?"":lobby->HoveredCharacterContentId.ToString(),
             selectedCharacter=lobby==null?"":lobby->SelectedCharacterContentId.ToString(),
@@ -206,6 +207,7 @@ public sealed partial class Plugin
                 if(logout!=null&&logout->PromptText!=null&&NativeEventPolicy.Prompt(expected,TravelMenuText(logout->PromptText->NodeText.StringPtr)??"")&&NativeEventButton((AtkUnitBase*)logout,logout->YesButton))assignedLogoutConfirmed=true;
                 return;
             }if(Player.ContentId.ToString()!=run.Target.ContentId)throw new InvalidOperationException("An unexpected character logged in.");assignedLogin=null;characterSwitchUntil=default;characterSwitchTarget=null;return;}
+            if(assignedLoginConfirmed){characterTravelStatus=$"Login accepted for {run.Target.Name}; waiting for the queue or loading.";return;}
             if(Client.IsLoggedIn||LifestreamBusy())return;
             if(SellerAddon("SelectString")!=null){if(!assignedServiceSent)assignedServiceSent=SelectVerifiedServiceAccount(run.ServiceAccount);return;}
             if(SelectLoginDataCenter(run.World,ref assignedDcSent))return;
@@ -233,7 +235,7 @@ public sealed partial class Plugin
             if(assignedLoginSent){
                 var target=TitleLoginTarget(run.Target.Id);
                 if(target!=null&&ulong.TryParse(target.ContentId,out var cid)&&ConfirmNativeLogin(true,cid,target.World,run.ServiceAccount,target.Name))
-                    characterTravelStatus=$"Login confirmed for {target.Name}; waiting for the game.";
+                    {assignedLoginConfirmed=true;characterTravelStatus=$"Login confirmed for {target.Name}; waiting for the game.";}
                 else if(SellerAddon("SelectYesno")!=null)
                     characterTravelStatus=$"Waiting for the displayed character to match {run.Target.Name} on service account {run.ServiceAccount+1}.";
                 return;

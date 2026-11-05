@@ -24,7 +24,6 @@ internal sealed class GameWalkingCollision:IWalkingCollision
     }
     public bool ComfortableTraverse(Vector3 from,Vector3 to)=>Traverse(from,to)&&WalkingClearance.PreservesRoom(from,to,WallPenalty);
     internal Vector3? LastBlockedAt { get; private set; }
-    private bool Reject(Vector3 point){LastBlockedAt=point;return false;}
     private bool Blocked(Vector3 a,Vector3 b){var delta=b-a;var length=delta.Length();return length>.001f&&Hit(a,delta/length,length,out _);}
     internal static unsafe bool Available(){
         var f=GameFramework.Instance();var c=f==null?null:f->BGCollisionModule;
@@ -72,30 +71,9 @@ internal sealed class GameWalkingCollision:IWalkingCollision
     }
     public bool Traverse(Vector3 from,Vector3 to)
     {
-        Ready();LastBlockedAt=null;var horizontal=CollisionRouteSearch.Horizontal(from,to);
-        if(horizontal>2.9f||MathF.Abs(from.Y-to.Y)>1.2f)return Reject(to);
-        var steps=Math.Max(1,(int)MathF.Ceiling(horizontal/.3f));var previous=from;
-        var delta=to-from;var side=horizontal>.01f?new Vector3(-delta.Z,0,delta.X)/horizontal*Radius:Vector3.UnitX*Radius;
-        for(var i=1;i<=steps;i++)
-        {
-            var point=Vector3.Lerp(from,to,(float)i/steps);point.Y=previous.Y;
-            if(!Ground(point,out var floor)||MathF.Abs(floor.Y-previous.Y)>.45f)return Reject(point);
-            // Keep both sides supported; don't squeeze along an edge or cut a corner.
-            foreach(var offset in (ReadOnlySpan<Vector3>)[-side,Vector3.Zero,side])
-            {
-                if(!Ground(floor+offset,out var support)||MathF.Abs(support.Y-floor.Y)>.4f)return Reject(floor+offset);
-                foreach(var height in (ReadOnlySpan<float>)[.2f,.5f,1.05f,Height])
-                {
-                    // Test above the higher support: a legal stair riser is not a body obstacle.
-                    var a=previous+offset;var b=floor+offset;
-                    a.Y=b.Y=MathF.Max(previous.Y,floor.Y)+height;
-                    var direction=b-a;var length=direction.Length();
-                    if(length>.001f&&Hit(a,direction/length,length,out _))return Reject(floor);
-                }
-            }
-            if(!WalkingClearance.BodyRoom(floor,Radius,Blocked))return Reject(floor);
-            previous=floor;
-        }
-        return MathF.Abs(previous.Y-to.Y)<.25f||Reject(to);
+        Ready();
+        var clear=WalkingGroundTraversal.Check(this,from,to,Blocked,out var blockedAt);
+        LastBlockedAt=blockedAt;
+        return clear;
     }
 }
