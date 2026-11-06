@@ -1822,3 +1822,14 @@ ItemQuantity372Tests.Run();
 QuestTools373Tests.Run();
 
 GardenNotice420Tests.Run();
+
+var celebrationGate=new CelebrationCheckGate();
+Check("idle celebrations never poll",celebrationGate.Take(time.AddDays(1),true).ToString(),"False");
+celebrationGate.Request(time);
+Check("celebration coalesces evidence",celebrationGate.Take(time.AddMilliseconds(100),true).ToString(),"False");
+celebrationGate.Request(time.AddMilliseconds(400));
+Check("new evidence does not postpone forever",celebrationGate.Take(time.AddMilliseconds(500),true).ToString(),"True");
+Check("unchanged evidence never repeats",celebrationGate.Take(time.AddSeconds(2),true).ToString(),"False");
+celebrationGate.Request(time.AddSeconds(3));
+Check("unready character retains evidence",celebrationGate.Take(time.AddSeconds(4),false).ToString(),"False");
+Check("ready character checks pending evidence",celebrationGate.Take(time.AddSeconds(5),true).ToString(),"True");

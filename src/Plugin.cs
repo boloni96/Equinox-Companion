@@ -362,6 +362,7 @@ public sealed partial class Plugin : IDalamudPlugin
         RunOptionalTool("Equinox Organizer",now);
         RunOptionalTool("Trade item shortcut",now);
         UpdateAdventure();
+        UpdateCelebrationChecks(now);
         UpdateTesting(now);
         UpdateShoppingTravel(now);
         UpdateBringCharacter(now);
@@ -727,6 +728,7 @@ public sealed partial class Plugin : IDalamudPlugin
         var last = observations.LastDiscovery(e);
         if (!force && last is not null && !GardenTargetMap.CanRepeatObservation(e.Kind, e.At - last.At) && !(e.GardenTarget is not null && e.At-last.At > TimeSpan.FromDays(30)) && !(e.Kind is "garden.ready" or "garden.observed" or "garden.status" or "garden.empty" or "garden.dead" && observations.PlantedAfter(e,last.At)) && JsonSerializer.Serialize(new { last.Actor, last.Address, last.House, last.Character, last.Crop, last.Collection, last.Fashion, last.Voyage, last.GardenTarget, last.Storage, last.Company, last.CachedVoyage, last.Supplies, last.Lottery, last.LotteryResult, last.SharedEstates }) == JsonSerializer.Serialize(new { e.Actor, e.Address, e.House, e.Character, e.Crop, e.Collection, e.Fashion, e.Voyage, e.GardenTarget, e.Storage, e.Company, e.CachedVoyage, e.Supplies, e.Lottery, e.LotteryResult, e.SharedEstates })) return;
         config.Discoveries.Add(e);
+        if(e.Kind is "fashion.observed" or "collection.observed" or "storage.observed")RequestCelebrationCheck();
         WakeObservationSync();
         if(collectingStorage)storageChanged=true;else if(save)SaveConfiguration();
     }
@@ -1125,12 +1127,24 @@ public sealed partial class Plugin : IDalamudPlugin
         TrackPerformance("window drawing", perf);
         perf = System.Diagnostics.Stopwatch.GetTimestamp();
         visible = mainWindow.IsOpen;
+        var overlayStarted = System.Diagnostics.Stopwatch.GetTimestamp();
         DrawFloatingLaunchers();
+        RecordPerformanceElapsed("Overlay: floating icons", overlayStarted);
+        overlayStarted = System.Diagnostics.Stopwatch.GetTimestamp();
         DrawPlantingMarkers();
+        RecordPerformanceElapsed("Overlay: garden markers", overlayStarted);
+        overlayStarted = System.Diagnostics.Stopwatch.GetTimestamp();
         DrawCofferMarkers();
+        RecordPerformanceElapsed("Overlay: coffer markers", overlayStarted);
+        overlayStarted = System.Diagnostics.Stopwatch.GetTimestamp();
         DrawHelperControls();
+        RecordPerformanceElapsed("Overlay: helper controls", overlayStarted);
+        overlayStarted = System.Diagnostics.Stopwatch.GetTimestamp();
         DrawAccountCelebration();
+        RecordPerformanceElapsed("Overlay: celebration", overlayStarted);
+        overlayStarted = System.Diagnostics.Stopwatch.GetTimestamp();
         DrawWorkIndicator();
+        RecordPerformanceElapsed("Overlay: loading icon", overlayStarted);
         TrackPerformance("overlays", perf);
         if (!visible) showSavedPairingKey = false;
     }

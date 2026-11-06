@@ -11,14 +11,13 @@ public sealed partial class Plugin
     private readonly Queue<(string Key,string Account,string Activity)> accountCelebrations=[];
     private (string Key,string Account,string Activity)? accountCelebration;
     private double accountCelebrationElapsed,accountCelebrationLastFrame;
-    private DateTimeOffset eventCelebrationNext;
     private string accountCelebrationPairing="";
     private static string CelebrationKey(string value)=>Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
     private string CelebrationImageKey(string identity)=>CelebrationKey(config.PairingKey+"|"+identity+"|image-size-2");
     private void ResetCelebrationScope()
     {
         if(accountCelebrationPairing==config.PairingKey)return;
-        accountCelebrationPairing=config.PairingKey;accountCelebrationObserved.Clear();accountCelebrations.Clear();accountCelebration=null;completedEventCelebration=null;eventCelebrationStatus="Waiting for account completion data.";eventCelebrationNext=default;
+        accountCelebrationPairing=config.PairingKey;accountCelebrationObserved.Clear();accountCelebrations.Clear();accountCelebration=null;completedEventCelebration=null;eventCelebrationStatus="Waiting for account completion data.";RequestCelebrationCheck();
     }
     private void QueueAccountCelebration(string identity,string account,string activity,bool replay=false)
     {
@@ -59,7 +58,7 @@ public sealed partial class Plugin
         }
         QueueAccountCelebration(identity,person.Name+" / "+current.Account,$"Fashion Report (week of {FashionCompletion.Cycle(now):yyyy-MM-dd})");
     }
-    private void CelebrateEventAccount()=>ObserveEventAccountCompletion();
+    private void CelebrateEventAccount()=>RequestCelebrationCheck();
     private unsafe void ObserveEventAccountCompletion()
     {
         completedEventCelebration=null;
@@ -76,7 +75,12 @@ public sealed partial class Plugin
         var identity=$"keybound-5466-wishlist-v3|{person.Id}|{current.AccountId}|"+string.Join(",",characters.Select(c=>c.Id).Order());
         var tasks=adventureBoards.SelectMany(b=>b.Stops).SelectMany(s=>s.Tasks).Where(t=>t.Rule?.Kind=="event"&&t.Rule.Quests?.Any(q=>QuestToolsPolicy.ShortId(q)==QuestToolsPolicy.KeywardBound)==true).ToArray();
         try{
-            LoadKeyboundOffers();keyboundPurchases!.Reload();
+            var loadStarted=System.Diagnostics.Stopwatch.GetTimestamp();
+            try{LoadKeyboundOffers();}
+            finally{RecordPerformanceElapsed("Celebration: reward catalogue",loadStarted);}
+            loadStarted=System.Diagnostics.Stopwatch.GetTimestamp();
+            try{keyboundPurchases!.Reload();}
+            finally{RecordPerformanceElapsed("Celebration: purchase history",loadStarted);}
             config.EventCelebrationEvidence??=[];
             var pending=new List<string>();var done=0;
             foreach(var c in characters){
@@ -104,11 +108,6 @@ public sealed partial class Plugin
         var delta=accountCelebrationLastFrame==0?0:Math.Clamp(now-accountCelebrationLastFrame,0,.1);
         accountCelebrationLastFrame=now;
         if(!Player.IsLoaded||Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51])return;
-        if(DateTimeOffset.UtcNow>=eventCelebrationNext){
-            eventCelebrationNext=DateTimeOffset.UtcNow.AddSeconds(2);
-            ObserveAccountFashionCompletion();
-            ObserveEventAccountCompletion();
-        }
         if(accountCelebration is null){if(accountCelebrations.Count==0)return;accountCelebration=accountCelebrations.Dequeue();accountCelebrationElapsed=0;}
         var image=Textures.GetFromFile(Path.Combine(Pi.AssemblyLocation.DirectoryName!,"goddess-complete.png")).GetWrapOrDefault();
         if(image==null)return; // Do not spend the display time while the texture loads.

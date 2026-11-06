@@ -149,7 +149,7 @@ public sealed partial class Plugin
         }catch(Exception e){TraceKeyboundRun(requestedRun,"start-failed",e.Message,source);StopKeyboundBuying(e.Message);}
     }
     private string KeyboundBuyFinished()=>$"Bought {keyboundBought} rewards"+(keyboundHeldRewards.Count>0?$" · {keyboundHeldRewards.Count} held for verification.":" · Done.");
-    private void StopKeyboundBuying(string reason,string source="system"){if(keyboundBuying)TraceKeyboundRun(keyboundBuyerRun,"stopped",reason,source);keyboundBuying=false;keyboundUsingRewards=false;keyboundBuyAndUse=false;keyboundBuyStatus=reason;keyboundBuyRefresh=default;}
+    private void StopKeyboundBuying(string reason,string source="system"){if(keyboundBuying)TraceKeyboundRun(keyboundBuyerRun,"stopped",reason,source);if(keyboundBuying)RequestCelebrationCheck();keyboundBuying=false;keyboundUsingRewards=false;keyboundBuyAndUse=false;keyboundBuyStatus=reason;keyboundBuyRefresh=default;}
     private bool KeyboundPurchaseDialogVisible()=>new[]{"SelectYesno","ShopExchangeItemDialog","ShopExchangeCurrencyDialog","Request"}.Any(VisibleFollowAddon);
     private unsafe KeyboundOffer? KeyboundReadOffer(string shop,int row,out uint index)
     {

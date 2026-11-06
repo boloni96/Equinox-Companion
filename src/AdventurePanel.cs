@@ -61,7 +61,7 @@ public sealed partial class Plugin
   if(adventureRequest?.IsCompleted==true){
    var reply=adventureRequest.IsCompletedSuccessfully?adventureRequest.Result:new AdventureReply(null,"Adventure request failed.");
    if(adventureRequest.IsFaulted)_=adventureRequest.Exception;
-   if(adventureRequestKey==config.PairingKey){adventureMessage=reply.Status;adventureFresh=reply.Boards is not null;if(reply.Boards is null){if(adventureFollowReply is {} retryFollow)adventurePendingTravel=retryFollow;adventureFollowReply=null;adventurePresenceSession.Reset();}if(reply.Boards is {} boards){adventureBoards=AdventurePolicy.Reconcile(adventureBoards,boards,adventureMutation).Select(adventureView.Apply).ToArray();adventureFetched=now;ApplyAdventureFollowReply();CacheAdventures();ObserveAccountFashionCompletion();}
+   if(adventureRequestKey==config.PairingKey){adventureMessage=reply.Status;adventureFresh=reply.Boards is not null;if(reply.Boards is null){if(adventureFollowReply is {} retryFollow)adventurePendingTravel=retryFollow;adventureFollowReply=null;adventurePresenceSession.Reset();}if(reply.Boards is {} boards){adventureBoards=AdventurePolicy.Reconcile(adventureBoards,boards,adventureMutation).Select(adventureView.Apply).ToArray();adventureFetched=now;ApplyAdventureFollowReply();CacheAdventures();}
     adventureNext=now.AddSeconds(AdventurePollPolicy.Seconds(adventureWindow.IsOpen,gardenTendRoute!=null,reply.Boards is null));
    }adventureRequest=null;adventureMutation=false;
   }
