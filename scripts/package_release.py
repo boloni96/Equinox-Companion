@@ -46,6 +46,9 @@ def package(build, output, repository, tag, ref=None):
         route_manifest=json.loads(routes.read("manifest.json"))
         if route_manifest["routeCount"] != 4388 or not routes.read("LICENSE"):
             raise ValueError("Independent quest pack missing or incomplete")
+    loading = (build / "goddess-loading.png").read_bytes()
+    if loading[:8] != b"\x89PNG\r\n\x1a\n" or loading[-12:] != b"\x00\x00\x00\x00IEND\xaeB`\x82":
+        raise ValueError("Goddess loading artwork is missing or incomplete")
     dll = build / "EquinoxCompanion.dll"
     if not dll.is_file() or dll.read_bytes()[:2] != b"MZ":
         raise ValueError("Compiled plugin DLL is missing or invalid")
