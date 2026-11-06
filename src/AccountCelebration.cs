@@ -83,15 +83,20 @@ public sealed partial class Plugin
             yield return true;
             config.EventCelebrationEvidence??=[];
             var pending=new List<string>();var done=0;
+            var offersByName=celebrationOffers!.ToDictionary(o=>KeyboundShoppingPolicy.Normalize(o.Name));
             foreach(var c in characters){
                 AccountEventEvidence? evidence=null;
                 foreach(var step in ReadEventCelebrationEvidence(c,current,tasks,value=>evidence=value))yield return step;
                 if(evidence==null)yield break;
-                var missing=c.KeyboundWishlist!.Where(w=>w.Wanted&&!AccountCelebrationPolicy.RewardComplete(w.Obtained,
-                    celebrationOffers!.Any(o=>o.Key==KeyboundShoppingPolicy.PrizeKey(w.Name)&&evidence.Items.Contains(o.Item)))).ToArray();
+                var missing=new List<SharedRewardWish>();
+                var owned=evidence.Items.ToHashSet();
+                foreach(var wish in c.KeyboundWishlist!){
+                    if(wish.Wanted&&!wish.Obtained&&(!offersByName.TryGetValue(KeyboundShoppingPolicy.Normalize(wish.Name),out var offer)||!owned.Contains(offer.Item)))missing.Add(wish);
+                    yield return true;
+                }
                 if(!evidence.QuestComplete)pending.Add(c.Name+": event quest completion not confirmed");
-                if(missing.Length>0)pending.Add(c.Name+": "+missing.Length+" reward(s) not confirmed ("+string.Join(", ",missing.Take(2).Select(w=>w.Name))+")");
-                if(evidence.QuestComplete&&missing.Length==0)done++;
+                if(missing.Count>0)pending.Add(c.Name+": "+missing.Count+" reward(s) not confirmed ("+string.Join(", ",missing.Take(2).Select(w=>w.Name))+")");
+                if(evidence.QuestComplete&&missing.Count==0)done++;
             }
             eventCelebrationStatus=$"{current.Account}: {done}/{characters.Length} event characters complete.";
             if(pending.Count>0){eventCelebrationStatus+="\n"+string.Join("\n",pending.Take(6));if(pending.Count>6)eventCelebrationStatus+="\nMore characters still need confirmation.";yield break;}
