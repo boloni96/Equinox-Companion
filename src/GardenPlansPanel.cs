@@ -100,7 +100,8 @@ public sealed partial class Plugin
     private readonly UiProjectionCache<SharedGardenPlan[]> gardenSourcesCache=new(maxAgeMs:0);
     private SharedGardenPlan[] GardenPlanSources()=>gardenSourcesCache.Get(config.SharedRoster,
         $"{config.Discoveries.Count}:{config.Discoveries.LastOrDefault()?.Id}",Environment.TickCount64,BuildGardenPlanSources);
-    private SharedGardenPlan[] BuildGardenPlanSources()
+    private SharedGardenPlan[] BuildGardenPlanSources()=>MeasureWork("Garden: plan sources",BuildGardenPlanSourcesCore);
+    private SharedGardenPlan[] BuildGardenPlanSourcesCore()
     {
         var result=GardenPlanSourceBuilder.Build(config.SharedRoster);
         var reads=DiscoveryReads();var edits=reads.Kind("garden.plan");

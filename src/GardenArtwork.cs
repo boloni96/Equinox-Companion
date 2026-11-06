@@ -11,7 +11,8 @@ public sealed partial class Plugin
     private readonly Dictionary<string,SharedGardenPlan> localGardenCache=[];
     private SharedRoster? projectedGardenRoster;
     private string projectedGardenActions="";
-    private void LoadGardenPictures()
+    private void LoadGardenPictures(){if(gardenPictures is null)MeasureWork("Garden: catalogue",LoadGardenPicturesCore);}
+    private void LoadGardenPicturesCore()
     {
         if(gardenPictures is not null)return;
         gardenPictures=new(StringComparer.OrdinalIgnoreCase);
@@ -160,6 +161,10 @@ public sealed partial class Plugin
         if(projectedGardenRoster!=config.SharedRoster||projectedGardenActions!=actions){localGardenCache.Clear();projectedGardenRoster=config.SharedRoster;projectedGardenActions=actions;}
         var key=plan.HouseId+":"+plan.Batch+":"+plan.At.ToUnixTimeMilliseconds();
         if(localGardenCache.TryGetValue(key,out var cached))return cached;
+        return MeasureWork("Garden: live projection",()=>BuildEffectiveGardenPlan(plan,key));
+    }
+    private SharedGardenPlan BuildEffectiveGardenPlan(SharedGardenPlan plan,string key)
+    {
         LoadGardenPictures();
         if(completedGardenPlans.TryGetValue(key,out var at))plan=plan with {CompletedAt=at};
         var result=GardenLive.Apply(plan,LocalGardenActions(),GardenCropName,n=>gardenTiming.TryGetValue(n,out var t)?t.Days:0,n=>gardenTiming.TryGetValue(n,out var t)?t.Wilt:null);

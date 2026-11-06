@@ -15,17 +15,15 @@ public sealed partial class Plugin
         var remaining=DateTimeOffset.FromUnixTimeSeconds(seconds)-DateTimeOffset.UtcNow;
         return remaining<=TimeSpan.Zero?"Voyage Complete":$"Returns in {(int)remaining.TotalHours}h {remaining.Minutes}m";
     }
-    private readonly UiProjectionCache<SubmarineDisplayIndex> submarineDisplayCache=new(0);
+    private readonly BackgroundDisplayProjection<SubmarineDisplayIndex> submarineDisplayCache=new();
     private readonly UiProjectionCache<Dictionary<string,FleetAttention>> submarineAttentionCache=new(0);
     private readonly UiProjectionCache<IGrouping<string,SharedCharacter>[]> submarineAccountCache=new();
     private double submarineDrawLastMs,submarineDrawPeakMs,submarineIndexLastMs;
     private long submarineIndexBuilds;
-    private SubmarineDisplayIndex BuildSubmarineDisplay()
+    private Func<SubmarineDisplayIndex> SnapshotSubmarineDisplay()
     {
-        var started=System.Diagnostics.Stopwatch.GetTimestamp();
-        var result=SubmarineDisplayIndex.Build(config.SharedRoster,config.Discoveries);
-        submarineIndexLastMs=System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;submarineIndexBuilds++;
-        return result;
+        var roster=config.SharedRoster;var history=config.Discoveries.ToArray();submarineIndexBuilds++;
+        return ()=>SubmarineDisplayIndex.Build(roster,history);
     }
     private void DrawSubmarines()
     {
@@ -51,7 +49,9 @@ public sealed partial class Plugin
         if(ImGui.SmallButton("Refresh")){autoRetainerForceRead=true;autoRetainerCharacters.Clear();nextAutoRetainerRead=default;nextRosterRead=default;}
         if(ImGui.IsItemHovered())ImGui.SetTooltip("Read available cached records and refresh the paired Journal. Offline characters retain their last recorded values.");
         var index=submarineDisplayCache.Get(config.SharedRoster,
-            $"{config.Discoveries.Count}:{config.Discoveries.LastOrDefault()?.Id}",Environment.TickCount64,BuildSubmarineDisplay);
+            $"{config.Discoveries.Count}:{config.Discoveries.LastOrDefault()?.Id}",SnapshotSubmarineDisplay);
+        if(index is null){ImGui.TextWrapped(submarineDisplayCache.Error.Length>0?submarineDisplayCache.Error:"Preparing fleet history…");return;}
+        submarineIndexLastMs=submarineDisplayCache.BuildMs;
         var (direct,caches,supplies)=index;
         var now=DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         FleetAttention Attention(SharedCharacter c){

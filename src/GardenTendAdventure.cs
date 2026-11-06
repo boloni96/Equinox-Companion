@@ -28,8 +28,9 @@ public sealed partial class Plugin
     private readonly Dictionary<string,DateTimeOffset> gardenAdventureInspected=[];
     private readonly Dictionary<(string House,int Batch),string> gardenDeferredPlanting=[];
     private string[] gardenAdventureBlockedReasons=[];
-    private void DrawTendAdventure(AdventureBoard board)
-    {
+    private void DrawTendAdventure(AdventureBoard board)=>MeasureWork("Adventure: gardening controls",()=>DrawTendAdventureMeasured(board));
+ private void DrawTendAdventureMeasured(AdventureBoard board)
+ {
         if(!board.Stops.Any(s=>s.Tasks.Any(AdventurePolicy.IsGardenTask)))return;
         if(ImGui.CollapsingHeader("Automatic gardening")){
             ImGui.BeginDisabled(gardenTendRoute!=null);

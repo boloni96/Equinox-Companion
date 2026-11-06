@@ -85,7 +85,8 @@ public sealed partial class Plugin
   config.AdventurePairingHash=hash;config.CachedAdventures=adventureBoards;config.SelectedAdventure=adventureSelected;SaveConfiguration();
  }
  private readonly UiProjectionCache<AdventureProgress> adventureProgress=new(maxAgeMs:0);
- private void DrawAdventureTotal(AdventureBoard board)
+ private void DrawAdventureTotal(AdventureBoard board)=>MeasureWork("Adventure: summary",()=>DrawAdventureTotalMeasured(board));
+ private void DrawAdventureTotalMeasured(AdventureBoard board)
  {
   var progress=adventureProgress.Get(board,"",Environment.TickCount64,()=>AdventureProgress.Count(board));
   ImGui.ProgressBar(progress.Total==0?0:(float)progress.Done/progress.Total,new Vector2(-1,ImGui.GetFrameHeight()),$"{progress.Done} / {progress.Total} done");
@@ -131,7 +132,8 @@ public sealed partial class Plugin
   return adventureFilterBoard=board with {Stops=stops,Index=index};
  }
  private string AdventureFilterSummary()=>adventureFilterAll?"Showing: all people / accounts":"Showing: "+(adventureFilterAccounts.Count==0?"none":string.Join(", ",(config.SharedRoster?.People??[]).SelectMany(p=>(p.Accounts??[]).Where(a=>adventureFilterAccounts.Contains(AdventureAccountKey(p.Id,a.Id))).Select(a=>p.Name+" / "+a.Name))));
- private void DrawAdventureFilters()
+ private void DrawAdventureFilters()=>MeasureWork("Adventure: filters",()=>DrawAdventureFiltersMeasured());
+ private void DrawAdventureFiltersMeasured()
  {
   if(ImGui.SmallButton("Select all accounts")){adventureFilterAll=true;adventureFilterAccounts.Clear();adventureFollowSession.Reset();}
   ImGui.SameLine();if(ImGui.SmallButton("Clear all")){adventureFilterAll=false;adventureFilterAccounts.Clear();adventureFollowSession.Reset();}
@@ -172,7 +174,8 @@ public sealed partial class Plugin
   "reward"=>"Collect reward.",
   _=>""
  };
- private void DrawAdventureTaskList(AdventureBoard board,AdventureStop stop,AdventureTask[] tasks)
+ private void DrawAdventureTaskList(AdventureBoard board,AdventureStop stop,AdventureTask[] tasks)=>MeasureWork("Adventure: task list",()=>DrawAdventureTaskListMeasured(board,stop,tasks));
+ private void DrawAdventureTaskListMeasured(AdventureBoard board,AdventureStop stop,AdventureTask[] tasks)
  {
     PrepareAdventureLayout(stop);
     foreach(var task in tasks){ImGui.PushID(task.Id);

@@ -22,14 +22,17 @@ public sealed partial class Plugin
 
     private sealed record LocalHousingRow(Actor Actor,string Location,HousingCharacterRows Houses);
     private readonly UiProjectionCache<LocalHousingRow[]> localHousingCache=new(0);
-    private LocalHousingRow[] BuildLocalHousingRows()
+    private readonly BackgroundDisplayProjection<LocalHousingProjection> housingHistoryProjection=new();
+    private LocalHousingProjection? ReadLocalHousingProjection()=>housingHistoryProjection.Get(config,
+        $"{config.Discoveries.Count}:{config.Discoveries.LastOrDefault()?.Id}:{config.Houses.Count}:{config.Houses.LastOrDefault()?.EventId}:{config.Tending.Count}:{config.Tending.LastOrDefault()?.EventId}:{config.Planting.Count}:{config.Planting.LastOrDefault()?.EventId}",()=>{
+            var history=config.Discoveries.ToArray();var visits=config.Houses.ToArray();var tending=config.Tending.ToArray();var planting=config.Planting.ToArray();
+            return ()=>LocalHousingProjection.Build(history,visits,tending,planting);
+        });
+    private LocalHousingRow[] BuildLocalHousingRows(LocalHousingProjection data)
     {
-        var started=System.Diagnostics.Stopwatch.GetTimestamp();
-        try {
-            var index=HousingDisplayIndex.Build(config.Discoveries,config.Houses);
-            return OrderedLocalCharacters().Select(a=>new LocalHousingRow(a,HomeLocation(a),
-                index.Characters.GetValueOrDefault(a.ContentId)??new HousingCharacterRows([],[]))).ToArray();
-        } finally {TrackPerformance("My Empire history index",started);}
+        var ordered=OrderCharacters("local",data.Actors,a=>a.ContentId,a=>data.Owners.Contains(a.ContentId));
+        if(Player.IsLoaded){var current=Player.ContentId.ToString(System.Globalization.CultureInfo.InvariantCulture);ordered=ordered.OrderBy(a=>a.ContentId==current?0:1).ToArray();}
+        return ordered.Select(a=>new LocalHousingRow(a,HomeLocation(a),data.Index.Characters.GetValueOrDefault(a.ContentId)??new HousingCharacterRows([],[]))).ToArray();
     }
     private void DrawHousing()
     {
@@ -47,7 +50,9 @@ public sealed partial class Plugin
         ImGui.SetNextItemWidth(-1);
         ImGui.InputTextWithHint("##EmpireCharacterSearch","Find character / world", ref housingSearch, 100);
         ImGui.BeginChild("EmpireCharacters",Vector2.Zero,false);
-        var actors = localHousingCache.Get(config,$"{configurationRevision}:{config.Discoveries.Count}:{config.Houses.Count}:{config.Tending.Count}:{config.Planting.Count}:{(Player.IsLoaded?Player.ContentId:0)}",Environment.TickCount64,BuildLocalHousingRows);
+        var data=ReadLocalHousingProjection();
+        if(data is null){ImGui.TextWrapped(housingHistoryProjection.Error.Length>0?housingHistoryProjection.Error:"Preparing house history…");ImGui.EndChild();return;}
+        var actors=localHousingCache.Get(data,$"{configurationRevision}:{(Player.IsLoaded?Player.ContentId:0)}",Environment.TickCount64,()=>BuildLocalHousingRows(data));
         if (actors.Length == 0) ImGui.TextWrapped("No visible characters. Log in to record them, or restore hidden characters in Settings.");
         var now = DateTimeOffset.UtcNow;
         foreach (var row in actors)

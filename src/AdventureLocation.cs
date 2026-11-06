@@ -48,7 +48,8 @@ public sealed partial class Plugin
   adventureMutation=true;adventureRequestKey=config.PairingKey;
   adventureRequest=adventureSync.Location(config.PairingKey,board,character.Id,world,area,territory,house);
  }
- private void DrawAdventureLocation(AdventureBoard board)
+ private void DrawAdventureLocation(AdventureBoard board)=>MeasureWork("Adventure: location",()=>DrawAdventureLocationMeasured(board));
+ private void DrawAdventureLocationMeasured(AdventureBoard board)
  {
   var world=PublicAdventureWorld();var ready=world.Length>0;
   var house=ready?adventureLocationHouse.Get(config.SharedRoster,$"{Player.CurrentWorld.RowId}:{currentAddress}",Environment.TickCount64,

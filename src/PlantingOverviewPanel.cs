@@ -43,7 +43,7 @@ public sealed partial class Plugin
         var display=gardenOverviewDisplayCache.Get(roster,
             $"{Player.ContentId}:{config.HouseCharactersFirst}:{config.Planting.Count}:{config.Planting.LastOrDefault()?.EventId}:{config.Tending.Count}:{config.Tending.LastOrDefault()?.EventId}:{config.Discoveries.Count}:{config.Discoveries.LastOrDefault()?.Id}:{gardenBedSync?.Mappings.Count()}:{gardenBedSync?.Mappings.LastOrDefault()?.Id}",Environment.TickCount64,()=>{
                 var ordered=roster.People.Select(p=>p with {Characters=OrderedSharedCharacters(p)}).ToArray();
-                return (ordered,GardenOverview.Houses(ordered,GardenPlanSources().Select(EffectiveGardenPlan)));
+                return (ordered,MeasureWork("Garden: overview houses",()=>GardenOverview.Houses(ordered,GardenPlanSources().Select(EffectiveGardenPlan))));
             });
         var people=display.People;var houses=display.Houses;
         var overviewStatus=gardenOverviewStatusCache.Get(houses,now.ToUnixTimeSeconds().ToString(),Environment.TickCount64,

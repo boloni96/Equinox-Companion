@@ -69,7 +69,8 @@ public sealed partial class Plugin
    if(cancel.IsCancellationRequested){texture.Dispose();return null;}return new(texture,frame);
   }catch{return null;}
  }
- private void DrawAdventureCharacter(SharedCharacter character,AdventureStop stop,Action? details=null)
+ private void DrawAdventureCharacter(SharedCharacter character,AdventureStop stop,Action? details=null)=>MeasureWork("Adventure: character and portrait",()=>DrawAdventureCharacterMeasured(character,stop,details));
+ private void DrawAdventureCharacterMeasured(SharedCharacter character,AdventureStop stop,Action? details=null)
  {
   if(portraitPairing!=config.PairingKey){ClearAdventurePortraits();portraitPairing=config.PairingKey;}
   var reference=stop.Portraits?.FirstOrDefault(p=>p.Id==character.Id);LoadedPortrait? picture=null;

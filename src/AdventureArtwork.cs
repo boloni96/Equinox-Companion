@@ -6,7 +6,8 @@ public sealed partial class Plugin
  private bool adventureShowActual;
  private (string House,int Batch,int Bed)? adventureOpenBed;
  private readonly AdventureGardenNavigation adventureGardenNavigation=new();
- private void FollowAdventureGarden(AdventureBoard board)
+ private void FollowAdventureGarden(AdventureBoard board)=>MeasureWork("Adventure: garden selection",()=>FollowAdventureGardenMeasured(board));
+ private void FollowAdventureGardenMeasured(AdventureBoard board)
  {
   adventureGardenNavigation.Set(board);
   if(!adventureGardenNavigation.HasGardens)return;
@@ -37,7 +38,8 @@ public sealed partial class Plugin
    ImGui.PopID();
   }
  }
- private void DrawAdventureGardens(string houseId)
+ private void DrawAdventureGardens(string houseId)=>MeasureWork("Adventure: garden display",()=>DrawAdventureGardensMeasured(houseId));
+ private void DrawAdventureGardensMeasured(string houseId)
  {
   var sources=GardenPlanSources().Where(p=>p.HouseId==houseId).OrderBy(p=>p.Batch).ToArray();
   if(sources.Length==0){ImGui.TextWrapped("Waiting for this house’s garden records. Confirmed garden observations will appear after Companion syncs.");return;}

@@ -25,4 +25,13 @@ public sealed partial class Plugin
             performanceContextFrame=-1;RecordPerformanceElapsed(stage,started);measuredOperation=previous;
         }
     }
+    private T MeasureWork<T>(string stage,Func<T> work)
+    {
+        var previous=measuredOperation;measuredOperation=stage;
+        var started=System.Diagnostics.Stopwatch.GetTimestamp();
+        try{return work();}finally{
+            performanceContextFrame=-1;RecordPerformanceElapsed(stage,started);measuredOperation=previous;
+        }
+    }
+
 }
