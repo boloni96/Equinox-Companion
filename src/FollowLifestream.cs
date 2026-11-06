@@ -19,11 +19,10 @@ public sealed partial class Plugin
             catch(Exception) { PrintEquinox("[FollowThem] Could not open the Lifestream installation page. Visit https://github.com/NightmareXIV/Lifestream#installation"); }
         }
         if(ImGui.IsItemHovered())ImGui.SetTooltip("Open Lifestream's installation instructions in your browser.");
-        SettingsHelp("Requires the separate Lifestream plugin, installed and enabled. No vnavmesh dependency for Companion requests.");
-        if(!config.FollowThem.UseLifestream)return;
-        MessageToggle("Follow World Visits (requires Lifestream)",config.FollowThem.FollowWorldVisits,v=>config.FollowThem.FollowWorldVisits=v);
-        MessageToggle("Follow Data Center travel (Lifestream; logs this character out and back in)",config.FollowThem.FollowDataCenters,v=>config.FollowThem.FollowDataCenters=v);
-        SettingsHelp("Optional Lifestream integration. Its own travel restrictions and service-account configuration apply. Companion requests no vnavmesh movement. Use /et WorldName (unique prefixes accepted, e.g. /et sir); /eqtravel is also supported; /equinox travel WorldName also works to share the destination before World/DC departure. Observed /li WorldName commands also share when available; menu travel has an arrival fallback. Queues can take time; use Stop to cancel a request started here.");
+        SettingsHelp("The optional legacy approach routes require Lifestream. Native world/DC travel and aethernet do not.");
+        MessageToggle("Follow World Visits (Companion)",config.FollowThem.FollowWorldVisits,v=>config.FollowThem.FollowWorldVisits=v);
+        MessageToggle("Follow Data Center travel (Companion; logs this character out and back in)",config.FollowThem.FollowDataCenters,v=>config.FollowThem.FollowDataCenters=v);
+        SettingsHelp("World/DC travel uses Companion native menus and the verified service account. Lifestream remains optional for other legacy routes. Use /et WorldName (unique prefixes accepted, e.g. /et sir); /eqtravel is also supported; /equinox travel WorldName also works to share the destination before World/DC departure. Observed /li WorldName commands also share when available; menu travel has an arrival fallback. Queues can take time; use Stop to cancel a request started here.");
     }
     private bool TryLifestreamAethernet(FollowPortalSignal signal)
     {
@@ -57,7 +56,7 @@ public sealed partial class Plugin
         if(!SharingTravel){worldSource=null;sharedWorldIntent=0;announcedWorldTrip=null;return;}
         _=SharingWorldIntent; // Also clears arrival even when worldSource was lost.
         if(sharedWorldIntent!=0&&Player.IsLoaded&&now-sharedWorldIntentAt>TimeSpan.FromSeconds(15)){
-            try { if(!LifestreamBusy()){RecordFollowTravel("World intent cleared",new {destination=sharedWorldIntent,reason="Lifestream idle"});sharedWorldIntent=0;} } catch(Exception){sharedWorldIntent=0;}
+            try { if(nativeWorldTrip==null&&!LifestreamBusy()){RecordFollowTravel("World intent cleared",new {destination=sharedWorldIntent,reason="Lifestream idle"});sharedWorldIntent=0;} } catch(Exception){sharedWorldIntent=0;}
         }
         if(!Player.IsLoaded||Objects.LocalPlayer is not {} self)return;
         if(worldSource is {} source&&source.Name==Player.CharacterName&&source.HomeWorld==Player.HomeWorld.RowId&&source.CurrentWorld!=Player.CurrentWorld.RowId&&now-worldSourceAt<TimeSpan.FromMinutes(30)&&config.PairingKey.Length==64){
@@ -72,7 +71,7 @@ public sealed partial class Plugin
     }
     private void TryFollowWorldTravel(FollowPortalSignal s,DateTimeOffset now)
     {
-        if(!config.FollowThem.UseLifestream||!config.FollowThem.FollowWorldVisits){TravelDiagnostic("World travel received; enable Lifestream and Follow World Visits to use it.");return;}
+        if(!config.FollowThem.FollowWorldVisits){TravelDiagnostic("World travel received; enable Follow World Visits to use it.");return;}
         if(!FollowThemSession.Matches(config.FollowThem.TargetName,config.FollowThem.HomeWorld,s.Name,s.HomeWorld)||s.CurrentWorld!=Player.CurrentWorld.RowId||s.DestinationWorld==0||s.DestinationWorld==s.CurrentWorld||s.EntityId!=lastLeaderEntity||s.SentAt<followArmedAt||s.SentAt<now.ToUnixTimeMilliseconds()-120000||s.ExpiresAt<=now.ToUnixTimeMilliseconds())return;
         if(FollowTransitionBusy()||Conditions[Dalamud.Game.ClientState.Conditions.ConditionFlag.InCombat]){TravelDiagnostic("World travel waiting until your character is free.");return;}
         var sheet=DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>();
@@ -81,14 +80,10 @@ public sealed partial class Plugin
         var cross=target.DataCenter.RowId!=from.DataCenter.RowId;
         if(cross&&!config.FollowThem.FollowDataCenters){TravelDiagnostic("Data Center travel received; the separate Data Center option is off.");return;}
         try{
-            if(LifestreamBusy()){TravelDiagnostic("Lifestream is already busy; not replacing its task.");return;}
-            var name=target.Name.ToString();
-            if(!Pi.GetIpcSubscriber<string,bool>(cross?"Lifestream.CanVisitCrossDC":"Lifestream.CanVisitSameDC").InvokeFunc(name)){TravelDiagnostic("Lifestream does not offer this destination World; travel remains manual.");return;}
-            lastPortalSignalId=s.Id;
-            // Explicitly disable secondary teleport and returning to a gateway after arrival.
-            Pi.GetIpcSubscriber<string,bool,string,bool,int?,bool?,bool?,object>("Lifestream.TPAndChangeWorld").InvokeAction(name,cross,"",true,null,false,false);
-            if(LifestreamBusy()){BeginLifestreamTravel(s.DestinationWorld);TravelDiagnostic("Lifestream requested World: "+name);}
-            else TravelDiagnostic("Lifestream declined travel; check its settings and game restrictions.");
-        }catch(Exception){TravelDiagnostic("Lifestream travel integration is unavailable; waiting.");}
+            if(nativeWorldTrip!=null||LifestreamBusy()){TravelDiagnostic("Travel is already busy; waiting.");return;}
+            PauseFollowForTravel();
+            if(!StartNativeWorldTravel(s.DestinationWorld,"follow")){TravelDiagnostic(nativeTravelStatus);return;}
+            lastPortalSignalId=s.Id;TravelDiagnostic("Companion requested world: "+target.Name.ToString());
+        }catch(Exception){TravelDiagnostic("Native world travel could not start; waiting.");}
     }
 }

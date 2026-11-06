@@ -111,7 +111,7 @@ public sealed partial class Plugin
  }
  private void ExportTesting()
  {
-  var snapshot=new {format="equinox-playtest-export",schema=2,performance=CapturePerformanceReport(),exportedAt=DateTimeOffset.UtcNow,completeHistory=testingState.Complete,catalog=testingState.Catalog,reports=testingState.Reports??[],pending=testingState.Pending??[],drafts=config.TestingDrafts.Where(x=>x.Key.StartsWith(testingScope+"|",StringComparison.Ordinal)).ToDictionary(x=>x.Key[(testingScope.Length+1)..],x=>x.Value),versions=new{plugin=typeof(Plugin).Assembly.GetName().Version?.ToString(),server=testingState.ServerVersion}};
+  var snapshot=new {format="equinox-playtest-export",schema=3,travelPrompts=TravelPromptExport(),performance=CapturePerformanceReport(),exportedAt=DateTimeOffset.UtcNow,completeHistory=testingState.Complete,catalog=testingState.Catalog,reports=testingState.Reports??[],pending=testingState.Pending??[],drafts=config.TestingDrafts.Where(x=>x.Key.StartsWith(testingScope+"|",StringComparison.Ordinal)).ToDictionary(x=>x.Key[(testingScope.Length+1)..],x=>x.Value),versions=new{plugin=typeof(Plugin).Assembly.GetName().Version?.ToString(),server=testingState.ServerVersion}};
   var path=Path.Combine(Pi.GetPluginConfigDirectory(),"exports","Equinox-Test-Results-"+DateTime.UtcNow.ToString("yyyyMMdd-HHmmss")+"-"+Guid.NewGuid().ToString("N")[..6]+".json");
   testingExport=Task.Run(()=>{Directory.CreateDirectory(Path.GetDirectoryName(path)!);File.WriteAllText(path,JsonSerializer.Serialize(snapshot,new JsonSerializerOptions(JsonSerializerDefaults.Web){WriteIndented=true}));return path;});testingMessage="Exporting checklist…";
  }

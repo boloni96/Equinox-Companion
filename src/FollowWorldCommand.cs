@@ -59,7 +59,7 @@ public sealed partial class Plugin
     }
     private void StartSharedWorldTravel(string worldName)
     {
-        if(worldName.Trim().Equals("stop",StringComparison.OrdinalIgnoreCase)){StopEstateTravel("Stopped");return;}
+        if(worldName.Trim().Equals("stop",StringComparison.OrdinalIgnoreCase)){StopIndicatorTravel();return;}
         if(EstateTravelCommand.Parse(worldName) is {} estate){StartEstateTravelCommand(estate);return;}
         worldName=TeleportNameSearch.Query(worldName);
         var parts=worldName.Split((char[]?)null,2,StringSplitOptions.RemoveEmptyEntries);
@@ -76,10 +76,7 @@ public sealed partial class Plugin
             var matches=FollowWorldNames.Matches(DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().Where(x=>x.IsPublic).Select(x=>(x.RowId,x.Name.ToString())),worldName);
             FollowChatNotice(matches.Length>1?"TRAVEL — Ambiguous World: "+string.Join(", ",matches.Select(x=>x.Name)):"TRAVEL — No unlocked teleport or world matches. Use an aetheryte/map name, /et world <name> (or /et w <name>), fc, priv, efc, epriv, or workshop.");return;
         }
-        try{
-            if(LifestreamBusy()){FollowChatNotice("TRAVEL — Lifestream is already busy.");return;}
-            if(Pi.GetIpcSubscriber<uint,bool>("Lifestream.ChangeWorldById").InvokeFunc(world))ShareFollowWorldIntent(world);
-            else FollowChatNotice("TRAVEL — Lifestream declined that World destination.");
-        }catch(Exception){FollowChatNotice("TRAVEL — Lifestream must be installed and enabled for World travel.");}
+        if(StartNativeWorldTravel(world))ShareFollowWorldIntent(world);
+        FollowChatNotice("TRAVEL — "+nativeTravelStatus);
     }
 }

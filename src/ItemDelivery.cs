@@ -125,14 +125,14 @@ public sealed partial class Plugin
                 if(itemTrade.Running)StopItemTrade("Delivery ended.");
                 if(session.Status=="complete"&&(!Player.IsLoaded||Player.CurrentWorld.RowId!=Player.HomeWorld.RowId)){
                     if(!deliveryReturning){
-                        if(!Player.IsLoaded||LifestreamBusy())return;
-                        try{if(!Pi.GetIpcSubscriber<uint,bool>("Lifestream.ChangeWorldById").InvokeFunc(Player.HomeWorld.RowId))throw new InvalidOperationException("Home-world return was refused.");deliveryReturning=true;deliveryActionDeadline=now.AddMinutes(15);deliveryNotice="Delivery confirmed · returning to this character's home world.";}
+                        if(!Player.IsLoaded||nativeWorldTrip!=null||LifestreamBusy())return;
+                        try{if(!StartNativeWorldTravel(Player.HomeWorld.RowId,"delivery"))throw new InvalidOperationException("Home-world return was refused.");deliveryReturning=true;deliveryActionDeadline=now.AddMinutes(15);deliveryNotice="Delivery confirmed · returning to this character's home world.";}
                         catch(Exception e){deliveryNotice="Delivery confirmed. Return home manually: "+e.Message;deliveryRun=deliveryTrip=deliveryTrade=deliveryResumeGarden="";}return;
                     }
                     if(now<deliveryActionDeadline)return;
-                    try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}deliveryNotice="Delivery confirmed; return journey timed out. Return home manually.";deliveryRun=deliveryTrip=deliveryTrade=deliveryResumeGarden="";deliveryReturning=false;return;
+                    try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}StopNativeWorldTravel("Delivery return timed out");deliveryNotice="Delivery confirmed; return journey timed out. Return home manually.";deliveryRun=deliveryTrip=deliveryTrade=deliveryResumeGarden="";deliveryReturning=false;return;
                 }
-                if(deliveryReturning&&LifestreamBusy())return;
+                if(deliveryReturning&&(nativeWorldTrip!=null||LifestreamBusy()))return;
                 deliveryReturning=false;RequestStorageRefresh();deliveryRun=deliveryTrip=deliveryTrade="";
                 if(session.Status=="complete"&&deliveryResumeGarden.Length>0){var board=adventureBoards.FirstOrDefault(b=>b.Id==deliveryResumeGarden);deliveryResumeGarden="";if(board!=null)StartTendAdventure(board);}return;
             }

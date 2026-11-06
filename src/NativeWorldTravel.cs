@@ -1,0 +1,140 @@
+using System.Numerics;
+using Dalamud.Game.ClientState.Conditions;
+using Dalamud.Game.ClientState.Objects.Enums;
+using FFXIVClientStructs.FFXIV.Client.Game.UI;
+using FFXIVClientStructs.FFXIV.Client.Game.Control;
+using FFXIVClientStructs.FFXIV.Client.UI;
+using FFXIVClientStructs.FFXIV.Client.UI.Agent;
+using FFXIVClientStructs.FFXIV.Client.System.String;
+using FFXIVClientStructs.FFXIV.Component.GUI;
+namespace EquinoxCompanion;
+public sealed partial class Plugin
+{
+    private sealed class NativeWorldTrip
+    {
+        public string Id=Guid.NewGuid().ToString("N");public string Owner="command";
+        public required ulong Character;public required string Name;public required uint Home,Source,Destination,Leg;
+        public required int Service;public required DateTimeOffset Started;
+        public NativeTravelStage Stage;public DateTimeOffset Next,StageAt;
+        public bool ReturnHome,DcSelected,ContextSent,LoginSent,LoginConfirmed,GatewaySent,TransferCommitted;
+        public uint Gateway,RequestedLoginWorld;public bool ServiceSent;
+    }
+    private NativeWorldTrip? nativeWorldTrip;
+    private string nativeTravelStatus="Choose a map, aetheryte or world.";
+    private uint TravelDc(uint world)=>DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().GetRowOrDefault(world)?.DataCenter.RowId??0;
+    private string TravelDcName(uint world)=>DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().GetRowOrDefault(world)?.DataCenter.Value.Name.ToString()??"";
+    private void SetNativeTravelStage(NativeWorldTrip trip,NativeTravelStage stage,string message)
+    {
+        trip.Stage=stage;trip.StageAt=DateTimeOffset.UtcNow;trip.Next=trip.StageAt.AddMilliseconds(500);nativeTravelStatus=message;
+        RecordTravelPrompt("Travel step",new{stage=stage.ToString(),message,trip.Character,trip.Service,trip.Source,trip.Destination,trip.Leg});
+    }
+    private void StopNativeWorldTravel(string reason)
+    {
+        if(nativeWorldTrip is not {} trip)return;
+        RecordTravelPrompt("Travel stopped",new{reason,trip.TransferCommitted});nativeWorldTrip=null;
+        StopIndependentWalk("Travel: "+reason);nativeTravelStatus=reason+(trip.TransferCommitted?" An accepted game transfer may still finish.":"");
+        FollowChatNotice("TRAVEL — "+nativeTravelStatus);
+    }
+    private unsafe bool StartNativeWorldTravel(uint destination,string owner="command")
+    {
+        if(nativeWorldTrip!=null||nativeAethernetTrip!=null){nativeTravelStatus="A trip is already running. Use /et stop first.";return false;}
+        if(!Player.IsLoaded||Player.ContentId==0||TravelDc(destination)==0){nativeTravelStatus="Wait for your character to load and choose a public world.";return false;}
+        if(destination==Player.CurrentWorld.RowId){nativeTravelStatus="Already on "+WorldName(destination)+".";return true;}
+        if(Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.BoundByDuty]||Conditions[ConditionFlag.Casting]||Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]||HelperInCutscene()||QuestConversationVisible()||VisibleFollowAddon("SelectYesno")){
+            nativeTravelStatus="Finish combat, duty, casting, loading or the current conversation first.";return false;
+        }
+        if(LifestreamBusy()||estateTrip!=null||estateHomeReturn!=null||assignedLogin!=null||titleLoginProbe.Active||loginMenuReturn.Active||independentMoving||independentSearch!=null||owner=="command"&&(QuestToolsOtherOperation()||independentQuestId!=0||eventAccountActive||gardenTendRoute!=null||shoppingTravel!=null||goSeeHomeTrip!=null||goSeeFriendTrip!=null)){nativeTravelStatus="Stop the active routine or journey before starting world travel.";return false;}
+        var source=Player.CurrentWorld.RowId;var home=Player.HomeWorld.RowId;var cross=TravelDc(source)!=TravelDc(destination);var slot=CurrentLoginServiceAccount();
+        if(cross&&slot is <0 or >15){nativeTravelStatus="Identify this client's service account before DC travel (log in once with Companion).";return false;}
+        var returning=NativeTravelPolicy.ReturnFirst(source,home,TravelDc(source),TravelDc(destination));
+        var trip=new NativeWorldTrip{Owner=owner,Character=Player.ContentId,Name=Player.CharacterName,Home=home,Source=source,Destination=destination,Leg=returning?home:destination,Service=slot,Started=DateTimeOffset.UtcNow,ReturnHome=returning};
+        nativeWorldTrip=trip;StopIndependentWalk("Starting native travel",resetFailure:true);
+        RecordTravelPrompt("Travel requested",new{trip.Character,trip.Name,trip.Home,trip.Source,trip.Destination,trip.Service});
+        if(cross)BeginNativeTravelLogout(trip);else SetNativeTravelStage(trip,NativeTravelStage.Gateway,"Reaching a World Visit aetheryte");
+        return true;
+    }
+    private unsafe void BeginNativeTravelLogout(NativeWorldTrip trip)
+    {
+        var ui=UIModule.Instance();if(ui==null){StopNativeWorldTravel("Game menu unavailable.");return;}
+        SetNativeTravelStage(trip,NativeTravelStage.Logout,trip.ReturnHome?"Returning home before the next destination":"Logging out for data-center travel");
+        using var command=new Utf8String();command.SetString("/logout");ui->ProcessChatBoxEntry(&command,0,false);
+    }
+    private unsafe void UpdateNativeWorldTravel(DateTimeOffset now)
+    {
+        if(nativeWorldTrip is not {} trip||now<trip.Next)return;
+        trip.Next=now.AddMilliseconds(500);
+        var started=System.Diagnostics.Stopwatch.GetTimestamp();
+        try{
+            if(now-trip.Started>TimeSpan.FromMinutes(30))throw new InvalidOperationException("Travel exceeded 30 minutes. Check the game queue before retrying.");
+            var loading=Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51];
+            if(Player.IsLoaded&&Player.ContentId!=trip.Character)throw new InvalidOperationException("A different character loaded; no further travel was requested.");
+            if(Player.IsLoaded&&NativeTravelPolicy.Arrival(trip.Character,Player.ContentId,trip.Leg,Player.CurrentWorld.RowId,loading)){
+                if(trip.Leg==trip.Destination){var following=trip.Owner=="follow";StopNativeWorldTravel("Arrived at "+WorldName(trip.Destination)+".");if(following)ResumeAfterConfirmedTravel();return;}
+                trip.Source=trip.Leg;trip.Leg=trip.Destination;trip.ReturnHome=false;trip.DcSelected=trip.ContextSent=trip.LoginSent=trip.LoginConfirmed=trip.TransferCommitted=false;trip.RequestedLoginWorld=0;
+                BeginNativeTravelLogout(trip);return;
+            }
+            if(trip.Stage is not (NativeTravelStage.WorldQueue or NativeTravelStage.TransferWait or NativeTravelStage.Login)&&now-trip.StageAt>TimeSpan.FromMinutes(3))throw new InvalidOperationException("Timed out during "+trip.Stage+". Export diagnostics to include the prompts and last action.");
+            if(loading){StopIndependentWalk("Waiting for travel loading");return;}
+            if(trip.Stage<=NativeTravelStage.WorldQueue){if(Player.IsLoaded)UpdateNativeSameDc(trip,now);return;}
+            UpdateNativeDc(trip,now);
+        }catch(Exception ex){StopNativeWorldTravel(ex.Message);}
+        finally{RecordPerformanceElapsed("Travel: native world step",started);}
+    }
+    private unsafe void UpdateNativeSameDc(NativeWorldTrip trip,DateTimeOffset now)
+    {
+        if(Conditions[ConditionFlag.InCombat])throw new InvalidOperationException("Combat interrupted world travel.");
+        if(trip.Stage==NativeTravelStage.Gateway){
+            if(followStopPending||followStopUnconfirmed||nativeFollowRequested)return;
+            if(Conditions[ConditionFlag.Casting])return;
+            var self=Objects.LocalPlayer;if(self==null)return;
+            var crystal=Objects.Where(x=>x.ObjectKind==ObjectKind.Aetheryte&&x.IsTargetable&&x.BaseId is 2 or 8 or 9).MinBy(x=>Vector3.DistanceSquared(x.Position,self.Position));
+            if(crystal==null||Vector3.Distance(crystal.Position,self.Position)>100){
+                if(trip.GatewaySent)return;
+                var telepo=Telepo.Instance();if(telepo==null)return;telepo->UpdateAetheryteList();
+                foreach(var t in telepo->TeleportList)if(t.AetheryteId is 2 or 8 or 9&&t.SubIndex==0){
+                    if(!telepo->Teleport(t.AetheryteId,0))throw new InvalidOperationException("The game refused the city teleport.");
+                    trip.GatewaySent=true;trip.Gateway=t.AetheryteId;nativeTravelStatus="Teleporting to the World Visit aetheryte";RecordTravelPrompt("City teleport requested",new{t.AetheryteId});return;
+                }
+                throw new InvalidOperationException("Unlock a main aetheryte in Gridania, Limsa Lominsa or Ul'dah first.");
+            }
+            if(Vector3.Distance(crystal.Position,self.Position)>crystal.HitboxRadius+3){
+                var offset=self.Position-crystal.Position;offset.Y=0;if(offset.LengthSquared()<.01f)throw new InvalidOperationException("The crystal is on another floor.");
+                var approach=crystal.Position+Vector3.Normalize(offset)*(crystal.HitboxRadius+2);
+                if(!independentCollision.Ground(approach,out var floor)){nativeTravelStatus="Waiting for walkable ground beside the aetheryte";return;}
+                IndependentWalk(floor,.65f,now,allowFlight:false);nativeTravelStatus="Approaching aetheryte · "+independentWalkStatus;return;
+            }
+            StopIndependentWalk("At World Visit aetheryte");Targets.Target=crystal;
+            var system=TargetSystem.Instance();if(system==null)return;
+            SetNativeTravelStage(trip,NativeTravelStage.AetheryteMenu,"Opening World Visit");
+            usingSharedTravel=true;try{system->InteractWithObject((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)crystal.Address,false);}finally{usingSharedTravel=false;}return;
+        }
+        if(trip.Stage==NativeTravelStage.AetheryteMenu){
+            var menu=(AddonSelectString*)SellerAddon("SelectString");if(menu==null)return;
+            var label=DataManager.GetExcelSheet<NativeEventQuestText>(name:"transport/Aetheryte").GetRowOrDefault(3)?.Text??"";
+            var choices=TransportChoices((AtkUnitBase*)menu);var index=choices.FindIndex(x=>NativeEventPolicy.Prompt(label,x));
+            if(index<0)throw new InvalidOperationException("World Visit is not available in this aetheryte menu.");
+            var list=menu->PopupMenu.PopupMenu.List;if(list==null||list->GetItemDisabledState(index))throw new InvalidOperationException("World Visit is currently disabled.");
+            SetNativeTravelStage(trip,NativeTravelStage.WorldList,"Selecting "+WorldName(trip.Leg));list->DispatchItemEvent(index,AtkEventType.ListItemClick);return;
+        }
+        if(trip.Stage==NativeTravelStage.WorldList){
+            var menu=SellerAddon("WorldTravelSelect");if(menu==null)return;
+            var module=RaptureAtkModule.Instance();var arrayIndex=(int)StringArrayType.WorldTranslate;
+            if(module==null||module->AtkArrayDataHolder.StringArrayCount<=arrayIndex||module->AtkArrayDataHolder.StringArrays==null)return;
+            var names=module->AtkArrayDataHolder.StringArrays[arrayIndex];if(names==null||names->StringArray==null)return;
+            for(var i=3;i<=10&&i<names->Size;i++)if(TravelMenuText(names->StringArray[i].Value)==WorldName(trip.Leg)){
+                SetNativeTravelStage(trip,NativeTravelStage.WorldConfirm,"Confirming destination "+WorldName(trip.Leg));NativeTravelCallback(menu,0,i-1);return;
+            }
+            nativeTravelStatus="Waiting for "+WorldName(trip.Leg)+" in the available World Visit list";return;
+        }
+        if(trip.Stage==NativeTravelStage.WorldConfirm){
+            var dialog=(AddonSelectYesno*)SellerAddon("SelectYesno");if(dialog==null||dialog->PromptText==null)return;
+            var prompt=TravelMenuText(dialog->PromptText->NodeText.StringPtr)??"";
+            if(!NativeTravelPolicy.WorldPrompt(prompt,WorldName(trip.Leg)??"")){nativeTravelStatus="Confirm the destination manually; this localized prompt is not yet recognized";return;}
+            if(NativeEventButton((AtkUnitBase*)dialog,dialog->YesButton)){trip.TransferCommitted=true;SetNativeTravelStage(trip,NativeTravelStage.WorldQueue,"Waiting for World Visit queue and arrival");}return;
+        }
+    }
+    private unsafe void NativeTravelCallback(AtkUnitBase* addon,params int[] args)
+    {
+        RecordTravelPrompt("Companion action",new{addon=addon->NameString,args});usingSharedTravel=true;try{LoginCallback(addon,args);}finally{usingSharedTravel=false;}
+    }
+}

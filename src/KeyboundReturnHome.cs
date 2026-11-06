@@ -27,11 +27,11 @@ public sealed partial class Plugin
         if(FollowMovementKeysHeld())throw new InvalidOperationException("Return home stopped by your movement.");
         if(Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.BoundByDuty])throw new InvalidOperationException("Return home blocked by combat or duty.");
         if(eventReturnApproachAt!=default&&now-eventReturnApproachAt>TimeSpan.FromSeconds(20))throw new InvalidOperationException("Estate entrance approach timed out; character kept online.");
-        if(LifestreamBusy()){eventReturnArrival.Reset();return;}
+        if(nativeWorldTrip!=null||LifestreamBusy()){eventReturnArrival.Reset();return;}
         if(Player.CurrentWorld.RowId!=eventReturnWorld){
             eventAccountStatus="Returning to home world · "+Player.HomeWorld.Value.Name.ToString();
             if(eventReturnWorldRequested){if(now-eventReturnActionAt>TimeSpan.FromSeconds(10))throw new InvalidOperationException("Home-world travel ended before arrival; character kept online.");return;}
-            if(!Pi.GetIpcSubscriber<uint,bool>("Lifestream.ChangeWorldById").InvokeFunc(eventReturnWorld))throw new InvalidOperationException("Home-world travel could not start; character kept online.");
+            if(!StartNativeWorldTravel(eventReturnWorld,"event"))throw new InvalidOperationException("Home-world travel could not start; character kept online.");
             eventReturnWorldRequested=true;eventReturnActionAt=now;return;
         }
         if(eventReturnWorldRequested&&now-eventReturnActionAt<TimeSpan.FromSeconds(5))return;

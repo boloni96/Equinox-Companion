@@ -209,12 +209,15 @@ public sealed partial class Plugin : IDalamudPlugin
         catch (Exception ex) { errorJournal.Record("plugin", "Estate placard observer unavailable", exceptionType: ex.GetType().Name); Log.Error(ex, "Estate placard observer unavailable"); }
         try { fashionHook = Interop.HookFromAddress<FFXIVClientStructs.FFXIV.Client.Game.Event.EventFramework.Delegates.ProcessEventPlay>(FFXIVClientStructs.FFXIV.Client.Game.Event.EventFramework.MemberFunctionPointers.ProcessEventPlay, ObserveNpcEvent); fashionHook.Enable(); }
         catch (Exception ex) { errorJournal.Record("plugin", "Fashion observer unavailable", exceptionType: ex.GetType().Name); }
-        if (config.TrackGardens) { callbackHook?.Enable(); callbackIntHook?.Enable(); plantHook?.Enable(); }
+        callbackHook?.Enable(); callbackIntHook?.Enable();
+        if (config.TrackGardens) plantHook?.Enable();
         ContextMenu.OnMenuOpened += OnItemSearchMenu;
         itemSearchCommandRegistered=Commands.AddHandler("/doihaveit",new CommandInfo((_,args)=>OpenItemSearch(args)){HelpMessage="Search recorded item locations across paired characters."});
         InitializeCameraCommand();
         Commands.AddHandler("/equinox", new CommandInfo(OnCommand) { HelpMessage = "Open Equinox Companion, shared profiles, housing and settings." });
         shortTravelCommandRegistered = Commands.AddHandler("/et", new CommandInfo((command,args)=>StartSharedWorldTravel(args)) { HelpMessage = "Travel: /et <partial aetheryte/map/world name> (e.g. saucer). /et tp <name>, world <name> or w <name> selects the type. Estates: fc, priv/private, efc, epriv/eprivate, workshop." });
+        InitializeTravelPromptRecorder();
+        shortWorldTravelCommandRegistered=Commands.AddHandler("/etw",new CommandInfo((_,args)=>StartSharedWorldTravel(args.Trim().Equals("stop",StringComparison.OrdinalIgnoreCase)?"stop":"world "+args)){HelpMessage="Native world/DC travel: /etw <world>. /etw shows usage; /etw stop cancels remaining steps."});
         if(!shortTravelCommandRegistered)Log.Warning("/et is already registered; use /eqtravel or /equinox travel.");
         travelCommandRegistered = Commands.AddHandler("/eqtravel", new CommandInfo((command,args)=>StartSharedWorldTravel(args)) { HelpMessage = "Travel: World name/prefix, fc, priv/private, efc, epriv/eprivate, workshop." });
         gardeningCommandRegistered = Commands.AddHandler("/gardening", new CommandInfo(OnPlantingCommand) { HelpMessage = "Open this house’s Gardening guide; follows selected synced beds." });
@@ -269,6 +272,7 @@ public sealed partial class Plugin : IDalamudPlugin
         minimizedLaunchers.Remove("Companion");
     }
     private readonly bool shortTravelCommandRegistered;
+    private readonly bool shortWorldTravelCommandRegistered;
     private readonly bool travelCommandRegistered;
     private readonly bool fashionCommandRegistered;
     private readonly bool plantingCommandRegistered;
@@ -327,6 +331,9 @@ public sealed partial class Plugin : IDalamudPlugin
     {
         var now = DateTimeOffset.UtcNow;
         UpdateQuestTools(now);
+        UpdateTravelPromptRecorder(now);
+        UpdateNativeWorldTravel(now);
+        UpdateNativeAethernet(now);
         UpdateAssignedLogin(now);
         UpdateEstateTravel(now);
         var gardenStarted=System.Diagnostics.Stopwatch.GetTimestamp();UpdateGardenCare(now);RecordPerformanceElapsed("garden automation",gardenStarted);
@@ -630,6 +637,7 @@ public sealed partial class Plugin : IDalamudPlugin
             CaptureHelperPurchase(addon,count,values);
             CaptureHelperQuestCallback(addon,count,values);
             CaptureHelperResultCallback(addon,count,values);
+            RecordNativeTravelCallback(addon,count,values);
             ObserveTravelCallbackDiagnostic(addon,count,values);
             CaptureWardMenu(addon,count,values);
             CaptureFollowRoom(addon,count,values);
@@ -654,7 +662,7 @@ public sealed partial class Plugin : IDalamudPlugin
     {
         try
         {
-            var diagnosticValue=new AtkValue{Type=AtkValueType.Int,Int=value};RecordQuestCallback(addon,1,&diagnosticValue);CaptureHelperQuestCallback(addon,1,&diagnosticValue);ObserveTravelCallbackDiagnostic(addon,1,&diagnosticValue);
+            var diagnosticValue=new AtkValue{Type=AtkValueType.Int,Int=value};RecordQuestCallback(addon,1,&diagnosticValue);CaptureHelperQuestCallback(addon,1,&diagnosticValue);RecordNativeTravelCallback(addon,1,&diagnosticValue);ObserveTravelCallbackDiagnostic(addon,1,&diagnosticValue);
             CaptureFollowInstanceChoice(addon,value);
             CaptureTransportChoice(addon,value);
             CaptureHelperChoice(addon,value);
@@ -1037,7 +1045,7 @@ public sealed partial class Plugin : IDalamudPlugin
         recordingUntil = DateTimeOffset.UtcNow.AddMinutes(5); recording = true; exportPath = null;
     }
 
-    private void StopRecording() { recording = false; if (!ObservingGardens && !questRecorderActive) { callbackHook?.Disable(); callbackIntHook?.Disable(); plantHook?.Disable(); } Volatile.Write(ref pendingTend, null); Volatile.Write(ref pendingRemove, null); Volatile.Write(ref pendingHarvest, null); Volatile.Write(ref pendingPlant, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); messages.Clear(); menuMessages.Clear(); readyMenus.Clear(); cropChats.Clear(); cropMatcher.Clear(); harvestInspections.Clear(); harvestedChats.Clear(); lastSnapshotKey = ""; }
+    private void StopRecording() { recording = false; if (!ObservingGardens && !questRecorderActive) { plantHook?.Disable(); } Volatile.Write(ref pendingTend, null); Volatile.Write(ref pendingRemove, null); Volatile.Write(ref pendingHarvest, null); Volatile.Write(ref pendingPlant, null); Volatile.Write(ref capturedContext, null); Volatile.Write(ref activeGardenMenu, null); messages.Clear(); menuMessages.Clear(); readyMenus.Clear(); cropChats.Clear(); cropMatcher.Clear(); harvestInspections.Clear(); harvestedChats.Clear(); lastSnapshotKey = ""; }
 
     private void Export()
     {
@@ -1050,7 +1058,7 @@ public sealed partial class Plugin : IDalamudPlugin
             // Capture game-facing state now. Published record values are immutable;
             // copy collection containers before the worker serializes them.
             var snapshot=new {
-                schemaVersion = 8, characterSync = CaptureDiagnosticState("character sync",ReadCharacterSyncStatus), characterLogin = CaptureDiagnosticState("login state",CaptureNativeLoginDiagnostic), followTravel = followTravelDiagnostics.ToArray(), pluginVersion = typeof(Plugin).Assembly.GetName().Version?.ToString(), exportedAt = DateTimeOffset.UtcNow,
+                schemaVersion = 9, travelPrompts = TravelPromptExport(), shoppingJourney = new {active=shoppingTravel!=null,status=marketTravelStatus,trip=shoppingTravel}, characterSync = CaptureDiagnosticState("character sync",ReadCharacterSyncStatus), characterLogin = CaptureDiagnosticState("login state",CaptureNativeLoginDiagnostic), followTravel = followTravelDiagnostics.ToArray(), pluginVersion = typeof(Plugin).Assembly.GetName().Version?.ToString(), exportedAt = DateTimeOffset.UtcNow,
                 syncDiagnostics = new { enabled = config.SyncEnabled, paired = config.PairingKey.Length == 64, endpoint = "https://equinoxjournal.pages.dev", status = syncStatus, pending = pendingSyncRecords, eligible = readySyncRecords, held = heldSyncRecords, historicalHeld = historicalHeldSyncRecords, unsupported = unsupportedSyncRecords, acknowledgedLocal = config.SentEvents.Count, lastSyncReceiptAt, lastSyncBatchSize, lastSyncBatchOldest, lastSyncBatchNewest, nextAttemptAt = nextSync, inFlight = syncTask is not null },
                 gardenPickerDetails=gardenPickerCaptures.ToArray(),
                 organizerStorage=CaptureDiagnosticState("organizer state",GearStorageDiagnostics),
@@ -1362,6 +1370,8 @@ public sealed partial class Plugin : IDalamudPlugin
         Commands.RemoveHandler("/equinox");
         if(travelCommandRegistered)Commands.RemoveHandler("/eqtravel");
         if(shortTravelCommandRegistered)Commands.RemoveHandler("/et");
+        if(shortWorldTravelCommandRegistered)Commands.RemoveHandler("/etw");
+        nativeWorldTrip=null;nativeAethernetTrip=null;Addons.UnregisterListener(RecordTravelUiEvent);
         if (fashionCommandRegistered) Commands.RemoveHandler("/fashionr");
         if (gardeningCommandRegistered) Commands.RemoveHandler("/gardening");
         if (plantingCommandRegistered) Commands.RemoveHandler("/planting");

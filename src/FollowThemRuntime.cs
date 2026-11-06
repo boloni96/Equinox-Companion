@@ -71,6 +71,7 @@ public sealed partial class Plugin
     }
     private void StopFollowThem(string reason = "Stopped.")
     {
+        if(nativeWorldTrip?.Owner=="follow")StopNativeWorldTravel(reason);
         var wasArmed = followSession.Armed;
         if(wasArmed)RecordFollowTravel("Follower session stopped",new {reason,target=config.FollowThem.TargetName,quest=helperPermission.Quest});
         EndHelperSession();
@@ -147,6 +148,7 @@ public sealed partial class Plugin
     {
         UpdateFollowMovementStop(now);
         if (!config.EnableFollowThem) return;
+        if(nativeWorldTrip?.Owner=="follow"){followSession.Pause();followStatus=nativeTravelStatus;return;}
         if(followSession.Armed&&FollowMovementKeysHeld())followManualInputSeen=true;
         if (now < nextFollowCheck) return;
         nextFollowCheck = now.AddMilliseconds(250);
@@ -341,7 +343,7 @@ public sealed partial class Plugin
         MessageToggle("Use Aetheryte Tickets for Companion teleports",config.FollowThem.UseAetheryteTickets,v=>config.FollowThem.UseAetheryteTickets=v);
         ImGui.TextWrapped("Ticket prompt: enabled uses a ticket; disabled pays gil. Applies only to teleports requested by Companion. Your gil limit still applies.");
         DrawCommittedInteger("Maximum gil per followed Teleport", config.FollowThem.TeleportGilLimit, 0, 10000, value => config.FollowThem.TeleportGilLimit = value);
-        ImGui.TextWrapped("Shared travel requires an active follow session. Teleport uses your own unlocked public destination and gil, within this limit. Ward entry, exact available estate teleports and matched transport menus are experimental. World/Data Center travel uses the separate Lifestream options. Aethernet requires the same nearby crystal and a matching unlocked menu entry. Party offers use the separate option above.");
+        ImGui.TextWrapped("Shared travel requires an active follow session. Teleport uses your own unlocked public destination and gil, within this limit. Ward entry, exact available estate teleports and matched transport menus are experimental. World/Data Center travel uses Companion native menus and the separate follow-travel options. Aethernet requires the same nearby crystal and a matching unlocked menu entry. Party offers use the separate option above.");
         MessageToggle("Use my selected character's shared portal (experimental)", config.FollowThem.UseSharedPortals, v => { config.FollowThem.UseSharedPortals = v; receivedPortal=null; relayGeneration++; });
         ImGui.TextWrapped(portalRelayStatus);
         ImGui.TextWrapped("Leader: enable Share my travel; no need to start following anyone. Follower: select that character, enable shared destinations and/or portals, then Start. Both need the same pairing key. The instruction expires after two minutes and never enters Journal history. Be beside the same source. Matching transport menus and confirmations can be replayed; unsupported dialogs remain manual. Lifestream must be installed separately for its optional routes.");

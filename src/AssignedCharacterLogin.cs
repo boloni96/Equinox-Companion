@@ -36,7 +36,7 @@ public sealed partial class Plugin
         if(assignedLogin!=null)return assignedLogin.Target.Id==target.Id;
         var current=CurrentSharedCharacter();var index=GardenServiceAccount(target);
         if(current==null||index is <0 or >15||(!allowLinkedAccounts&&current.AccountId!=target.AccountId)||!DeliveryCharacters().Any(x=>x.Character.Id==target.Id&&x.Person.Characters.Any(c=>c.Id==current.Id))){characterTravelStatus="Verify this client's current service account before automatic switching.";return false;}
-        if(estateHomeReturn!=null||estateTrip!=null||LifestreamBusy()||followSession.Armed||TraderRunning||HelperInCutscene()){characterTravelStatus="Finish the active operation before switching.";return false;}
+        if(nativeWorldTrip!=null||estateHomeReturn!=null||estateTrip!=null||LifestreamBusy()||followSession.Armed||TraderRunning||HelperInCutscene()){characterTravelStatus="Finish the active operation before switching.";return false;}
         try{
             var ui=UIModule.Instance();if(ui==null)throw new InvalidOperationException("Game menu unavailable.");
             assignedLogin=new(target,Player.ContentId,index,config.PairingKey,LastLoginWorld(target),DateTimeOffset.UtcNow.AddMinutes(5));

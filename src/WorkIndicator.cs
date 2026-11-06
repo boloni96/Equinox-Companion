@@ -15,6 +15,7 @@ public sealed partial class Plugin
     }
     private void StopIndicatorDelivery()
     {
+        if(nativeWorldTrip?.Owner=="delivery")StopNativeWorldTravel(IndicatorStopReason);
         CancelAssignedLogin(IndicatorStopReason);
         if(itemTrade.Running)StopItemTrade(IndicatorStopReason);
         if(deliveryTrip.Length>0||deliveryReturning){try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}goSeeHomeTrip=null;}
@@ -24,7 +25,18 @@ public sealed partial class Plugin
     }
     private void StopIndicatorTravel()
     {
+        var owner=nativeWorldTrip?.Owner;
+        if(owner=="delivery")StopIndicatorDelivery();
+        if(owner=="event")StopEventAccount(IndicatorStopReason);
+        if(owner=="bring")bringTrip=null;
+        if(owner=="estate")goSeeHomeTrip=null;
         if(followSession.Armed)StopFollowThem(IndicatorStopReason);
+        StopNativeWorldTravel(IndicatorStopReason);
+        if(nativeAethernetTrip!=null){
+            if(eventAccountActive)StopEventAccount(IndicatorStopReason);
+            if(independentQuestId!=0)StopIndependentQuest(IndicatorStopReason);
+            StopNativeAethernet(IndicatorStopReason);
+        }
         StopEstateTravel(IndicatorStopReason);
         if(shoppingTravel!=null||goSeeHomeTrip!=null||goSeeFriendTrip!=null){
             shoppingTravel=null;goSeeHomeTrip=null;goSeeFriendTrip=null;
@@ -52,6 +64,9 @@ public sealed partial class Plugin
         ?$"{Math.Clamp(independentWaypoint,0,independentPath.Length-1)}/{independentPath.Length-1}":"";
     private IndicatorWork? CurrentIndicatorWork()
     {
+        if(shoppingTravel!=null)return new("Shopping travel",marketTravelStatus,$"{Math.Clamp(shoppingTravel.Stage+1,1,4)}/4",StopIndicatorTravel);
+        if(nativeAethernetTrip!=null)return new("Aethernet",nativeAethernetStatus,$"{Math.Min(3,nativeAethernetTrip.Stage)+1}/4",StopIndicatorTravel);
+        if(nativeWorldTrip!=null)return new("World travel",nativeTravelStatus,NativeTravelPolicy.Progress(nativeWorldTrip.Stage),StopIndicatorTravel);
         if(gardenTendRoute!=null||gardenCareRun?.Running==true||gardenAutoPlantPlan!=null||gardenHousePlant!=null||gardenHouseHarvest!=null){
             var care=gardenCareRun?.Running==true?gardenCareRun:null;
             return new(care?.Action.ToString()??"Gardening",care?.Status??gardenTendStatus,care==null?"":$"{care.Completed}/{care.Total}",StopIndicatorGarden);

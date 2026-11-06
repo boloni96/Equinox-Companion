@@ -21,7 +21,6 @@ public sealed partial class Plugin
     private bool RequestUnlockedAethernet(uint id,out string reason){
         var unlocked=AethernetUnlocked(id);
         if(unlocked!=true){reason=unlocked==false?"This character has not attuned to the destination shard.":"Aethernet destination or character unlock data is not verified.";return false;}
-        if(!Pi.GetIpcSubscriber<uint,bool>("Lifestream.AethernetTeleportById").InvokeFunc(id)){reason="Aethernet request was refused.";return false;}
-        reason="";return true;
+        return BeginNativeAethernet(id,out reason);
     }
 }

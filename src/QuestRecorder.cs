@@ -91,15 +91,15 @@ public sealed partial class Plugin
     private void StopQuestRecording(string reason){
         if(!questRecorderActive)return;
         if(questRecorded.Count<12000)questRecorded.Add(new(DateTimeOffset.UtcNow,"stop",new {reason}));questRecorderActive=false;questRecorderStatus=reason;
-        if(!questRecorderHookEnabled&&!ObservingGardens)callbackHook?.Disable();
-        if(!questRecorderIntHookEnabled&&!ObservingGardens)callbackIntHook?.Disable();
+        // Travel prompt recording keeps the shared callback hook enabled.
+        // Travel prompt recording keeps the shared integer callback hook enabled.
         ExportQuestRecording(true);
     }
     private void ExportQuestRecording(bool final=false){
         if(questRecorded.Count==0)return;
         if(questRecorderWrite!=null&&!final){questRecorderSaveAgain=true;return;}
         var path=Path.Combine(Pi.GetPluginConfigDirectory(),"exports","quest-"+questRecorderStarted.ToString("yyyyMMdd-HHmmss")+"-"+Guid.NewGuid().ToString("N")[..8]+".json");
-        var data=new {format="equinox-quest-recording-v1",performance=CapturePerformanceReport(),version=typeof(Plugin).Assembly.GetName().Version?.ToString(),started=questRecorderStarted,
+        var data=new {format="equinox-quest-recording-v1",travelPrompts=TravelPromptExport(),performance=CapturePerformanceReport(),version=typeof(Plugin).Assembly.GetName().Version?.ToString(),started=questRecorderStarted,
             label=questRecorderLabel,recording=questRecorderActive,limitations="Observed UI events and state, not an executable quest path. Arbitrary text input and private chat are excluded. Some native actions have no callback.",events=questRecorded.ToArray()};
         questRecorderWrite=DiagnosticExportWriter.Start(path,data,new JsonSerializerOptions{WriteIndented=true},()=>[],()=>[]);
         questRecorderSaveAgain=false;

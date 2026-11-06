@@ -84,6 +84,7 @@ public sealed partial class Plugin
         TraceKeyboundRun(keyboundAccountRun,"account-stopped",reason,reason=="Stopped by you."?"user-button":"system");
         eventAccountActive=false;eventEntranceSceneOwned=false;eventEntranceInteractionAt=default;StopNativeEventQuest(reason);CancelEventAccountMovement();
         if(eventAccountStage=="return-home"&&eventReturnWorldRequested){try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}}
+        if(nativeWorldTrip?.Owner=="event")StopNativeWorldTravel(reason);
         if(eventAccountWorldOwned){try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}eventAccountWorldOwned=false;}
         if(assignedLogin!=null)CancelAssignedLogin(reason);
         StopIndependentQuest(reason);StopKeybound(reason);if(keyboundBuying)StopKeyboundBuying(reason);
@@ -136,7 +137,7 @@ public sealed partial class Plugin
             if(eventAccountWorldOwned){
                 if(now-eventAccountActionAt>TimeSpan.FromMinutes(30))throw new InvalidOperationException("Sophia travel timed out.");
                 eventAccountStatus="Travelling to Sophia · waiting for verified arrival";
-                if(LifestreamBusy())return;
+                if(nativeWorldTrip!=null||LifestreamBusy())return;
                 if(!Player.IsLoaded||now-eventAccountActionAt<TimeSpan.FromSeconds(5))return;
                 eventAccountWorldOwned=false;
                 if(Player.CurrentWorld.Value.Name.ToString()!="Sophia")throw new InvalidOperationException("Travel ended before reaching Sophia.");
@@ -170,12 +171,10 @@ public sealed partial class Plugin
             if(now-eventAccountStageAt>TimeSpan.FromMinutes(5)&&eventAccountStage is not ("farm" or "quest"))throw new InvalidOperationException("No confirmed progress: "+eventAccountStatus);
             if(Player.CurrentWorld.Value.Name.ToString()!="Sophia"){
                 EventAccountStage("world","Travelling to Sophia");
-                if(LifestreamBusy())return;
+                if(nativeWorldTrip!=null||LifestreamBusy())return;
                 var sophia=DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().FirstOrDefault(w=>w.Name.ToString()=="Sophia");
-                var cross=Player.CurrentWorld.Value.DataCenter.RowId!=sophia.DataCenter.RowId;
-                if(!Pi.GetIpcSubscriber<string,bool>(cross?"Lifestream.CanVisitCrossDC":"Lifestream.CanVisitSameDC").InvokeFunc("Sophia"))throw new InvalidOperationException("Sophia travel is temporarily unavailable.");
+                if(!StartNativeWorldTravel(sophia.RowId,"event"))throw new InvalidOperationException(nativeTravelStatus);
                 eventAccountWorldOwned=true;eventAccountActionAt=now;
-                Pi.GetIpcSubscriber<string,bool,string,bool,int?,bool?,bool?,object>("Lifestream.TPAndChangeWorld").InvokeAction("Sophia",cross,"",true,null,false,false);
                 return;
             }
             if(!QuestManager.IsQuestComplete(QuestToolsPolicy.KeywardBound)){

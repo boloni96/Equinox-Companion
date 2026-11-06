@@ -9,7 +9,7 @@ public sealed partial class Plugin
     private bool eventSaucerTravelOwned;
     private bool OptionalQuestRunning(){try{return QuestProviderRunning();}catch{return false;}}
     private void CancelEventAccountMovement(){
-        StopIndependentWalk();
+        if(eventSaucerTravelOwned)StopNativeAethernet("Event movement stopped");StopIndependentWalk();
         if(eventAccountMoveOwned||eventSaucerTravelOwned){try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}}
         eventAccountMoveOwned=eventSaucerTravelOwned=false;eventSaucerTravelAt=default;
     }
@@ -31,8 +31,8 @@ public sealed partial class Plugin
         if(eventSaucerTravelOwned){
             eventAccountStatus="Using the Gold Saucer aethernet to Entrance & Card Squares";
             if(now-eventSaucerTravelAt>TimeSpan.FromSeconds(90))throw new InvalidOperationException("Entrance aethernet travel timed out.");
-            if(LifestreamBusy()||now-eventSaucerTravelAt<TimeSpan.FromSeconds(3))return false;
-            // Lifestream can finish before loading/position settle. Keep observing the
+            if(nativeAethernetTrip!=null||LifestreamBusy()||now-eventSaucerTravelAt<TimeSpan.FromSeconds(3))return false;
+            // Travel can finish before loading/position settle. Keep observing the
             // accepted request, without dispatching another teleport or failing early.
             if(Conditions[Dalamud.Game.ClientState.Conditions.ConditionFlag.BetweenAreas]||Conditions[Dalamud.Game.ClientState.Conditions.ConditionFlag.BetweenAreas51]||Vector3.Distance(self.Position,new(-64.74408f,2.8839111f,54.33728f))>20)return false;
             eventSaucerTravelOwned=false;return true;

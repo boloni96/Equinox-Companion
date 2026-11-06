@@ -12,6 +12,7 @@ public sealed partial class Plugin
     private DateTimeOffset independentTravelAt;
     private unsafe bool IndependentSkip(JsonElement step,string group)=>Objects.LocalPlayer is {} player&&IndependentSkipPolicy.Matches(step,group,Client.TerritoryType,player.Position,IndependentWork(),id=>QuestManager.Instance()!=null&&QuestManager.Instance()->IsQuestAccepted(id),id=>QuestManager.IsQuestComplete(id),IndependentCrystalUnlocked);
     private void CancelIndependentQuestTravel(){
+        if(independentTravelOwned)StopNativeAethernet("Quest travel stopped");
         if(independentTravelOwned){try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}}
         independentTravelOwned=false;independentTravelDestination=0;
     }
@@ -32,7 +33,7 @@ public sealed partial class Plugin
         if(independentTravelOwned){
             questToolsStatus+=" · waiting for aethernet arrival";
             if(now-independentTravelAt>TimeSpan.FromSeconds(90))throw new InvalidOperationException("Aethernet arrival timed out.");
-            if(LifestreamBusy()||now-independentTravelAt<TimeSpan.FromSeconds(3))return false;
+            if(nativeAethernetTrip!=null||LifestreamBusy()||now-independentTravelAt<TimeSpan.FromSeconds(3))return false;
             var expected=sheet.GetRowOrDefault(independentTravelDestination)?.Territory.RowId??0;
             if(expected!=0&&Client.TerritoryType!=expected)return false;
             if(Client.TerritoryType==independentTravelSourceTerritory&&Objects.LocalPlayer is {} arriving&&Vector3.Distance(arriving.Position,independentTravelSourcePosition)<8){questToolsStatus+=" · waiting for destination position";return false;}

@@ -17,7 +17,7 @@ public sealed partial class Plugin
   if(ImGui.SmallButton("Bring here")){bringDestination=new AdventurePresence(world,DateTimeOffset.UtcNow.ToString("O"),world==PublicAdventureWorld()?CurrentAdventureArea():"",world==PublicAdventureWorld()?(uint)Client.TerritoryType:0,house);bringChoice=CurrentSharedCharacter()?.Id??"";bringOpenedActor=Player.ContentId;bringOpenedPairing=config.PairingKey;bringMessage="";ImGui.OpenPopup("Bring character");}
   ImGui.EndDisabled();
   if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))ImGui.SetTooltip("Bring a paired character to the world selected above. When it is your current world, also return to your current area or estate entrance. Travel does not complete tasks or add characters to the route.");
-  if(bringTrip is not null){SameLineIfFits(ButtonWidth("Cancel bring"));if(ImGui.SmallButton("Cancel bring")){bringTrip=null;CancelAssignedLogin("Bring character cancelled.");try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}characterSwitchUntil=default;bringMessage="Bring character cancelled.";}}
+  if(bringTrip is not null){SameLineIfFits(ButtonWidth("Cancel bring"));if(ImGui.SmallButton("Cancel bring")){bringTrip=null;StopNativeWorldTravel("Bring character cancelled.");CancelAssignedLogin("Bring character cancelled.");try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}characterSwitchUntil=default;bringMessage="Bring character cancelled.";}}
   if(!ImGui.BeginPopupModal("Bring character",ImGuiWindowFlags.AlwaysAutoResize))return;
   var report=bringDestination;
   ImGui.TextUnformatted("Bring a character to this location");
@@ -53,8 +53,8 @@ public sealed partial class Plugin
   var house=(config.SharedRoster?.People??[]).SelectMany(p=>p.Characters).SelectMany(c=>c.Houses).FirstOrDefault(h=>h.Id==destination.HouseId&&h.World==destination.World);
   var aetheryte=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Aetheryte>().Where(a=>a.IsAetheryte&&a.Territory.RowId==destination.Territory).Select(a=>a.RowId).FirstOrDefault();
   if(world==0||destination.Territory!=0&&house is null&&aetheryte==0){bringMessage="No supported teleport destination for this location. Close this picker and try from an area with an aetheryte or an identified paired estate.";return false;}
-  try{if(LifestreamBusy()||shoppingTravel is not null||goSeeHomeTrip is not null||goSeeFriendTrip is not null||DateTimeOffset.UtcNow<characterSwitchUntil||DateTimeOffset.UtcNow<goSeeNativeUntil){bringMessage="Wait for the current trip to finish first.";return false;}}
-  catch{bringMessage="Enable Lifestream first.";return false;}
+  try{if(nativeWorldTrip!=null||nativeAethernetTrip!=null||LifestreamBusy()||shoppingTravel is not null||goSeeHomeTrip is not null||goSeeFriendTrip is not null||DateTimeOffset.UtcNow<characterSwitchUntil||DateTimeOffset.UtcNow<goSeeNativeUntil){bringMessage="Wait for the current trip to finish first.";return false;}}
+  catch{bringMessage="Travel state is unavailable. Wait for the game to settle.";return false;}
   var source=Player.ContentId;
   if(source!=content){
    var from=CharacterSwitchScope(CurrentSharedCharacter()?.Id??"");var to=CharacterSwitchScope(chosen.Id);
@@ -74,10 +74,10 @@ public sealed partial class Plugin
   if(Player.ContentId!=trip.Character){if(trip.Stage==0&&Player.ContentId==trip.Source)return;EndBring("Bring character stopped: a different character logged in.");return;}
   if(Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.BoundByDuty]||HelperInCutscene()){EndBring("Bring character stopped: combat, duty or cutscene started.");return;}
   try{
-   if(LifestreamBusy()||now<trip.NotBefore)return;
+   if(nativeWorldTrip!=null||LifestreamBusy()||now<trip.NotBefore)return;
    characterSwitchUntil=default;
    if(trip.Stage==0){
-    if(Player.CurrentWorld.RowId!=trip.World&&!Pi.GetIpcSubscriber<uint,bool>("Lifestream.ChangeWorldById").InvokeFunc(trip.World)){EndBring("Lifestream cannot travel to that world.");return;}
+    if(Player.CurrentWorld.RowId!=trip.World&&!StartNativeWorldTravel(trip.World,"bring")){EndBring(nativeTravelStatus);return;}
     bringTrip=trip with{Stage=1,NotBefore=now.AddSeconds(3)};return;
    }
    if(Player.CurrentWorld.RowId!=trip.World){EndBring("World travel ended before arrival. Bring character stopped.");return;}
@@ -85,11 +85,11 @@ public sealed partial class Plugin
    if(trip.House is {} house){bringTrip=null;VisitSharedHouse(house);PrintEquinox("[Equinox] "+characterTravelStatus);return;}
    if(Client.TerritoryType==trip.Territory){EndBring("Arrived in the requested area. Meet your partner there.");return;}
    if(trip.Stage==1){
-    if(!Pi.GetIpcSubscriber<uint,byte,bool>("Lifestream.Teleport").InvokeFunc(trip.Aetheryte,0)){EndBring("Area teleport unavailable. Check that this character has unlocked it.");return;}
+    if(!RequestNativePublicTeleport(trip.Aetheryte)){EndBring("Area teleport unavailable. Check that this character has unlocked it.");return;}
     bringTrip=trip with{Stage=2,NotBefore=now.AddSeconds(15)};return;
    }
    EndBring("Area arrival could not be confirmed. Bring character stopped.");
-  }catch{EndBring("Bring character stopped: Lifestream unavailable.");}
+  }catch{EndBring("Bring character stopped: native travel unavailable.");}
  }
 }
 
