@@ -32,6 +32,20 @@ public sealed partial class Plugin
         }
         StopIndependentWalk(IndicatorStopReason);
     }
+    private void StopIndicatorLogin()
+    {
+        loginMenuReturn.Stop();
+        if(titleLoginProbe.Active)StopTitleLoginCheck(IndicatorStopReason);
+        CancelAssignedLogin(IndicatorStopReason);
+        characterSwitchUntil=default;characterSwitchTarget=null;
+        characterTravelStatus=IndicatorStopReason+" An already accepted login may still finish.";
+    }
+    private void StopIndicatorBring()
+    {
+        bringTrip=null;StopIndicatorLogin();StopIndicatorTravel();
+        try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}
+        bringMessage=IndicatorStopReason;
+    }
     private IndicatorWork? CurrentIndicatorWork()
     {
         if(gardenTendRoute!=null||gardenCareRun?.Running==true||gardenAutoPlantPlan!=null||gardenHousePlant!=null||gardenHouseHarvest!=null){
@@ -42,21 +56,30 @@ public sealed partial class Plugin
         if(deliveryRun.Length>0&&(deliveryReturning||delivery is {Paused:false,Stopped:false}&&delivery.Status is not ("paused" or "complete" or "stopped")))
             return new("Delivery",deliveryNotice,"…",StopIndicatorDelivery);
         if(eventAccountActive)return new("Adventure",eventAccountStatus,$"{eventAccountCompleted}/{eventAccountCharacters.Length}",()=>StopEventAccount(IndicatorStopReason));
+        if(questChainActive)return new("Quest routine",questChainStatus,"…",()=>StopQuestChain(IndicatorStopReason));
         if(nativeEventActive)return new("Event quest",questToolsStatus,"…",()=>StopNativeEventQuest(IndicatorStopReason));
         if(independentQuestId!=0&&!independentUserPaused)return new("Quest",questToolsStatus,"…",()=>StopIndependentQuest(IndicatorStopReason));
+        if(bringTrip!=null)return new("Bring character",bringMessage,"…",StopIndicatorBring);
         if(estateTrip!=null||estateHomeReturn!=null)return new("House travel",independentWalkStatus,"…",StopIndicatorTravel);
+        if(loginMenuReturn.Active||titleLoginProbe.Active||assignedLogin!=null||characterSwitchTarget!=null&&DateTimeOffset.UtcNow<characterSwitchUntil)
+            return new(loginMenuReturn.Active?"Returning to title":titleLoginProbe.Active?"Checking login":assignedLoginConfirmed?"Login queue":"Switching character",characterTravelStatus,"…",StopIndicatorLogin);
         if(shoppingTravel!=null||goSeeHomeTrip!=null||goSeeFriendTrip!=null)return new("Travel",independentWalkStatus,"…",StopIndicatorTravel);
+        if(gearRouting)return new("Gear storage",gearStatus,"…",()=>StopGearStorage(IndicatorStopReason));
+        if(armoireRunning)return new("Armoire",armoireStatus,"…",()=>StopArmoireOrganizer(IndicatorStopReason));
+        if(craftingWithdrawalPending)return new("Preparing withdrawal",retrievalError,"…",()=>CancelCraftingWithdrawal(IndicatorStopReason));
         if(organizeRunning)return new("Organizer",organizeStatus,"…",()=>StopOrganize(IndicatorStopReason));
         if(retrievalRun.Running)return new("Transfer",retrievalRun.Status,"…",()=>retrievalRun.Stop(IndicatorStopReason));
         if(chestRunning)return new("Company chest",chestStatus,"…",()=>StopChest(IndicatorStopReason));
-        if(retainerGilRunning)return new("Retainer gil",retainerGilStatus,"…",()=>StopRetainerGil(IndicatorStopReason));
+        if(retainerGilRunning)return new("Retainer gil",retainerGilStatus,$"{retainerGilIndex}/{retainerGilTargets.Length}",()=>StopRetainerGil(IndicatorStopReason));
         if(itemTrade.Running)return new("Item trade",itemTrade.Status,"…",()=>StopItemTrade(IndicatorStopReason));
         if(gilTrade.Running)return new("Gil trade",gilTrade.Status,"…",()=>StopGilTrade(IndicatorStopReason));
-        if(sellerRun.Running)return new("Seller",sellerNotice,"…",()=>sellerRun.Stop(IndicatorStopReason));
+        if(sellerRun.Running)return new(sellerRun.Paused?"Prices paused":sellerRun.Apply?"Updating prices":"Checking prices",
+            $"Retainer {sellerRun.RetainerIndex+1}/{sellerRun.RetainerCount} · {sellerRun.Status}",
+            sellerRun.ItemCount>0?$"{sellerRun.ItemIndex}/{sellerRun.ItemCount}":$"{sellerRun.RetainerIndex}/{sellerRun.RetainerCount}",()=>sellerRun.Stop(IndicatorStopReason));
         if(keyboundBuying)return new("Rewards",keyboundBuyStatus,"…",()=>StopKeyboundBuying(IndicatorStopReason));
         if(keyboundEnabled&&!keyboundStatus.StartsWith("Paused",StringComparison.OrdinalIgnoreCase))return new("Keybound",keyboundStatus,"…",()=>StopKeybound(IndicatorStopReason));
         if((FlightActive||independentSearch!=null||independentPath!=null||independentEntranceForward!=null)&&!independentUserPaused)
-            return new("Navigation",independentWalkStatus,"…",StopIndicatorTravel);
+            return new("Navigation",independentWalkStatus,independentPath!=null&&independentLastRoutePoints>1?$"{Math.Min(independentWaypoint,independentLastRoutePoints-1)}/{independentLastRoutePoints-1}":"…",StopIndicatorTravel);
         if(nativeFollowRequested&&followSession.Armed)return new("Following",followStatus,"…",()=>StopFollowThem(IndicatorStopReason));
         return null;
     }
@@ -75,7 +98,7 @@ public sealed partial class Plugin
         var work=CurrentIndicatorWork();
         if(!workIndicatorPreview&&(!config.WorkIndicatorEnabled||work==null)){workIndicatorDragging=false;return;}
         var preview=work==null&&workIndicatorPreview;
-        var viewport=ImGui.GetMainViewport();var size=Math.Clamp(config.WorkIndicatorSize,80,220);var bounds=new Vector2(size,size+25);
+        var viewport=ImGui.GetMainViewport();var size=Math.Clamp(config.WorkIndicatorSize,80,220);var bounds=new Vector2(size,size+45);
         var area=viewport.Size;var origin=viewport.Pos;
         var pos=new Vector2(config.WorkIndicatorX<0?(area.X-size)/2:config.WorkIndicatorX,config.WorkIndicatorY<0?35:config.WorkIndicatorY);
         pos=Vector2.Clamp(pos,Vector2.Zero,Vector2.Max(Vector2.Zero,area-bounds));
@@ -99,8 +122,8 @@ public sealed partial class Plugin
             }
             var draw=ImGui.GetWindowDrawList();var style=Math.Clamp(config.WorkIndicatorStyle,0,2);
             // Match the blue track in goddess-loading.png; its frame is slightly elliptical.
-            var center=top+(style==0?new Vector2(.4972f,.6319f):new Vector2(.515f,.63f))*size;
-            var radii=(style==0?new Vector2(.3216f,.3128f):new Vector2(.285f))*size;
+            var center=top+(style==0?new Vector2(.4908f,.6405f):new Vector2(.515f,.63f))*size;
+            var radii=(style==0?new Vector2(.3000f,.3033f):new Vector2(.285f))*size;
             var radius=MathF.Min(radii.X,radii.Y);
             if(style<2){
                 var file=style==0?"goddess-loading.png":"goddess-complete.png";
@@ -117,9 +140,6 @@ public sealed partial class Plugin
             var angle=time*2.7f;var pulse=.75f+.25f*MathF.Sin(time*3);
             for(var i=0;i<32;i++){
                 var a=angle+i*.045f;var b=a+.05f;var alpha=(i+1)/32f;
-                // Let the streak pass behind the hand/hair on the upper-left frame.
-                var phase=(a+.025f)%(2*MathF.PI);
-                if(style==0&&phase>3.65f&&phase<4.55f)continue;
                 var p=center+new Vector2(MathF.Cos(a),MathF.Sin(a))*radii;var q=center+new Vector2(MathF.Cos(b),MathF.Sin(b))*radii;
                 draw.AddLine(p,q,C(.15f,.65f,1,alpha*.35f),size*.045f);
                 draw.AddLine(p,q,C(.2f,.85f,1,alpha*pulse),size*.024f);
@@ -131,6 +151,12 @@ public sealed partial class Plugin
             var label=preview?"Preview":work?.Label??"";var labelSize=ImGui.CalcTextSize(label);
             var labelAt=top+new Vector2((size-labelSize.X)/2,size+3);
             draw.AddText(labelAt+Vector2.One,C(0,0,0,1),label);draw.AddText(labelAt,C(.8f,.92f,1,1),label);
+            var detail=preview?"Right-click to stop":work?.Detail??"";
+            var firstLine=detail.Split('\n')[0];
+            if(firstLine.Length>80)firstLine=firstLine[..80]+"…";
+            while(firstLine.Length>1&&ImGui.CalcTextSize(firstLine).X>size-4)firstLine=firstLine[..^2]+"…";
+            var detailAt=top+new Vector2((size-ImGui.CalcTextSize(firstLine).X)/2,size+22);
+            draw.AddText(detailAt+Vector2.One,C(0,0,0,1),firstLine);draw.AddText(detailAt,C(.75f,.85f,.95f,1),firstLine);
             if(hover&&!workIndicatorDragging){ImGui.BeginTooltip();ImGui.PushTextWrapPos(ImGui.GetFontSize()*24);ImGui.TextUnformatted(preview?"Position preview":work?.Detail??"");ImGui.TextUnformatted(preview?"Right-click: close preview":"Right-click: stop this routine");if(!config.WorkIndicatorLocked)ImGui.TextUnformatted("Left-drag: move");ImGui.PopTextWrapPos();ImGui.EndTooltip();}
         }
         ImGui.End();ImGui.PopStyleVar();

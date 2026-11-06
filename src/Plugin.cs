@@ -1100,6 +1100,7 @@ public sealed partial class Plugin : IDalamudPlugin
             {
                 adventureCutsceneWindows.Draw();
                 DrawQuestCutsceneControls();
+                DrawWorkIndicator();
                 DrawPluginItemPopup();
             }
             return;
