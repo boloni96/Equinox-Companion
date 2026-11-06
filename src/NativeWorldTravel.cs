@@ -17,7 +17,7 @@ public sealed partial class Plugin
         public required int Service;public required DateTimeOffset Started;
         public NativeTravelStage Stage;public DateTimeOffset Next,StageAt;
         public bool ReturnHome,DcSelected,ContextSent,LoginSent,LoginConfirmed,GatewaySent,TransferCommitted;
-        public uint Gateway,RequestedLoginWorld;public bool ServiceSent;
+        public uint Gateway,RequestedLoginWorld;public bool ServiceSent,LogoutConfirmed,IntroSent;
     }
     private NativeWorldTrip? nativeWorldTrip;
     private string nativeTravelStatus="Choose a map, aetheryte or world.";
@@ -28,11 +28,11 @@ public sealed partial class Plugin
         trip.Stage=stage;trip.StageAt=DateTimeOffset.UtcNow;trip.Next=trip.StageAt.AddMilliseconds(500);nativeTravelStatus=message;
         RecordTravelPrompt("Travel step",new{stage=stage.ToString(),message,trip.Character,trip.Service,trip.Source,trip.Destination,trip.Leg});
     }
-    private void StopNativeWorldTravel(string reason)
+    private void StopNativeWorldTravel(string reason,bool arrived=false)
     {
         if(nativeWorldTrip is not {} trip)return;
         RecordTravelPrompt("Travel stopped",new{reason,trip.TransferCommitted});nativeWorldTrip=null;
-        StopIndependentWalk("Travel: "+reason);nativeTravelStatus=reason+(trip.TransferCommitted?" An accepted game transfer may still finish.":"");
+        StopIndependentWalk("Travel: "+reason);nativeTravelStatus=reason+(trip.TransferCommitted&&!arrived?" An accepted game transfer may still finish.":"");
         FollowChatNotice("TRAVEL — "+nativeTravelStatus);
     }
     private unsafe bool StartNativeWorldTravel(uint destination,string owner="command")
@@ -53,6 +53,12 @@ public sealed partial class Plugin
         if(cross)BeginNativeTravelLogout(trip);else SetNativeTravelStage(trip,NativeTravelStage.Gateway,"Reaching a World Visit aetheryte");
         return true;
     }
+    private static void PrepareNativeFinalLeg(NativeWorldTrip trip)
+    {
+        trip.Source=trip.Leg;trip.Leg=trip.Destination;trip.ReturnHome=false;
+        trip.DcSelected=trip.ContextSent=trip.LoginSent=trip.LoginConfirmed=trip.TransferCommitted=trip.IntroSent=trip.LogoutConfirmed=trip.ServiceSent=false;
+        trip.RequestedLoginWorld=0;
+    }
     private unsafe void BeginNativeTravelLogout(NativeWorldTrip trip)
     {
         var ui=UIModule.Instance();if(ui==null){StopNativeWorldTravel("Game menu unavailable.");return;}
@@ -69,8 +75,8 @@ public sealed partial class Plugin
             var loading=Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51];
             if(Player.IsLoaded&&Player.ContentId!=trip.Character)throw new InvalidOperationException("A different character loaded; no further travel was requested.");
             if(Player.IsLoaded&&NativeTravelPolicy.Arrival(trip.Character,Player.ContentId,trip.Leg,Player.CurrentWorld.RowId,loading)){
-                if(trip.Leg==trip.Destination){var following=trip.Owner=="follow";StopNativeWorldTravel("Arrived at "+WorldName(trip.Destination)+".");if(following)ResumeAfterConfirmedTravel();return;}
-                trip.Source=trip.Leg;trip.Leg=trip.Destination;trip.ReturnHome=false;trip.DcSelected=trip.ContextSent=trip.LoginSent=trip.LoginConfirmed=trip.TransferCommitted=false;trip.RequestedLoginWorld=0;
+                if(trip.Leg==trip.Destination){var following=trip.Owner=="follow";StopNativeWorldTravel("Arrived at "+WorldName(trip.Destination)+".",arrived:true);if(following)ResumeAfterConfirmedTravel();return;}
+                PrepareNativeFinalLeg(trip);
                 if(TravelDc(trip.Source)==TravelDc(trip.Destination))SetNativeTravelStage(trip,NativeTravelStage.Gateway,"Home return complete; continuing to the requested world");
                 else BeginNativeTravelLogout(trip);
                 return;
@@ -86,7 +92,7 @@ public sealed partial class Plugin
     {
         if(Conditions[ConditionFlag.InCombat])throw new InvalidOperationException("Combat interrupted world travel.");
         if(trip.Stage==NativeTravelStage.Gateway){
-            if(followStopPending||followStopUnconfirmed||nativeFollowRequested)return;
+            if(!NativeTravelMovementReady())return;
             if(Conditions[ConditionFlag.Casting])return;
             var self=Objects.LocalPlayer;if(self==null)return;
             var crystal=Objects.Where(x=>x.ObjectKind==ObjectKind.Aetheryte&&x.IsTargetable&&x.BaseId is 2 or 8 or 9).MinBy(x=>Vector3.DistanceSquared(x.Position,self.Position));
@@ -99,10 +105,10 @@ public sealed partial class Plugin
                 }
                 throw new InvalidOperationException("Unlock a main aetheryte in Gridania, Limsa Lominsa or Ul'dah first.");
             }
-            if(Vector3.Distance(crystal.Position,self.Position)>crystal.HitboxRadius+3){
+            if(Vector3.Distance(crystal.Position,self.Position)>MathF.Max(8,crystal.HitboxRadius+3)){
                 var offset=self.Position-crystal.Position;offset.Y=0;if(offset.LengthSquared()<.01f)throw new InvalidOperationException("The crystal is on another floor.");
                 var approach=crystal.Position+Vector3.Normalize(offset)*(crystal.HitboxRadius+2);
-                if(!independentCollision.Ground(approach,out var floor)){nativeTravelStatus="Waiting for walkable ground beside the aetheryte";return;}
+                if(!TryNativeTravelGround(approach,self.Position,crystal.Position,out var floor)){nativeTravelStatus="Waiting for walkable ground beside the aetheryte";return;}
                 IndependentWalk(floor,.65f,now,allowFlight:false);nativeTravelStatus="Approaching aetheryte · "+independentWalkStatus;return;
             }
             StopIndependentWalk("At World Visit aetheryte");Targets.Target=crystal;

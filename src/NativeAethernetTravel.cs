@@ -35,16 +35,16 @@ public sealed partial class Plugin
             var sheet=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Aetheryte>();var destination=sheet.GetRow(trip.Destination);
             if(trip.Selections>0&&Client.TerritoryType==destination.Territory.RowId&&Vector3.Distance(self.Position,trip.Source)>8&&IndependentCrystalPosition(trip.Destination) is {} point&&Vector3.Distance(self.Position,point)<30){StopNativeAethernet("Aethernet arrival confirmed",true);return;}
             if(trip.Stage==0){
-                if(Conditions[ConditionFlag.Casting])return;
+                if(Conditions[ConditionFlag.Casting]||!NativeTravelMovementReady())return;
                 var crystal=Objects.Where(x=>x.ObjectKind==ObjectKind.Aetheryte&&x.IsTargetable&&sheet.GetRowOrDefault(x.BaseId)?.AethernetGroup==destination.AethernetGroup).MinBy(x=>Vector3.DistanceSquared(self.Position,x.Position));
                 if(crystal==null||Vector3.Distance(self.Position,crystal.Position)>100){
                     if(trip.Teleported)return;
                     var main=sheet.FirstOrDefault(x=>x.IsAetheryte&&x.AethernetGroup==destination.AethernetGroup).RowId;
                     if(main==0||!RequestNativePublicTeleport(main))throw new InvalidOperationException("No available teleport to this aethernet group.");trip.Teleported=true;return;
                 }
-                if(Vector3.Distance(self.Position,crystal.Position)>crystal.HitboxRadius+3){
+                if(Vector3.Distance(self.Position,crystal.Position)>MathF.Max(8,crystal.HitboxRadius+3)){
                     var offset=self.Position-crystal.Position;offset.Y=0;if(offset.LengthSquared()<.01f)throw new InvalidOperationException("Aethernet crystal is on another floor.");
-                    if(!independentCollision.Ground(crystal.Position+Vector3.Normalize(offset)*(crystal.HitboxRadius+2),out var floor))return;
+                    if(!TryNativeTravelGround(crystal.Position+Vector3.Normalize(offset)*(crystal.HitboxRadius+2),self.Position,crystal.Position,out var floor)){nativeAethernetStatus="Waiting for walkable ground beside the aethernet";return;}
                     IndependentWalk(floor,.65f,now,allowFlight:false);nativeAethernetStatus="Approaching aethernet · "+independentWalkStatus;return;
                 }
                 StopIndependentWalk("At aethernet");var system=TargetSystem.Instance();if(system==null)return;

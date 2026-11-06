@@ -14,14 +14,15 @@ public sealed partial class Plugin
     private static readonly string[] TravelDiagnosticAddons=["TeleportHousingFriend","HousingSelectRoom","MansionSelectRoom","HousingSelectBlock","TelepotTown","SelectString","SelectIconString","CutSceneSelectString","JournalAccept","JournalResult","SelectYesno","Talk"];
     private unsafe object? ReadTravelMenuDiagnostic(AtkUnitBase* addon)
     {
-        if(addon==null||!addon->IsVisible||addon->AtkValues==null||addon->AtkValuesCount>1024)return null;
+        if(addon==null||!addon->IsVisible)return null;
+        var captured=addon->AtkValues==null?0:Math.Min((int)addon->AtkValuesCount,1024);
         var values=new List<object>();
-        for(var i=0;i<addon->AtkValuesCount;i++){
+        for(var i=0;i<captured;i++){
             var v=addon->AtkValues[i];var type=(int)v.Type&15;
             if(type is 8 or 10){var text=TravelMenuText(v.String.Value);if(!string.IsNullOrEmpty(text))values.Add(new {index=i,text=text[..Math.Min(300,text.Length)]});}
             else if(type is 3 or 5)values.Add(new {index=i,number=v.UInt});
         }
-        return new {name=addon->NameString,valueCount=addon->AtkValuesCount,values,textNodes=TravelNodeText(&addon->UldManager)};
+        return new {name=addon->NameString,valueCount=addon->AtkValuesCount,capturedValueCount=captured,truncated=captured<addon->AtkValuesCount,values,textNodes=TravelNodeText(&addon->UldManager)};
     }
     private unsafe void ObserveTravelMenuDiagnostics(DateTimeOffset now)
     {

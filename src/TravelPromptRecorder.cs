@@ -21,7 +21,7 @@ public sealed partial class Plugin
     private unsafe void RecordTravelUiEvent(AddonEvent type,AddonArgs args){
         try{
             if(type==AddonEvent.PreReceiveEvent&&args is AddonReceiveEventArgs e){
-                var kind=e.AtkEventType.ToString();if(!kind.Contains("Click",StringComparison.Ordinal)&&!kind.Contains("Change",StringComparison.Ordinal))return;
+                var kind=e.AtkEventType.ToString();if(!kind.Contains("Click",StringComparison.Ordinal)&&!kind.Contains("Change",StringComparison.Ordinal)||kind=="TimelineActiveLabelChanged")return;
                 RecordTravelPrompt("UI input",new{addon=args.AddonName,eventType=kind,parameter=e.EventParam,source=usingSharedTravel||helperReplaying?"Companion":"game or other input",menu=ReadTravelMenuDiagnostic((AtkUnitBase*)args.Addon.Address)});
             }else RecordTravelPrompt("UI lifecycle",new{addon=args.AddonName,eventType=type.ToString(),menu=ReadTravelMenuDiagnostic((AtkUnitBase*)args.Addon.Address)});
         }catch(Exception ex){Log.Debug(ex,"Travel UI observation failed");}
@@ -49,7 +49,7 @@ public sealed partial class Plugin
                         buttons.Add(new{id,enabled=button->IsEnabled,texts=TravelNodeText(&button->AtkComponentBase.UldManager)});
                     }
                     var options=name=="SelectString"?TransportChoices(addon):null;
-                    var state=new {menu=snapshot,buttons,options};var fingerprint=JsonSerializer.Serialize(state);
+                    var state=new {addon=name,menu=snapshot,buttons,options,trees=name=="LobbyDKTWorldList"?ReadNativeTravelTrees(addon):null};var fingerprint=JsonSerializer.Serialize(state);
                     if(!travelPromptLast.TryGetValue(name,out var old)||old!=fingerprint){travelPromptLast[name]=fingerprint;RecordTravelPrompt(old==null?"Menu opened":"Menu changed",state);}
                 }
                 if(Stopwatch.GetElapsedTime(started).TotalMilliseconds>=1){travelPromptCursor++;break;}

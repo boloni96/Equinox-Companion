@@ -10,7 +10,7 @@ public sealed partial class Plugin
             if(Player.IsLoaded){
                 var yes=(AddonSelectYesno*)SellerAddon("SelectYesno");
                 var expected=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Addon>().GetRowOrDefault(115)?.Text.ToString()??"";
-                if(yes!=null&&yes->PromptText!=null&&NativeEventPolicy.Prompt(expected,TravelMenuText(yes->PromptText->NodeText.StringPtr)??""))NativeEventButton((AtkUnitBase*)yes,yes->YesButton);
+                if(!trip.LogoutConfirmed&&yes!=null&&yes->PromptText!=null&&NativeEventPolicy.Prompt(expected,TravelMenuText(yes->PromptText->NodeText.StringPtr)??""))trip.LogoutConfirmed=NativeEventButton((AtkUnitBase*)yes,yes->YesButton);
                 return;
             }
             if(Client.IsLoggedIn)return;
@@ -58,8 +58,13 @@ public sealed partial class Plugin
         if(trip.Stage==NativeTravelStage.VisitIntro){
             var home=SellerAddon("LobbyWKTCheckHome");
             if(trip.ReturnHome&&home!=null){if(NativeEventButton(home,home->GetComponentButtonById(3))){trip.TransferCommitted=true;SetNativeTravelStage(trip,NativeTravelStage.TransferWait,"Waiting for home-world return");}return;}
-            var intro=SellerAddon("LobbyDKTCheck");
-            if(!trip.ReturnHome&&intro!=null){if(NativeEventButton(intro,intro->GetComponentButtonById(3)))SetNativeTravelStage(trip,NativeTravelStage.Destination,"Choosing "+TravelDcName(trip.Leg)+" / "+WorldName(trip.Leg));return;}
+            var intro=(AddonLobbyDKTCheck*)SellerAddon("LobbyDKTCheck");
+            if(!trip.ReturnHome&&intro!=null){
+                // Node-list index 3 is NOT node ID 3 (the Help button).
+                // Use the typed confirmation control and wait for the destination UI.
+                if(!trip.IntroSent)trip.IntroSent=NativeEventButton((AtkUnitBase*)intro,intro->ConfirmButton);
+                return;
+            }
             if(SellerAddon("LobbyDKTWorldList")!=null){SetNativeTravelStage(trip,NativeTravelStage.Destination,"Checking the native destination list");return;}
             if(trip.ReturnHome&&SellerAddon("LobbyDKTCheckExec")!=null){SetNativeTravelStage(trip,NativeTravelStage.TransferConfirm,"Verifying home-return confirmation");return;}
         }
@@ -89,11 +94,11 @@ public sealed partial class Plugin
                 var text=ok->PromptText==null?"":TravelMenuText(ok->PromptText->NodeText.StringPtr)??"";
                 if(text.Contains(WorldName(trip.Leg)??"\0",StringComparison.Ordinal)&&
                    (text.Contains("arrived safely",StringComparison.OrdinalIgnoreCase)||text.Contains("transfer successful",StringComparison.OrdinalIgnoreCase))){
-                    if(NativeEventButton((AtkUnitBase*)ok,ok->OkButton)){trip.DcSelected=false;SetNativeTravelStage(trip,NativeTravelStage.Login,"Selecting service account and logging into "+WorldName(trip.Leg));}
+                    if(NativeEventButton((AtkUnitBase*)ok,ok->OkButton)){CompleteNativeTransfer(trip);}
                 }else nativeTravelStatus="Game message needs attention; it has been recorded. Confirm it manually to continue.";
                 return;
             }
-            if(NativeTravelCharacterIndex(trip,out var at)>=0&&at==trip.Leg){trip.DcSelected=false;SetNativeTravelStage(trip,NativeTravelStage.Login,"Transfer complete; logging into the destination");}
+            if(NativeTravelCharacterIndex(trip,out var at)>=0&&at==trip.Leg){CompleteNativeTransfer(trip);}
             return;
         }
         if(trip.Stage==NativeTravelStage.Login){
@@ -103,6 +108,14 @@ public sealed partial class Plugin
             if(world!=trip.Leg){nativeTravelStatus="Waiting for the character's destination world to update";return;}
             ClickNativeLoginCharacter(menu,index);trip.LoginSent=true;RecordTravelPrompt("Login requested",new{trip.Character,trip.Leg,trip.Service});
         }
+    }
+    private void CompleteNativeTransfer(NativeWorldTrip trip)
+    {
+        trip.DcSelected=false;
+        if(NativeTravelPolicy.ContinueDcFromHome(trip.ReturnHome,trip.Leg,trip.Home,trip.Destination,TravelDc(trip.Home),TravelDc(trip.Destination))){
+            PrepareNativeFinalLeg(trip);
+            SetNativeTravelStage(trip,NativeTravelStage.CharacterMenu,"Home return complete; continuing DC travel without logging in");
+        }else SetNativeTravelStage(trip,NativeTravelStage.Login,"Transfer complete; logging into "+WorldName(trip.Leg));
     }
     private void RequestNativeTravelLoginWorld(NativeWorldTrip trip,uint world){
         if(trip.RequestedLoginWorld==world)return;
@@ -117,6 +130,23 @@ public sealed partial class Plugin
         }return matches==1?index:-1;
     }
     private unsafe string TravelValueText(AtkUnitBase* addon,int index)=>addon!=null&&addon->AtkValues!=null&&index>=0&&index<addon->AtkValuesCount&&((int)addon->AtkValues[index].Type&15) is 8 or 10?TravelMenuText(addon->AtkValues[index].String.Value)??"":"";
+    private unsafe object ReadNativeTravelTrees(AtkUnitBase* addon)
+    {
+        var result=new List<object>();
+        foreach(var id in new uint[]{23,24}){
+            var node=addon->GetNodeById(id);if(node==null)continue;
+            var component=node->GetAsAtkComponentNode();if(component==null||component->Component==null||component->Component->GetComponentType()!=ComponentType.TreeList)continue;
+            var tree=(AtkComponentTreeList*)component->Component;if(tree->Items.LongCount is <0 or >128)continue;
+            var items=new List<object>();
+            for(var i=0;i<tree->Items.LongCount;i++){
+                var item=tree->Items[i].Value;if(item==null)continue;
+                var text=item->StringValues.LongCount is >0 and <=32?TravelMenuText(item->StringValues[0].Value):null;
+                items.Add(new{index=i,text,hidden=item->IsHidden,state=(int)item->State,type=(int)item->Type,depth=item->Depth});
+            }
+            result.Add(new{id,items});
+        }
+        return result;
+    }
     private unsafe bool SelectNativeTravelTree(AtkUnitBase* addon,uint nodeId,string expected)
     {
         var node=addon->GetNodeById(nodeId);if(node==null)return false;
