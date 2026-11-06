@@ -17,7 +17,7 @@ public sealed partial class Plugin
         public required int Mode;
         public required string Label;
         public required DateTimeOffset Started;
-        public int Stage,EntrySteps,DoorRevealSteps;
+        public int Stage,EntrySteps,DoorRevealSteps,DoorAttempt;
         public Vector3? EntryDirection;
         public DateTimeOffset ActionAt,DoorMissingSince;
         public Vector3? Forward,DoorApproach;
@@ -106,7 +106,7 @@ public sealed partial class Plugin
             if(EstateTravelCommand.InteriorArrived(trip.Mode,indoors,inside?.Workshop??false,inside?.Room??-1)&&trip.Mode==3){StopEstateTravel("Arrived inside the FC workshop.");return;}
             if(indoors&&!inside!.Workshop&&inside.Room==0){
                 if(trip.Mode==2){StopEstateTravel("Arrived "+trip.Label+".");return;}
-                if(trip.Mode==3&&trip.Stage<5){trip.Stage=5;trip.Door=0;trip.DoorApproach=null;trip.ActionAt=now;trip.DoorMissingSince=default;trip.Arrival.Reset();StopIndependentWalk("Loading FC interior");}
+                if(trip.Mode==3&&trip.Stage<5){trip.Stage=5;trip.Door=0;trip.DoorAttempt=0;trip.DoorApproach=null;trip.ActionAt=now;trip.DoorMissingSince=default;trip.Arrival.Reset();StopIndependentWalk("Loading FC interior");}
             }
             // A submitted workshop entry changes territory before its housing record is ready.
             if(trip.Stage==7){
@@ -154,6 +154,11 @@ public sealed partial class Plugin
             }
             if(trip.Stage is 3 or 6){
                 if(now-trip.ActionAt>TimeSpan.FromSeconds(20))throw new InvalidOperationException("The expected entrance prompt was not available.");
+                if(trip.DoorAttempt==0&&now-trip.ActionAt>TimeSpan.FromSeconds(3)&&
+                    !VisibleFollowAddon("SelectYesno")&&!VisibleFollowAddon("SelectString")&&!QuestConversationVisible()){
+                    trip.DoorAttempt=1;trip.DoorApproach=null;trip.Stage=trip.Stage==3?2:5;
+                    RecordTravelPrompt("Estate entrance closer retry",new{trip.Door,trip.DoorAttempt});return;
+                }
                 if(Targets.Target?.GameObjectId!=trip.Door)return;
                 if(trip.Stage==3){
                     var prompt=(AddonSelectYesno*)KeyboundAddon("SelectYesno");
@@ -211,15 +216,15 @@ public sealed partial class Plugin
             if(!TargetWithinInteractionRange(door)){
             if(!GameWalkingCollision.Available())return;
             trip.DoorApproach??=EstateDoorApproach.Find(independentCollision,self.Position,door.Position,
-                point=>independentCollision.InteractionVisible(point,door.Position));
+                point=>independentCollision.InteractionVisible(point,door.Position),InteractionLimit(door));
             if(trip.DoorApproach is not {} approach)throw new InvalidOperationException("No clear standing point within range of the estate entrance. Move nearer the door and retry.");
             if(!IndependentWalk(approach,.35f,now,allowFlight:false,interactionTarget:door))return;
             }
             StopIndependentWalk("At estate door");
-            if(!InteractionApproachPolicy.WithinDistance(self.Position,door.Position,false))throw new InvalidOperationException("Door approach finished outside interaction distance; no entrance interaction sent.");
+            if(!InteractionApproachPolicy.WithinDistance(self.Position,door.Position,InteractionLimit(door)))throw new InvalidOperationException("Door approach finished outside interaction distance; no entrance interaction sent.");
             var targetSystem=TargetSystem.Instance();if(targetSystem==null)return;
             Targets.Target=door;
-            RecordTravelPrompt("Estate entrance interaction requested",new{door=door.GameObjectId,dataId=door.BaseId,distance=Vector3.Distance(self.Position,door.Position),player=self.Position,target=door.Position});
+            RecordTravelPrompt("Estate entrance interaction requested",new{door=door.GameObjectId,dataId=door.BaseId,distance=Vector3.Distance(self.Position,door.Position),limit=InteractionLimit(door),trip.DoorAttempt,player=FollowTravelPosition.From(self.Position),target=FollowTravelPosition.From(door.Position)});
             targetSystem->InteractWithObject((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)door.Address,false);
             trip.Stage=workshop?6:3;trip.ActionAt=now;
         }catch(Exception ex){StopEstateTravel(ex.Message);}
