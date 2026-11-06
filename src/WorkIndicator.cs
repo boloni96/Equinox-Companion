@@ -122,8 +122,8 @@ public sealed partial class Plugin
             }
             var draw=ImGui.GetWindowDrawList();var style=Math.Clamp(config.WorkIndicatorStyle,0,2);
             // Match the blue track in goddess-loading.png; its frame is slightly elliptical.
-            var center=top+(style==0?new Vector2(.4908f,.6405f):new Vector2(.515f,.63f))*size;
-            var radii=(style==0?new Vector2(.3000f,.3033f):new Vector2(.285f))*size;
+            var center=top+(style==0?new Vector2(.4906f,.6336f):new Vector2(.515f,.63f))*size;
+            var radii=(style==0?new Vector2(.3007f,.3040f):new Vector2(.285f))*size;
             var radius=MathF.Min(radii.X,radii.Y);
             if(style<2){
                 var file=style==0?"goddess-loading.png":"goddess-complete.png";
