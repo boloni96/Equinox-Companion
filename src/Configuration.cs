@@ -3,6 +3,12 @@ namespace EquinoxCompanion;
 [Serializable]
 public sealed class Configuration : IPluginConfiguration
 {
+    public bool WorkIndicatorEnabled { get; set; } = true;
+    public bool WorkIndicatorLocked { get; set; }
+    public int WorkIndicatorStyle { get; set; }
+    public float WorkIndicatorSize { get; set; } = 130;
+    public float WorkIndicatorX { get; set; } = -1;
+    public float WorkIndicatorY { get; set; } = -1;
     public int QuestLevelingTarget { get; set; }
     public bool QuestLeveling { get; set; }
     public bool QuestLevelingIncludeMsq { get; set; } = true;

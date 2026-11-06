@@ -73,7 +73,22 @@ internal sealed class AvoidStalledTargets(IWalkingCollision inner,Vector3[] bloc
     public bool Ground(Vector3 near,out Vector3 ground)=>inner.Ground(near,out ground);
     public float WallPenalty(Vector3 point)=>inner.WallPenalty(point);
     public bool Traverse(Vector3 from,Vector3 to)=>
-        !blocked.Any(p=>CollisionRouteSearch.Horizontal(p,to)<.65f&&MathF.Abs(p.Y-to.Y)<1)&&inner.Traverse(from,to);
+        ClearOfBlocked(from,to,blocked)&&inner.Traverse(from,to);
+    public static bool ClearOfBlocked(Vector3 from,Vector3 to,IEnumerable<Vector3> blocked)
+    {
+        var edge=new Vector2(to.X-from.X,to.Z-from.Z);
+        foreach(var p in blocked){
+            var offset=new Vector2(p.X-from.X,p.Z-from.Z);
+            var t=edge.LengthSquared()<.0001f?0:Math.Clamp(Vector2.Dot(offset,edge)/edge.LengthSquared(),0,1);
+            var nearest=Vector3.Lerp(from,to,t);
+            if(MathF.Abs(p.Y-nearest.Y)>=1||CollisionRouteSearch.Horizontal(p,nearest)>=.65f)continue;
+            // A failed step can leave the player inside the exclusion. Permit escape
+            // away from it, but never a shortcut across it or toward its centre.
+            if(offset.Length()<.65f&&Vector2.Dot(offset,edge)<=0&&CollisionRouteSearch.Horizontal(p,to)>offset.Length()+.01f)continue;
+            return false;
+        }
+        return true;
+    }
 }
 
 // Cross the full footprint, not just three parallel tracks, to catch narrow posts.

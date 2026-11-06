@@ -75,6 +75,13 @@ Check(phases.Expired(frame.AddSeconds(180)),"walking is still bounded");
 var avoided=new AvoidStalledTargets(collision,new[]{new Vector3(0,0,1)});
 Check(!avoided.Traverse(Vector3.Zero,new(0,0,1)),"retry rejects stalled target");
 Check(avoided.Traverse(Vector3.Zero,new(-1,0,0)),"retry may leave along another clear edge");
+Check(!avoided.Traverse(Vector3.Zero,new(0,0,2)),"retry rejects an edge crossing a blocked target even when its endpoint is clear");
+Check(AvoidStalledTargets.ClearOfBlocked(new(0,0,.5f),new(0,0,-.5f),[new(0,0,1)]),"can escape a nearby blocked footprint by moving away");
+Check(!AvoidStalledTargets.ClearOfBlocked(new(0,0,.5f),new(0,0,2),[new(0,0,1)]),"cannot escape by crossing through the obstruction");
+Check(AvoidStalledTargets.ClearOfBlocked(new(0,4,0),new(0,4,2),[new(0,0,1)]),"blocked footprint does not obstruct another floor");
+var detour=new[]{Vector3.Zero,new Vector3(1,0,0),new Vector3(1,0,2),new Vector3(0,0,3)};
+var around=WalkingSteering.PursuitTarget(Vector3.Zero,detour,1,(a,b)=>AvoidStalledTargets.ClearOfBlocked(a,b,[new(.4f,0,.8f)]));
+Check(around==new Vector3(1,0,0),"pursuit follows the corner rather than cutting across a remembered obstacle");
 Console.WriteLine("Separate phase deadlines and blocked-target retry passed.");
 // Thin post offset between the old center and side tracks.
 Check(!WalkingClearance.BodyRoom(Vector3.Zero,.45f,(a,b)=>{
