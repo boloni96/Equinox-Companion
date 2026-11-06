@@ -14,6 +14,10 @@ internal static class SearchBudget462Tests
         var fast=new CollisionRouteSearch(new CostlyFloor(),Vector3.Zero,new(48,0,10),.4f);
         for(var i=0;i<1000&&(!slow.Finished||!fast.Finished);i++){slow.Advance(100,1000);fast.Advance(100,1000);}
         if(slow.Path==null||fast.Path==null||fast.Expanded>=slow.Expanded/2)throw new Exception("Goal-focused search must avoid broad expansion under map/clearance costs.");
+        var snapshot=slow.DiagnosticSnapshot();
+        if(snapshot.Explored.Length>512||snapshot.Expanded!=slow.Expanded||snapshot.ClosestPath.Length==0||snapshot.ClosestPath[0]!=new NavigationSearchPoint(0,0,0))throw new Exception("Search diagnostics must retain the reached trail with bounded coordinate samples.");
+        var json=System.Text.Json.JsonSerializer.Serialize(snapshot);
+        if(!json.Contains("\"X\""))throw new Exception("Search diagnostics must serialize coordinates, not empty Vector3 objects.");
         Console.WriteLine($"Resumable collision probes and final connectors passed; focused search {fast.Expanded} versus {slow.Expanded} nodes.");
     }
     private sealed class CostlyFloor:IWalkingCollision

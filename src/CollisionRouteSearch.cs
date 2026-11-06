@@ -3,9 +3,16 @@ using System.Numerics;
 namespace EquinoxCompanion;
 
 public sealed class NavigationSliceExpiredException:Exception { }
+public sealed record NavigationSearchPoint(float X,float Y,float Z)
+{
+    public static NavigationSearchPoint From(Vector3 p)=>new(p.X,p.Y,p.Z);
+}
+public sealed record NavigationSearchDiagnostic(NavigationSearchPoint Origin,NavigationSearchPoint Goal,int Expanded,int Frontier,int BudgetYields,int GroundRejected,int TraverseRejected,int AcceptedEdges,long NativeQueries,long CacheHits,NavigationSearchPoint[] Explored,NavigationSearchPoint[] Rejected,NavigationSearchPoint[] ClosestPath);
 
 public interface IWalkingCollision
 {
+    long NativeQueries=>0;
+    long CacheHits=>0;
     void BeginSlice(double milliseconds) { }
     void EndSlice() { }
     bool Ground(Vector3 near,out Vector3 ground);
@@ -23,7 +30,17 @@ public sealed class CollisionRouteSearch
     private readonly PriorityQueue<Node,float> open=new();
     private readonly Dictionary<Key,float> costs=[];
     private readonly HashSet<Key> closed=[];
-    private Node? expanding;
+    private Node? expanding,closest;
+    private readonly List<Vector3> explored=[];
+    private readonly Queue<Vector3> rejected=[];
+    private int groundRejected,traverseRejected,acceptedEdges;
+    public NavigationSearchDiagnostic DiagnosticSnapshot(){
+        var path=new List<Vector3>();for(var n=closest;n!=null;n=n.Previous)path.Add(n.Point);path.Reverse();
+        var stride=Math.Max(1,(int)Math.Ceiling(explored.Count/512d));
+        return new(NavigationSearchPoint.From(origin),NavigationSearchPoint.From(goal),Expanded,open.Count,BudgetYields,groundRejected,traverseRejected,acceptedEdges,collision.NativeQueries,collision.CacheHits,
+            explored.Where((_,i)=>i%stride==0).Select(NavigationSearchPoint.From).ToArray(),rejected.Select(NavigationSearchPoint.From).ToArray(),path.Take(256).Select(NavigationSearchPoint.From).ToArray());
+    }
+    private void Rejected(Vector3 point){rejected.Enqueue(point);if(rejected.Count>128)rejected.Dequeue();}
     private int neighbor;
     private static readonly (int X,int Z)[] Directions=[(1,0),(-1,0),(0,1),(0,-1),(1,1),(1,-1),(-1,1),(-1,-1)];
     public string Error { get; private set; }="";
@@ -50,7 +67,9 @@ public sealed class CollisionRouteSearch
                 if(expanding==null){
                     while(open.TryDequeue(out var next,out _)){
                         if(closed.Contains(next.Key)||next.Cost>costs[next.Key])continue;
-                        expanding=next;neighbor=-1;closed.Add(next.Key);break;
+                        expanding=next;neighbor=-1;closed.Add(next.Key);explored.Add(next.Point);
+                        if(closest==null||Vector3.DistanceSquared(next.Point,goal)<Vector3.DistanceSquared(closest.Point,goal))closest=next;
+                        break;
                     }
                     if(expanding==null){Error="No connected walkable route found.";return;}
                     if(closed.Count>96000){Error="Local navigation search limit reached.";return;}
@@ -79,11 +98,12 @@ public sealed class CollisionRouteSearch
         if(Horizontal(candidate,origin)>2048||Horizontal(candidate,goal)>Horizontal(origin,goal)+35)return;
         if(!collision.Ground(candidate,out var point)&&
            !collision.Ground(candidate+new Vector3(0,.45f,0),out point)&&
-           !collision.Ground(candidate-new Vector3(0,.45f,0),out point))return;
+           !collision.Ground(candidate-new Vector3(0,.45f,0),out point)){groundRejected++;Rejected(candidate);return;}
         var key=Address(point);if(closed.Contains(key))return;
         var cost=parent.Cost+Vector3.Distance(parent.Point,point)*(1+6*collision.WallPenalty(point)+3*collision.RoutePenalty(point));
         if(costs.TryGetValue(key,out var known)&&cost>=known)return;
-        if(!collision.Traverse(parent.Point,point))return;
+        if(!collision.Traverse(parent.Point,point)){traverseRejected++;Rejected(point);return;}
+        acceptedEdges++;
         costs[key]=cost;open.Enqueue(new(key,point,cost,parent),cost+heuristicWeight*Heuristic(point));
     }
     private Key Address(Vector3 p)=>new((int)MathF.Round((p.X-origin.X)/spacing),(int)MathF.Round(p.Y*4),(int)MathF.Round((p.Z-origin.Z)/spacing));

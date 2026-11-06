@@ -7,6 +7,7 @@ namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
     private CollisionRouteSearch? independentSearch;
+    private NavigationSearchDiagnostic? independentLastSearchDiagnostic;
     private EntranceForwardProgress? independentEntranceForward;
     private readonly GameWalkingCollision independentCollision=new();
     private readonly WalkingGroundReadiness independentGroundReadiness=new();
@@ -118,6 +119,7 @@ public sealed partial class Plugin
     }
     private void StopIndependentWalk(string reason="Stopped",bool resetFailure=false)
     {
+        if(independentSearch!=null)independentLastSearchDiagnostic=independentSearch.DiagnosticSnapshot();
         if(independentSearch!=null||independentPath!=null||independentEntranceForward!=null)
             RecordTravelPrompt("Navigation ended",new{run=independentNavigationRun,reason,planning=independentSearch==null?null:new{independentSearch.Expanded,independentSearch.BudgetYields},goal=FollowTravelPosition.From(independentGoal),independentInputReads,independentInputOverrides,independentExpiredReads,independentInactiveReads,independentNativeGateRejects,independentNativeManualReads,independentReplans,independentPlanningSeconds,independentWalkStatus,controlMode=independentLegacyMode?"Legacy":"Standard",axes=new{x=independentAxes.X,y=independentAxes.Y},independentHeading,independentFacingOnly});
         if(independentSearch!=null||independentPath!=null||independentEntranceForward!=null)TraceKeyboundRun(independentNavigationRun,"navigation-stopped",reason,"companion-navigation",false);
@@ -153,7 +155,7 @@ public sealed partial class Plugin
         }
         independentGroundReadiness.Reset();
         if(!PrepareNavigationMap(now))return false;
-        independentNavigationRun=Guid.NewGuid().ToString("N");independentInputReads=independentInputOverrides=0;
+        independentLastSearchDiagnostic=null;independentNavigationRun=Guid.NewGuid().ToString("N");independentInputReads=independentInputOverrides=0;
         independentForwardReads=independentExpiredReads=independentInactiveReads=0;independentNativeGateRejects=independentNativeManualReads=independentNativeExceptions=0;
         independentInputBlock=independentLastWalkFailure="";independentPositionChanged=false;independentLastRoutePoints=independentLastExpanded=0;independentPlanningSeconds=0;independentLease.Revoke();
         TraceKeyboundRun(independentNavigationRun,"navigation-started",$"Destination {destination}; range {range}",independentQuestId!=0?"quest:"+independentQuestRun:"event",false);
