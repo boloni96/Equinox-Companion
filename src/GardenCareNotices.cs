@@ -3,60 +3,59 @@ namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
     private DateTimeOffset nextGardenNotice;
-    private readonly GardenNoticeSession gardenNotices = new();
-    private void OnGardenNoticeLogin() => gardenNotices.Login();
+    private readonly GardenNoticeSession gardenNotices=new();
+    private Task<((string Text,ushort Color)[] Messages,double Ms)>? gardenNoticeTask;
+    private string gardenNoticeInput="";
+    private SharedRoster? gardenNoticeRoster;
+    private bool gardenNoticePending;
+    private long gardenNoticeGeneration, gardenNoticeTaskGeneration;
+    private double gardenNoticeBuildMs;
+    private string GardenNoticeInput=>$"{Player.ContentId}:{config.PairingKey}:{config.NotifyGardenCare}:{config.NotifyGardenTending}:{config.NotifyGardenRisk}:{config.SyncEnabled}:{config.Planting.Count}:{config.Planting.LastOrDefault()?.EventId}:{config.Tending.Count}:{config.Tending.LastOrDefault()?.EventId}:{GardenMappingVersion}:{completedGardenPlans.Count}";
+    private void OnGardenNoticeLogin(){gardenNotices.Login();gardenNoticeGeneration++;gardenNoticePending=false;}
     private void UpdateGardenCareNotices(DateTimeOffset now)
     {
-        if (!Player.IsLoaded || Player.ContentId == 0) return;
-        if (gardenNotices.ObserveCharacter(Player.ContentId))
-        {
-            nextGardenNotice = now.AddSeconds(20); nextRosterRead = default; return;
+        if(!Player.IsLoaded||Player.ContentId==0)return;
+        if(gardenNotices.ObserveCharacter(Player.ContentId)){
+            gardenNoticeGeneration++;gardenNoticePending=false;
+            nextGardenNotice=now.AddSeconds(20);nextRosterRead=default;return;
         }
-        if (!config.NotifyGardenCare || !config.SyncEnabled || now < nextGardenNotice || config.SharedRoster is not { } roster) return;
-        nextGardenNotice = now.AddSeconds(30);
-        if (roster.GardenCare is null || !gardenNotices.TrySummary()) return;
-        var allPlans=GardenPlanSources();
-        var reads=DiscoveryReads();
-        var plants=config.Planting.GroupBy(t=>(t.Address.HouseId,t.Patch,t.Bed)).ToDictionary(g=>g.Key,g=>g.Max(t=>t.ConfirmedAt));
-        var tends=config.Tending.GroupBy(t=>(t.Address.HouseId,t.Patch,t.Bed)).ToDictionary(g=>g.Key,g=>g.Max(t=>t.ConfirmedAt));
-        var notices = new List<GardenPersonNotice>();
-        foreach (var house in roster.GardenCare.GroupBy(g => g.HouseId))
-        {
-            var person = GardenLoginSummary.Person(roster.People, house.First());
-            if (person is null) continue;
-            foreach (var batch in house)
-            {
-                var source=allPlans.FirstOrDefault(p=>p.HouseId==batch.HouseId&&p.Batch==batch.Batch);
-                var projection=source is null?null:EffectiveGardenPlan(source);
-                foreach (var bed in batch.Beds)
-                {
-                    // Local confirmed care already happened, even if the browser has not saved it yet.
-                    var key=(batch.GameHouseId,(batch.PhysicalPatch>0?batch.PhysicalPatch:batch.Batch),bed.Bed);
-                    var lastPlant = plants.GetValueOrDefault(key,DateTimeOffset.MinValue);
-                    var lastTend = tends.GetValueOrDefault(key,DateTimeOffset.MinValue);
-                    var localCare = lastPlant > lastTend ? lastPlant : lastTend;
-                    var empty = reads.EmptyAt(key.GameHouseId,key.Item2,key.Bed);
-                    if (empty > (bed.Watered ?? DateTimeOffset.MinValue) && empty >= localCare) continue;
-                    var effective = localCare > (bed.Watered ?? DateTimeOffset.MinValue) ? bed with { Watered = localCare, NextTend = localCare.AddHours(12), DeathAt = bed.WiltHours is > 0 ? localCare.AddHours(bed.WiltHours.Value+24) : null } : bed;
-                    var projected=projection?.Beds.FirstOrDefault(b=>b.Bed==bed.Bed);
-                    if(projection?.CompletedAt is null&&projected is not null&&GardenPlantRequirement.SuppressTending(projected))continue;
-                    if(projected is not null)
-                    {
-                        if(projected.ActualCrop=="Empty")continue;
-                        effective=effective with {Empty=false,Ready=projected.Ready,KeepMature=projected.KeepMature,Watered=projected.Watered,NextTend=projected.NextTend,HarvestAt=projected.HarvestAt,WiltHours=projected.WiltHours,
-                            DeadConfirmedAt=projected.DeadConfirmedAt,WiltedAt=projected.WiltedAt,Planted=projected.Planted,GrowingObservedAt=projected.GrowingObservedAt,
-                            DeathAt=projected.Ready||GardenVisualState(projected,false,now)=="dead"?null:projected.Watered is {} care&&projected.WiltHours is {} wilt?care.AddHours(wilt+24):null};
-                    }
-                    else if (lastPlant > (bed.Watered ?? DateTimeOffset.MinValue)) effective = effective with { Ready = false, KeepMature = false, HarvestAt = null, DeathAt = null };
-                    var kind = projection is not null && projected is not null
-                        ? GardenLoginSummary.Kind(projection, projected, now)
-                        : GardenLoginSummary.Kind(effective, now);
-                    if (kind == "tend" && config.NotifyGardenTending || kind == "check" && config.NotifyGardenRisk)
-                        notices.Add(new(person.Id, person.Name, kind!));
+        if(gardenNoticeTask is {} task){
+            if(!task.IsCompleted)return;
+            gardenNoticeTask=null;
+            if(task.IsCompletedSuccessfully){
+                gardenNoticeBuildMs=task.Result.Ms;
+                if(gardenNoticeTaskGeneration==gardenNoticeGeneration){
+                    if(gardenNoticeInput==GardenNoticeInput&&ReferenceEquals(gardenNoticeRoster,config.SharedRoster)){
+                        gardenNoticePending=false;
+                        foreach(var message in task.Result.Messages)
+                            PrintEquinox(new SeStringBuilder().AddText("[Equinox] ").AddUiForeground(message.Color).AddText(message.Text).AddUiForegroundOff().Build());
+                    }else nextGardenNotice=now; // Changed care or character data must be recalculated.
                 }
+            }else{
+                _=task.Exception;nextGardenNotice=now.AddSeconds(30);
+                errorJournal.Record("garden-notice","Garden summary preparation failed; will retry.");
             }
         }
-        foreach(var message in GardenLoginSummary.Messages(notices))
-            PrintEquinox(new SeStringBuilder().AddText("[Equinox] ").AddUiForeground(message.Color).AddText(message.Text).AddUiForegroundOff().Build());
+        if(!config.NotifyGardenCare||!config.SyncEnabled||now<nextGardenNotice||config.SharedRoster is not {} roster)return;
+        nextGardenNotice=now.AddSeconds(30);
+        if(roster.GardenCare is null||!gardenNoticePending&&!gardenNotices.TrySummary())return;
+        gardenNoticePending=true;
+        var planting=config.Planting.ToArray();var tending=config.Tending.ToArray();
+        // Enrich only the small local-action set on the framework; the large history stays managed.
+        var actors=new Dictionary<Actor,Actor>();var addresses=new Dictionary<Address,Address>();
+        Actor ActorNames(Actor a){if(!actors.TryGetValue(a,out var named))actors[a]=named=WithWorldNames(a);return named;}
+        Address AddressNames(Address a){if(!addresses.TryGetValue(a,out var named))addresses[a]=named=WithAddressNames(a);return named;}
+        var local=planting.Select(p=>new SyncEvent(p.EventId,"garden.planted",p.ConfirmedAt,ActorNames(p.Actor),AddressNames(p.Address),p.Patch,p.Bed,p.Plant))
+            .Concat(tending.Select(t=>new SyncEvent(t.EventId,"garden.tended",t.ConfirmedAt,ActorNames(t.Actor),AddressNames(t.Address),t.Patch,t.Bed))).ToArray();
+        var mappings=(gardenBedSync?.Mappings??[]).Select(e=>e with {Address=AddressNames(e.Address!)}).ToArray();
+        var history=config.Discoveries.ToArray();var completed=new Dictionary<string,DateTimeOffset>(completedGardenPlans);
+        var path=Path.Combine(Pi.AssemblyLocation.DirectoryName!,"garden-art","catalog");
+        var tend=config.NotifyGardenTending;var risk=config.NotifyGardenRisk;
+        gardenNoticeInput=GardenNoticeInput;gardenNoticeRoster=roster;gardenNoticeTaskGeneration=gardenNoticeGeneration;
+        gardenNoticeTask=Task.Run(()=>{
+            var watch=System.Diagnostics.Stopwatch.GetTimestamp();
+            var messages=GardenNoticeBuilder.Build(roster,planting,tending,history,local,mappings,completed,path,now,tend,risk);
+            return (messages,System.Diagnostics.Stopwatch.GetElapsedTime(watch).TotalMilliseconds);
+        });
     }
 }

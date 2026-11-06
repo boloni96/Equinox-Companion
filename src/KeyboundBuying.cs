@@ -38,6 +38,7 @@ public sealed partial class Plugin
     {
         keyboundPurchases??=new(Path.Combine(Pi.GetPluginConfigDirectory(),"keybound-purchases.json"));
         if(keyboundOffers!=null)return;
+        if(celebrationOffers!=null){LoadArmoireCatalogue();keyboundOffers=celebrationOffers;return;}
         var items=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>(Dalamud.Game.ClientLanguage.English);
         var prizes=KeyboundShoppingPolicy.Prizes.ToDictionary(p=>KeyboundShoppingPolicy.Normalize(p.Name));
         var offers=new List<KeyboundOffer>();
@@ -50,6 +51,7 @@ public sealed partial class Plugin
     }
     private unsafe void RefreshKeyboundBuyPlan()
     {
+        var measured=System.Diagnostics.Stopwatch.GetTimestamp();
         keyboundUseCandidates.Clear();keyboundUseReady=0;keyboundMissingPlan=null;keyboundReadyPlan=null;keyboundPlanError="";keyboundPlanDataPending=false;keyboundHeldRewards.Clear();
         try{
             if(!Client.IsLoggedIn||!Player.IsLoaded||Player.ContentId==0)return;
@@ -62,7 +64,8 @@ public sealed partial class Plugin
             var state=UIState.Instance();if(state==null||!state->PlayerState.IsLoaded)throw new InvalidOperationException("Waiting for character collections.");
             // Positive storage observations also protect items moved into storage
             // that is not currently open. Never borrow another character's stock.
-            var observed=DiscoveryReads().Kind("storage.observed").Where(e=>e.Actor.ContentId==character.ToString()&&e.Storage!=null&&(e.Storage.Key.StartsWith("bag:")||e.Storage.Key.StartsWith("retainer:")||e.Storage.Key is "armoire" or "dresser")).SelectMany(e=>e.Storage!.Items).ToHashSet();
+            var observed=ReadKeyboundStorageEvidence(character);
+            if(observed is null)throw new InvalidOperationException("Checking recorded reward ownership…");
             if(roster.Length==1)observed.UnionWith((config.SharedRoster?.ItemLocations??[])
                 .Where(l=>l.OwnerId==roster[0].Id&&(l.Key.StartsWith("bag:")||l.Key.StartsWith("retainer:")||l.Key is "armoire" or "dresser"))
                 .SelectMany(l=>l.Items));
@@ -96,6 +99,7 @@ public sealed partial class Plugin
             keyboundMissingPlan=wanted;
             keyboundReadyPlan=KeyboundBuyingPolicy.ReadyPlan(wanted,keyboundHeldRewards);
         }catch(Exception e){keyboundPlanError=e.Message;}
+        finally{RecordPerformanceElapsed("Keybound: reward plan",measured);}
     }
     private void DrawKeyboundBuyButton()
     {

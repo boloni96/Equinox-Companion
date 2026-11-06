@@ -75,7 +75,7 @@ public sealed partial class Plugin
             dataSizes=new {discoveries=config.Discoveries.Count,houses=config.Houses.Count,planting=config.Planting.Count,tending=config.Tending.Count,
                 people=config.SharedRoster?.People.Length??0,characters=config.SharedRoster?.People.Sum(p=>p.Characters.Length)??0,
                 itemLocations=config.SharedRoster?.ItemLocations?.Length??0,adventures=adventureBoards.Length,
-                celebrationHistoryRecords=celebrationHistory.IndexedRecords,celebrationHistoryBuildMs,celebrationHistoryInFlight=celebrationHistoryTask is {IsCompleted:false},
+                gardenNoticeBuildMs,gardenNoticeInFlight=gardenNoticeTask is {IsCompleted:false},celebrationHistoryRecords=celebrationHistory.IndexedRecords,celebrationHistoryBuildMs,celebrationHistoryInFlight=celebrationHistoryTask is {IsCompleted:false},
                 observationIndexRecords=discoveryReads.IndexedRecords,observationIndexRevision=discoveryReads.Revision},
             features=new {config.SyncEnabled,config.SyncCharacterDetails,config.SyncCollections,config.EnableFollowThem,config.EnableRetriever,
                 config.EnableGilTrader,config.EnableCofferMarkers,config.EnableKeyboundBrawler,config.WorkIndicatorEnabled},
