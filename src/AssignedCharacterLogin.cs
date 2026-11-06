@@ -19,8 +19,15 @@ public sealed partial class Plugin
     {
         var observed=config.Discoveries.Where(e=>e.Actor.ContentId==target.ContentId).OrderByDescending(e=>e.At).FirstOrDefault();
         var presence=adventureBoards.Select(b=>b.Locations?.GetValueOrDefault(target.Id)).Where(x=>x!=null&&DateTimeOffset.TryParse(x.At,out _)).OrderByDescending(x=>DateTimeOffset.Parse(x!.At)).FirstOrDefault();
-        if(presence!=null&&(observed==null||DateTimeOffset.Parse(presence.At)>observed.At))return presence.World;
-        return !string.IsNullOrEmpty(observed?.Actor.CurrentWorldName)?observed.Actor.CurrentWorldName:target.World;
+        if(presence!=null&&(observed==null||DateTimeOffset.Parse(presence.At)>observed.At))return CharacterSelectionWorld(target.World,presence.World);
+        return CharacterSelectionWorld(target.World,observed?.Actor.CurrentWorldName??target.World);
+    }
+    private string CharacterSelectionWorld(string home,string current)
+    {
+        var worlds=DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>();
+        var homeDc=worlds.Where(w=>w.Name.ToString()==home).Select(w=>w.DataCenter.RowId).FirstOrDefault();
+        var currentDc=worlds.Where(w=>w.Name.ToString()==current).Select(w=>w.DataCenter.RowId).FirstOrDefault();
+        return CharacterLoginWorldPolicy.Resolve(home,current,homeDc,currentDc);
     }
     private int GardenServiceAccount(SharedCharacter target)
     {
@@ -218,20 +225,21 @@ public sealed partial class Plugin
         }
         if(count!=1||match==null)return false;
         var visiting=WorldName(match->CurrentWorldId);var visitingDc=TravelDc(match->CurrentWorldId);
+        var listWorld=CharacterLoginWorldPolicy.Resolve(run.Target.World,visiting,TravelDc(match->HomeWorldId),visitingDc);
         if(visitingDc==0||displayedDc==0||string.IsNullOrEmpty(visiting))throw new InvalidOperationException("This character is visiting another data center, but its current world could not be verified. Export diagnostics or select its visiting data center manually.");
         if(visitingDc==displayedDc){
             if((match->LoginFlags&CharaSelectCharacterEntryLoginFlags.DCTraveling)!=0&&visitingDc==TravelDc(match->HomeWorldId))
                 throw new InvalidOperationException("The game marks this character as visiting another data center, but has not supplied its visiting world. Select its visiting data center manually and retry; no home-world login was attempted.");
-            if(run.World!=visiting){assignedLogin=run with{World=visiting};loginWorldChecked.Clear();loginWorldPending=loginWorldSample=0;loginWorldNext=default;return true;}
+            if(run.World!=listWorld){assignedLogin=run with{World=listWorld};loginWorldChecked.Clear();loginWorldPending=loginWorldSample=0;loginWorldNext=default;return true;}
             return false;
         }
         if(SellerAddon("SelectYesno")!=null||SellerAddon("SelectOk")!=null||SellerAddon("ContextMenu")!=null)return true;
         if(!ClickLoginMenuButton("_CharaSelectReturn",4))return true;
-        assignedLogin=run with{World=visiting};assignedVisitingReturnFromDc=displayedDc;
+        assignedLogin=run with{World=listWorld};assignedVisitingReturnFromDc=displayedDc;
         assignedDcSent=assignedServiceSent=assignedLoginSent=assignedLoginConfirmed=assignedAccountReturnSent=false;
         loginWorldChecked.Clear();loginWorldNext=default;loginWorldPending=loginWorldSample=0;
-        characterTravelStatus=$"{run.Target.Name} is visiting {visiting}; selecting that data center on the same service account.";
-        RecordTravelPrompt("Visiting character login redirected",new{character=run.Target.ContentId,home=run.Target.World,visiting,displayedDc,visitingDc,slot=run.ServiceAccount});
+        characterTravelStatus=$"Selecting {listWorld} for {run.Target.Name} on the same service account.";
+        RecordTravelPrompt("Visiting character login redirected",new{character=run.Target.ContentId,home=run.Target.World,visiting,listWorld,displayedDc,visitingDc,slot=run.ServiceAccount});
         return true;
     }
     private unsafe void UpdateAssignedLogin(DateTimeOffset now)
