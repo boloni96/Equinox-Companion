@@ -95,14 +95,14 @@ public sealed partial class Plugin
         var locked=config.WorkIndicatorLocked;if(ImGui.Checkbox("Lock position",ref locked)){config.WorkIndicatorLocked=locked;SaveConfiguration();}
         if(ImGui.Button(workIndicatorPreview?"Close preview":"Preview / move indicator"))workIndicatorPreview=!workIndicatorPreview;
         ImGui.SameLine();if(ImGui.Button("Reset position")){config.WorkIndicatorX=config.WorkIndicatorY=-1;SaveConfiguration();}
-        ImGui.TextWrapped("Drag the icon with the left mouse button. Right-click stops the routine shown. Confirmed progress is kept; an action already accepted by the game may finish. The indicator disappears when work ends. Preview is only for positioning and can be closed with right-click.");
+        ImGui.TextWrapped("Hover for activity details. Drag the icon with the left mouse button. Right-click stops the routine shown. Confirmed progress is kept; an action already accepted by the game may finish. The indicator disappears when work ends. Preview is only for positioning and can be closed with right-click.");
     }
     private void DrawWorkIndicator()
     {
         var work=CurrentIndicatorWork();
         if(!workIndicatorPreview&&(!config.WorkIndicatorEnabled||work==null)){workIndicatorDragging=false;return;}
         var preview=work==null&&workIndicatorPreview;
-        var viewport=ImGui.GetMainViewport();var size=Math.Clamp(config.WorkIndicatorSize,80,220);var bounds=new Vector2(size,size+45);
+        var viewport=ImGui.GetMainViewport();var size=Math.Clamp(config.WorkIndicatorSize,80,220);var bounds=new Vector2(size,size+ImGui.GetTextLineHeight()+7);
         var area=viewport.Size;var origin=viewport.Pos;
         var pos=new Vector2(config.WorkIndicatorX<0?(area.X-size)/2:config.WorkIndicatorX,config.WorkIndicatorY<0?35:config.WorkIndicatorY);
         pos=Vector2.Clamp(pos,Vector2.Zero,Vector2.Max(Vector2.Zero,area-bounds));
@@ -159,16 +159,21 @@ public sealed partial class Plugin
                 var countSize=measured*fontSize;
                 draw.AddText(font,fontSize,center-countSize/2,C(.9f,.98f,1,1),count);
             }
-            var label=preview?"Preview":work?.Label??"";var labelSize=ImGui.CalcTextSize(label);
+            // All activities share one compact caption; full status belongs in the tooltip.
+            var label=preview?"Preview":work?.Label??"";
+            var caption=label;
+            while(caption.Length>1&&ImGui.CalcTextSize(caption).X>size-4)caption=caption[..^2]+"…";
+            var labelSize=ImGui.CalcTextSize(caption);
             var labelAt=top+new Vector2((size-labelSize.X)/2,size+3);
-            draw.AddText(labelAt+Vector2.One,C(0,0,0,1),label);draw.AddText(labelAt,C(.8f,.92f,1,1),label);
-            var detail=preview?"Right-click to stop":work?.Detail??"";
-            var firstLine=detail.Split('\n')[0];
-            if(firstLine.Length>80)firstLine=firstLine[..80]+"…";
-            while(firstLine.Length>1&&ImGui.CalcTextSize(firstLine).X>size-4)firstLine=firstLine[..^2]+"…";
-            var detailAt=top+new Vector2((size-ImGui.CalcTextSize(firstLine).X)/2,size+22);
-            draw.AddText(detailAt+Vector2.One,C(0,0,0,1),firstLine);draw.AddText(detailAt,C(.75f,.85f,.95f,1),firstLine);
-            if(hover&&!workIndicatorDragging){ImGui.BeginTooltip();ImGui.PushTextWrapPos(ImGui.GetFontSize()*24);ImGui.TextUnformatted(preview?"Position preview":work?.Detail??"");ImGui.TextUnformatted(preview?"Right-click: close preview":"Right-click: stop this routine");if(!config.WorkIndicatorLocked)ImGui.TextUnformatted("Left-drag: move");ImGui.PopTextWrapPos();ImGui.EndTooltip();}
+            draw.AddText(labelAt+Vector2.One,C(0,0,0,1),caption);draw.AddText(labelAt,C(.8f,.92f,1,1),caption);
+            if(hover&&!workIndicatorDragging){
+                ImGui.BeginTooltip();ImGui.PushTextWrapPos(ImGui.GetFontSize()*24);
+                ImGui.TextUnformatted(preview?"Position preview":label);
+                if(!preview&&!string.IsNullOrWhiteSpace(work?.Detail))ImGui.TextUnformatted(work!.Detail);
+                ImGui.TextUnformatted(preview?"Right-click: close preview":"Right-click: stop this routine");
+                if(!config.WorkIndicatorLocked)ImGui.TextUnformatted("Left-drag: move");
+                ImGui.PopTextWrapPos();ImGui.EndTooltip();
+            }
         }
         ImGui.End();ImGui.PopStyleVar();
     }
