@@ -21,7 +21,9 @@ public sealed partial class Plugin
             AllowClickthrough = true;
             AllowBackgroundBlur = true;
         }
-        public override void PostDraw() => HandleNativeCollapse(this, () => plugin.MinimizeLauncher("Companion"));
-        public override void Draw() { plugin.DrawContents(); }
+        public override void PostDraw()=>plugin.MeasureWindow(WindowName,PostDrawMeasured,"PostDraw");
+        private void PostDrawMeasured() => HandleNativeCollapse(this, () => plugin.MinimizeLauncher("Companion"));
+        public override void Draw()=>plugin.MeasureWindow(WindowName,DrawMeasuredContent);
+        private void DrawMeasuredContent() { plugin.DrawContents(); }
     }
 }

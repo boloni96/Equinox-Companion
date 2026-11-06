@@ -43,10 +43,14 @@ public sealed partial class Plugin
     }
     private sealed class RetrieverWindow(Plugin p):Window("Equinox Organizer###EquinoxRetriever")
     {
-        public override void OnOpen(){Size??=new(720,500);SizeCondition=ImGuiCond.FirstUseEver;SizeConstraints=new(){MinimumSize=new(420,340),MaximumSize=new(float.MaxValue)};RespectCloseHotkey=false;AllowPinning=true;}
-        public override void OnClose(){p.CancelCraftingWithdrawal("");p.retrievalPickItems=false;p.retrievalPickLast=0;}
-        public override void Draw()=>p.DrawOrganizerWindow();
-        public override void PostDraw()=>HandleNativeCollapse(this,()=>p.MinimizeLauncher("Equinox Organizer"));
+        public override void OnOpen()=>p.MeasureWindow(WindowName,OnOpenMeasured,"OnOpen");
+        private void OnOpenMeasured(){Size??=new(720,500);SizeCondition=ImGuiCond.FirstUseEver;SizeConstraints=new(){MinimumSize=new(420,340),MaximumSize=new(float.MaxValue)};RespectCloseHotkey=false;AllowPinning=true;}
+        public override void OnClose()=>p.MeasureWindow(WindowName,OnCloseMeasured,"OnClose");
+        private void OnCloseMeasured(){p.CancelCraftingWithdrawal("");p.retrievalPickItems=false;p.retrievalPickLast=0;}
+        public override void Draw()=>p.MeasureWindow(WindowName,DrawMeasuredContent);
+        private void DrawMeasuredContent()=>p.DrawOrganizerWindow();
+        public override void PostDraw()=>p.MeasureWindow(WindowName,PostDrawMeasured,"PostDraw");
+        private void PostDrawMeasured()=>HandleNativeCollapse(this,()=>p.MinimizeLauncher("Equinox Organizer"));
     }
     private void InitializeRetriever(){gearSkipDyed=config.StorageGearSkipDyed;gearReserve=Math.Clamp(config.StorageGearReserve,1,10);chestKeep=Math.Clamp(config.StorageKeepInBags,0,RetainerRetrieval.MaxQuantity);Addons.RegisterListener(Dalamud.Game.Addon.Lifecycle.AddonEvent.PreReceiveEvent,"Bank",ObserveRetainerBankInput);retrievalPort=new(this);retrievalRun=new(retrievalPort);retrieverWindow=new(this);windows.AddWindow(retrieverWindow);chestToolsWindow=new(this);windows.AddWindow(chestToolsWindow);retainerToolsWindow=new(this);windows.AddWindow(retainerToolsWindow);organizerCommand=Commands.AddHandler("/eqorganizer",new CommandInfo((_,args)=>{if(args.Trim().Equals("stop",StringComparison.OrdinalIgnoreCase)){StopGearStorage("Stopped by command.");StopArmoireOrganizer("Stopped by command.");CancelCraftingWithdrawal("Stopped by command.");StopOrganize("Stopped by command.");StopRetainerGil("Stopped by command.");retrievalRun.Stop("Stopped by command.");StopChest("Stopped by command.");}else OpenRetriever();}){HelpMessage="Equinox Organizer · withdraw, entrust and organize retainer/FC chest storage."});retrieverCommand=Commands.AddHandler("/eqretrieve",new CommandInfo((_,args)=>{if(args.Trim().Equals("stop",StringComparison.OrdinalIgnoreCase)){CancelCraftingWithdrawal("Stopped by command.");retrievalRun.Stop("Stopped by command.");}else OpenRetriever();}){HelpMessage="Withdraw finished items or crafting materials from your retainers. /eqretrieve stop cancels."});}
     private void DisposeRetriever(){StopGearStorage("Companion unloaded.");StopArmoireOrganizer("Companion unloaded.");CancelCraftingWithdrawal("");Addons.UnregisterListener(ObserveRetainerBankInput);StopRetainerGil("Companion unloaded.");StopChest("Companion unloaded.");StopOrganize("Companion unloaded.");retrievalRun.Stop("Companion unloaded.");if(organizerCommand)Commands.RemoveHandler("/eqorganizer");if(retrieverCommand)Commands.RemoveHandler("/eqretrieve");}

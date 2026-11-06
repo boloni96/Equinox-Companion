@@ -14,8 +14,10 @@ public sealed partial class Plugin
             SizeConstraints=new WindowSizeConstraints{MinimumSize=new Vector2(500,360),MaximumSize=new Vector2(float.MaxValue)};
             AllowPinning=true;RespectCloseHotkey=false;AllowBackgroundBlur=true;
         }
-        public override void PostDraw() => HandleNativeCollapse(this, () => plugin.MinimizeLauncher("Planting"));
-        public override void Draw() => plugin.DrawWindowWithLauncher(plugin.DrawGardenPlansWindow);
+        public override void PostDraw()=>plugin.MeasureWindow(WindowName,PostDrawMeasured,"PostDraw");
+        private void PostDrawMeasured() => HandleNativeCollapse(this, () => plugin.MinimizeLauncher("Planting"));
+        public override void Draw()=>plugin.MeasureWindow(WindowName,DrawMeasuredContent);
+        private void DrawMeasuredContent() => plugin.DrawWindowWithLauncher(plugin.DrawGardenPlansWindow);
     }
     private string? plantingHouseId;
     private int plantingBatch=1;

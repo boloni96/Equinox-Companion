@@ -17,8 +17,10 @@ public sealed partial class Plugin
     private sealed record DeliveryReply(DeliverySession[]? Sessions,DeliverySession? Session,string Error);
     private sealed class DeliveryWindow(Plugin p):Window("Item delivery · Equinox###EquinoxDelivery")
     {
-        public override void OnOpen(){Size??=new(580,520);SizeCondition=ImGuiCond.FirstUseEver;SizeConstraints=new(){MinimumSize=new(420,330),MaximumSize=new(float.MaxValue)};}
-        public override void Draw()=>p.DrawItemDelivery();
+        public override void OnOpen()=>p.MeasureWindow(WindowName,OnOpenMeasured,"OnOpen");
+        private void OnOpenMeasured(){Size??=new(580,520);SizeCondition=ImGuiCond.FirstUseEver;SizeConstraints=new(){MinimumSize=new(420,330),MaximumSize=new(float.MaxValue)};}
+        public override void Draw()=>p.MeasureWindow(WindowName,DrawMeasuredContent);
+        private void DrawMeasuredContent()=>p.DrawItemDelivery();
     }
     private DeliveryWindow? deliveryWindow;
     private readonly HttpClient itemDeliveryClient=new(){Timeout=TimeSpan.FromSeconds(15)};

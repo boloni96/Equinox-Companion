@@ -34,15 +34,21 @@ public sealed partial class Plugin
     private string MarketViewStamp=>string.Join("\u001f",marketDate.ToString(),marketSource.ToString(),marketFocusRetainer.ToString(),marketFilter,marketPerson,marketAccount,marketCharacter,marketRetainerFilter,marketWorldFilter,(config.SharedRoster?.Revision??0).ToString());
     private sealed class EquinoxMarketWindow(Plugin p):Window("Equinox Market###EquinoxMarket")
     {
-        public override void OnOpen(){Size??=new(750,480);SizeCondition=ImGuiCond.FirstUseEver;SizeConstraints=new(){MinimumSize=new(450,300),MaximumSize=new(float.MaxValue)};RespectCloseHotkey=false;AllowPinning=true;AllowClickthrough=true;}
-        public override void Draw()=>p.DrawWindowWithLauncher(p.DrawEquinoxMarket);
-        public override void PostDraw()=>HandleNativeCollapse(this,()=>p.MinimizeLauncher("Equinox Market"));
+        public override void OnOpen()=>p.MeasureWindow(WindowName,OnOpenMeasured,"OnOpen");
+        private void OnOpenMeasured(){Size??=new(750,480);SizeCondition=ImGuiCond.FirstUseEver;SizeConstraints=new(){MinimumSize=new(450,300),MaximumSize=new(float.MaxValue)};RespectCloseHotkey=false;AllowPinning=true;AllowClickthrough=true;}
+        public override void Draw()=>p.MeasureWindow(WindowName,DrawMeasuredContent);
+        private void DrawMeasuredContent()=>p.DrawWindowWithLauncher(p.DrawEquinoxMarket);
+        public override void PostDraw()=>p.MeasureWindow(WindowName,PostDrawMeasured,"PostDraw");
+        private void PostDrawMeasured()=>HandleNativeCollapse(this,()=>p.MinimizeLauncher("Equinox Market"));
     }
     private sealed class EquinoxSellerWindow(Plugin p):Window("Equinox Seller###EquinoxSeller")
     {
-        public override void OnOpen(){Size??=new(440,230);SizeCondition=ImGuiCond.FirstUseEver;SizeConstraints=new(){MinimumSize=new(330,180),MaximumSize=new(float.MaxValue)};RespectCloseHotkey=false;AllowPinning=true;AllowClickthrough=true;}
-        public override void Draw()=>p.DrawWindowWithLauncher(p.DrawEquinoxSeller);
-        public override void PostDraw()=>HandleNativeCollapse(this,()=>p.MinimizeLauncher("Equinox Seller"));
+        public override void OnOpen()=>p.MeasureWindow(WindowName,OnOpenMeasured,"OnOpen");
+        private void OnOpenMeasured(){Size??=new(440,230);SizeCondition=ImGuiCond.FirstUseEver;SizeConstraints=new(){MinimumSize=new(330,180),MaximumSize=new(float.MaxValue)};RespectCloseHotkey=false;AllowPinning=true;AllowClickthrough=true;}
+        public override void Draw()=>p.MeasureWindow(WindowName,DrawMeasuredContent);
+        private void DrawMeasuredContent()=>p.DrawWindowWithLauncher(p.DrawEquinoxSeller);
+        public override void PostDraw()=>p.MeasureWindow(WindowName,PostDrawMeasured,"PostDraw");
+        private void PostDrawMeasured()=>HandleNativeCollapse(this,()=>p.MinimizeLauncher("Equinox Seller"));
     }
     private void InitializeMarketWindows()
     {

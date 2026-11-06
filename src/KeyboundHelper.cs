@@ -35,7 +35,7 @@ public sealed partial class Plugin
         if(ImGui.Button(eventAccountActive||keyboundEnabled||keyboundBuying?"Stop":"Start")){
             if(eventAccountActive)StopEventAccount("Stopped by you.");else if(keyboundBuying)StopKeyboundBuying("Stopped by you.","user-button");else if(keyboundEnabled)StopKeybound("Stopped by you.");else{StopKeybound();keyboundBuyStatus="";keyboundGoalCheckAt=default;keyboundEnabled=true;keyboundTypingRun=Guid.NewGuid().ToString("N");TraceKeyboundRun(keyboundTypingRun,"typing-started","Typing started","user-button");keyboundNext=keyboundHold=keyboundMissing=default;keyboundStatus="Waiting for Keybound Brawler";}
         }
-        ImGui.SameLine();DrawKeyboundHelp();
+        ImGui.SameLine();MeasureWork("Keybound UI: help",DrawKeyboundHelp);
         ImGui.SameLine();ImGui.TextUnformatted(eventAccountActive?"Account routine":keyboundBuying?(keyboundUsingRewards?"Using rewards":"Buying rewards"):keyboundEnabled?(keyboundStatus.StartsWith("Paused:",StringComparison.Ordinal)?"Paused":"Running"):"Stopped");
         // Reserve the same space for short phrases and long waiting/error text.
         // Content scrolls here; neither the window nor the controls below jump.
@@ -50,8 +50,8 @@ public sealed partial class Plugin
         }
         ImGui.EndChild();
         ImGui.Separator();
-        DrawKeyboundRewards();
-        DrawKeyboundShopping();
+        MeasureWork("Keybound UI: rewards",DrawKeyboundRewards);
+        MeasureWork("Keybound UI: shopping",DrawKeyboundShopping);
         ImGui.Separator();
         if(ImGui.CollapsingHeader("Options")){
         DrawKeyboundSpeedPreset("Slow",KeyboundPolicy.SoftMinMs,KeyboundPolicy.SoftMaxMs,KeyboundPolicy.SoftSubmitMs);
@@ -158,7 +158,8 @@ public sealed partial class Plugin
         }
         return (null,false);
     }
-    private unsafe void UpdateKeybound(IFramework framework)
+    private unsafe void UpdateKeybound(IFramework framework)=>MeasureWork("Keybound: typing update",()=>UpdateKeyboundMeasured(framework));
+    private unsafe void UpdateKeyboundMeasured(IFramework framework)
     {
         if(!keyboundEnabled)return;
         if(!config.EnableKeyboundBrawler){StopKeybound("Stopped: tool disabled");return;}

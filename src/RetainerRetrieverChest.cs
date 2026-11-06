@@ -21,14 +21,17 @@ public sealed partial class Plugin
     private ChestQuantityMove? chestMove;
     private sealed class ChestToolsWindow(Plugin p):Window("##EquinoxChestToolsBar",ImGuiWindowFlags.AlwaysAutoResize|ImGuiWindowFlags.NoDecoration|ImGuiWindowFlags.NoSavedSettings|ImGuiWindowFlags.NoFocusOnAppearing)
     {
-        public override void Draw()=>p.DrawChestToolbar();
-        public override unsafe void PreDraw(){
+        public override void Draw()=>p.MeasureWindow(WindowName,DrawMeasuredContent);
+        private void DrawMeasuredContent()=>p.DrawChestToolbar();
+        public override unsafe void PreDraw()=>p.MeasureWindow(WindowName,PreDrawMeasured,"PreDraw");
+        private unsafe void PreDrawMeasured(){
             RespectCloseHotkey=false;AllowPinning=false;
             var addon=SellerAddon("FreeCompanyChest");
             if(p.chestDock&&addon!=null){var height=ImGui.GetFrameHeight()+8;var y=addon->Y-height-4;Position=new Vector2(Math.Max(0,(int)addon->X),y>=0?y:addon->Y+addon->GetScaledHeight(true)+4);PositionCondition=ImGuiCond.Always;}else Position=null;
             PushRetainerToolbarStyle();
         }
-        public override void PostDraw(){ImGui.PopStyleVar(2);ImGui.PopStyleColor(7);}
+        public override void PostDraw()=>p.MeasureWindow(WindowName,PostDrawMeasured,"PostDraw");
+        private void PostDrawMeasured(){ImGui.PopStyleVar(2);ImGui.PopStyleColor(7);}
     }
     private unsafe int ChestAccess(uint container)
     {

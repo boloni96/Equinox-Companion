@@ -86,8 +86,10 @@ public sealed partial class Plugin
             }
             if (loading is null && (login || DateTimeOffset.UtcNow - lastAttempt > TimeSpan.FromHours(1))) Refresh();
         }
-        public override void PostDraw() => HandleNativeCollapse(this, Minimize);
-        public override void Draw()
+        public override void PostDraw()=>plugin.MeasureWindow(WindowName,PostDrawMeasured,"PostDraw");
+        private void PostDrawMeasured() => HandleNativeCollapse(this, Minimize);
+        public override void Draw()=>plugin.MeasureWindow(WindowName,DrawMeasuredContent);
+        private void DrawMeasuredContent()
         {
             if (resize)
             {

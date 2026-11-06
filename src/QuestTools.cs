@@ -105,14 +105,17 @@ public sealed partial class Plugin
         internal CompanionHelperWindow(Plugin p):base("Helper · Equinox###EquinoxStandaloneHelper"){
             this.p=p;Size=new(560,480);SizeCondition=ImGuiCond.FirstUseEver;RespectCloseHotkey=false;
         }
-        public override void Draw()=>p.DrawHelperWindowBody();
-        public override void PostDraw()=>HandleNativeCollapse(this,()=>p.MinimizeLauncher("Helper"));
+        public override void Draw()=>p.MeasureWindow(WindowName,DrawMeasuredContent);
+        private void DrawMeasuredContent()=>p.DrawHelperWindowBody();
+        public override void PostDraw()=>p.MeasureWindow(WindowName,PostDrawMeasured,"PostDraw");
+        private void PostDrawMeasured()=>HandleNativeCollapse(this,()=>p.MinimizeLauncher("Helper"));
     }
     private sealed class QuestToolsWindow:Window
     {
         private readonly Plugin p;
         internal QuestToolsWindow(Plugin p):base("Quest tools · Equinox"){this.p=p;Size=new(560,480);SizeCondition=ImGuiCond.FirstUseEver;RespectCloseHotkey=false;}
-        public override void Draw()=>p.DrawQuestTools();
+        public override void Draw()=>p.MeasureWindow(WindowName,DrawMeasuredContent);
+        private void DrawMeasuredContent()=>p.DrawQuestTools();
     }
 }
 

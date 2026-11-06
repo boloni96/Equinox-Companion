@@ -171,7 +171,8 @@ public sealed partial class Plugin
         for(var i=1;i<3;i++)if(agent->ItemCost[index*3+i].ItemId!=0||agent->ItemCost[index*3+i].ItemCount!=0)return null;
         return offer;
     }
-    private unsafe void UpdateKeyboundBuying(IFramework framework)
+    private unsafe void UpdateKeyboundBuying(IFramework framework)=>MeasureWork("Keybound: buying update",()=>UpdateKeyboundBuyingMeasured(framework));
+    private unsafe void UpdateKeyboundBuyingMeasured(IFramework framework)
     {
         var now=DateTimeOffset.UtcNow;
         if(!keyboundBuying){

@@ -63,7 +63,8 @@ public sealed partial class Plugin
         internal NavigationSystemWindow(Plugin p):base("Navigation system · Equinox"){
             this.p=p;Size=new Vector2(440,330);SizeCondition=ImGuiCond.FirstUseEver;RespectCloseHotkey=false;
         }
-        public override void Draw()=>p.DrawNavigationSystem();
+        public override void Draw()=>p.MeasureWindow(WindowName,DrawMeasuredContent);
+        private void DrawMeasuredContent()=>p.DrawNavigationSystem();
     }
 }
 

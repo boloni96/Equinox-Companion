@@ -35,10 +35,14 @@ public sealed partial class Plugin
             Size=new Vector2(500,350);SizeCondition=ImGuiCond.FirstUseEver;
             SizeConstraints=new WindowSizeConstraints{MinimumSize=new Vector2(360,280),MaximumSize=new Vector2(900,850)};
         }
-        public override void OnClose(){if(!plugin.minimizedLaunchers.Contains("Welcome"))plugin.DismissWelcome();}
-        public override void OnOpen()=>plugin.welcomeFinished=false;
-        public override void PostDraw()=>HandleNativeCollapse(this,()=>plugin.MinimizeLauncher("Welcome"));
-        public override void Draw()=>plugin.DrawWindowWithLauncher(DrawContent);
+        public override void OnClose()=>plugin.MeasureWindow(WindowName,OnCloseMeasured,"OnClose");
+        private void OnCloseMeasured(){if(!plugin.minimizedLaunchers.Contains("Welcome"))plugin.DismissWelcome();}
+        public override void OnOpen()=>plugin.MeasureWindow(WindowName,OnOpenMeasured,"OnOpen");
+        private void OnOpenMeasured()=>plugin.welcomeFinished=false;
+        public override void PostDraw()=>plugin.MeasureWindow(WindowName,PostDrawMeasured,"PostDraw");
+        private void PostDrawMeasured()=>HandleNativeCollapse(this,()=>plugin.MinimizeLauncher("Welcome"));
+        public override void Draw()=>plugin.MeasureWindow(WindowName,DrawMeasuredContent);
+        private void DrawMeasuredContent()=>plugin.DrawWindowWithLauncher(DrawContent);
         private void DrawContent()
         {
             var font=ImGui.GetFontSize();var iconSize=font*3;

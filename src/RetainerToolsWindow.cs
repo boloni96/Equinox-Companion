@@ -10,10 +10,14 @@ public sealed partial class Plugin
     private bool retainerToolsWasOpen;private string? retrievalEditingPreset;
     private sealed class RetainerToolsWindow(Plugin p):Window("Retainer tools · Equinox###EquinoxRetainerTools",ImGuiWindowFlags.AlwaysAutoResize|ImGuiWindowFlags.NoDecoration|ImGuiWindowFlags.NoSavedSettings|ImGuiWindowFlags.NoFocusOnAppearing)
     {
-        public override void Draw()=>p.DrawRetainerTools();
-        public override void OnClose(){p.retrievalPickItems=false;}
-        public override unsafe void PreDraw(){var a=SellerAddon("RetainerList");if(a!=null){Position=new Vector2(Math.Max(0,(int)a->X),Math.Max(0,a->Y+a->GetScaledHeight(true)+4));PositionCondition=ImGuiCond.Always;}else Position=null;RespectCloseHotkey=false;AllowPinning=false;PushRetainerToolbarStyle();}
-        public override void PostDraw(){ImGui.PopStyleVar(2);ImGui.PopStyleColor(7);}
+        public override void Draw()=>p.MeasureWindow(WindowName,DrawMeasuredContent);
+        private void DrawMeasuredContent()=>p.DrawRetainerTools();
+        public override void OnClose()=>p.MeasureWindow(WindowName,OnCloseMeasured,"OnClose");
+        private void OnCloseMeasured(){p.retrievalPickItems=false;}
+        public override unsafe void PreDraw()=>p.MeasureWindow(WindowName,PreDrawMeasured,"PreDraw");
+        private unsafe void PreDrawMeasured(){var a=SellerAddon("RetainerList");if(a!=null){Position=new Vector2(Math.Max(0,(int)a->X),Math.Max(0,a->Y+a->GetScaledHeight(true)+4));PositionCondition=ImGuiCond.Always;}else Position=null;RespectCloseHotkey=false;AllowPinning=false;PushRetainerToolbarStyle();}
+        public override void PostDraw()=>p.MeasureWindow(WindowName,PostDrawMeasured,"PostDraw");
+        private void PostDrawMeasured(){ImGui.PopStyleVar(2);ImGui.PopStyleColor(7);}
     }
     private static unsafe bool RetainerToolsContext(){var rm=RetainerManager.Instance();return SellerAddon("RetainerList")!=null||(rm!=null&&RetrieverActive(rm->LastSelectedRetainerId));}
     private void SaveRetrievalPreset()

@@ -10,7 +10,8 @@ public sealed partial class Plugin
     private long activityPulseCount;
     private string activityStatus="Off";
     [DllImport("user32.dll",EntryPoint="GetAsyncKeyState")] private static extern short ActivityKeyState(int key);
-    private unsafe void UpdateActivityKeepAlive(IFramework framework)
+    private unsafe void UpdateActivityKeepAlive(IFramework framework)=>MeasureWork("Activity keep-alive",()=>UpdateActivityKeepAliveMeasured(framework));
+    private unsafe void UpdateActivityKeepAliveMeasured(IFramework framework)
     {
         var now=DateTimeOffset.UtcNow;
         var eventRun=config.EnableKeyboundBrawler&&keyboundEnabled&&keyboundAntiAfk&&KeyboundPolicy.LoopTerritory(Client.TerritoryType);

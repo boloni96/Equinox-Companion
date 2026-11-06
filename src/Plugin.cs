@@ -1103,7 +1103,7 @@ public sealed partial class Plugin : IDalamudPlugin
                 adventureCutsceneWindows.Draw();
                 DrawQuestCutsceneControls();
                 DrawWorkIndicator();
-                DrawPluginItemPopup();
+                MeasureWork("Overlay: item popup",DrawPluginItemPopup);
             }
             return;
         }
@@ -1118,9 +1118,9 @@ public sealed partial class Plugin : IDalamudPlugin
         using (new EquinoxAppearance(GoddessAppearance))
         {
             windows.Draw();
-            DrawSellerToolbar();
-            DrawMarketNativeHover();
-            DrawPluginItemPopup();
+            MeasureWork("Overlay: seller toolbar",DrawSellerToolbar);
+            MeasureWork("Overlay: market item hover",DrawMarketNativeHover);
+            MeasureWork("Overlay: item popup",DrawPluginItemPopup);
         }
         // The actual welcome always wears Goddess blue; other windows use the saved choice.
         using (new EquinoxAppearance(true)) welcomeWindows.Draw();

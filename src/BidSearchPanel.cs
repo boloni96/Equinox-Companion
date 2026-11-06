@@ -7,7 +7,10 @@ using LifeAddress=(string,int,int,int,int,int,int,bool,bool,string);
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
- private sealed class BidWindow:Window{private readonly Plugin p;public BidWindow(Plugin p):base("Housing · Find a plot###EquinoxBid"){this.p=p;RespectCloseHotkey=false;Size=new(1180,570);SizeCondition=ImGuiCond.FirstUseEver;SizeConstraints=new(){MinimumSize=new(760,380),MaximumSize=new(float.MaxValue)};}public override void Draw()=>p.DrawWindowWithLauncher(p.DrawBidSearch);public override void PostDraw()=>HandleNativeCollapse(this,()=>p.MinimizeLauncher("Housing bids"));public override void OnClose()=>p.CancelBidSearch();}
+ private sealed class BidWindow:Window{private readonly Plugin p;public BidWindow(Plugin p):base("Housing · Find a plot###EquinoxBid"){this.p=p;RespectCloseHotkey=false;Size=new(1180,570);SizeCondition=ImGuiCond.FirstUseEver;SizeConstraints=new(){MinimumSize=new(760,380),MaximumSize=new(float.MaxValue)};}public override void Draw()=>p.MeasureWindow(WindowName,DrawMeasuredContent);
+        private void DrawMeasuredContent()=>p.DrawWindowWithLauncher(p.DrawBidSearch);public override void PostDraw()=>p.MeasureWindow(WindowName,PostDrawMeasured,"PostDraw");
+        private void PostDrawMeasured()=>HandleNativeCollapse(this,()=>p.MinimizeLauncher("Housing bids"));public override void OnClose()=>p.MeasureWindow(WindowName,OnCloseMeasured,"OnClose");
+        private void OnCloseMeasured()=>p.CancelBidSearch();}
  private BidWindow bidWindow=null!;private readonly BidSearch bidSearch=new();private bool bidCommand;private readonly HashSet<string> bidShortcutCommands=new();
  private CancellationTokenSource? bidCancel;private Task<BidPlot[]>? bidTask;private uint bidWorld;private readonly BidWorldSession bidSession=new();
  private (uint Id,string Name,string Dc,int Region)[]? bidWorlds;

@@ -10,8 +10,10 @@ public sealed partial class Plugin
     private Dictionary<uint,int> gardenSupplyBags=[],gardenSupplyRetainers=[];
     private sealed class GardenSuppliesWindow(Plugin p):Window("Garden supplies###EquinoxGardenSupplies")
     {
-        public override void OnOpen(){Size??=new(600,360);SizeCondition=ImGuiCond.FirstUseEver;SizeConstraints=new(){MinimumSize=new(450,260),MaximumSize=new(float.MaxValue)};}
-        public override void Draw()=>p.DrawGardenSupplyReview();
+        public override void OnOpen()=>p.MeasureWindow(WindowName,OnOpenMeasured,"OnOpen");
+        private void OnOpenMeasured(){Size??=new(600,360);SizeCondition=ImGuiCond.FirstUseEver;SizeConstraints=new(){MinimumSize=new(450,260),MaximumSize=new(float.MaxValue)};}
+        public override void Draw()=>p.MeasureWindow(WindowName,DrawMeasuredContent);
+        private void DrawMeasuredContent()=>p.DrawGardenSupplyReview();
     }
     private void DrawGardenSuppliesWindow(){} // Independent window remains available after leaving the garden.
     private string GardenSeedItemName(string crop)

@@ -13,8 +13,10 @@ public sealed partial class Plugin
  {
   private readonly Plugin p;
   public TestingWindow(Plugin p):base("Testing checklist · Equinox###EquinoxTests"){this.p=p;RespectCloseHotkey=false;Size=new(760,570);SizeCondition=ImGuiCond.FirstUseEver;SizeConstraints=new(){MinimumSize=new(500,340),MaximumSize=new(float.MaxValue)};AllowPinning=true;}
-  public override void Draw()=>p.DrawWindowWithLauncher(p.DrawTesting);
-  public override void PostDraw()=>HandleNativeCollapse(this,()=>p.MinimizeLauncher("Testing"));
+  public override void Draw()=>p.MeasureWindow(WindowName,DrawMeasuredContent);
+        private void DrawMeasuredContent()=>p.DrawWindowWithLauncher(p.DrawTesting);
+  public override void PostDraw()=>p.MeasureWindow(WindowName,PostDrawMeasured,"PostDraw");
+        private void PostDrawMeasured()=>HandleNativeCollapse(this,()=>p.MinimizeLauncher("Testing"));
  }
  private TestingWindow testingWindow=null!;private readonly TestingSync testingSync=new();private bool testingCommand;
  private string testingPairingKey="";

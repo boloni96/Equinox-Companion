@@ -71,9 +71,12 @@ public sealed partial class Plugin
     {
         private readonly Plugin p;
         public NewCharacterWindow(Plugin p):base("New Character Detected###EquinoxNewCharacter",ImGuiWindowFlags.None){Size=new Vector2(500,320);SizeCondition=ImGuiCond.FirstUseEver;this.p=p;RespectCloseHotkey=false;SizeConstraints=new(){MinimumSize=new Vector2(430,200),MaximumSize=new Vector2(650,650)};}
-        public override void OnClose()=>p.registrationDeferred=true;
-        public override void PostDraw()=>HandleNativeCollapse(this,()=>p.MinimizeLauncher("New Character"));
-        public override void Draw()=>p.DrawWindowWithLauncher(DrawContent);
+        public override void OnClose()=>p.MeasureWindow(WindowName,OnCloseMeasured,"OnClose");
+        private void OnCloseMeasured()=>p.registrationDeferred=true;
+        public override void PostDraw()=>p.MeasureWindow(WindowName,PostDrawMeasured,"PostDraw");
+        private void PostDrawMeasured()=>HandleNativeCollapse(this,()=>p.MinimizeLauncher("New Character"));
+        public override void Draw()=>p.MeasureWindow(WindowName,DrawMeasuredContent);
+        private void DrawMeasuredContent()=>p.DrawWindowWithLauncher(DrawContent);
         private void DrawContent()
         {
             var snapshot=p.registrationSnapshot;var roster=p.config.SharedRoster;

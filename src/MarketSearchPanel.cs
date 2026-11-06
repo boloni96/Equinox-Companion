@@ -37,8 +37,10 @@ public sealed partial class Plugin
             SizeConstraints = new() { MinimumSize = new(680, 360), MaximumSize = new(float.MaxValue) };
             AllowPinning = true; AllowClickthrough = true; AllowBackgroundBlur = true; RespectCloseHotkey = false;
         }
-        public override void Draw()=>plugin.DrawWindowWithLauncher(plugin.DrawMarketSearch);
-        public override void PostDraw() => HandleNativeCollapse(this, () => plugin.MinimizeLauncher("Where is it cheapest?"));
+        public override void Draw()=>plugin.MeasureWindow(WindowName,DrawMeasuredContent);
+        private void DrawMeasuredContent()=>plugin.DrawWindowWithLauncher(plugin.DrawMarketSearch);
+        public override void PostDraw()=>plugin.MeasureWindow(WindowName,PostDrawMeasured,"PostDraw");
+        private void PostDrawMeasured() => HandleNativeCollapse(this, () => plugin.MinimizeLauncher("Where is it cheapest?"));
     }
     private void InitializeMarketSearch()
     {

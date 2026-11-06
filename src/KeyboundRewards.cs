@@ -10,7 +10,8 @@ public sealed partial class Plugin
     private ulong keyboundMgcCharacter;
     private uint keyboundRewardTerritory;
     private string[] keyboundLastResults=[];
-    private unsafe void UpdateKeyboundRewards(IFramework framework)
+    private unsafe void UpdateKeyboundRewards(IFramework framework)=>MeasureWork("Keybound: reward balance",()=>UpdateKeyboundRewardsMeasured(framework));
+    private unsafe void UpdateKeyboundRewardsMeasured(IFramework framework)
     {
         if(!config.EnableKeyboundBrawler||(!keyboundEnabled&&!keyboundWindow.IsOpen))return;
         var now=DateTimeOffset.UtcNow;if(now<keyboundMgcPollAt)return;keyboundMgcPollAt=now.AddSeconds(1);

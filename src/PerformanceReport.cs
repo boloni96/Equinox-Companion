@@ -30,18 +30,12 @@ public sealed partial class Plugin
     }
     private object CapturePerformanceContext()
     {
-        var work=CurrentIndicatorWork();var open=new List<string>();
-        void Window(string name,bool shown){if(shown)open.Add(name);}
-        Window("Companion",mainWindow?.IsOpen==true);Window("Gardening",plantingWindow?.IsOpen==true);
-        Window("Adventure",adventureWindow?.IsOpen==true);Window("Organizer",retrieverWindow?.IsOpen==true);
-        Window("Market",equinoxMarketWindow?.IsOpen==true);Window("Seller",sellerWindow?.IsOpen==true);
-        Window("Gil Trader",gilTraderWindow?.IsOpen==true);Window("Helper",companionHelperWindow?.IsOpen==true);
-        Window("Testing",testingWindow?.IsOpen==true);Window("Registration",registrationWindow?.IsOpen==true);
-        Window("Housing bids",bidWindow?.IsOpen==true);Window("Item search",itemSearchWindow?.IsOpen==true);
-        Window("Price search",marketWindow?.IsOpen==true);Window("Fashion",fashionWindow?.IsOpen==true);
+        var work=CurrentIndicatorWork();
+        var open=windows.Windows.Concat(welcomeWindows.Windows).Concat(adventureCutsceneWindows.Windows)
+            .Where(w=>w.IsOpen).Select(w=>w.WindowName).Distinct().ToArray();
         static string Brief(string? s)=>s is null?"":s.Length<=240?s:s[..240];
         return new {
-            loggedIn=Player.IsLoaded,territory=Client.TerritoryType,section=config.CompanionSection,openWindows=open.ToArray(),
+            loggedIn=Player.IsLoaded,territory=Client.TerritoryType,section=config.CompanionSection,openWindows=open,window=measuredWindow,windowPhase=measuredWindowPhase,windowOpening=measuredWindowOpening,operation=measuredOperation,
             activity=work?.Label??"Idle",progress=work?.Count??"",detail=Brief(work?.Detail),
             celebrationChecking=celebrationEventWork!=null,celebrationStatus=Brief(eventCelebrationStatus),celebrationLastTrigger,celebrationLastTriggerAt,
             cofferAutoStatus=Brief(cofferAutoStatus),cofferStatus=Brief(cofferStatus),
@@ -75,7 +69,7 @@ public sealed partial class Plugin
             dataSizes=new {discoveries=config.Discoveries.Count,houses=config.Houses.Count,planting=config.Planting.Count,tending=config.Tending.Count,
                 people=config.SharedRoster?.People.Length??0,characters=config.SharedRoster?.People.Sum(p=>p.Characters.Length)??0,
                 itemLocations=config.SharedRoster?.ItemLocations?.Length??0,adventures=adventureBoards.Length,
-                gardenNoticeBuildMs,gardenNoticeInFlight=gardenNoticeTask is {IsCompleted:false},celebrationHistoryRecords=celebrationHistory.IndexedRecords,celebrationHistoryBuildMs,celebrationHistoryInFlight=celebrationHistoryTask is {IsCompleted:false},
+                keyboundStorageInFlight=keyboundStorageTask is {IsCompleted:false},keyboundStorageCount,gardenNoticeBuildMs,gardenNoticeInFlight=gardenNoticeTask is {IsCompleted:false},celebrationHistoryRecords=celebrationHistory.IndexedRecords,celebrationHistoryBuildMs,celebrationHistoryInFlight=celebrationHistoryTask is {IsCompleted:false},
                 observationIndexRecords=discoveryReads.IndexedRecords,observationIndexRevision=discoveryReads.Revision},
             features=new {config.SyncEnabled,config.SyncCharacterDetails,config.SyncCollections,config.EnableFollowThem,config.EnableRetriever,
                 config.EnableGilTrader,config.EnableCofferMarkers,config.EnableKeyboundBrawler,config.WorkIndicatorEnabled},

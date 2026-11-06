@@ -27,8 +27,10 @@ public sealed partial class Plugin
             SizeConstraints=new(){MinimumSize=new(480,320),MaximumSize=new(float.MaxValue)};
             AllowPinning=true;AllowClickthrough=true;AllowBackgroundBlur=true;RespectCloseHotkey=false;
         }
-        public override void Draw()=>plugin.DrawWindowWithLauncher(plugin.DrawItemSearch);
-        public override void PostDraw()=>HandleNativeCollapse(this,()=>plugin.MinimizeLauncher("Do I already have it?"));
+        public override void Draw()=>plugin.MeasureWindow(WindowName,DrawMeasuredContent);
+        private void DrawMeasuredContent()=>plugin.DrawWindowWithLauncher(plugin.DrawItemSearch);
+        public override void PostDraw()=>plugin.MeasureWindow(WindowName,PostDrawMeasured,"PostDraw");
+        private void PostDrawMeasured()=>HandleNativeCollapse(this,()=>plugin.MinimizeLauncher("Do I already have it?"));
     }
     private readonly Dictionary<uint,string> searchItemNames=[];
     private string SearchItemName(uint id){if(!searchItemNames.TryGetValue(id,out var name))searchItemNames[id]=name=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>(Dalamud.Game.ClientLanguage.English).GetRowOrDefault(id)?.Name.ToString()??$"Item {id}";return name;}

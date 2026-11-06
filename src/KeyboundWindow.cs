@@ -26,10 +26,8 @@ public sealed partial class Plugin
             SizeConstraints=new WindowSizeConstraints{MinimumSize=new Vector2(360,260),MaximumSize=new Vector2(float.MaxValue,float.MaxValue)};
             RespectCloseHotkey=false;
         }
-        public override void Draw(){
-            var started=System.Diagnostics.Stopwatch.GetTimestamp();
-            try{plugin.DrawKeyboundHelper();}finally{plugin.RecordPerformanceElapsed("Window: Keybound Brawler",started);}
-        }
+        public override void Draw()=>plugin.MeasureWindow(WindowName,DrawMeasuredContent);
+        private void DrawMeasuredContent()=>plugin.DrawKeyboundHelper();
     }
 }
 

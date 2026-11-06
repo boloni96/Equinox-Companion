@@ -13,18 +13,22 @@ public sealed partial class Plugin
     private int gilTotal = 1_000_000;
     private sealed class GilTraderWindow(Plugin p) : Window("Gil & Item Trader · Equinox###EquinoxGilTrader")
     {
-        public override void OnOpen()
+        public override void OnOpen()=>p.MeasureWindow(WindowName,OnOpenMeasured,"OnOpen");
+        private void OnOpenMeasured()
         {
             Size ??= new(460, 500); SizeCondition = ImGuiCond.FirstUseEver;
             SizeConstraints = new() { MinimumSize = new(360, 300), MaximumSize = new(float.MaxValue) };
             RespectCloseHotkey = false; AllowPinning = true;
         }
-        public override void Draw() => p.DrawWindowWithLauncher(p.DrawGilTrader);
-        public override void OnClose()
+        public override void Draw()=>p.MeasureWindow(WindowName,DrawMeasuredContent);
+        private void DrawMeasuredContent() => p.DrawWindowWithLauncher(p.DrawGilTrader);
+        public override void OnClose()=>p.MeasureWindow(WindowName,OnCloseMeasured,"OnClose");
+        private void OnCloseMeasured()
         {
             if (!p.minimizedLaunchers.Contains("Gil Trader")) p.StopGilTrade("Gil & Item Trader closed.");
         }
-        public override void PostDraw() => HandleNativeCollapse(this, () => p.MinimizeLauncher("Gil Trader"));
+        public override void PostDraw()=>p.MeasureWindow(WindowName,PostDrawMeasured,"PostDraw");
+        private void PostDrawMeasured() => HandleNativeCollapse(this, () => p.MinimizeLauncher("Gil Trader"));
     }
     private void InitializeGilTrader()
     {
