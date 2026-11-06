@@ -13,6 +13,12 @@ internal sealed class GameWalkingCollision:IWalkingCollision
     private const float Radius=.6f,Height=1.85f;
     private readonly Dictionary<Vector3,float> wallCache=[];
     private readonly Dictionary<(Vector3 Origin,Vector3 Direction,float Distance),(bool Found,RaycastHit Hit)> rayCache=[];
+    private long sliceDeadline;
+    public void BeginSlice(double milliseconds){
+        if(rayCache.Count>60000)rayCache.Clear();
+        sliceDeadline=System.Diagnostics.Stopwatch.GetTimestamp()+(long)(Math.Max(.1,milliseconds)*System.Diagnostics.Stopwatch.Frequency/1000);
+    }
+    public void EndSlice()=>sliceDeadline=0;
     private long liveWallAt;
     private readonly Dictionary<Vector3,float> liveWallCache=[];
     public float WallPenalty(Vector3 point){
@@ -49,6 +55,7 @@ internal sealed class GameWalkingCollision:IWalkingCollision
     {
         var key=(origin,direction,distance);
         if(groundCache!=null&&rayCache.TryGetValue(key,out var saved)){hit=saved.Hit;return saved.Found;}
+        if(sliceDeadline!=0&&System.Diagnostics.Stopwatch.GetTimestamp()>=sliceDeadline)throw new NavigationSliceExpiredException();
         var found=BGCollisionModule.RaycastMaterialFilter(origin,direction,out hit,distance);
         if(groundCache!=null&&rayCache.Count<65536)rayCache[key]=(found,hit);
         return found;

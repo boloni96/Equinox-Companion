@@ -74,6 +74,8 @@ internal sealed class NavigationPhaseTimer
 }
 internal sealed class AvoidStalledTargets(IWalkingCollision inner,Vector3[] blocked):IWalkingCollision
 {
+    public void BeginSlice(double milliseconds)=>inner.BeginSlice(milliseconds);
+    public void EndSlice()=>inner.EndSlice();
     public bool Ground(Vector3 near,out Vector3 ground)=>inner.Ground(near,out ground);
     public float WallPenalty(Vector3 point){
         var result=inner.WallPenalty(point);

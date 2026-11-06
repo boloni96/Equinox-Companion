@@ -119,7 +119,7 @@ public sealed partial class Plugin
     private void StopIndependentWalk(string reason="Stopped",bool resetFailure=false)
     {
         if(independentSearch!=null||independentPath!=null||independentEntranceForward!=null)
-            RecordTravelPrompt("Navigation ended",new{run=independentNavigationRun,reason,goal=FollowTravelPosition.From(independentGoal),independentInputReads,independentInputOverrides,independentExpiredReads,independentInactiveReads,independentNativeGateRejects,independentNativeManualReads,independentReplans,independentPlanningSeconds,independentWalkStatus,controlMode=independentLegacyMode?"Legacy":"Standard",axes=new{x=independentAxes.X,y=independentAxes.Y},independentHeading,independentFacingOnly});
+            RecordTravelPrompt("Navigation ended",new{run=independentNavigationRun,reason,planning=independentSearch==null?null:new{independentSearch.Expanded,independentSearch.BudgetYields},goal=FollowTravelPosition.From(independentGoal),independentInputReads,independentInputOverrides,independentExpiredReads,independentInactiveReads,independentNativeGateRejects,independentNativeManualReads,independentReplans,independentPlanningSeconds,independentWalkStatus,controlMode=independentLegacyMode?"Legacy":"Standard",axes=new{x=independentAxes.X,y=independentAxes.Y},independentHeading,independentFacingOnly});
         if(independentSearch!=null||independentPath!=null||independentEntranceForward!=null)TraceKeyboundRun(independentNavigationRun,"navigation-stopped",reason,"companion-navigation",false);
         independentBacktracking=false;independentInteractionTarget=0;independentEntranceForward=null;independentGroundReadiness.Reset();independentFacingAt=default;independentFacingOnly=false;
         StopIndependentFlight();
@@ -245,7 +245,7 @@ public sealed partial class Plugin
                 independentWalkStatus="Walking forward into the plot · watching actual progress";return;
             }
             if(independentSearch!=null){
-                independentMoving=false;independentSearch.Advance(milliseconds:independentNearbyApproach?1.5:6,edgeBudget:independentNearbyApproach?48:192);
+                independentMoving=false;independentSearch.Advance(milliseconds:independentNearbyApproach?1.5:3,edgeBudget:independentNearbyApproach?48:192);
                 independentLastExpanded=independentSearch.Expanded;independentPlanningSeconds=(DateTimeOffset.UtcNow-independentPlanningSince).TotalSeconds;
                 independentWalkStatus=$"Finding walkable route · {independentSearch.Expanded} areas checked";
                 if(independentSearch.Error.Length>0)throw new InvalidOperationException(independentSearch.Error);

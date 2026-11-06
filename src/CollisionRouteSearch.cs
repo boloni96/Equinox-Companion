@@ -2,8 +2,12 @@ using System.Diagnostics;
 using System.Numerics;
 namespace EquinoxCompanion;
 
+public sealed class NavigationSliceExpiredException:Exception { }
+
 public interface IWalkingCollision
 {
+    void BeginSlice(double milliseconds) { }
+    void EndSlice() { }
     bool Ground(Vector3 near,out Vector3 ground);
     bool Traverse(Vector3 from,Vector3 to);
     float WallPenalty(Vector3 point)=>0;
@@ -15,7 +19,7 @@ public sealed class CollisionRouteSearch
     private sealed record Node(Key Key,Vector3 Point,float Cost,Node? Previous);
     private readonly IWalkingCollision collision;
     private readonly Vector3 origin,goal;
-    private readonly float range,spacing;
+    private readonly float range,spacing,heuristicWeight;
     private readonly PriorityQueue<Node,float> open=new();
     private readonly Dictionary<Key,float> costs=[];
     private readonly HashSet<Key> closed=[];
@@ -25,10 +29,12 @@ public sealed class CollisionRouteSearch
     public string Error { get; private set; }="";
     public Vector3[]? Path { get; private set; }
     public int Expanded=>closed.Count;
+    public int BudgetYields { get; private set; }
     public bool Finished=>Path!=null||Error.Length>0;
-    public CollisionRouteSearch(IWalkingCollision collision,Vector3 start,Vector3 goal,float range,float spacing=1f)
+    public CollisionRouteSearch(IWalkingCollision collision,Vector3 start,Vector3 goal,float range,float spacing=1f,float heuristicWeight=4f)
     {
-        this.collision=collision;this.goal=goal;this.range=Math.Clamp(range,.25f,5f);this.spacing=spacing;
+        this.collision=collision;this.goal=goal;this.range=Math.Clamp(range,.25f,5f);this.spacing=spacing;this.heuristicWeight=heuristicWeight;
+        if(!float.IsFinite(heuristicWeight)||heuristicWeight is <1 or >8)throw new ArgumentException("Invalid search priority");
         if(!Finite(start)||!Finite(goal)||!float.IsFinite(spacing)||spacing<.25f||spacing>2)throw new ArgumentException("Invalid navigation coordinates");
         if(Vector3.Distance(start,goal)>2048)throw new InvalidOperationException("Local route exceeds 2048 yalms; use travel first.");
         if(!collision.Ground(start,out origin)){Error="No walkable ground beneath the character.";return;}
@@ -37,42 +43,48 @@ public sealed class CollisionRouteSearch
     public void Advance(double milliseconds=1.5,int edgeBudget=24,CancellationToken cancellation=default)
     {
         if(Finished)return;
-        var clock=Stopwatch.StartNew();
-        while(edgeBudget-->0&&clock.Elapsed.TotalMilliseconds<milliseconds)
-        {
-            cancellation.ThrowIfCancellationRequested();
-            if(expanding==null)
-            {
-                Node? next=null;
-                while(open.TryDequeue(out var n,out _)){if(!closed.Contains(n.Key)&&n.Cost<=costs[n.Key]){next=n;break;}}
-                if(next==null){Error="No connected walkable route found.";return;}
-                closed.Add(next.Key);
-                if(closed.Count>96000){Error="Local navigation search limit reached.";return;}
-                Vector3? endpoint=null;
-                var arrived=Horizontal(next.Point,goal)<=range&&MathF.Abs(next.Point.Y-goal.Y)<=1.2f;
-                // A sub-grid arrival radius needs a checked final connector to the exact point.
-                if(!arrived&&range<1&&Horizontal(next.Point,goal)<=2.6f&&collision.Ground(goal,out var floor)&&MathF.Abs(floor.Y-goal.Y)<=1.2f&&collision.Traverse(next.Point,floor))endpoint=floor;
-                if(arrived||endpoint.HasValue)
-                {
-                    var path=new List<Vector3>();for(var n=next;n!=null;n=n.Previous)path.Add(n.Point);
-                    path.Reverse();if(endpoint is {} end)path.Add(end);Path=path.ToArray();return;
+        var clock=Stopwatch.StartNew();collision.BeginSlice(milliseconds);
+        try {
+            while(edgeBudget-->0&&clock.Elapsed.TotalMilliseconds<milliseconds){
+                cancellation.ThrowIfCancellationRequested();
+                if(expanding==null){
+                    while(open.TryDequeue(out var next,out _)){
+                        if(closed.Contains(next.Key)||next.Cost>costs[next.Key])continue;
+                        expanding=next;neighbor=-1;closed.Add(next.Key);break;
+                    }
+                    if(expanding==null){Error="No connected walkable route found.";return;}
+                    if(closed.Count>96000){Error="Local navigation search limit reached.";return;}
                 }
-                expanding=next;neighbor=0;
+                // Keep the exact node/edge pending until all its native queries finish.
+                // Cached queries allow a long edge to resume without repeating native work.
+                if(neighbor<0){
+                    var next=expanding;Vector3? endpoint=null;
+                    var arrived=Horizontal(next.Point,goal)<=range&&MathF.Abs(next.Point.Y-goal.Y)<=1.2f;
+                    if(!arrived&&range<1&&Horizontal(next.Point,goal)<=2.6f&&collision.Ground(goal,out var floor)&&MathF.Abs(floor.Y-goal.Y)<=1.2f&&collision.Traverse(next.Point,floor))endpoint=floor;
+                    if(arrived||endpoint.HasValue){
+                        var path=new List<Vector3>();for(var n=next;n!=null;n=n.Previous)path.Add(n.Point);
+                        path.Reverse();if(endpoint is {} end)path.Add(end);Path=path.ToArray();return;
+                    }
+                    neighbor=0;
+                }
+                ExpandEdge(expanding,Directions[neighbor]);
+                if(++neighbor==Directions.Length)expanding=null;
             }
-            var parent=expanding;var d=Directions[neighbor++];if(neighbor==Directions.Length)expanding=null;
-            var candidate=parent.Point+new Vector3(d.X*spacing,0,d.Z*spacing);
-            if(Horizontal(candidate,origin)>2048||Horizontal(candidate,goal)>Horizontal(origin,goal)+35)continue;
-            // A rising stair endpoint can lie above the single local ground probe.
-            // Probe adjacent height bands; Traverse still verifies every supported step.
-            if(!collision.Ground(candidate,out var point)&&
-               !collision.Ground(candidate+new Vector3(0,.45f,0),out point)&&
-               !collision.Ground(candidate-new Vector3(0,.45f,0),out point))continue;
-            var key=Address(point);if(closed.Contains(key))continue;
-            var cost=parent.Cost+Vector3.Distance(parent.Point,point)*(1+6*collision.WallPenalty(point)+3*collision.RoutePenalty(point));
-            if(costs.TryGetValue(key,out var known)&&cost>=known)continue;
-            if(!collision.Traverse(parent.Point,point))continue;
-            costs[key]=cost;open.Enqueue(new(key,point,cost,parent),cost+1.25f*Heuristic(point));
-        }
+        }catch(NavigationSliceExpiredException){BudgetYields++;}
+        finally{collision.EndSlice();}
+    }
+    private void ExpandEdge(Node parent,(int X,int Z) direction)
+    {
+        var candidate=parent.Point+new Vector3(direction.X*spacing,0,direction.Z*spacing);
+        if(Horizontal(candidate,origin)>2048||Horizontal(candidate,goal)>Horizontal(origin,goal)+35)return;
+        if(!collision.Ground(candidate,out var point)&&
+           !collision.Ground(candidate+new Vector3(0,.45f,0),out point)&&
+           !collision.Ground(candidate-new Vector3(0,.45f,0),out point))return;
+        var key=Address(point);if(closed.Contains(key))return;
+        var cost=parent.Cost+Vector3.Distance(parent.Point,point)*(1+6*collision.WallPenalty(point)+3*collision.RoutePenalty(point));
+        if(costs.TryGetValue(key,out var known)&&cost>=known)return;
+        if(!collision.Traverse(parent.Point,point))return;
+        costs[key]=cost;open.Enqueue(new(key,point,cost,parent),cost+heuristicWeight*Heuristic(point));
     }
     private Key Address(Vector3 p)=>new((int)MathF.Round((p.X-origin.X)/spacing),(int)MathF.Round(p.Y*4),(int)MathF.Round((p.Z-origin.Z)/spacing));
     private float Heuristic(Vector3 p)=>MathF.Max(0,Horizontal(p,goal)-range);
