@@ -46,12 +46,15 @@ def package(build, output, repository, tag, ref=None):
         route_manifest=json.loads(routes.read("manifest.json"))
         if route_manifest["routeCount"] != 4388 or not routes.read("LICENSE"):
             raise ValueError("Independent quest pack missing or incomplete")
+    loading = (build / "goddess-loading.png").read_bytes()
+    if loading[:8] != b"\x89PNG\r\n\x1a\n" or loading[-12:] != b"\x00\x00\x00\x00IEND\xaeB`\x82":
+        raise ValueError("Goddess loading artwork is missing or incomplete")
     dll = build / "EquinoxCompanion.dll"
     if not dll.is_file() or dll.read_bytes()[:2] != b"MZ":
         raise ValueError("Compiled plugin DLL is missing or invalid")
     output.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(output / "EquinoxCompanion.zip", "w", zipfile.ZIP_DEFLATED) as archive:
-        for name in ("EquinoxCompanion.dll", "EquinoxCompanion.json", "EquinoxCompanion.deps.json", "icon.png", "collection-ids.json", "THIRD-PARTY-KEYBOUND.txt", "gear-duty-sources.json", "THIRD-PARTY-GEAR-SOURCES.txt", "questionable-quests.json", "quest-routes.zip", "QUEST-TOOLS-SOURCES.txt", "goddess-complete.png"):
+        for name in ("EquinoxCompanion.dll", "EquinoxCompanion.json", "EquinoxCompanion.deps.json", "icon.png", "collection-ids.json", "THIRD-PARTY-KEYBOUND.txt", "gear-duty-sources.json", "THIRD-PARTY-GEAR-SOURCES.txt", "questionable-quests.json", "quest-routes.zip", "QUEST-TOOLS-SOURCES.txt", "goddess-complete.png", "goddess-loading.png"):
             archive.write(build / name, name)
         for asset in (build / "garden-art").rglob("*"):
             if asset.is_file(): archive.write(asset, asset.relative_to(build))

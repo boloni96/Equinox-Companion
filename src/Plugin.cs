@@ -1129,6 +1129,7 @@ public sealed partial class Plugin : IDalamudPlugin
         DrawCofferMarkers();
         DrawHelperControls();
         DrawAccountCelebration();
+        DrawWorkIndicator();
         TrackPerformance("overlays", perf);
         if (!visible) showSavedPairingKey = false;
     }

@@ -45,6 +45,7 @@ public sealed partial class Plugin
             SettingsSection("Keybinds",DrawShortcutSettings);
             SettingsSection("Characters",DrawCharacterOrderSettings);
             SettingsSection("Windows",DrawFloatingLauncherSettings);
+            SettingsSection("Loading icon",DrawWorkIndicatorSettings);
             SettingsSection("Connection",DrawConnection);
             SettingsSection("Diagnostics",DrawCompactDiagnostics);
             ImGui.EndTabBar();

@@ -34,7 +34,8 @@ public sealed partial class Plugin
     private readonly NavigationPhaseTimer independentPhaseTimer=new();
     private readonly List<Vector3> independentBlockedTargets=[];
     private CollisionRouteSearch CreateIndependentSearch(Vector3 start,Vector3 goal,float range)=>
-        new(new AvoidStalledTargets(new GameWalkingCollision(cacheGround:true),independentBlockedTargets.ToArray()),start,goal,range);
+        new(new AvoidStalledTargets(new GameWalkingCollision(cacheGround:true),independentBlockedTargets.ToArray()),start,goal,range,independentBlockedTargets.Count>0?.5f:1f);
+    private bool IndependentClearConnector(Vector3 from,Vector3 to)=>AvoidStalledTargets.ClearOfBlocked(from,to,independentBlockedTargets)&&independentCollision.ComfortableTraverse(from,to);
     private bool independentMoving,independentArrived,independentDirectOnly;
     private DateTimeOffset independentPulseUntil,independentSince,independentPlanningSince,independentProgressAt,independentCollisionAt;
     private int independentCheckedWaypoint=-1,independentInputReads,independentInputOverrides;
@@ -233,9 +234,9 @@ public sealed partial class Plugin
                 if(independentPendingPath!=null){independentPath=independentPendingPath;independentPendingPath=null;independentWaypoint=1;independentCheckedWaypoint=-1;}
                 else if(independentSearch!=null){independentProgressAt=now;independentWalkStatus="Verified section complete · calculating the next section";return;}
             }
-            if(independentPath!=null)independentWaypoint=WalkingSteering.AdvanceWaypoint(self.Position,independentPath,independentWaypoint,independentCollision.ComfortableTraverse);
+            if(independentPath!=null)independentWaypoint=WalkingSteering.AdvanceWaypoint(self.Position,independentPath,independentWaypoint,IndependentClearConnector);
             if(independentPath==null||independentWaypoint>=independentPath.Length)throw new InvalidOperationException("Route ended without confirmed arrival.");
-            var target=WalkingSteering.PursuitTarget(self.Position,independentPath,independentWaypoint,independentCollision.ComfortableTraverse);
+            var target=WalkingSteering.PursuitTarget(self.Position,independentPath,independentWaypoint,IndependentClearConnector);
             if(Vector3.Distance(self.Position,independentLastProgress)>.3f){independentProgressAt=now;independentLastProgress=self.Position;independentPositionChanged=true;
                 if(independentWalkedPoints.Count==0||Vector3.Distance(independentWalkedPoints[^1],self.Position)>=1)independentWalkedPoints.Add(self.Position);}
             var checkCollision=now>=independentCollisionAt||independentCheckedWaypoint!=independentWaypoint;
@@ -243,7 +244,7 @@ public sealed partial class Plugin
                 independentCollisionAt=now.AddMilliseconds(150);independentCheckedWaypoint=independentWaypoint;
             }
             var stalled=now-independentProgressAt>TimeSpan.FromSeconds(independentInputOverrides>0?1.5:4);
-            if(stalled||checkCollision&&!independentCollision.Traverse(self.Position,target)){
+            if(stalled||!AvoidStalledTargets.ClearOfBlocked(self.Position,target,independentBlockedTargets)||checkCollision&&!independentCollision.Traverse(self.Position,target)){
                 independentMoving=false;independentForwardHook?.Disable();
                 if(independentInputOverrides==0&&now-independentProgressAt>TimeSpan.FromSeconds(4))throw new InvalidOperationException($"Movement not delivered · ground reads {independentForwardReads}, game blocked {independentNativeGateRejects}, other input {independentNativeManualReads}, expired {independentExpiredReads}. {independentInputBlock}");
                 if(independentDirectOnly)throw new InvalidOperationException("The short plot-entry step became blocked; stopped without circling the plot.");
@@ -265,7 +266,7 @@ public sealed partial class Plugin
                 var smooth=WalkingSteering.SmoothHeading(previousHeading,heading,(float)(now-independentSteeringAt).TotalSeconds);
                 if(MathF.Abs(MathF.IEEERemainder(smooth-heading,2*MathF.PI))>.01f){
                     var probe=self.Position+new Vector3(MathF.Sin(smooth),0,MathF.Cos(smooth))*.6f;
-                    if(independentCollision.Ground(probe,out var floor)&&independentCollision.ComfortableTraverse(self.Position,floor))heading=smooth;
+                    if(independentCollision.Ground(probe,out var floor)&&IndependentClearConnector(self.Position,floor))heading=smooth;
                     else {independentHeading=smooth;independentSteeringAt=now;independentProgressAt=now;independentWalkStatus="Turning toward the clear route";return;}
                 }
             }
@@ -286,4 +287,5 @@ public sealed partial class Plugin
     private bool IndependentOtherTravelBusy(){try{return LifestreamBusy();}catch{return false;}}
     private void DisposeIndependentWalk(){StopIndependentWalk("Plugin unloaded");independentForwardHook?.Dispose();independentForwardHook=null;independentFlightHook?.Dispose();independentFlightHook=null;}
 }
+
 
