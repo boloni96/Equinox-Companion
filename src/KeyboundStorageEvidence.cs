@@ -13,7 +13,7 @@ public sealed partial class Plugin
             if(!task.IsCompleted)return null;
             keyboundStorageTask=null;
             if(task.IsCompletedSuccessfully)keyboundStorageEvidence=task.Result;
-            else{_=task.Exception;keyboundStorageSource=null;}
+            else{_=task.Exception;keyboundStorageSource=null;throw new InvalidOperationException("Recorded reward ownership could not be checked. Try buying again.");}
         }
         var rows=config.Discoveries;
         if(keyboundStorageCharacter==character&&ReferenceEquals(keyboundStorageSource,rows)&&keyboundStorageCount==rows.Count&&ReferenceEquals(keyboundStorageTail,rows.LastOrDefault())&&keyboundStorageEvidence!=null)

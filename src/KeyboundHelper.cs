@@ -36,7 +36,7 @@ public sealed partial class Plugin
             if(eventAccountActive)StopEventAccount("Stopped by you.");else if(keyboundBuying)StopKeyboundBuying("Stopped by you.","user-button");else if(keyboundEnabled)StopKeybound("Stopped by you.");else{StopKeybound();keyboundBuyStatus="";keyboundGoalCheckAt=default;keyboundEnabled=true;keyboundTypingRun=Guid.NewGuid().ToString("N");TraceKeyboundRun(keyboundTypingRun,"typing-started","Typing started","user-button");keyboundNext=keyboundHold=keyboundMissing=default;keyboundStatus="Waiting for Keybound Brawler";}
         }
         ImGui.SameLine();MeasureWork("Keybound UI: help",DrawKeyboundHelp);
-        ImGui.SameLine();ImGui.TextUnformatted(eventAccountActive?"Account routine":keyboundBuying?(keyboundUsingRewards?"Using rewards":"Buying rewards"):keyboundEnabled?(keyboundStatus.StartsWith("Paused:",StringComparison.Ordinal)?"Paused":"Running"):"Stopped");
+        ImGui.SameLine();ImGui.TextUnformatted(eventAccountActive?"Account routine":keyboundBuying?(keyboundUsingRewards?"Using rewards":keyboundPlanDataPending||keyboundStartRequest!=null?"Checking rewards":"Buying rewards"):keyboundEnabled?(keyboundStatus.StartsWith("Paused:",StringComparison.Ordinal)?"Paused":"Running"):"Stopped");
         // Reserve the same space for short phrases and long waiting/error text.
         // Content scrolls here; neither the window nor the controls below jump.
         if(ImGui.BeginChild("Keybound running status",new System.Numerics.Vector2(0,ImGui.GetTextLineHeightWithSpacing()*4.5f),true)){

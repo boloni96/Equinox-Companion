@@ -40,7 +40,7 @@ public sealed partial class Plugin
             celebrationChecking=celebrationEventWork!=null,celebrationStatus=Brief(eventCelebrationStatus),celebrationLastTrigger,celebrationLastTriggerAt,
             cofferAutoStatus=Brief(cofferAutoStatus),cofferStatus=Brief(cofferStatus),
             gardenCare=gardenCareRun?.Running==true,seller=sellerRun?.Running==true,organizer=organizeRunning,
-            keyboundBuying,followArmed=followSession.Armed,
+            keyboundBuying,keyboundPlanDataPending,keyboundPlanWaiting,keyboundStartPending=keyboundStartRequest!=null,followArmed=followSession.Armed,
             savePending=configurationDirty,saveWorkerBusy=configurationWriter?.Busy==true,
             syncInFlight=syncTask!=null,syncStatus=Brief(syncStatus),pendingSyncRecords,
             managedBytes=GC.GetTotalMemory(false),allocatedBytes=GC.GetTotalAllocatedBytes(false),

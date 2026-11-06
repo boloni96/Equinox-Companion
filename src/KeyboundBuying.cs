@@ -18,6 +18,8 @@ public sealed partial class Plugin
     private KeyboundPurchaseBook? keyboundPurchases;
     private KeyboundOffer[]? keyboundOffers;
     private bool keyboundEquipmentCheckSent;
+    private KeyboundStartRequest? keyboundStartRequest;
+    private bool keyboundPlanWaiting;
     private bool keyboundBuying,keyboundBuySelected,keyboundBuyConfirmed,keyboundBuyerOpened;
     private ulong keyboundBuyerCharacter,keyboundBuyerObject;
     private uint keyboundBuyerWorld,keyboundBuyerTerritory,keyboundBuyIndex;
@@ -65,7 +67,7 @@ public sealed partial class Plugin
             // Positive storage observations also protect items moved into storage
             // that is not currently open. Never borrow another character's stock.
             var observed=ReadKeyboundStorageEvidence(character);
-            if(observed is null)throw new InvalidOperationException("Checking recorded reward ownership…");
+            if(observed is null){keyboundPlanDataPending=true;keyboundPlanError="Checking recorded reward ownership…";return;}
             if(roster.Length==1)observed.UnionWith((config.SharedRoster?.ItemLocations??[])
                 .Where(l=>l.OwnerId==roster[0].Id&&(l.Key.StartsWith("bag:")||l.Key.StartsWith("retainer:")||l.Key is "armoire" or "dresser"))
                 .SelectMany(l=>l.Items));
@@ -118,13 +120,23 @@ public sealed partial class Plugin
     }
     private unsafe uint KeyboundWallet(){var c=CurrencyManager.Instance();if(c==null||!c->HasItem(52322))throw new InvalidOperationException("MGC wallet is not loaded.");return c->GetItemCount(52322);}
     private bool KeyboundIsTrader(Dalamud.Game.ClientState.Objects.Types.IGameObject? obj)=>obj!=null&&obj.ObjectKind==ObjectKind.EventNpc&&string.Equals(DataManager.GetExcelSheet<Lumina.Excel.Sheets.ENpcResident>(Dalamud.Game.ClientLanguage.English).GetRowOrDefault(obj.BaseId)?.Singular.ToString(),"MGC trader",StringComparison.OrdinalIgnoreCase);
-    private unsafe void StartKeyboundBuying(bool useRewards=false,string source="user-button")
+    private unsafe void StartKeyboundBuying(bool useRewards=false,string source="user-button",KeyboundStartRequest? retry=null)
     {
-        var requestedRun=Guid.NewGuid().ToString("N");
-        TraceKeyboundRun(requestedRun,"start-requested",useRewards?"Buy all & use requested":"Buy all missing requested",source);
+        var requestedRun=retry?.Run??Guid.NewGuid().ToString("N");
+        if(retry is null)TraceKeyboundRun(requestedRun,"start-requested",useRewards?"Buy all & use requested":"Buy all missing requested",source);
         try{
-            if(keyboundBuying){TraceKeyboundRun(requestedRun,"start-rejected","Another reward run is active",source);return;}
-            RefreshKeyboundBuyPlan();if(keyboundReadyPlan==null)throw new InvalidOperationException(keyboundPlanError);
+            if(keyboundBuying&&retry is null){TraceKeyboundRun(requestedRun,"start-rejected","Another reward run is active",source);return;}
+            if(!config.EnableKeyboundBrawler||!Player.IsLoaded||Player.ContentId==0||Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51])throw new InvalidOperationException("Character unavailable for buying.");
+            RefreshKeyboundBuyPlan();
+            if(KeyboundPlanWait.Decide(keyboundReadyPlan!=null,keyboundPlanDataPending)==KeyboundPlanDecision.Wait){
+                keyboundStartRequest=retry??new(useRewards,source,requestedRun,Player.ContentId,Player.CurrentWorld.RowId,Client.TerritoryType,Targets.Target?.GameObjectId??0,DateTimeOffset.UtcNow.AddSeconds(45));
+                StopKeybound("Waiting for reward ownership checks");keyboundBuyerRun=requestedRun;keyboundBuying=true;keyboundUsingRewards=false;keyboundBuyAndUse=useRewards;
+                keyboundBuyStatus=keyboundPlanError;keyboundBuyNext=DateTimeOffset.UtcNow.AddMilliseconds(350);
+                if(retry is null){keyboundBuyItem=null;keyboundBuyIntent=null;keyboundBuyRemaining.Clear();keyboundBought=0;keyboundPlanWaiting=false;TraceKeyboundRun(requestedRun,"waiting-for-plan",keyboundBuyStatus,source);}
+                return;
+            }
+            if(keyboundReadyPlan==null)throw new InvalidOperationException(keyboundPlanError);
+            keyboundStartRequest=null;
             if(keyboundReadyPlan.Count==0&&(!useRewards||keyboundUseReady==0))throw new InvalidOperationException(keyboundHeldRewards.Count>0?"Remaining purchases need verification; duplicate purchases are held.":"All selected rewards are already obtained.");
             if(!config.EnableKeyboundBrawler||Client.TerritoryType==1359||Conditions[ConditionFlag.InDutyQueue]||Conditions[ConditionFlag.WaitingForDuty])throw new InvalidOperationException("Finish the round / leave the queue before buying.");
             if(followSession.Armed||purchasePending!=null||helperExchangePending!=null||gearRouting||armoireRunning||retrievalRun.Running||organizeRunning||sellerRun.Running||TraderRunning)throw new InvalidOperationException("Finish the other helper or storage operation first.");
@@ -153,7 +165,7 @@ public sealed partial class Plugin
         }catch(Exception e){TraceKeyboundRun(requestedRun,"start-failed",e.Message,source);StopKeyboundBuying(e.Message);}
     }
     private string KeyboundBuyFinished()=>$"Bought {keyboundBought} rewards"+(keyboundHeldRewards.Count>0?$" · {keyboundHeldRewards.Count} held for verification.":" · Done.");
-    private void StopKeyboundBuying(string reason,string source="system"){if(keyboundBuying)TraceKeyboundRun(keyboundBuyerRun,"stopped",reason,source);if(keyboundBuying)RequestCelebrationCheck();keyboundBuying=false;keyboundUsingRewards=false;keyboundBuyAndUse=false;keyboundBuyStatus=reason;keyboundBuyRefresh=default;}
+    private void StopKeyboundBuying(string reason,string source="system"){if(keyboundBuying)TraceKeyboundRun(keyboundBuyerRun,"stopped",reason,source);if(keyboundBuying)RequestCelebrationCheck();keyboundBuying=false;keyboundStartRequest=null;keyboundPlanWaiting=false;keyboundUsingRewards=false;keyboundBuyAndUse=false;keyboundBuyStatus=reason;keyboundBuyRefresh=default;}
     private bool KeyboundPurchaseDialogVisible()=>new[]{"SelectYesno","ShopExchangeItemDialog","ShopExchangeCurrencyDialog","Request"}.Any(VisibleFollowAddon);
     private unsafe KeyboundOffer? KeyboundReadOffer(string shop,int row,out uint index)
     {
@@ -179,6 +191,12 @@ public sealed partial class Plugin
             if(config.EnableKeyboundBrawler&&keyboundWindow.IsOpen&&now>=keyboundBuyRefresh){keyboundBuyRefresh=now.AddSeconds(2);RefreshKeyboundBuyPlan();}return;
         }
         if(now<keyboundBuyNext)return;keyboundBuyNext=now.AddMilliseconds(350);
+        if(keyboundStartRequest is {} request){
+            if(!Player.IsLoaded||!request.Valid(now,Player.ContentId,Player.CurrentWorld.RowId,Client.TerritoryType,Targets.Target?.GameObjectId??0)){
+                StopKeyboundBuying("Reward check timed out or character, location or target changed.");return;
+            }
+            StartKeyboundBuying(request.UseRewards,request.Source,request);return;
+        }
         try{
             if(!config.EnableKeyboundBrawler||!Player.IsLoaded||Player.ContentId!=keyboundBuyerCharacter||Player.CurrentWorld.RowId!=keyboundBuyerWorld||Client.TerritoryType!=keyboundBuyerTerritory||Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]||Conditions[ConditionFlag.InCombat]||followSession.Armed||purchasePending!=null||helperExchangePending!=null)throw new InvalidOperationException("Buying stopped: character, location or active helper changed.");
             if(keyboundUsingRewards){UpdateKeyboundRewardUse(now);return;}
@@ -199,7 +217,14 @@ public sealed partial class Plugin
                 if(!KeyboundShopTabReady(shop,now))return;
                 var rows=new List<(KeyboundOffer Offer,uint Index)>();
                 for(var i=0;i<122;i++)if(KeyboundReadOffer(shop,i,out var index) is {} offer)rows.Add((offer,index));
-                RefreshKeyboundBuyPlan();if(keyboundReadyPlan==null)throw new InvalidOperationException(keyboundPlanError);
+                RefreshKeyboundBuyPlan();
+                if(KeyboundPlanWait.Decide(keyboundReadyPlan!=null,keyboundPlanDataPending)==KeyboundPlanDecision.Wait){
+                    keyboundBuyStatus=keyboundPlanError;
+                    if(!keyboundPlanWaiting)TraceKeyboundRun(keyboundBuyerRun,"waiting-for-plan",keyboundBuyStatus);
+                    keyboundPlanWaiting=true;return; // Retain remaining items and receipts; do not select or confirm anything.
+                }
+                if(keyboundReadyPlan==null)throw new InvalidOperationException(keyboundPlanError);
+                if(keyboundPlanWaiting){TraceKeyboundRun(keyboundBuyerRun,"plan-ready","Ownership verified; continuing purchases");keyboundPlanWaiting=false;}
                 keyboundBuyRemaining.RemoveWhere(id=>keyboundOwned.Contains(id)||!keyboundOffers!.Any(o=>o.Item==id&&keyboundReadyPlan.ContainsKey(o.Key)));
                 // Recover unchanged unsubmitted reservations before spending on
                 // fresh rewards, otherwise their original wallet baseline is lost.
