@@ -1,5 +1,7 @@
 using System.Text.Json;
 using EquinoxCompanion;
+// Threaded tests must run after module initialization releases the runtime lock.
+BackgroundDisplayTests.Run();
 var time = DateTimeOffset.Parse("2026-09-29T00:00:00Z");
 var gate = new ObservationGate();
 void Check(string name, string? actual, string? expected) { if (actual != expected) throw new Exception($"{name}: {actual} != {expected}"); Console.WriteLine($"PASS {name}"); }

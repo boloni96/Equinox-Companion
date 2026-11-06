@@ -1,9 +1,8 @@
-using System.Runtime.CompilerServices;
 using EquinoxCompanion;
 internal static class BackgroundDisplayTests
 {
     private sealed record Result(int Version);
-    [ModuleInitializer]internal static void Run()
+    internal static void Run()
     {
         var cache=new BackgroundDisplayProjection<Result>();var source=new object();
         var release=new TaskCompletionSource<Result>(TaskCreationOptions.RunContinuationsAsynchronously);
