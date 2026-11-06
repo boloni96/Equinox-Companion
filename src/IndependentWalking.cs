@@ -266,7 +266,7 @@ public sealed partial class Plugin
                 var smooth=WalkingSteering.SmoothHeading(previousHeading,heading,(float)(now-independentSteeringAt).TotalSeconds);
                 if(MathF.Abs(MathF.IEEERemainder(smooth-heading,2*MathF.PI))>.01f){
                     var probe=self.Position+new Vector3(MathF.Sin(smooth),0,MathF.Cos(smooth))*.6f;
-                    if(independentCollision.Ground(probe,out var floor)&&independentCollision.ComfortableTraverse(self.Position,floor))heading=smooth;
+                    if(independentCollision.Ground(probe,out var floor)&&IndependentClearConnector(self.Position,floor))heading=smooth;
                     else {independentHeading=smooth;independentSteeringAt=now;independentProgressAt=now;independentWalkStatus="Turning toward the clear route";return;}
                 }
             }
@@ -287,4 +287,5 @@ public sealed partial class Plugin
     private bool IndependentOtherTravelBusy(){try{return LifestreamBusy();}catch{return false;}}
     private void DisposeIndependentWalk(){StopIndependentWalk("Plugin unloaded");independentForwardHook?.Dispose();independentForwardHook=null;independentFlightHook?.Dispose();independentFlightHook=null;}
 }
+
 
