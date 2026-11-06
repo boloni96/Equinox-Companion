@@ -1,0 +1,50 @@
+using System.Numerics;
+using Dalamud.Game.ClientState.Objects.Types;
+namespace EquinoxCompanion;
+public sealed partial class Plugin
+{
+    private sealed class NativeGardenMove
+    {
+        public required Queue<Vector3> Points;public required string Owner;public required DateTimeOffset Deadline;
+        public required ulong Character;public required uint World,Territory;public ulong Target;
+    }
+    private NativeGardenMove? nativeGardenMove;
+    private string nativeGardenMoveFailure="";
+    private bool NativeGardenWalking=>nativeGardenMove!=null;
+    private void StartNativeGardenMove(IEnumerable<Vector3> points,string owner,IGameObject? target=null)
+    {
+        if(nativeGardenMove is {} prior&&prior.Owner!=owner)throw new InvalidOperationException("Another garden movement is active.");
+        var route=points.ToArray();if(route.Length is <1 or >8||route.Any(p=>!NativeHousingPolicy.Position(p)))throw new InvalidOperationException("Garden route has invalid points.");
+        if(LifestreamBusy()||nativeHousingTrip!=null||nativeWorldTrip!=null||nativeAethernetTrip!=null)throw new InvalidOperationException("Finish the active journey before garden walking.");
+        StopIndependentWalk("Starting native garden movement",resetFailure:true);nativeGardenMoveFailure="";
+        nativeGardenMove=new(){Points=new(route),Owner=owner,Deadline=DateTimeOffset.UtcNow.AddSeconds(45),Character=Player.ContentId,World=Player.CurrentWorld.RowId,Territory=Client.TerritoryType,Target=target?.GameObjectId??0};
+        RecordTravelPrompt("Garden movement started",new{owner,target=target?.BaseId,points=route.Select(FollowTravelPosition.From).ToArray()});
+    }
+    private void StopNativeGardenMove(string reason,string? owner=null)
+    {
+        if(nativeGardenMove is not {} move||owner!=null&&move.Owner!=owner)return;
+        nativeGardenMove=null;StopIndependentWalk(reason);RecordTravelPrompt("Garden movement stopped",new{move.Owner,reason});
+    }
+    private void UpdateNativeGardenMove(DateTimeOffset now)
+    {
+        if(nativeGardenMove is not {} move)return;
+        try{
+            if(!Player.IsLoaded||Player.ContentId!=move.Character||Player.CurrentWorld.RowId!=move.World||Client.TerritoryType!=move.Territory)throw new InvalidOperationException("Garden walking stopped: character, world or territory changed.");
+            if(now>move.Deadline)throw new InvalidOperationException("Native garden approach timed out.");
+            var target=move.Target==0?null:Objects.FirstOrDefault(x=>x.GameObjectId==move.Target);
+            if(move.Target!=0&&target==null)throw new InvalidOperationException("The mapped garden target is no longer loaded.");
+            if(!NativeTravelMovementReady())return;
+            if(!IndependentWalk(move.Points.Peek(),.3f,now,allowFlight:false,directDistance:8,interactionTarget:move.Points.Count==1?target:null))return;
+            move.Points.Dequeue();StopIndependentWalk("Garden route segment reached");
+            if(move.Points.Count==0)StopNativeGardenMove("Native garden approach complete");
+        }catch(Exception ex){nativeGardenMoveFailure=ex.Message;StopNativeGardenMove(ex.Message);}
+    }
+    private Vector3? NativeGardenEntrance(uint territory,int plot)
+    {
+        var district=NativeHousingPolicy.District(DistrictName(territory)??"");
+        if(district==null||plot is <1 or >60)throw new InvalidOperationException("Garden plot address is not supported.");
+        var geometry=LoadHousingGeometry(district);if(!geometry.IsCompleted)return null;
+        if(!geometry.IsCompletedSuccessfully)throw new InvalidOperationException(geometry.Exception?.GetBaseException().Message??"Housing layout unavailable.");
+        return geometry.Result.Entrances[plot-1]??throw new InvalidOperationException("This plot's native entrance position is not recorded in the game layout. Export diagnostics; no Lifestream movement was started.");
+    }
+}

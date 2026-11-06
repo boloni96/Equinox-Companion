@@ -11,7 +11,7 @@ public sealed partial class Plugin
     {
         StopTendAdventure(IndicatorStopReason);
         gardenHouseHarvest=null;StopHousePlant(IndicatorStopReason);
-        StopEstateTravel(IndicatorStopReason);StopNativeHousing(IndicatorStopReason);StopIndependentWalk(IndicatorStopReason);
+        StopNativeGardenMove(IndicatorStopReason);StopEstateTravel(IndicatorStopReason);StopNativeHousing(IndicatorStopReason);StopIndependentWalk(IndicatorStopReason);
     }
     private void StopIndicatorDelivery()
     {
@@ -41,6 +41,7 @@ public sealed partial class Plugin
         }
         StopEstateTravel(IndicatorStopReason);
         StopNativeHousing(IndicatorStopReason);
+        StopNativeGardenMove(IndicatorStopReason);
         if(shoppingTravel!=null||goSeeHomeTrip!=null||goSeeFriendTrip!=null){
             shoppingTravel=null;goSeeHomeTrip=null;goSeeFriendTrip=null;
             try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}

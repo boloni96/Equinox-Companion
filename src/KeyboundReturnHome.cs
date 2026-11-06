@@ -42,6 +42,8 @@ public sealed partial class Plugin
             var destination=AddressOf(new HouseId{Id=eventReturnEstate});
             var exact=destination!=null&&new[]{address,observed}.Any(a=>a!=null&&a.WorldId==destination.WorldId&&a.TerritoryTypeId==destination.TerritoryTypeId&&a.Ward==destination.Ward&&a.Plot==destination.Plot);
             var arrived=exact;
+            if(eventReturnApproachAt!=default&&NativeGardenWalking)return;
+            if(eventReturnApproachAt!=default&&nativeGardenMoveFailure.Length>0)throw new InvalidOperationException(nativeGardenMoveFailure);
             if(eventReturnApproachAt!=default&&now-eventReturnApproachAt<TimeSpan.FromSeconds(3))return;
             if(!arrived&&eventReturnApproachAt!=default)
                 throw new InvalidOperationException("The entrance step did not reach the destination plot; character kept online.");
@@ -52,12 +54,12 @@ public sealed partial class Plugin
                 address==null&&now-eventReturnActionAt>=TimeSpan.FromSeconds(3)){
                 var pending=Conditions[ConditionFlag.Casting]||HelperInCutscene()||Telepo.Instance()!=null&&Telepo.Instance()->ActiveTeleportRequest;
                 if(eventReturnArrival.Ready(pending,player.Position,now)){
-                    var entrance=Pi.GetIpcSubscriber<uint,int,Vector3?>("Lifestream.GetPlotEntrance").InvokeFunc(Client.TerritoryType,destination.Plot-1)
-                        ??throw new InvalidOperationException("The destination plot entrance is unavailable; character kept online.");
-                    var path=GardenPlotApproachPolicy.Path(player.Position,entrance,null,player.Rotation);
+                    var entrance=NativeGardenEntrance(Client.TerritoryType,destination.Plot);
+                    if(entrance==null){eventAccountStatus="Reading native estate entrance";return;}
+                    if(Vector3.Distance(player.Position,entrance.Value)>40)throw new InvalidOperationException("The native estate entrance is not nearby; character kept online.");
+                    StartNativeGardenMove([entrance.Value],"event-return");
                     eventAccountMoveOwned=true;eventReturnApproachAt=now;
-                    Pi.GetIpcSubscriber<List<Vector3>,bool?,float?,float?,object>("Lifestream.MoveEx").InvokeAction(path.ToList(),true,.3f,.3f);
-                    eventAccountStatus="Returning to estate · walking three yalms through the plot entrance";
+                    eventAccountStatus="Returning to estate · native plot entrance approach";
                     return;
                 }
             }

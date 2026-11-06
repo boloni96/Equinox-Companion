@@ -37,8 +37,8 @@ public sealed partial class Plugin
     private bool independentNearbyApproach;
     private readonly List<Vector3> independentBlockedTargets=[];
     private CollisionRouteSearch CreateIndependentSearch(Vector3 start,Vector3 goal,float range)=>
-        new(new AvoidStalledTargets(new GameWalkingCollision(cacheGround:true),independentBlockedTargets.ToArray()),start,goal,range,independentBlockedTargets.Count>0?.5f:1f);
-    private bool IndependentClearConnector(Vector3 from,Vector3 to)=>AvoidStalledTargets.ClearOfBlocked(from,to,independentBlockedTargets)&&independentCollision.Traverse(from,to);
+        new(new AvoidStalledTargets(new GameWalkingCollision(cacheGround:true,roadGuide:independentRoadGuide),independentBlockedTargets.ToArray()),start,goal,range,independentBlockedTargets.Count>0?.5f:1f);
+    private bool IndependentClearConnector(Vector3 from,Vector3 to)=>AvoidStalledTargets.ClearOfBlocked(from,to,independentBlockedTargets)&&independentCollision.ComfortableTraverse(from,to);
     private bool independentMoving,independentArrived,independentDirectOnly;
     private DateTimeOffset independentPulseUntil,independentSince,independentPlanningSince,independentProgressAt,independentCollisionAt;
     private int independentCheckedWaypoint=-1,independentInputReads,independentInputOverrides;
@@ -149,6 +149,7 @@ public sealed partial class Plugin
             throw new InvalidOperationException($"No walkable ground beneath the character after 10s · territory {Client.TerritoryType} · position {self.Position}.");
         }
         independentGroundReadiness.Reset();
+        if(!PrepareNavigationMap(now))return false;
         independentNavigationRun=Guid.NewGuid().ToString("N");independentInputReads=independentInputOverrides=0;
         independentForwardReads=independentExpiredReads=independentInactiveReads=0;independentNativeGateRejects=independentNativeManualReads=independentNativeExceptions=0;
         independentInputBlock=independentLastWalkFailure="";independentPositionChanged=false;independentLastRoutePoints=independentLastExpanded=0;independentPlanningSeconds=0;independentLease.Revoke();
@@ -162,6 +163,7 @@ public sealed partial class Plugin
         // Short verified approaches (including the shared three-yalm estate step)
         // do not need an area search or a detour to satisfy preferred wall clearance.
         var direct=directOnly?VerifiedWalkingOpening.Entrance(independentCollision,self.Position,destination):VerifiedWalkingOpening.ShortDirect(independentCollision,self.Position,destination,directDistance);
+        if(!directOnly&&direct.Length>1&&!WalkingClearance.PreservesRoom(self.Position,destination,independentCollision.WallPenalty))direct=[];
         if(direct.Length>1){
             independentPath=direct;independentWaypoint=1;independentCheckedWaypoint=-1;
             independentPhaseTimer.SetPlanning(false,now);independentWalkStatus="Short approach ready";return false;
@@ -211,6 +213,7 @@ public sealed partial class Plugin
             if(Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]||Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.BoundByDuty]||Conditions[ConditionFlag.Mounted]||Conditions[ConditionFlag.InFlight])throw new InvalidOperationException("Navigation stopped for loading, combat, duty or mounted movement. Dismount for ground walking.");
             if(now-independentSince>TimeSpan.FromMinutes(15))throw new InvalidOperationException("Navigation exceeded its fifteen-minute total limit.");
             if(independentSearch!=null&&independentNearbyApproach&&now-independentPlanningSince>TimeSpan.FromSeconds(5))throw new InvalidOperationException($"Nearby approach blocked: no route found within 5 seconds ({independentSearch.Expanded} areas checked). Move to a clear side of the aetheryte and retry.");
+            if(independentSearch!=null&&independentReplans>0&&now-independentPlanningSince>TimeSpan.FromSeconds(15))throw new InvalidOperationException("Blocked-route recovery found no alternative within 15 seconds; stopped without continuing to push the corner.");
             if(independentSearch!=null&&independentPhaseTimer.Expired(now))throw new InvalidOperationException(independentSearch!=null?"Route calculation timed out after 90 seconds.":"Walking timed out after 90 seconds.");
             if(!GameWalkingCollision.Available()){independentWalkStatus="Waiting for collision geometry to load";return;}
             if(IndependentMovementWindow()||FollowStopTextEntryActive()||Conditions[ConditionFlag.OccupiedInEvent]||Conditions[ConditionFlag.OccupiedInQuestEvent]||HelperInCutscene()||Conditions[ConditionFlag.Casting]){independentWalkStatus="Paused · close the conversation or wait for the cast";independentInputBlock=independentWalkStatus;independentProgressAt=now;return;}
@@ -273,16 +276,17 @@ public sealed partial class Plugin
             }
             if(independentFacingOnly)independentProgressAt=now;
             var stalled=now-independentProgressAt>TimeSpan.FromSeconds(independentInputOverrides>0?1.5:4);
-            if(stalled||!AvoidStalledTargets.ClearOfBlocked(self.Position,target,independentBlockedTargets)||checkCollision&&!independentCollision.Traverse(self.Position,target)){
+            var noConnector=Vector3.DistanceSquared(self.Position,target)<.0001f;
+            if(noConnector||stalled||!AvoidStalledTargets.ClearOfBlocked(self.Position,target,independentBlockedTargets)||checkCollision&&!independentCollision.Traverse(self.Position,target)){
                 independentMoving=false;independentForwardHook?.Disable();
                 if(independentInputOverrides==0&&now-independentProgressAt>TimeSpan.FromSeconds(4))throw new InvalidOperationException($"Movement not delivered · ground reads {independentForwardReads}, game blocked {independentNativeGateRejects}, other input {independentNativeManualReads}, expired {independentExpiredReads}. {independentInputBlock}");
                 if(independentDirectOnly)throw new InvalidOperationException("The short plot-entry step became blocked; stopped without circling the plot.");
                 independentReplans++;
                 if(!independentRecovery.Try(self.Position))throw new InvalidOperationException("Route remained blocked after four replans without sufficient progress; stopped.");
-                var blockedAt=stalled?Vector3.Lerp(self.Position,target,MathF.Min(1,.6f/MathF.Max(.01f,Vector3.Distance(self.Position,target)))):independentCollision.LastBlockedAt??target;
+                var blockedAt=noConnector?WalkingSteering.BoundedTarget(self.Position,independentPath[independentWaypoint]):stalled?Vector3.Lerp(self.Position,target,MathF.Min(1,.6f/MathF.Max(.01f,Vector3.Distance(self.Position,target)))):independentCollision.LastBlockedAt??target;
                 ForgetIndependentRoute();independentPendingPath=null;independentBlockedTargets.Add(blockedAt);independentPhaseTimer.SetPlanning(true,now);independentPlanningSince=now;
                 independentSearch=CreateIndependentSearch(self.Position,independentGoal,independentRange);independentPath=null;independentProgressAt=now;
-                TraceKeyboundRun(independentNavigationRun,"route-replan",$"Attempt {independentReplans}; avoiding obstacle {blockedAt}; target {target}; position {self.Position}; stalled {stalled}; input reads {independentInputReads}, overrides {independentInputOverrides}","companion-navigation",false);
+                TraceKeyboundRun(independentNavigationRun,"route-replan",$"Attempt {independentReplans}; avoiding obstacle {blockedAt}; target {target}; position {self.Position}; stalled {stalled}; no clearance-safe connector {noConnector}; input reads {independentInputReads}, overrides {independentInputOverrides}","companion-navigation",false);
                 independentWalkStatus="Path changed or blocked · finding another route";return;
             }
             var cameras=CameraManager.Instance();

@@ -7,19 +7,29 @@ namespace EquinoxCompanion;
 internal sealed class GameWalkingCollision:IWalkingCollision
 {
     private readonly Dictionary<Vector3,(bool Found,Vector3 Ground)>? groundCache;
-    internal GameWalkingCollision(bool cacheGround=false){if(cacheGround)groundCache=new();}
-    private const float Radius=.45f,Height=1.85f;
+    private readonly NavigationRoadMap? roadGuide;
+    internal GameWalkingCollision(bool cacheGround=false,NavigationRoadMap? roadGuide=null){this.roadGuide=roadGuide;if(cacheGround)groundCache=new();}
+    public float RoutePenalty(Vector3 point)=>roadGuide?.Penalty(point)??0;
+    private const float Radius=.6f,Height=1.85f;
     private readonly Dictionary<Vector3,float> wallCache=[];
     private readonly Dictionary<(Vector3 Origin,Vector3 Direction,float Distance),(bool Found,RaycastHit Hit)> rayCache=[];
+    private long liveWallAt;
+    private readonly Dictionary<Vector3,float> liveWallCache=[];
     public float WallPenalty(Vector3 point){
+        var key=new Vector3(MathF.Round(point.X*4)/4,MathF.Round(point.Y*4)/4,MathF.Round(point.Z*4)/4);
+        if(groundCache==null){
+            var now=Environment.TickCount64;if(now-liveWallAt>150){liveWallAt=now;liveWallCache.Clear();}
+            if(liveWallCache.TryGetValue(key,out var live))return live;
+        }
         if(groundCache!=null&&wallCache.TryGetValue(point,out var cached))return cached;
-        Ready();const float preferred=3.5f;var nearest=preferred;
+        Ready();const float preferred=3f;var nearest=preferred;
         for(var i=0;i<8;i++){
             var angle=i*MathF.PI/4;var direction=new Vector3(MathF.Cos(angle),0,MathF.Sin(angle));
-            if(Hit(point+new Vector3(0,.9f,0),direction,preferred,out var hit))nearest=MathF.Min(nearest,CollisionRouteSearch.Horizontal(point,hit.Point));
+            if(Hit(point+new Vector3(0,.65f,0),direction,preferred,out var hit))nearest=MathF.Min(nearest,CollisionRouteSearch.Horizontal(point,hit.Point));
         }
         var penalty=Math.Clamp((preferred-nearest)/(preferred-Radius),0,1);
         if(groundCache!=null&&wallCache.Count<100000)wallCache[point]=penalty;
+        if(groundCache==null&&liveWallCache.Count<512)liveWallCache[key]=penalty;
         return penalty;
     }
     public bool ComfortableTraverse(Vector3 from,Vector3 to)=>Traverse(from,to)&&WalkingClearance.PreservesRoom(from,to,WallPenalty);

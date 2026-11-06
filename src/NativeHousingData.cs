@@ -4,13 +4,14 @@ namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
     private sealed record HousingShard(uint Id,uint Instance,string Name,byte Order,Vector3 Position);
-    private sealed record HousingGeometry(Vector3[] Placards,HousingShard[] Shards);
+    private sealed record HousingGeometry(Vector3[] Placards,HousingShard[] Shards,Vector3?[] Entrances);
     private readonly Dictionary<uint,Task<HousingGeometry>> nativeHousingGeometry=[];
     private Task<HousingGeometry> LoadHousingGeometry(NativeHousingDistrict district)
     {
         if(nativeHousingGeometry.TryGetValue(district.Territory,out var existing)&&!existing.IsFaulted)return existing;
         var land=DataManager.GetExcelSheet<Lumina.Excel.Sheets.HousingLandSet>().GetRow(district.LandSet);
         var plots=land.LandSet.Select(x=>x.PlacardId).ToArray();
+        var exits=land.LandSet.Select(x=>x.RoomExit).ToArray();
         var bg=DataManager.GetExcelSheet<Lumina.Excel.Sheets.TerritoryType>().GetRow(district.Territory).Bg.ToString();
         var root="bg/"+bg[..(bg.LastIndexOf('/')+1)];
         var shards=DataManager.GetExcelSheet<Lumina.Excel.Sheets.HousingAethernet>().Where(x=>x.TerritoryType.RowId==district.Territory)
@@ -28,7 +29,7 @@ public sealed partial class Plugin
             if(plots.Length<60||plots.Take(60).Any(id=>id==0||!positions.ContainsKey(id)))throw new InvalidOperationException($"Housing layout {district.Territory} at {root}: {positions.Count} objects; missing plot instances {string.Join(",",plots.Take(60).Where(id=>!positions.ContainsKey(id)).Take(8))}. Export the report; no route sent to another plugin.");
             var located=shards.Where(s=>positions.ContainsKey(s.Instance)).Select(s=>s with{Position=positions[s.Instance]}).OrderBy(s=>s.Order).ToArray();
             if(located.Length!=shards.Length||located.Length<2)throw new InvalidOperationException($"Housing layout {district.Territory}: found {located.Length}/{shards.Length} shards; missing {string.Join(",",shards.Where(s=>!positions.ContainsKey(s.Instance)).Select(s=>s.Instance))}.");
-            return new HousingGeometry(plots.Take(60).Select(id=>positions[id]).ToArray(),located);
+            return new HousingGeometry(plots.Take(60).Select(id=>positions[id]).ToArray(),located,exits.Take(60).Select(id=>positions.TryGetValue(id,out var point)?(Vector3?)point:null).ToArray());
         });
         nativeHousingGeometry[district.Territory]=task;return task;
     }

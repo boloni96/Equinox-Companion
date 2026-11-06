@@ -9,6 +9,7 @@ public sealed partial class Plugin
     private bool eventSaucerTravelOwned;
     private bool OptionalQuestRunning(){try{return QuestProviderRunning();}catch{return false;}}
     private void CancelEventAccountMovement(){
+        StopNativeGardenMove("Event estate approach stopped","event-return");
         if(eventSaucerTravelOwned)StopNativeAethernet("Event movement stopped");StopIndependentWalk();
         if(eventAccountMoveOwned||eventSaucerTravelOwned){try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}}
         eventAccountMoveOwned=eventSaucerTravelOwned=false;eventSaucerTravelAt=default;

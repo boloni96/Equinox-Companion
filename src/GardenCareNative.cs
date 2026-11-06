@@ -137,7 +137,7 @@ public sealed partial class Plugin
         if(gardenHarvestScope!=scope){gardenHarvestScope=scope;gardenHarvestSelection.Clear();}
         var now=DateTimeOffset.UtcNow;
         ImGui.TextUnformatted($"Batch {plan.Batch} · care actions");
-        var walk=config.GardenCareWalk;if(ImGui.Checkbox("Walk to mapped beds (Lifestream)",ref walk)){config.GardenCareWalk=walk;SaveConfiguration();}
+        var walk=config.GardenCareWalk;if(ImGui.Checkbox("Walk to mapped beds (Companion)",ref walk)){config.GardenCareWalk=walk;SaveConfiguration();}
         if(ImGui.IsItemHovered())ImGui.SetTooltip("Short direct approaches inside this plot, up to 30 yalms. Lifestream movement does not find a route around furniture; blocked approaches stop on timeout.");
         ImGui.BeginDisabled(gardenHousePlant!=null||gardenAutoPlantPlan!=null||gardenHouseHarvest!=null||gardenTendRoute!=null||gardenCareRun?.Running==true||!atOutdoorEstate||SharedGardenLocation.Match(currentAddress,[plan])!=plan.HouseId);
         var multipleBatches=plan.Capacity>1||GardenPlanSources().Any(p=>p.HouseId==plan.HouseId&&p.Batch>1);
@@ -203,7 +203,7 @@ public sealed partial class Plugin
         private ulong targetId;private int openedBed;private DateTimeOffset opened,actionAt,next;private bool menuSent,itemOpened,itemSent;private InventoryType fertilizerBag;private int fertilizerSlot;private uint fertilizerId;private bool closing;private bool confirmationSent;private uint plantSeed,plantSoil;private GardenCareAction? issuedAction;
         public GardenCarePort(Plugin plugin,SharedGardenPlan plan,bool postPlantTend=false,bool tendAll=false,bool visitorTend=false,bool mappedInspection=false){this.mappedInspection=mappedInspection;this.visitorTend=visitorTend;this.postPlantTend=postPlantTend;this.tendAll=tendAll;p=plugin;original=plan;owner=Player.ContentId;world=Player.CurrentWorld.RowId;origin=Objects.LocalPlayer?.Position??default;}
         private SharedGardenPlan Current(){var source=p.GardenPlanSources().FirstOrDefault(x=>x.HouseId==original.HouseId&&x.Batch==original.Batch)??throw new InvalidOperationException("Garden plan is no longer available.");if(source.At!=original.At)throw new InvalidOperationException("Garden plan changed during the run.");return p.EffectiveGardenPlan(source);}
-        public DateTimeOffset? MovementRecoveryUntil=>walking?walkRecovery.Deadline:null;
+        public DateTimeOffset? MovementRecoveryUntil=>walking?p.nativeGardenMove?.Deadline:null;
         public void Validate()
         {
             if(!Player.IsLoaded||owner==0||Player.ContentId!=owner||Player.CurrentWorld.RowId!=world||!p.ObservingGardens||!p.atOutdoorEstate||SharedGardenLocation.Match(p.currentAddress,[original])!=original.HouseId||Objects.LocalPlayer is not {} player||(!walking&&Vector3.Distance(player.Position,origin)>1.5f)||Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]||Conditions[ConditionFlag.Unconscious]||Conditions[ConditionFlag.TradeOpen]||p.HelperInCutscene()||p.sellerRun.Running||p.TraderRunning||p.retrievalRun.Running||p.organizeRunning||p.chestRunning)
@@ -213,13 +213,11 @@ public sealed partial class Plugin
         public bool Open(int bed)
         {
             var now=DateTimeOffset.UtcNow;
-            if(walking){if(walkProgress.Blocked(Objects.LocalPlayer!.Position,now)){
-                var recovery=walkRecovery.Next(Objects.LocalPlayer.Position,now);
-                if(recovery==null)throw new InvalidOperationException("Garden walk is blocked after 30 seconds of recovery. Clear the path or move closer, then restart.");
-                Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();
-                Pi.GetIpcSubscriber<List<Vector3>,bool?,float?,float?,object>("Lifestream.MoveEx").InvokeAction(recovery.ToList(),true,.3f,.3f);
-                walkProgress.Reset(Objects.LocalPlayer.Position,now);return false;
-            }if(p.LifestreamBusy())return false;walking=false;origin=Objects.LocalPlayer!.Position;}
+            if(walking){
+                if(p.NativeGardenWalking)return false;
+                if(p.nativeGardenMoveFailure.Length>0)throw new InvalidOperationException(p.nativeGardenMoveFailure);
+                walking=false;origin=Objects.LocalPlayer!.Position;
+            }
             if(openedBed!=bed){
                 if(SellerAddonPresentForGarden())return false;
                 var plan=Current();var resolver=p.GardenResolver();var found=Objects.Where(o=>o.IsTargetable&&o.BaseId==2003757&&o.ObjectKind==ObjectKind.EventObj&&o.Address!=0&&(p.config.GardenCareWalk||Vector3.Distance(o.Position,Objects.LocalPlayer!.Position)<=4.5f)).Where(o=>{
@@ -229,13 +227,13 @@ public sealed partial class Plugin
                     return GardenTargetMap.SelectedBatch(candidate,resolver,[plan]) is {} hit&&hit.Bed==bed;
                 }).Take(2).ToArray();
                 if(found.Length!=1)throw new InvalidOperationException(p.config.GardenCareWalk?$"Bed {bed} is not uniquely mapped among loaded garden objects. Inspect / sync this batch, then resume.":$"Bed {bed} is out of reach. Enable Walk to mapped beds or move closer.");
-                if(Vector3.Distance(found[0].Position,Objects.LocalPlayer!.Position)>3f){
+                if(Vector3.Distance(found[0].Position,Objects.LocalPlayer!.Position)>3.2f){
                     if(walkedBed==bed)throw new InvalidOperationException("Could not reach the bed. Clear the approach or move closer, then retry.");
                     if(!p.config.GardenCareWalk)throw new InvalidOperationException("Move closer to the garden or enable Walk to mapped beds.");
                     if(p.LifestreamBusy())throw new InvalidOperationException("Another Lifestream journey is active.");
                     var offset=Objects.LocalPlayer.Position-found[0].Position;offset.Y=0;if(offset.LengthSquared()<.01f)throw new InvalidOperationException("Cannot choose a garden approach point.");
                     var destination=found[0].Position+Vector3.Normalize(offset)*2.2f;
-                    Pi.GetIpcSubscriber<List<Vector3>,bool?,float?,float?,object>("Lifestream.MoveEx").InvokeAction([destination],true,.3f,.3f);walking=true;walkRecovery.Reset(Objects.LocalPlayer.Position,destination);walkProgress.Reset(Objects.LocalPlayer.Position,now);walkedBed=bed;return false;
+                    p.StartNativeGardenMove([destination],"bed",found[0]);walking=true;walkRecovery.Reset(Objects.LocalPlayer.Position,destination);walkProgress.Reset(Objects.LocalPlayer.Position,now);walkedBed=bed;return false;
                 }
                 openedBed=bed;targetId=found[0].GameObjectId;opened=now;menuSent=itemOpened=itemSent=confirmationSent=false;issuedAction=null;closing=false;actionAt=default;
                 Targets.Target=found[0];TargetSystem.Instance()->InteractWithObject((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)found[0].Address,false);return false;
@@ -360,6 +358,6 @@ public sealed partial class Plugin
             if(SellerAddonPresentForGarden())return false;
             targetId=0;openedBed=0;walkedBed=0;return true;
         }
-        public void Release(){if(walking){try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}walking=false;}p.RequestStorageRefresh();p.nextRosterRead=default;if(p.syncFailures==0)p.nextSync=default;}
+        public void Release(){if(walking){p.StopNativeGardenMove("Garden care movement released","bed");walking=false;}p.RequestStorageRefresh();p.nextRosterRead=default;if(p.syncFailures==0)p.nextSync=default;}
     }
 }

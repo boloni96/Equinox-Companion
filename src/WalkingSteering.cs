@@ -38,7 +38,9 @@ internal static class WalkingSteering
             point=path[i];remaining-=distance;
         }
         point=BoundedTarget(position,point);
-        return clear(position,point)?point:BoundedTarget(position,path[next]);
+        if(clear(position,point))return point;
+        var fallback=BoundedTarget(position,path[next]);
+        return clear(position,fallback)?fallback:position;
     }
     public static Vector3 BoundedTarget(Vector3 position,Vector3 target){
         var distance=Vector3.Distance(position,target);
@@ -73,7 +75,12 @@ internal sealed class NavigationPhaseTimer
 internal sealed class AvoidStalledTargets(IWalkingCollision inner,Vector3[] blocked):IWalkingCollision
 {
     public bool Ground(Vector3 near,out Vector3 ground)=>inner.Ground(near,out ground);
-    public float WallPenalty(Vector3 point)=>inner.WallPenalty(point);
+    public float WallPenalty(Vector3 point){
+        var result=inner.WallPenalty(point);
+        foreach(var p in blocked)if(MathF.Abs(p.Y-point.Y)<1)result=MathF.Max(result,Math.Clamp(1-CollisionRouteSearch.Horizontal(p,point)/3,0,1));
+        return result;
+    }
+    public float RoutePenalty(Vector3 point)=>inner.RoutePenalty(point);
     public bool Traverse(Vector3 from,Vector3 to)=>
         ClearOfBlocked(from,to,blocked)&&inner.Traverse(from,to);
     public static bool ClearOfBlocked(Vector3 from,Vector3 to,IEnumerable<Vector3> blocked)

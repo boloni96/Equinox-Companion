@@ -42,7 +42,7 @@ public sealed partial class Plugin
             }
             optionsChanged|=ImGui.Checkbox("Switch assigned characters on this login",ref switchCharacters);
             if(optionsChanged){config.GardenAdventureInspect=inspect;config.GardenAdventureTend=tend;config.GardenAdventurePlant=plant;config.GardenAdventureHarvest=harvest;config.GardenAdventureSwitch=switchCharacters;SaveConfiguration();}
-            var walk=config.GardenCareWalk;if(ImGui.Checkbox("Walk to mapped beds (Lifestream)",ref walk)){config.GardenCareWalk=walk;SaveConfiguration();}
+            var walk=config.GardenCareWalk;if(ImGui.Checkbox("Walk to mapped beds (Companion)",ref walk)){config.GardenCareWalk=walk;SaveConfiguration();}
             ImGui.TextWrapped("Work is grouped by plot and gardener. When planting or harvesting is selected, that plot’s assigned gardener also handles eligible inspection and tending where travel permits. Care-only work prefers the starting character. Switching stays within the starting person and verified Square Enix login. The growing adventure pauses when no work is ready; resume it later. Planting uses its exact saved seed, soil and bed order; with Harvest full batches enabled, ready crops are harvested before the next route layout is applied. Mixed maturity and protected neighbours wait. After reaching a plot, the routine rechecks all selected batches and finishes eligible work there before leaving. Confirmed arrival is reused between actions and batches on that plot. New plot visits use house travel and the short entrance approach. Stop remains available during active work.");
             ImGui.BeginDisabled(!adventureFresh||gardenCareRun?.Running==true||!Player.IsLoaded||!(gardenAdventureTend||gardenAdventurePlant||gardenAdventureHarvest||config.GardenAdventureInspect));
             if(ImGui.Button("Resume automatic gardening"))StartTendAdventure(board);ImGui.EndDisabled();ImGui.EndDisabled();
@@ -70,7 +70,7 @@ public sealed partial class Plugin
         if(gardenTendRoute==null)return;
         gardenConnection.Reset();gardenConnectionKey="";gardenVisitedHouse="";gardenVisitedCharacter=0;
         CancelAssignedLogin(reason);gardenPlotApproaching=false;gardenTendRoute=null;gardenAutoPlantPlan=null;gardenCareRun?.Stop(reason);gardenTendStatus=reason;
-        goSeeHomeTrip=null;goSeeFriendTrip=null;StopNativeHousing("Garden adventure stopped.");gardenArrival.Reset();
+        StopNativeGardenMove(reason);goSeeHomeTrip=null;goSeeFriendTrip=null;StopNativeHousing("Garden adventure stopped.");gardenArrival.Reset();
         if(gardenAdventureSwitchSent){characterSwitchUntil=default;characterSwitchTarget=null;gardenAdventureSwitchSent=false;}
         try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}
     }
@@ -83,20 +83,12 @@ public sealed partial class Plugin
         if(!config.GardenCareWalk)throw new InvalidOperationException("Enable Walk to mapped beds to approach the plot after teleporting, or move onto the plot first.");
         if(gardenPlotApproachAttempted)throw new InvalidOperationException("Plot entrance approach already attempted. Move inside the destination plot and restart.");
         if(Conditions[ConditionFlag.Unconscious]||Conditions[ConditionFlag.TradeOpen]||SellerAddonPresentForGarden())return;
-        var entrance=Pi.GetIpcSubscriber<uint,int,Vector3?>("Lifestream.GetPlotEntrance").InvokeFunc(Client.TerritoryType,plan.Plot-1)
-            ??throw new InvalidOperationException("Lifestream has no entrance position for this plot. Move onto the plot first.");
-        // The game supplies the arrival facing. Read it only after travel and settling finish.
-        var path=GardenPlotApproachPolicy.Path(player.Position,entrance,null,player.Rotation);
-        Pi.GetIpcSubscriber<List<Vector3>,bool?,float?,float?,object>("Lifestream.MoveEx").InvokeAction(path.ToList(),true,.3f,.3f);
-        gardenPlotApproaching=gardenPlotApproachAttempted=true;gardenPlotApproachAt=now;gardenPlotProgress.Reset(player.Position,now);gardenPlotRecovery.Reset(player.Position,path[^1]);
+        var entrance=NativeGardenEntrance(Client.TerritoryType,plan.Plot);
+        if(entrance==null){gardenTendStatus="Reading native plot entrance";return;}
+        if(Vector3.Distance(player.Position,entrance.Value)>40)throw new InvalidOperationException("The requested plot entrance is not nearby. Finish GO SEE first.");
+        StartNativeGardenMove([entrance.Value],"plot");
+        gardenPlotApproaching=gardenPlotApproachAttempted=true;gardenPlotApproachAt=now;
         gardenTendStatus="Walking through the plot entrance · "+plan.HouseName;
-    }
-    private bool TryRecoverGardenPlot(Vector3 position,DateTimeOffset now)
-    {
-        var path=gardenPlotRecovery.Next(position,now);if(path==null)return false;
-        Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();
-        Pi.GetIpcSubscriber<List<Vector3>,bool?,float?,float?,object>("Lifestream.MoveEx").InvokeAction(path.ToList(),true,.3f,.3f);
-        gardenPlotProgress.Reset(position,now);gardenTendStatus="Plot approach blocked · trying a short sidestep";return true;
     }
     private static bool SameGardenDefinition(GardenPlanDefinition? a,GardenPlanDefinition? b)=>a!=null&&b!=null&&a.Draft.Target==b.Draft.Target&&
         a.Steps.OrderBy(s=>s.Bed).Select(s=>(s.Bed,s.Order,s.Crop,s.Soil,s.ReplantOrder,s.StarterSoil,s.Neighbour)).SequenceEqual(b.Steps.OrderBy(s=>s.Bed).Select(s=>(s.Bed,s.Order,s.Crop,s.Soil,s.ReplantOrder,s.StarterSoil,s.Neighbour)));
@@ -256,25 +248,11 @@ public sealed partial class Plugin
             }
             var atDestination=atOutdoorEstate&&SharedGardenLocation.Match(currentAddress,[sourcePlan])==sourcePlan.HouseId;
             if(gardenPlotApproaching){
-                if(atDestination){
-                    // Finish the short forward leg; crossing the boundary alone can leave us beside the fence.
-                    if(LifestreamBusy()){
-                        if(now>=(gardenPlotRecovery.Deadline??gardenPlotApproachAt.AddSeconds(20)))
-                            throw new InvalidOperationException("Forward plot approach timed out.");
-                        if(Objects.LocalPlayer is {} inside&&gardenPlotProgress.Blocked(inside.Position,now)&&!TryRecoverGardenPlot(inside.Position,now))
-                            throw new InvalidOperationException("Forward plot approach is blocked. Clear the path or move further inside, then restart.");
-                        gardenTendStatus="Inside the plot · finishing forward approach";return;
-                    }
-                    gardenPlotApproaching=false;gardenTendStatus="On the destination plot · approaching garden";
-                }
-                else{
-                    if(atOutdoorEstate)throw new InvalidOperationException("Plot approach reached a different estate. Review the entrance before restarting.");
-                    if(now>=(gardenPlotRecovery.Deadline??gardenPlotApproachAt.AddSeconds(20)))throw new InvalidOperationException("Plot entrance approach timed out.");
-                    if(Objects.LocalPlayer is {} stalled&&gardenPlotProgress.Blocked(stalled.Position,now)&&!TryRecoverGardenPlot(stalled.Position,now))
-                        throw new InvalidOperationException("Plot entrance approach is blocked. Move inside the destination plot and restart.");
-                    if(now-gardenPlotApproachAt>TimeSpan.FromSeconds(3)&&!LifestreamBusy())throw new InvalidOperationException("The short approach did not enter the destination plot. Move inside and restart.");
-                    return;
-                }
+                if(atOutdoorEstate&&!atDestination)throw new InvalidOperationException("Plot approach reached a different estate; stopped.");
+                if(NativeGardenWalking){gardenTendStatus=atDestination?"Inside the plot · finishing native approach":"Walking through the plot entrance";return;}
+                if(nativeGardenMoveFailure.Length>0)throw new InvalidOperationException(nativeGardenMoveFailure);
+                if(!atDestination)throw new InvalidOperationException("Native approach did not confirm the requested plot. Export diagnostics and move inside before resuming.");
+                gardenPlotApproaching=false;gardenTendStatus="On the destination plot · approaching garden";
             }
             if(!atDestination){
                 if(!LifestreamBusy()&&nativeHousingTrip==null&&goSeeHomeTrip==null&&goSeeFriendTrip==null)TryApproachGardenPlot(sourcePlan,now);

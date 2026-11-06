@@ -37,7 +37,7 @@ public sealed partial class Plugin
         if(!CanRequestWorldTravel(world,out var reason)){bidTravelMessage=characterTravelStatus=reason;return;}
         var area=NativeHousingPolicy.District(district);
         if(area==null||!NativeHousingPolicy.Address(ward,plot)){bidTravelMessage="Choose a supported housing district, ward 1–30 and plot 1–60.";return;}
-        if(nativeHousingTrip!=null||nativeWorldTrip!=null||nativeAethernetTrip!=null||estateTrip!=null||assignedLogin!=null||independentQuestId!=0||nativeEventActive||keyboundBuying||independentMoving||independentSearch!=null||independentPath!=null||followSession.Armed||LifestreamBusy()){
+        if(nativeHousingTrip!=null||NativeGardenWalking||nativeWorldTrip!=null||nativeAethernetTrip!=null||estateTrip!=null||assignedLogin!=null||independentQuestId!=0||nativeEventActive||keyboundBuying||independentMoving||independentSearch!=null||independentPath!=null||followSession.Armed||LifestreamBusy()){
             bidTravelMessage="Another journey is active. Stop it before starting GO SEE.";return;
         }
         var now=DateTimeOffset.UtcNow;

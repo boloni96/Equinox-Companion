@@ -47,7 +47,7 @@ public sealed partial class Plugin
 
     private unsafe void StartEstateTravelCommand((int Property,int Mode,string Label) destination)
     {
-        if(nativeWorldTrip!=null||nativeHousingTrip!=null||estateTrip!=null||estateHomeReturn!=null){FollowChatNotice("TRAVEL — Estate travel is running. Use /et stop first.");return;}
+        if(NativeGardenWalking||nativeWorldTrip!=null||nativeHousingTrip!=null||estateTrip!=null||estateHomeReturn!=null){FollowChatNotice("TRAVEL — Estate travel is running. Use /et stop first.");return;}
         if(!Player.IsLoaded||Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]){
             FollowChatNotice("TRAVEL — Wait until your character has loaded.");return;
         }

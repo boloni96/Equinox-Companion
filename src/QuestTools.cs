@@ -48,7 +48,7 @@ public sealed partial class Plugin
         if(companionHelperCommand)Commands.RemoveHandler("/eqhelper");
         if(companionFollowCommand)Commands.RemoveHandler("/eqfollow");
     }
-    private bool QuestToolsOtherOperation()=>nativeHousingTrip!=null||followSession.Armed||TraderRunning||gardenCareRun?.Running==true||
+    private bool QuestToolsOtherOperation()=>NativeGardenWalking||nativeHousingTrip!=null||followSession.Armed||TraderRunning||gardenCareRun?.Running==true||
         gearRouting||armoireRunning||retrievalRun.Running||organizeRunning||sellerRun.Running||keyboundBuying||keyboundEnabled;
     private string QuestTitle(uint id)=>DataManager.GetExcelSheet<Lumina.Excel.Sheets.Quest>().GetRowOrDefault(65536+QuestToolsPolicy.ShortId(id))?.Name.ToString()??
         questCatalogue.FirstOrDefault(x=>x.Id==QuestToolsPolicy.ShortId(id))?.Name??id.ToString();

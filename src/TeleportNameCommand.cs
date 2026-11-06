@@ -31,7 +31,7 @@ public sealed partial class Plugin
             if(Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]||Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.BoundByDuty]||Conditions[ConditionFlag.Casting]||HelperInCutscene()||QuestConversationVisible()||VisibleFollowAddon("SelectYesno")||telepo->ActiveTeleportRequest){
                 FollowChatNotice("TRAVEL — Finish the current loading, combat, duty, cast or conversation first.");return true;
             }
-            if(nativeHousingTrip!=null||nativeWorldTrip!=null||LifestreamBusy()||estateTrip!=null||estateHomeReturn!=null||followSession.Armed||independentMoving||independentSearch!=null||independentQuestId!=0||assignedLogin!=null||eventAccountActive||gardenTendRoute!=null||shoppingTravel!=null||goSeeHomeTrip!=null||goSeeFriendTrip!=null||keyboundBuying){
+            if(NativeGardenWalking||nativeHousingTrip!=null||nativeWorldTrip!=null||LifestreamBusy()||estateTrip!=null||estateHomeReturn!=null||followSession.Armed||independentMoving||independentSearch!=null||independentQuestId!=0||assignedLogin!=null||eventAccountActive||gardenTendRoute!=null||shoppingTravel!=null||goSeeHomeTrip!=null||goSeeFriendTrip!=null||keyboundBuying){
                 FollowChatNotice("TRAVEL — Stop the active routine or journey first.");return true;
             }
             // Revalidate against the live unlocked list; never send a guessed or locked ID.

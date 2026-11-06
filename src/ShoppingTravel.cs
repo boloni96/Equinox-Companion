@@ -22,7 +22,7 @@ public sealed partial class Plugin
   if(!Player.IsLoaded||Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]){marketTravelStatus="Wait until you are out of combat and loading, then click Travel.";return;}
   marketTravelNext=DateTimeOffset.UtcNow.AddSeconds(2);
   try{
-   if(shoppingTravel is not null||nativeHousingTrip!=null||nativeWorldTrip!=null||nativeAethernetTrip!=null||LifestreamBusy()){marketTravelStatus="Travel is already in progress.";return;}
+   if(NativeGardenWalking||shoppingTravel is not null||nativeHousingTrip!=null||nativeWorldTrip!=null||nativeAethernetTrip!=null||LifestreamBusy()){marketTravelStatus="Travel is already in progress.";return;}
    var city=Math.Clamp(config.ShoppingCity,0,2);var shard=ShoppingDestination.Shard(city,config.ShoppingArrival);
    if(Player.CurrentWorld.RowId!=world&&!StartNativeWorldTravel(world,"shopping")){marketTravelStatus=nativeTravelStatus;return;}
    shoppingTravelGate.Reset();

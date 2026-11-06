@@ -2,7 +2,7 @@ using System.Numerics;
 namespace EquinoxCompanion;
 internal static class WalkingGroundTraversal
 {
-    private const float Radius=.45f,Height=1.85f;
+    private const float Radius=.6f,Height=1.85f;
     private static bool Finite(Vector3 p)=>float.IsFinite(p.X)&&float.IsFinite(p.Y)&&float.IsFinite(p.Z);
     public static bool Check(IWalkingCollision collision,Vector3 from,Vector3 to,Func<Vector3,Vector3,bool> blocked,out Vector3? blockedAt)
     {
