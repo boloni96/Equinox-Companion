@@ -8,6 +8,7 @@ internal sealed class GameWalkingCollision:IWalkingCollision
 {
     private readonly Dictionary<Vector3,(bool Found,Vector3 Ground)>? groundCache;
     private readonly NavigationRoadMap? roadGuide;
+    private readonly WalkingTraversalCache traversalCache=new();
     internal GameWalkingCollision(bool cacheGround=false,NavigationRoadMap? roadGuide=null){this.roadGuide=roadGuide;if(cacheGround)groundCache=new();}
     public float RoutePenalty(Vector3 point)=>roadGuide?.Penalty(point)??0;
     private const float Radius=.6f,Height=1.85f;
@@ -92,7 +93,8 @@ internal sealed class GameWalkingCollision:IWalkingCollision
     public bool Traverse(Vector3 from,Vector3 to)
     {
         Ready();
-        var clear=WalkingGroundTraversal.Check(this,from,to,Blocked,out var blockedAt);
+        Vector3? blockedAt;
+        var clear=groundCache!=null?traversalCache.Check(this,from,to,Blocked,out blockedAt):WalkingGroundTraversal.Check(this,from,to,Blocked,out blockedAt);
         LastBlockedAt=blockedAt;
         return clear;
     }

@@ -107,7 +107,15 @@ public sealed class CollisionRouteSearch
         costs[key]=cost;open.Enqueue(new(key,point,cost,parent),cost+heuristicWeight*Heuristic(point));
     }
     private Key Address(Vector3 p)=>new((int)MathF.Round((p.X-origin.X)/spacing),(int)MathF.Round(p.Y*4),(int)MathF.Round((p.Z-origin.Z)/spacing));
-    private float Heuristic(Vector3 p)=>MathF.Max(0,Horizontal(p,goal)-range);
+    // Arrival needs both horizontal reach and the correct floor. A point directly
+    // beneath the destination must not look like a zero-distance destination.
+    internal static float RemainingDistance(Vector3 p,Vector3 goal,float range)
+    {
+        var horizontal=MathF.Max(0,Horizontal(p,goal)-range);
+        var vertical=MathF.Max(0,MathF.Abs(p.Y-goal.Y)-1.2f);
+        return MathF.Sqrt(horizontal*horizontal+vertical*vertical);
+    }
+    private float Heuristic(Vector3 p)=>RemainingDistance(p,goal,range);
     public static float Horizontal(Vector3 a,Vector3 b)=>new Vector2(a.X-b.X,a.Z-b.Z).Length();
     private static bool Finite(Vector3 p)=>float.IsFinite(p.X)&&float.IsFinite(p.Y)&&float.IsFinite(p.Z);
 }

@@ -4,7 +4,7 @@ internal static class WalkingGroundTraversal
 {
     private const float Radius=.6f,Height=1.85f;
     private static bool Finite(Vector3 p)=>float.IsFinite(p.X)&&float.IsFinite(p.Y)&&float.IsFinite(p.Z);
-    public static bool Check(IWalkingCollision collision,Vector3 from,Vector3 to,Func<Vector3,Vector3,bool> blocked,out Vector3? blockedAt)
+    public static bool Check(IWalkingCollision collision,Vector3 from,Vector3 to,Func<Vector3,Vector3,bool> blocked,out Vector3? blockedAt,Func<Vector3,bool>? bodyRoom=null)
     {
         blockedAt=null;var horizontal=CollisionRouteSearch.Horizontal(from,to);
         if(horizontal>2.9f||MathF.Abs(from.Y-to.Y)>1.2f){blockedAt=to;return false;}
@@ -33,10 +33,32 @@ internal static class WalkingGroundTraversal
                     if(length>.001f&&blocked(a,b)){blockedAt=floor;return false;}
                 }
             }
-            if(!WalkingClearance.BodyRoom(floor,Radius,blocked)){blockedAt=floor;return false;}
+            if(!(bodyRoom?.Invoke(floor)??WalkingClearance.BodyRoom(floor,Radius,blocked))){blockedAt=floor;return false;}
             previous=floor;
         }
         if(MathF.Abs(previous.Y-to.Y)<.25f)return true;
         blockedAt=to;return false;
+    }
+}
+
+// A planning collision instance belongs to one route on one loaded territory.
+// Cache only completed checks at exact coordinates; live steering stays uncached.
+internal sealed class WalkingTraversalCache
+{
+    private readonly Dictionary<(Vector3 From,Vector3 To),(bool Clear,Vector3? Blocked)> edges=[];
+    private readonly Dictionary<Vector3,bool> rooms=[];
+    public bool Check(IWalkingCollision collision,Vector3 from,Vector3 to,Func<Vector3,Vector3,bool> blocked,out Vector3? blockedAt)
+    {
+        if(edges.TryGetValue((from,to),out var saved)){blockedAt=saved.Blocked;return saved.Clear;}
+        bool Room(Vector3 floor){
+            if(rooms.TryGetValue(floor,out var clear))return clear;
+            clear=WalkingClearance.BodyRoom(floor,.6f,blocked);
+            if(rooms.Count<100000)rooms[floor]=clear;
+            return clear;
+        }
+        var result=WalkingGroundTraversal.Check(collision,from,to,blocked,out blockedAt,Room);
+        // Exceptions (including slice expiry) never save an unfinished result.
+        if(edges.Count<100000)edges[(from,to)]=(result,blockedAt);
+        return result;
     }
 }
