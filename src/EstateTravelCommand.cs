@@ -159,6 +159,7 @@ public sealed partial class Plugin
                     var prompt=(AddonSelectYesno*)KeyboundAddon("SelectYesno");
                     var expected=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Warp>().GetRowOrDefault(131148)?.Question.ToString()??"";
                     if(prompt!=null&&prompt->PromptText!=null&&NativeEventPolicy.Prompt(expected,TravelMenuText(prompt->PromptText->NodeText.StringPtr)??"")&&NativeEventButton((AtkUnitBase*)prompt,prompt->YesButton)){
+                        RecordTravelPrompt("Estate entrance menu confirmed",new{door=trip.Door});
                         trip.Stage=4;trip.ActionAt=now;
                     }
                 }else{
@@ -215,9 +216,10 @@ public sealed partial class Plugin
             if(!IndependentWalk(approach,.35f,now,allowFlight:false,interactionTarget:door))return;
             }
             StopIndependentWalk("At estate door");
-            if(!TargetWithinInteractionRange(door)&&Vector3.Distance(self.Position,door.Position)>4)return;
+            if(!InteractionApproachPolicy.WithinDistance(self.Position,door.Position,false))throw new InvalidOperationException("Door approach finished outside interaction distance; no entrance interaction sent.");
             var targetSystem=TargetSystem.Instance();if(targetSystem==null)return;
             Targets.Target=door;
+            RecordTravelPrompt("Estate entrance interaction requested",new{door=door.GameObjectId,dataId=door.BaseId,distance=Vector3.Distance(self.Position,door.Position),player=self.Position,target=door.Position});
             targetSystem->InteractWithObject((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)door.Address,false);
             trip.Stage=workshop?6:3;trip.ActionAt=now;
         }catch(Exception ex){StopEstateTravel(ex.Message);}

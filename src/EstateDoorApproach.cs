@@ -6,7 +6,7 @@ public static class EstateDoorApproach
     public static Vector3? Find(IWalkingCollision collision,Vector3 start,Vector3 door,Func<Vector3,bool> visible)
     {
         var candidates=new List<Vector3>();
-        if(Vector3.Distance(start,door)<=3.2f&&collision.Ground(start,out var standing)&&
+        if(Vector3.Distance(start,door)<=2.8f&&collision.Ground(start,out var standing)&&
             collision.Traverse(standing,standing)&&visible(standing))return standing;
         var facing=MathF.Atan2(start.Z-door.Z,start.X-door.X);
         foreach(var radius in new[]{2.25f,3f,1.5f})
@@ -15,7 +15,7 @@ public static class EstateDoorApproach
             var near=door+new Vector3(MathF.Cos(angle)*radius,0,MathF.Sin(angle)*radius);
             foreach(var height in new[]{0f,-.6f,-1.2f,-1.8f,-2.4f,.6f}){
                 if(!collision.Ground(near+new Vector3(0,height,0),out var floor)||
-                    Vector3.Distance(floor,door)>3.2f||!collision.Traverse(floor,floor)||!visible(floor))continue;
+                    Vector3.Distance(floor,door)>2.8f||!collision.Traverse(floor,floor)||!visible(floor))continue;
                 candidates.Add(floor);break;
             }
         }

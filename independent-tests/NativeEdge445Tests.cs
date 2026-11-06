@@ -11,7 +11,7 @@ internal static class NativeEdge445Tests
     }
     [ModuleInitializer] internal static void Run()
     {
-        if(NativeAetheryteApproach.Range(0,1)!=30||NativeAetheryteApproach.Range(1,1)!=13||NativeAetheryteApproach.Range(2,1)!=8)throw new Exception("Try the nearby crystal before progressively moving closer.");
+        if(NativeAetheryteApproach.Range(0,1)!=8||NativeAetheryteApproach.Range(1,1)!=7||NativeAetheryteApproach.Range(2,1)!=6)throw new Exception("Only attempt interaction at bounded close distances.");
         var player=new Vector3(18,0,0);var crystal=new Vector3(0,4,0);var map=new Pedestal();
         var edge=NativeAetheryteApproach.InteractionEdge(player,crystal,13);
         if(Vector3.Distance(edge,crystal)>12.01f||edge.X<10||edge.Y!=0)throw new Exception("Approach must stop inside interaction range on the player's floor, not beside the pedestal.");

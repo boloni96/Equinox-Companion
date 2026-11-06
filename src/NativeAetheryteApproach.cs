@@ -2,7 +2,7 @@ using System.Numerics;
 namespace EquinoxCompanion;
 public static class NativeAetheryteApproach
 {
-    public static float Range(int attempt,float hitbox)=>MathF.Max(attempt<=0?30:attempt==1?13:8,hitbox+3);
+    public static float Range(int attempt,float hitbox)=>attempt<=0?8:attempt==1?7:6;
     public static Vector3 InteractionEdge(Vector3 player,Vector3 crystal,float range)
     {
         if(Vector3.Distance(player,crystal)<=range)return player;
