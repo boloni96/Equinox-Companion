@@ -17,7 +17,7 @@ public sealed partial class Plugin
         public required int Service;public required DateTimeOffset Started;
         public NativeTravelStage Stage;public DateTimeOffset Next,StageAt;
         public bool ReturnHome,DcSelected,ContextSent,LoginSent,LoginConfirmed,GatewaySent,TransferCommitted;
-        public uint Gateway,RequestedLoginWorld;public bool ServiceSent,LogoutConfirmed,IntroSent,CloseApproach;
+        public uint Gateway,RequestedLoginWorld;public bool ServiceSent,LogoutConfirmed,IntroSent;public int ApproachAttempt;
     }
     private NativeWorldTrip? nativeWorldTrip;
     private string nativeTravelStatus="Choose a map, aetheryte or world.";
@@ -105,11 +105,11 @@ public sealed partial class Plugin
                 }
                 throw new InvalidOperationException("Unlock a main aetheryte in Gridania, Limsa Lominsa or Ul'dah first.");
             }
-            if(Vector3.Distance(crystal.Position,self.Position)>MathF.Max(trip.CloseApproach?8:13,crystal.HitboxRadius+3)){
+            if(Vector3.Distance(crystal.Position,self.Position)>NativeAetheryteApproach.Range(trip.ApproachAttempt,crystal.HitboxRadius)){
                 var offset=self.Position-crystal.Position;offset.Y=0;if(offset.LengthSquared()<.01f)throw new InvalidOperationException("The crystal is on another floor.");
-                var approach=crystal.Position+Vector3.Normalize(offset)*(crystal.HitboxRadius+2);
+                var approach=NativeAetheryteApproach.InteractionEdge(self.Position,crystal.Position,NativeAetheryteApproach.Range(trip.ApproachAttempt,crystal.HitboxRadius));
                 if(!TryNativeTravelGround(approach,self.Position,crystal.Position,out var floor)){nativeTravelStatus="Waiting for walkable ground beside the aetheryte";return;}
-                IndependentWalk(floor,.65f,now,allowFlight:false);nativeTravelStatus="Approaching aetheryte · "+independentWalkStatus;return;
+                IndependentWalk(floor,.65f,now,allowFlight:false,directDistance:8);nativeTravelStatus="Approaching aetheryte · "+independentWalkStatus;return;
             }
             StopIndependentWalk("At World Visit aetheryte");Targets.Target=crystal;
             var system=TargetSystem.Instance();if(system==null)return;
@@ -119,9 +119,9 @@ public sealed partial class Plugin
         if(trip.Stage==NativeTravelStage.AetheryteMenu){
             var menu=(AddonSelectString*)SellerAddon("SelectString");
             if(menu==null){
-                if(now-trip.StageAt<TimeSpan.FromSeconds(5))return;
-                if(trip.CloseApproach)throw new InvalidOperationException("The aetheryte menu did not open after the closer approach.");
-                trip.CloseApproach=true;SetNativeTravelStage(trip,NativeTravelStage.Gateway,"Aetheryte did not respond; moving a little closer");return;
+                if(now-trip.StageAt<TimeSpan.FromSeconds(trip.ApproachAttempt==0?2:5))return;
+                if(trip.ApproachAttempt>=2)throw new InvalidOperationException("The aetheryte menu did not open after the closer approach.");
+                trip.ApproachAttempt++;SetNativeTravelStage(trip,NativeTravelStage.Gateway,"Aetheryte did not respond; moving a little closer");return;
             }
             var label=DataManager.GetExcelSheet<NativeEventQuestText>(name:"transport/Aetheryte").GetRowOrDefault(3)?.Text??"";
             var choices=TransportChoices((AtkUnitBase*)menu);var index=choices.FindIndex(x=>NativeEventPolicy.Prompt(label,x));

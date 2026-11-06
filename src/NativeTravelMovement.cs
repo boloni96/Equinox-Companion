@@ -16,7 +16,7 @@ public sealed partial class Plugin
         // Object origins can float above the floor. Ground() only probes within
         // 0.7 yalms of the supplied height; start at the character's floor height.
         // Retain a planned goal so approaching does not continually restart it.
-        if((independentSearch!=null||independentPath!=null)&&Vector3.DistanceSquared(independentGoal,approach)<36){floor=independentGoal;return true;}
+        if((independentSearch!=null||independentPath!=null)&&Vector3.DistanceSquared(independentGoal,approach)<1){floor=independentGoal;return true;}
         if(NativeAetheryteApproach.Ground(independentCollision,approach,player,out floor))return true;
         RecordNativeMovementWait("No supported aetheryte approach",new{player=new{x=player.X,y=player.Y,z=player.Z},crystal=new{x=crystal.X,y=crystal.Y,z=crystal.Z},approach=new{x=approach.X,y=approach.Y,z=approach.Z},territory=Client.TerritoryType});
         return false;

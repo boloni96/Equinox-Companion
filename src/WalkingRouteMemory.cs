@@ -3,9 +3,9 @@ namespace EquinoxCompanion;
 internal sealed record RememberedWalkingRoute(uint Territory,Vector3 Goal,float Range,Vector3[] Points);
 internal static class VerifiedWalkingOpening
 {
-    public static Vector3[] ShortDirect(IWalkingCollision collision,Vector3 start,Vector3 goal){
+    public static Vector3[] ShortDirect(IWalkingCollision collision,Vector3 start,Vector3 goal,float maxDistance=4){
         var distance=CollisionRouteSearch.Horizontal(start,goal);
-        if(distance>4||MathF.Abs(start.Y-goal.Y)>1.2f)return [];
+        if(distance>Math.Clamp(maxDistance,0,8)||MathF.Abs(start.Y-goal.Y)>1.2f)return [];
         var steps=Math.Max(1,(int)MathF.Ceiling(distance/.25f));
         var path=new List<Vector3>{start};
         for(var i=1;i<=steps;i++){

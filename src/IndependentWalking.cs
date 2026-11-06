@@ -32,6 +32,7 @@ public sealed partial class Plugin
     private int independentLastRoutePoints,independentLastExpanded;
     private double independentPlanningSeconds;
     private readonly NavigationPhaseTimer independentPhaseTimer=new();
+    private bool independentNearbyApproach;
     private readonly List<Vector3> independentBlockedTargets=[];
     private CollisionRouteSearch CreateIndependentSearch(Vector3 start,Vector3 goal,float range)=>
         new(new AvoidStalledTargets(new GameWalkingCollision(cacheGround:true),independentBlockedTargets.ToArray()),start,goal,range,independentBlockedTargets.Count>0?.5f:1f);
@@ -103,7 +104,7 @@ public sealed partial class Plugin
         independentSearch=null;independentPath=null;independentPendingPath=null;independentArrived=false;independentDirectOnly=false;independentWalkStatus=reason;independentWalkFailure="";
         if(resetFailure)independentLastWalkFailure="";
     }
-    private unsafe bool IndependentWalk(Vector3 destination,float range,DateTimeOffset now,bool allowFlight=true,bool preferFlight=false,bool directOnly=false)
+    private unsafe bool IndependentWalk(Vector3 destination,float range,DateTimeOffset now,bool allowFlight=true,bool preferFlight=false,bool directOnly=false,float directDistance=4)
     {
         if(Objects.LocalPlayer is not {} self)return false;
         if(FlightActive){if(Vector3.DistanceSquared(flightGoal,destination)<1)return false;StopIndependentWalk("Flight destination changed");}
@@ -131,12 +132,13 @@ public sealed partial class Plugin
         independentInputBlock=independentLastWalkFailure="";independentPositionChanged=false;independentLastRoutePoints=independentLastExpanded=0;independentPlanningSeconds=0;independentLease.Revoke();
         TraceKeyboundRun(independentNavigationRun,"navigation-started",$"Destination {destination}; range {range}",independentQuestId!=0?"quest:"+independentQuestRun:"event",false);
         independentBlockedTargets.Clear();independentRecovery.Reset();independentWalkedPoints.Clear();independentWalkedPoints.Add(self.Position);independentPhaseTimer.Begin(now);
+        independentNearbyApproach=directDistance>4&&Vector3.Distance(self.Position,destination)<=16;
         independentDirectOnly=directOnly;independentGoal=destination;independentRange=range;independentCharacter=Player.ContentId;independentTerritory=Client.TerritoryType;
         independentWalkFailure="";independentArrived=false;independentReplans=0;independentSince=independentPlanningSince=independentProgressAt=now;
         independentPrevious=independentLastProgress=self.Position;
         // Short verified approaches (including the shared three-yalm estate step)
         // do not need an area search or a detour to satisfy preferred wall clearance.
-        var direct=directOnly?VerifiedWalkingOpening.Entrance(independentCollision,self.Position,destination):VerifiedWalkingOpening.ShortDirect(independentCollision,self.Position,destination);
+        var direct=directOnly?VerifiedWalkingOpening.Entrance(independentCollision,self.Position,destination):VerifiedWalkingOpening.ShortDirect(independentCollision,self.Position,destination,directDistance);
         if(direct.Length>1){
             independentPath=direct;independentWaypoint=1;independentCheckedWaypoint=-1;
             independentPhaseTimer.SetPlanning(false,now);independentWalkStatus="Short approach ready";return false;
@@ -183,6 +185,7 @@ public sealed partial class Plugin
             if(!QuestOwnsMovement&&FollowMovementKeysHeld())throw new InvalidOperationException("Navigation stopped by your movement.");
             if(Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]||Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.BoundByDuty]||Conditions[ConditionFlag.Mounted]||Conditions[ConditionFlag.InFlight])throw new InvalidOperationException("Navigation stopped for loading, combat, duty or mounted movement. Dismount for ground walking.");
             if(now-independentSince>TimeSpan.FromMinutes(15))throw new InvalidOperationException("Navigation exceeded its fifteen-minute total limit.");
+            if(independentSearch!=null&&independentNearbyApproach&&now-independentPlanningSince>TimeSpan.FromSeconds(5))throw new InvalidOperationException($"Nearby approach blocked: no route found within 5 seconds ({independentSearch.Expanded} areas checked). Move to a clear side of the aetheryte and retry.");
             if(independentSearch!=null&&independentPhaseTimer.Expired(now))throw new InvalidOperationException(independentSearch!=null?"Route calculation timed out after 90 seconds.":"Walking timed out after 90 seconds.");
             if(!GameWalkingCollision.Available()){independentWalkStatus="Waiting for collision geometry to load";return;}
             if(IndependentMovementWindow()||FollowStopTextEntryActive()||Conditions[ConditionFlag.OccupiedInEvent]||Conditions[ConditionFlag.OccupiedInQuestEvent]||HelperInCutscene()||Conditions[ConditionFlag.Casting]){independentWalkStatus="Paused · close the conversation or wait for the cast";independentInputBlock=independentWalkStatus;independentProgressAt=now;return;}
@@ -210,7 +213,7 @@ public sealed partial class Plugin
                 independentWalkStatus="Walking forward into the plot · watching actual progress";return;
             }
             if(independentSearch!=null){
-                independentMoving=false;independentSearch.Advance(milliseconds:6,edgeBudget:192);
+                independentMoving=false;independentSearch.Advance(milliseconds:independentNearbyApproach?1.5:6,edgeBudget:independentNearbyApproach?48:192);
                 independentLastExpanded=independentSearch.Expanded;independentPlanningSeconds=(DateTimeOffset.UtcNow-independentPlanningSince).TotalSeconds;
                 independentWalkStatus=$"Finding walkable route · {independentSearch.Expanded} areas checked";
                 if(independentSearch.Error.Length>0)throw new InvalidOperationException(independentSearch.Error);
