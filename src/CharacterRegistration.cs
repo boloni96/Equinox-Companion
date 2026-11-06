@@ -6,11 +6,14 @@ public static class CharacterRegistrationPolicy
     public static bool Valid(CharacterRegistration? r) => r is not null && Regex.IsMatch(r.PersonId??"","^[A-Za-z0-9_-]{1,100}$") && Regex.IsMatch(r.AccountId??"","^[A-Za-z0-9_-]{1,100}$") && new[]{r.PersonName,r.AccountName,r.Dc,r.Region}.All(s=>s is not null&&s.Length<=100&&!s.Any(char.IsControl)) && (r.AccountKey==""||Regex.IsMatch(r.AccountKey??"","^[a-f0-9]{64}$"));
     public static SharedCharacter? Find(SharedRoster roster,Actor actor)
     {
-        var all=roster.People.SelectMany(p=>p.Characters).ToArray();
-        var stable=all.Where(c=>c.ContentId==actor.ContentId||c.Id=="companion-character-"+actor.ContentId).ToArray();
-        if(stable.Length==1)return stable[0];
-        var names=all.Where(c=>string.Equals(c.Name.Trim(),actor.Name.Trim(),StringComparison.OrdinalIgnoreCase)&&string.Equals(c.World.Trim(),actor.HomeWorldName?.Trim(),StringComparison.OrdinalIgnoreCase)).ToArray();
-        return names.Length==1?names[0]:null;
+        SharedCharacter? stable=null,named=null;var stableCount=0;var nameCount=0;
+        var generatedId="companion-character-"+actor.ContentId;
+        var name=actor.Name.Trim();var world=actor.HomeWorldName?.Trim();
+        foreach(var person in roster.People)foreach(var c in person.Characters){
+            if(c.ContentId==actor.ContentId||c.Id==generatedId){stable=c;stableCount++;}
+            if(string.Equals(c.Name.Trim(),name,StringComparison.OrdinalIgnoreCase)&&string.Equals(c.World.Trim(),world,StringComparison.OrdinalIgnoreCase)){named=c;nameCount++;}
+        }
+        return stableCount==1?stable:nameCount==1?named:null;
     }
     public static (string Person,string Account)? Destination(SharedRoster roster,string key)
     {

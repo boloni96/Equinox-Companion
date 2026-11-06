@@ -6,9 +6,16 @@ public static class GardenLive
     {
         var beds=plan.Beds.Select(b=>b with {Crop=GardenCropIdentity.Canonical(b.Crop),ActualCrop=GardenCropIdentity.Canonical(b.ActualCrop)}).ToDictionary(b=>b.Bed);
         var complete=plan.CompletedAt;
-        foreach(var e in events.OrderBy(e=>e.At))
+        var singlePlan=new[]{plan};var patch=plan.PhysicalPatch>0?plan.PhysicalPatch:plan.Batch;
+        var addresses=new Dictionary<Address,bool>();
+        bool Relevant(SyncEvent e){
+            if(e.Address is not {} address||e.Patch!=patch||e.Bed is not (>=1 and <=8))return false;
+            if(!addresses.TryGetValue(address,out var match))addresses[address]=match=SharedGardenLocation.Match(address,singlePlan)==plan.HouseId;
+            return match;
+        }
+        // Resolve each distinct estate address once and sort only this batch's events.
+        foreach(var e in events.Where(Relevant).OrderBy(e=>e.At))
         {
-            if(e.Address is null || SharedGardenLocation.Match(e.Address,[plan])!=plan.HouseId || e.Patch!=(plan.PhysicalPatch>0?plan.PhysicalPatch:plan.Batch) || e.Bed is not (>=1 and <=8))continue;
             if(!beds.TryGetValue(e.Bed.Value,out var b))continue;
             if(b.Watered is {} latestCare && e.At<latestCare)continue;
             if(b.ObservedAt is {} observed && e.At<=observed || b.Planted is {} planted && e.At<planted)continue;

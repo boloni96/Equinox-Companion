@@ -12,7 +12,7 @@ public sealed partial class Plugin
     private void StopCelebrationCheck(){celebrationEventWork?.Dispose();celebrationEventWork=null;}
     private void AdvanceCelebrationCheck()
     {
-        if(celebrationEventWork==null)return;
+        if(celebrationEventWork==null||celebrationHistoryTask is {IsCompleted:false})return;
         var started=System.Diagnostics.Stopwatch.GetTimestamp();
         try{if(!CelebrationWorkBudget.Advance(celebrationEventWork))StopCelebrationCheck();}
         catch(Exception e){StopCelebrationCheck();eventCelebrationStatus="Completion check is waiting: "+e.Message;}

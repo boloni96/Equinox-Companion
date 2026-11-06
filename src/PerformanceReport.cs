@@ -53,6 +53,12 @@ public sealed partial class Plugin
             gc0=GC.CollectionCount(0),gc1=GC.CollectionCount(1),gc2=GC.CollectionCount(2)
         };
     }
+    private T CaptureDiagnosticState<T>(string stage,Func<T> capture)
+    {
+        var started=Stopwatch.GetTimestamp();
+        try{return capture();}
+        finally{RecordPerformanceElapsed("Export: "+stage,started);}
+    }
     private object CapturePerformanceReport()
     {
         var clock=PerformanceClock;var recent=rollingPerformance.Snapshot(clock);
@@ -69,6 +75,7 @@ public sealed partial class Plugin
             dataSizes=new {discoveries=config.Discoveries.Count,houses=config.Houses.Count,planting=config.Planting.Count,tending=config.Tending.Count,
                 people=config.SharedRoster?.People.Length??0,characters=config.SharedRoster?.People.Sum(p=>p.Characters.Length)??0,
                 itemLocations=config.SharedRoster?.ItemLocations?.Length??0,adventures=adventureBoards.Length,
+                celebrationHistoryRecords=celebrationHistory.IndexedRecords,celebrationHistoryBuildMs,celebrationHistoryInFlight=celebrationHistoryTask is {IsCompleted:false},
                 observationIndexRecords=discoveryReads.IndexedRecords,observationIndexRevision=discoveryReads.Revision},
             features=new {config.SyncEnabled,config.SyncCharacterDetails,config.SyncCollections,config.EnableFollowThem,config.EnableRetriever,
                 config.EnableGilTrader,config.EnableCofferMarkers,config.EnableKeyboundBrawler,config.WorkIndicatorEnabled},

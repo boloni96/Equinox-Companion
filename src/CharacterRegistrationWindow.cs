@@ -11,6 +11,9 @@ public sealed partial class Plugin
     private bool registrationDeferred,registrationNewPersonMode,registrationNewAccountMode;
     private SyncEvent? registrationSnapshot;
     private DateTimeOffset registrationStartedAt;
+    private SharedRoster? registrationMatchedRoster;
+    private Actor? registrationMatchedActor;
+    private SharedCharacter? registrationMatchedCharacter;
     private readonly HashSet<string> registrationNotified=[];
     private bool RegistrationNeedsRoster => Player.IsLoaded && (registrationSession!=config.PairingKey+":"+Player.ContentId || registrationFreshKey!=config.PairingKey || registrationWindow.IsOpen || DiscoveryReads().Kind("character.registered").Any(e=>e.Kind=="character.registered"&&e.Actor.ContentId==Player.ContentId.ToString()&&e.Registration?.PairingScope==RegistrationScope&&!registrationNotified.Contains(e.Id)));
     private string registrationScopeKey="",registrationScopeHash="";
@@ -32,7 +35,11 @@ public sealed partial class Plugin
         var pending=reads.Kind("character.registered").LastOrDefault(e=>e.Kind=="character.registered"&&e.Actor.ContentId==actor.ContentId&&e.Registration?.PairingScope==RegistrationScope);
         RecordPerformanceElapsed("Registration: pending history",measured);
         measured=System.Diagnostics.Stopwatch.GetTimestamp();
-        var known=CharacterRegistrationPolicy.Find(roster,actor);
+        if(!ReferenceEquals(registrationMatchedRoster,roster)||registrationMatchedActor!=actor){
+            registrationMatchedCharacter=CharacterRegistrationPolicy.Find(roster,actor);
+            registrationMatchedRoster=roster;registrationMatchedActor=actor;
+        }
+        var known=registrationMatchedCharacter;
         RecordPerformanceElapsed("Registration: roster match",measured);
         if(known is not null){
             registrationWindow.IsOpen=false;minimizedLaunchers.Remove("New Character");

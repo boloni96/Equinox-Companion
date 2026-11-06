@@ -75,7 +75,9 @@ public sealed partial class Plugin
         var identity=$"keybound-5466-wishlist-v3|{person.Id}|{current.AccountId}|"+string.Join(",",characters.Select(c=>c.Id).Order());
         var tasks=adventureBoards.SelectMany(b=>b.Stops).SelectMany(s=>s.Tasks).Where(t=>t.Rule?.Kind=="event"&&t.Rule.Quests?.Any(q=>QuestToolsPolicy.ShortId(q)==QuestToolsPolicy.KeywardBound)==true).ToArray();
         {
+            eventCelebrationStatus="Checking changed completion evidence…";
             foreach(var step in PrepareCelebrationOffers())yield return step;
+            foreach(var step in PrepareCelebrationHistory())yield return step;
             keyboundPurchases??=new(Path.Combine(Pi.GetPluginConfigDirectory(),"keybound-purchases.json"));
             var loadStarted=System.Diagnostics.Stopwatch.GetTimestamp();
             try{keyboundPurchases!.Reload();}

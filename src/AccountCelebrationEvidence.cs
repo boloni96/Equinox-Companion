@@ -25,35 +25,13 @@ public sealed partial class Plugin
     {
         var key=EventEvidenceKey(c);var saved=config.EventCelebrationEvidence.GetValueOrDefault(key);
         var rewards=celebrationOffers!.Select(o=>o.Item).ToHashSet();
-        var items=(saved?.Items??[]).ToHashSet();
-        var quest=saved?.QuestComplete==true||(c.Id==current.Id&&CelebrationLiveQuest());
+        var history=celebrationHistory.Read(c);
+        var items=(saved?.Items??[]).ToHashSet();items.UnionWith(history.Items);
+        var quest=saved?.QuestComplete==true||history.QuestComplete||(c.Id==current.Id&&CelebrationLiveQuest());
         yield return true;
         foreach(var task in tasks){
             if(!quest&&task.Done&&task.ServerConfirmed&&AdventurePolicy.TaskCharacterId(task,[c])==c.Id)quest=true;
             yield return true;
-        }
-        var reads=DiscoveryReads();
-        var collections=reads.Kind("collection.observed");
-        var collectionCount=collections.Count;
-        var unlocked=new Dictionary<string,HashSet<uint>>();
-        for(var i=0;i<collectionCount&&i<collections.Count;i++){
-            var e=collections[i];
-            yield return true;
-            if(!CelebrationActorMatches(e.Actor,c)||e.Collection is not {} collection)continue;
-            if(!unlocked.TryGetValue(collection.Category,out var ids))unlocked[collection.Category]=ids=[];
-            foreach(var id in collection.Unlocked){
-                ids.Add(id);
-                if(collection.Category=="quest"&&QuestToolsPolicy.ShortId(id)==QuestToolsPolicy.KeywardBound)quest=true;
-                yield return true;
-            }
-            foreach(var id in collection.Obtained){ids.Add(id);yield return true;}
-        }
-        // Retain only event rewards, not every item in the account's storage history.
-        var storage=reads.Kind("storage.observed");var storageCount=storage.Count;
-        for(var i=0;i<storageCount&&i<storage.Count;i++){
-            var e=storage[i];yield return true;
-            if(!CelebrationActorMatches(e.Actor,c)||e.Storage is not {} location||!CelebrationStorage(location.Key))continue;
-            foreach(var item in location.Items){if(rewards.Contains(item))items.Add(item);yield return true;}
         }
         foreach(var location in config.SharedRoster?.ItemLocations??[]){
             yield return true;
@@ -62,11 +40,6 @@ public sealed partial class Plugin
         }
         if(ulong.TryParse(c.ContentId,out var cid))foreach(var receipt in keyboundPurchases!.Entries.ToArray()){
             if(receipt.Character==cid&&receipt.Confirmed&&rewards.Contains(receipt.Item))items.Add(receipt.Item);
-            yield return true;
-        }
-        // Use the completed catalogue too; catalogueBase is cleared after loading.
-        foreach(var group in collectionGroups??catalogueBase??[])foreach(var entry in group){
-            if(rewards.Contains(entry.ItemId)&&unlocked.TryGetValue(entry.Category,out var ids)&&ids.Contains(entry.Id))items.Add(entry.ItemId);
             yield return true;
         }
         if(c.Id==current.Id)foreach(var offer in celebrationOffers!){
