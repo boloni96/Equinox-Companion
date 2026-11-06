@@ -68,7 +68,7 @@ public sealed partial class Plugin
             var entry=item.Value;
             if(entry!=null&&entry->ContentId.ToString()==target.ContentId&&entry->NameString==target.Name&&WorldName(entry->HomeWorldId)==target.World&&
                 (entry->LoginFlags&CharaSelectCharacterEntryLoginFlags.Locked)==0){
-                if(TravelDc(entry->CurrentWorldId)==0||TravelDc(entry->CurrentWorldId)!=TravelDc(lobby->LobbyData.CurrentWorldId))return false;
+                if(TravelDc(entry->CurrentWorldId)==0||TravelDc(entry->CurrentWorldId)!=TravelDc(lobby->WorldId))return false;
                 index=current;matches++;
             }
             current++;
@@ -121,6 +121,9 @@ public sealed partial class Plugin
             requested=assignedLogin!=null?assignedLoginSent:estateHomeReturn?.LoginSent??false,
             confirmed=assignedLogin!=null?assignedLoginConfirmed:estateHomeReturn?.LoginConfirmed??false,
             currentSlot=lobby==null?-1:(int)lobby->ServiceAccountIndex,
+            displayedWorld=lobby==null?0:lobby->WorldId,
+            lobbyCurrentWorld=lobby==null?0:lobby->LobbyData.CurrentWorldId,
+            requestedWorld=assignedLogin?.World,waitingToLeaveDc=assignedVisitingReturnFromDc,
             displayedCharacter=lobby==null?"":lobby->HoveredCharacterContentId.ToString(),
             selectedCharacter=lobby==null?"":lobby->SelectedCharacterContentId.ToString(),
             locked=lobby!=null&&lobby->TemporaryLocked,
@@ -187,7 +190,7 @@ public sealed partial class Plugin
         foreach(var c in lobby->LobbyData.LobbyUIClient.CurrentDataCenterCharacters)if(c.ContentId.ToString()==targetContent&&c.DeletedFlag==0&&(c.LoginFlags&CharaSelectCharacterEntryLoginFlags.Locked)==0)preferred=c.CurrentWorldId;
         var known=DeliveryCharacters().GroupBy(x=>x.Character.World).ToDictionary(g=>g.Key,g=>g.Select(x=>x.Person.Id+"/"+x.Character.AccountId).Distinct().Count());
         var worlds=new List<(ushort Id,int Index,string Name,int Priority)>();
-        foreach(var w in available){var name=w.NameString;var menuIndex=CurrentLoginIdentification.WorldMenuIndex(menuNames,name);if(menuIndex>=0)worlds.Add((w.Id,menuIndex,name,w.Id==preferred?1000:name==targetWorld?500:known.GetValueOrDefault(name)*10));}
+        foreach(var w in available){var name=w.NameString;var menuIndex=CurrentLoginIdentification.WorldMenuIndex(menuNames,name);if(menuIndex>=0)worlds.Add((w.Id,menuIndex,name,name==targetWorld?1000:w.Id==preferred?500:known.GetValueOrDefault(name)*10));}
         loginWorldChecked.Add(lobby->WorldId);
         var next=worlds.Where(w=>!loginWorldChecked.Contains(w.Id)).OrderByDescending(w=>w.Priority).ThenBy(w=>w.Index).FirstOrDefault();
         if(next.Id==0)return false;
@@ -201,7 +204,7 @@ public sealed partial class Plugin
     }
     private unsafe bool RedirectAssignedVisitingCharacter(AssignedLogin run,AgentLobby* lobby)
     {
-        var displayedDc=TravelDc(lobby->LobbyData.CurrentWorldId);
+        var displayedDc=TravelDc(lobby->WorldId);
         if(assignedVisitingReturnFromDc!=0){
             if(displayedDc==assignedVisitingReturnFromDc)return true;
             assignedVisitingReturnFromDc=0;
@@ -219,6 +222,7 @@ public sealed partial class Plugin
         if(visitingDc==displayedDc){
             if((match->LoginFlags&CharaSelectCharacterEntryLoginFlags.DCTraveling)!=0&&visitingDc==TravelDc(match->HomeWorldId))
                 throw new InvalidOperationException("The game marks this character as visiting another data center, but has not supplied its visiting world. Select its visiting data center manually and retry; no home-world login was attempted.");
+            if(run.World!=visiting){assignedLogin=run with{World=visiting};loginWorldChecked.Clear();loginWorldPending=loginWorldSample=0;loginWorldNext=default;return true;}
             return false;
         }
         if(SellerAddon("SelectYesno")!=null||SellerAddon("SelectOk")!=null||SellerAddon("ContextMenu")!=null)return true;
@@ -277,10 +281,10 @@ public sealed partial class Plugin
                 return;
             }
             if(lobby->TemporaryLocked||SellerAddon("_CharaSelectListMenu")==null||now<loginWorldNext)return;
-            if(TryReadReadyLoginList(out var entries)&&entries.FirstOrDefault(e=>!e.Locked&&e.ContentId==run.Target.ContentId&&e.World==run.Target.World) is {} verified){
+            if(WorldName(lobby->WorldId)==run.World&&TryReadReadyLoginList(out var entries)&&entries.FirstOrDefault(e=>!e.Locked&&e.ContentId==run.Target.ContentId&&e.World==run.Target.World) is {} verified){
                 assignedLoginSent=BeginNativeCharacterLogin(run.Target,run.ServiceAccount);return;
             }
-            if(!SelectNextKnownLoginWorld(run.Target.ContentId,run.Target.World,now))throw new InvalidOperationException("No matching character found on the selected account and data center. No alternate account was tried.");
+            if(!SelectNextKnownLoginWorld(run.Target.ContentId,run.World,now))throw new InvalidOperationException("No matching character found on the selected account and data center. No alternate account was tried.");
         }catch(Exception e){CancelAssignedLogin(e.Message);}
     }
 }
