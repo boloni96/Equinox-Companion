@@ -149,20 +149,43 @@ public sealed partial class Plugin
     }
     private unsafe bool SelectNativeTravelTree(AtkUnitBase* addon,uint nodeId,string expected)
     {
+        if(addon==null||!addon->IsReady||addon->AtkValues==null||nodeId is not (23 or 24))return false;
         var node=addon->GetNodeById(nodeId);if(node==null)return false;
-        var component=node->GetAsAtkComponentNode();if(component==null||component->Component==null||component->Component->GetComponentType()!=ComponentType.TreeList)return false;
-        var tree=(AtkComponentTreeList*)component->Component;
-        if(tree->Items.LongCount is <=0 or >128)return false;
-        for(var i=0;i<tree->Items.LongCount;i++){
-            var item=tree->Items[i].Value;
-            if(item==null||item->StringValues.LongCount is <1 or >32||item->IsHidden||(item->State&TreeListItemState.Disabled)!=0||(item->Type&(TreeListItemType.Group|TreeListItemType.SectionHeader))!=0)continue;
-            if(TravelMenuText(item->StringValues[0].Value)!=expected)continue;
-            // Use the game's virtual tree selection; validate the selected names
-            // on the next tick before enabling any confirmation.
-            tree->SelectItem(i,false);
-            tree->DispatchItemEvent(i,AtkEventType.ListItemClick);
-            RecordTravelPrompt("Destination list selection",new{nodeId,index=i,expected});return true;
+        var tree=node->GetAsAtkComponentTreeList();if(tree==null)return false;
+        var names=new string[nodeId==23?16:8];
+        for(var i=0;i<names.Length;i++)names[i]=TravelValueText(addon,nodeId==23?17+(i/4)*34+(i%4)*8:155+i*8);
+        var choice=NativeDcListSelection.Find(nodeId,expected,names);
+        if(choice is not {} selection){nativeTravelStatus="Waiting for available destination: "+expected;return false;}
+        // Match a visible, enabled row as well as the data entry. Header rows and
+        // disabled destinations never become a substitute for the requested name.
+        var treeBase=(AtkComponentBase*)tree;
+        var layout=&treeBase->UldManager;
+        if(layout->NodeList==null||layout->NodeListCount>256)return false;
+        var highlight=-1;
+        for(var i=0;i<layout->NodeListCount;i++){
+            var row=layout->NodeList[i];if(row==null||!row->IsVisible())continue;
+            var renderer=row->GetAsAtkComponentListItemRenderer();if(renderer==null||!renderer->IsEnabled||renderer->ListItemIndex is <0 or >127)continue;
+            var contents=&((AtkComponentBase*)renderer)->UldManager;
+            if(contents->NodeList==null||contents->NodeListCount>64)continue;
+            for(var n=0;n<contents->NodeListCount;n++){
+                var child=contents->NodeList[n];if(child==null)continue;
+                var label=child->GetAsAtkTextNode();
+                if(label==null||!child->IsVisible()||child->Alpha_2!=255||TravelMenuText(label->NodeText.StringPtr)!=expected)continue;
+                if(highlight>=0&&highlight!=renderer->ListItemIndex)return false;
+                highlight=renderer->ListItemIndex;
+            }
         }
-        nativeTravelStatus="Waiting for available destination: "+expected;return false;
+        if(highlight<0){nativeTravelStatus="Waiting for enabled destination row: "+expected;return false;}
+        var key=new NativeDcTreeKey{Selected=1,Item=selection.PackedItem};var keyPointer=&key;
+        var data=new NativeDcTreeInput{Key=&keyPointer,Highlight=highlight};
+        var evt=new AtkEvent{Target=(AtkEventTarget*)node,Listener=&treeBase->AtkEventListener,Param=1,State=new(){EventType=AtkEventType.ListItemClick}};
+        // Ordinary DispatchItemEvent omits the region/item payload this addon
+        // reads. Dispatch directly, then verify the selected names next tick.
+        usingSharedTravel=true;
+        try{addon->ReceiveEvent(AtkEventType.ListItemClick,selection.EventParameter,&evt,(AtkEventData*)&data);tree->SelectItem(highlight,false);}
+        finally{usingSharedTravel=false;}
+        if(nativeWorldTrip is {} trip)trip.Next=DateTimeOffset.UtcNow.AddSeconds(2);
+        RecordTravelPrompt("Destination list selection",new{nodeId,expected,selection.Category,selection.Item,selection.PackedItem,highlight,selection.EventParameter});
+        return true;
     }
 }
