@@ -17,7 +17,7 @@ public sealed partial class Plugin
     private string nativeAethernetStatus="";private bool nativeAethernetSucceeded;
     private bool BeginNativeAethernet(uint id,out string reason)
     {
-        if(nativeAethernetTrip!=null||nativeWorldTrip!=null||LifestreamBusy()){reason="Another travel operation is active.";return false;}
+        if(nativeAethernetTrip!=null||nativeWorldTrip!=null||nativeHousingTrip!=null||LifestreamBusy()){reason="Another travel operation is active.";return false;}
         var row=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Aetheryte>().GetRowOrDefault(id);
         if(row==null||row.Value.AethernetGroup==0){reason="No supported aethernet connection for this destination.";return false;}
         nativeAethernetSucceeded=false;nativeAethernetTrip=new(){Destination=id,World=Player.CurrentWorld.RowId,Character=Player.ContentId,Started=DateTimeOffset.UtcNow};

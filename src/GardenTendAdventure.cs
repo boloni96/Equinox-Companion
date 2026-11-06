@@ -70,7 +70,7 @@ public sealed partial class Plugin
         if(gardenTendRoute==null)return;
         gardenConnection.Reset();gardenConnectionKey="";gardenVisitedHouse="";gardenVisitedCharacter=0;
         CancelAssignedLogin(reason);gardenPlotApproaching=false;gardenTendRoute=null;gardenAutoPlantPlan=null;gardenCareRun?.Stop(reason);gardenTendStatus=reason;
-        goSeeHomeTrip=null;goSeeFriendTrip=null;gardenArrival.Reset();
+        goSeeHomeTrip=null;goSeeFriendTrip=null;StopNativeHousing("Garden adventure stopped.");gardenArrival.Reset();
         if(gardenAdventureSwitchSent){characterSwitchUntil=default;characterSwitchTarget=null;gardenAdventureSwitchSent=false;}
         try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}
     }
@@ -204,7 +204,7 @@ public sealed partial class Plugin
                 if(liveTask.Done){gardenTendRoute.Dequeue();gardenTendTravelSent=false;gardenPlotApproaching=gardenPlotApproachAttempted=false;return;}
                 if(liveTask.Rule==null)throw new InvalidOperationException("The active garden task has no rule.");
                 if(liveTask.Rule.HouseId!=work.House||liveTask.Rule.Batch!=work.Batch||!work.TendOnly&&!work.InspectOnly&&liveTask.Rule.Cid.Length>0&&liveTask.Rule.Cid!=work.Character){
-                    if(LifestreamBusy()||goSeeHomeTrip!=null||goSeeFriendTrip!=null||Conditions[ConditionFlag.Casting]||Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51])return;
+                    if(LifestreamBusy()||nativeHousingTrip!=null||goSeeHomeTrip!=null||goSeeFriendTrip!=null||Conditions[ConditionFlag.Casting]||Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51])return;
                     gardenTendRoute.Clear();gardenTendTravelSent=false;gardenPlotApproaching=gardenPlotApproachAttempted=false;gardenTendStatus="Using the updated selected batch assignment…";return;
                 }
                 if(!work.TendOnly&&!work.InspectOnly&&!work.HarvestOnly&&liveTask.Rule.Kind=="growingcycle"&&liveTask.Rule.Phase is "waiting" or "review"){gardenTendRoute.Dequeue();gardenTendTravelSent=false;gardenPlotApproaching=gardenPlotApproachAttempted=false;return;}
@@ -233,25 +233,25 @@ public sealed partial class Plugin
                 gardenTendRoute.Clear();gardenSupplyRefreshUntil=now.AddSeconds(20);gardenPlotApproaching=gardenPlotApproachAttempted=false;gardenTendStarted=gardenTendTravelSent=false;gardenTendDeadline=now.AddMinutes(10);gardenAdventureNext=now.AddSeconds(3);return;
             }
             if(gardenTendTravelSent&&(gardenTravelHouse!=work.House||gardenTravelCharacter!=Player.ContentId)){
-                if(LifestreamBusy()||goSeeHomeTrip!=null||goSeeFriendTrip!=null||now<goSeeNativeUntil)return;
+                if(LifestreamBusy()||nativeHousingTrip!=null||goSeeHomeTrip!=null||goSeeFriendTrip!=null||now<goSeeNativeUntil)return;
                 gardenTendTravelSent=false;gardenPlotApproaching=gardenPlotApproachAttempted=false;gardenArrival.Reset();
             }
             // Only a plot this run has actually reached can reuse arrival. A
             // different character/address still takes the full estate approach.
             var reuseArrival=GardenAdventureJobs.ReuseArrival(gardenVisitedHouse,gardenVisitedCharacter,work.House,Player.ContentId,
                 atOutdoorEstate&&SharedGardenLocation.Match(currentAddress,[sourcePlan])==sourcePlan.HouseId);
-            if(!gardenTendTravelSent&&reuseArrival&&!LifestreamBusy()&&goSeeHomeTrip==null&&goSeeFriendTrip==null){
+            if(!gardenTendTravelSent&&reuseArrival&&!LifestreamBusy()&&nativeHousingTrip==null&&goSeeHomeTrip==null&&goSeeFriendTrip==null){
                 gardenTendTravelSent=true;gardenTravelHouse=work.House;gardenTravelCharacter=Player.ContentId;gardenArrival.Reset();
                 gardenTendStatus="Continuing on this plot · "+sourcePlan.HouseName+" · Batch "+work.Batch;
             }
             if(!gardenTendTravelSent){
-                if(LifestreamBusy())throw new InvalidOperationException("Another Lifestream journey is active.");EnsureBidWorlds();var world=bidWorlds!.FirstOrDefault(w=>w.Name==sourcePlan.World);if(world.Id==0)throw new InvalidOperationException("Destination world unavailable.");gardenArrival.Reset();GoSeeBid(world.Id,sourcePlan.District,sourcePlan.Ward,sourcePlan.Plot);if(now>=goSeeNativeUntil&&goSeeHomeTrip==null&&goSeeFriendTrip==null&&!LifestreamBusy())
+                if(LifestreamBusy())throw new InvalidOperationException("Another Lifestream journey is active.");EnsureBidWorlds();var world=bidWorlds!.FirstOrDefault(w=>w.Name==sourcePlan.World);if(world.Id==0)throw new InvalidOperationException("Destination world unavailable.");gardenArrival.Reset();GoSeeBid(world.Id,sourcePlan.District,sourcePlan.Ward,sourcePlan.Plot);if(now>=goSeeNativeUntil&&nativeHousingTrip==null&&goSeeHomeTrip==null&&goSeeFriendTrip==null&&!LifestreamBusy())
                     throw new InvalidOperationException("House travel did not start: "+bidTravelMessage);
                 gardenTendTravelSent=true;gardenTravelHouse=work.House;gardenTravelCharacter=Player.ContentId;gardenTendStatus="Travelling to "+sourcePlan.HouseName;
                 return;
             }
             if(gardenTendTravelSent&&!gardenPlotApproaching){
-                var pending=now<goSeeNativeUntil||LifestreamBusy()||goSeeHomeTrip!=null||goSeeFriendTrip!=null||VisibleFollowAddon("SelectYesno")||VisibleFollowAddon("TeleportHousingFriend");
+                var pending=now<goSeeNativeUntil||LifestreamBusy()||nativeHousingTrip!=null||goSeeHomeTrip!=null||goSeeFriendTrip!=null||VisibleFollowAddon("SelectYesno")||VisibleFollowAddon("TeleportHousingFriend");
                 if(!gardenArrival.Ready(pending,Objects.LocalPlayer!.Position,now)){gardenTendStatus="Waiting for teleport and travel to finish · "+sourcePlan.HouseName;return;}
             }
             var atDestination=atOutdoorEstate&&SharedGardenLocation.Match(currentAddress,[sourcePlan])==sourcePlan.HouseId;
@@ -277,10 +277,10 @@ public sealed partial class Plugin
                 }
             }
             if(!atDestination){
-                if(!LifestreamBusy()&&goSeeHomeTrip==null&&goSeeFriendTrip==null)TryApproachGardenPlot(sourcePlan,now);
+                if(!LifestreamBusy()&&nativeHousingTrip==null&&goSeeHomeTrip==null&&goSeeFriendTrip==null)TryApproachGardenPlot(sourcePlan,now);
                 return;
             }
-            if(LifestreamBusy()||goSeeHomeTrip!=null)return;
+            if(LifestreamBusy()||nativeHousingTrip!=null||goSeeHomeTrip!=null)return;
             gardenVisitedHouse=work.House;gardenVisitedCharacter=Player.ContentId;
             DiscoverGardenBedMappings(sourcePlan,now);
             var plan=EffectiveGardenPlan(sourcePlan);

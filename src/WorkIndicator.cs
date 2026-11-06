@@ -11,20 +11,22 @@ public sealed partial class Plugin
     {
         StopTendAdventure(IndicatorStopReason);
         gardenHouseHarvest=null;StopHousePlant(IndicatorStopReason);
-        StopEstateTravel(IndicatorStopReason);StopIndependentWalk(IndicatorStopReason);
+        StopEstateTravel(IndicatorStopReason);StopNativeHousing(IndicatorStopReason);StopIndependentWalk(IndicatorStopReason);
     }
     private void StopIndicatorDelivery()
     {
         if(nativeWorldTrip?.Owner=="delivery")StopNativeWorldTravel(IndicatorStopReason);
         CancelAssignedLogin(IndicatorStopReason);
         if(itemTrade.Running)StopItemTrade(IndicatorStopReason);
-        if(deliveryTrip.Length>0||deliveryReturning){try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}goSeeHomeTrip=null;}
+        if(deliveryTrip.Length>0||deliveryReturning){try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}goSeeHomeTrip=null;StopNativeHousing(IndicatorStopReason);}
         deliveryRun=deliveryTrip=deliveryTrade=deliveryResumeGarden="";deliveryReturning=false;
         deliveryNotice="Local delivery stopped. The partner will pause when this client stops reporting.";
         StopIndependentWalk(IndicatorStopReason);
     }
     private void StopIndicatorTravel()
     {
+        if(nativeHousingTrip!=null&&gardenTendRoute!=null)StopIndicatorGarden();
+        if(nativeHousingTrip!=null&&deliveryRun.Length>0)StopIndicatorDelivery();
         var owner=nativeWorldTrip?.Owner;
         if(owner=="delivery")StopIndicatorDelivery();
         if(owner=="event")StopEventAccount(IndicatorStopReason);
@@ -38,6 +40,7 @@ public sealed partial class Plugin
             StopNativeAethernet(IndicatorStopReason);
         }
         StopEstateTravel(IndicatorStopReason);
+        StopNativeHousing(IndicatorStopReason);
         if(shoppingTravel!=null||goSeeHomeTrip!=null||goSeeFriendTrip!=null){
             shoppingTravel=null;goSeeHomeTrip=null;goSeeFriendTrip=null;
             try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}
@@ -64,6 +67,7 @@ public sealed partial class Plugin
         ?$"{Math.Clamp(independentWaypoint,0,independentPath.Length-1)}/{independentPath.Length-1}":"";
     private IndicatorWork? CurrentIndicatorWork()
     {
+        if(nativeHousingTrip!=null)return new("Housing travel",nativeHousingStatus,$"{Math.Min(6,nativeHousingTrip.Stage/2+1)}/6",StopIndicatorTravel);
         if(shoppingTravel!=null)return new("Shopping travel",marketTravelStatus,$"{Math.Clamp(shoppingTravel.Stage+1,1,4)}/4",StopIndicatorTravel);
         if(nativeAethernetTrip!=null)return new("Aethernet",nativeAethernetStatus,$"{Math.Min(3,nativeAethernetTrip.Stage)+1}/4",StopIndicatorTravel);
         if(nativeWorldTrip!=null)return new("World travel",nativeTravelStatus,NativeTravelPolicy.Progress(nativeWorldTrip.Stage),StopIndicatorTravel);

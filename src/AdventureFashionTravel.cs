@@ -7,7 +7,7 @@ public sealed partial class Plugin
   void Notice(string text){characterTravelStatus=text;PrintEquinox("[Equinox] "+text);}
   if(!Player.IsLoaded||Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]||Conditions[ConditionFlag.BoundByDuty]){Notice("Leave combat, loading or your duty before travelling to the Gold Saucer.");return;}
   if(followSession.Armed){Notice("Stop FollowThem before travelling to the Gold Saucer.");return;}
-  if(goSeeHomeTrip is not null||goSeeFriendTrip is not null||shoppingTravel is not null||DateTimeOffset.UtcNow<characterSwitchUntil||DateTimeOffset.UtcNow<goSeeNativeUntil){Notice("Travel is already in progress. Wait for it to finish first.");return;}
+  if(nativeHousingTrip!=null||goSeeHomeTrip is not null||goSeeFriendTrip is not null||shoppingTravel is not null||DateTimeOffset.UtcNow<characterSwitchUntil||DateTimeOffset.UtcNow<goSeeNativeUntil){Notice("Travel is already in progress. Wait for it to finish first.");return;}
   try{if(LifestreamBusy()){Notice("Lifestream travel is already in progress. Wait for it to finish first.");return;}}catch{/* Native teleport does not require Lifestream. */}
   const uint goldSaucerAetheryte=62;
   var destination=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Aetheryte>().GetRowOrDefault(goldSaucerAetheryte);

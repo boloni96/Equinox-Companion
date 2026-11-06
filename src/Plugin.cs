@@ -335,6 +335,7 @@ public sealed partial class Plugin : IDalamudPlugin
         UpdateTravelPromptRecorder(now);
         UpdateNativeWorldTravel(now);
         UpdateNativeAethernet(now);
+        UpdateNativeHousing(now);
         UpdateAssignedLogin(now);
         UpdateEstateTravel(now);
         var gardenStarted=System.Diagnostics.Stopwatch.GetTimestamp();UpdateGardenCare(now);RecordPerformanceElapsed("garden automation",gardenStarted);
@@ -1372,7 +1373,7 @@ public sealed partial class Plugin : IDalamudPlugin
         if(travelCommandRegistered)Commands.RemoveHandler("/eqtravel");
         if(shortTravelCommandRegistered)Commands.RemoveHandler("/et");
         if(shortWorldTravelCommandRegistered)Commands.RemoveHandler("/etw");
-        nativeWorldTrip=null;nativeAethernetTrip=null;Addons.UnregisterListener(RecordTravelUiEvent);
+        nativeWorldTrip=null;nativeAethernetTrip=null;nativeHousingTrip=null;Addons.UnregisterListener(RecordTravelUiEvent);
         if (fashionCommandRegistered) Commands.RemoveHandler("/fashionr");
         if (gardeningCommandRegistered) Commands.RemoveHandler("/gardening");
         if (plantingCommandRegistered) Commands.RemoveHandler("/planting");

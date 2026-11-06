@@ -51,7 +51,7 @@ public sealed partial class Plugin
     }
     private unsafe bool StartNativeWorldTravel(uint destination,string owner="command")
     {
-        if(nativeWorldTrip!=null||nativeAethernetTrip!=null){nativeTravelStatus="A trip is already running. Use /et stop first.";return false;}
+        if(nativeWorldTrip!=null||nativeAethernetTrip!=null||nativeHousingTrip!=null&&owner!="housing"){nativeTravelStatus="A trip is already running. Use /et stop first.";return false;}
         if(!Player.IsLoaded||Player.ContentId==0||TravelDc(destination)==0){nativeTravelStatus="Wait for your character to load and choose a public world.";return false;}
         if(!CanRequestWorldTravel(destination,out var rejection)){nativeTravelStatus=rejection;return false;}
         if(destination==Player.CurrentWorld.RowId){nativeTravelStatus="Already on "+WorldName(destination)+".";return true;}

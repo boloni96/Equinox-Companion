@@ -53,7 +53,7 @@ public sealed partial class Plugin
   var house=(config.SharedRoster?.People??[]).SelectMany(p=>p.Characters).SelectMany(c=>c.Houses).FirstOrDefault(h=>h.Id==destination.HouseId&&h.World==destination.World);
   var aetheryte=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Aetheryte>().Where(a=>a.IsAetheryte&&a.Territory.RowId==destination.Territory).Select(a=>a.RowId).FirstOrDefault();
   if(world==0||destination.Territory!=0&&house is null&&aetheryte==0){bringMessage="No supported teleport destination for this location. Close this picker and try from an area with an aetheryte or an identified paired estate.";return false;}
-  try{if(nativeWorldTrip!=null||nativeAethernetTrip!=null||LifestreamBusy()||shoppingTravel is not null||goSeeHomeTrip is not null||goSeeFriendTrip is not null||DateTimeOffset.UtcNow<characterSwitchUntil||DateTimeOffset.UtcNow<goSeeNativeUntil){bringMessage="Wait for the current trip to finish first.";return false;}}
+  try{if(nativeHousingTrip!=null||nativeWorldTrip!=null||nativeAethernetTrip!=null||LifestreamBusy()||shoppingTravel is not null||goSeeHomeTrip is not null||goSeeFriendTrip is not null||DateTimeOffset.UtcNow<characterSwitchUntil||DateTimeOffset.UtcNow<goSeeNativeUntil){bringMessage="Wait for the current trip to finish first.";return false;}}
   catch{bringMessage="Travel state is unavailable. Wait for the game to settle.";return false;}
   var source=Player.ContentId;
   if(source!=content){
@@ -74,7 +74,7 @@ public sealed partial class Plugin
   if(Player.ContentId!=trip.Character){if(trip.Stage==0&&Player.ContentId==trip.Source)return;EndBring("Bring character stopped: a different character logged in.");return;}
   if(Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.BoundByDuty]||HelperInCutscene()){EndBring("Bring character stopped: combat, duty or cutscene started.");return;}
   try{
-   if(nativeWorldTrip!=null||LifestreamBusy()||now<trip.NotBefore)return;
+   if(nativeHousingTrip!=null||nativeWorldTrip!=null||LifestreamBusy()||now<trip.NotBefore)return;
    characterSwitchUntil=default;
    if(trip.Stage==0){
     if(Player.CurrentWorld.RowId!=trip.World&&!StartNativeWorldTravel(trip.World,"bring")){EndBring(nativeTravelStatus);return;}

@@ -9,7 +9,7 @@ public sealed partial class Plugin
     {
         var crystal=target.ObjectKind==ObjectKind.Aetheryte;
         var main=crystal&&DataManager.GetExcelSheet<Lumina.Excel.Sheets.Aetheryte>().GetRowOrDefault(target.BaseId)?.IsAetheryte==true;
-        var attempt=crystal?(nativeWorldTrip?.ApproachAttempt??nativeAethernetTrip?.ApproachAttempt??0):
+        var attempt=crystal?(nativeWorldTrip?.ApproachAttempt??nativeAethernetTrip?.ApproachAttempt??nativeHousingTrip?.Attempt??0):
             estateTrip?.Door==target.GameObjectId?estateTrip.DoorAttempt:0;
         return InteractionApproachPolicy.Limit(target.BaseId,crystal,main,attempt);
     }

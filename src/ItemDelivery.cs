@@ -90,7 +90,7 @@ public sealed partial class Plugin
         }
         if(deliveryRun.Length>0&&ImGui.Button("Stop local delivery / return journey")){
             CancelAssignedLogin("Stopped by you.");if(itemTrade.Running)StopItemTrade("Stopped by you.");
-            if(deliveryTrip.Length>0||deliveryReturning){try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}goSeeHomeTrip=null;}
+            if(deliveryTrip.Length>0||deliveryReturning){try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}goSeeHomeTrip=null;StopNativeHousing("Delivery travel stopped.");}
             deliveryRun=deliveryTrip=deliveryTrade=deliveryResumeGarden="";deliveryReturning=false;deliveryNotice="Local delivery stopped. The partner will pause when this client stops reporting.";
         }
         if(deliveryNotice.Length>0)ImGui.TextWrapped(deliveryNotice);
@@ -112,12 +112,12 @@ public sealed partial class Plugin
         if(deliveryRequest?.IsCompleted==true){var reply=deliveryRequest.IsCompletedSuccessfully?deliveryRequest.Result:new DeliveryReply(null,null,"Delivery request failed.");deliveryRequest=null;
             if(reply.Error.Length==0)deliveryLastContact=now;if(reply.Sessions!=null)deliverySessions=reply.Sessions;if(reply.Session!=null){deliverySessions=deliverySessions.Where(s=>s.Id!=reply.Session.Id).Append(reply.Session).ToArray();deliverySelected=reply.Session.Id;}if(reply.Error.Length>0)deliveryNotice=reply.Error;}
         if(deliveryRun.Length>0&&config.PairingKey!=deliveryPairing){if(itemTrade.Running)StopItemTrade("Pairing changed.");deliveryRun="";deliveryNotice="Delivery stopped: pairing changed.";return;}
-        if(deliveryRun.Length>0&&!deliveryReturning&&deliveryLastContact!=default&&now-deliveryLastContact>TimeSpan.FromSeconds(15)){deliveryMustReconcile=true;CancelAssignedLogin("Delivery connection lost.");if(itemTrade.Running)StopItemTrade("Delivery connection lost.");if(deliveryTrip.Length>0){try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}goSeeHomeTrip=null;deliveryTrip="";}deliveryNotice="Connection lost · delivery paused until both clients reconcile.";}
+        if(deliveryRun.Length>0&&!deliveryReturning&&deliveryLastContact!=default&&now-deliveryLastContact>TimeSpan.FromSeconds(15)){deliveryMustReconcile=true;CancelAssignedLogin("Delivery connection lost.");if(itemTrade.Running)StopItemTrade("Delivery connection lost.");if(deliveryTrip.Length>0){try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}goSeeHomeTrip=null;StopNativeHousing("Delivery travel stopped.");deliveryTrip="";}deliveryNotice="Connection lost · delivery paused until both clients reconcile.";}
         if(deliveryRequest!=null||config.PairingKey.Length!=64)return;
         var session=deliverySessions.FirstOrDefault(s=>s.Id==deliveryRun);
         if(session!=null&&!session.Members.ContainsKey(deliveryClientId)){
             CancelAssignedLogin("Delivery client reservation is no longer active.");if(itemTrade.Running)StopItemTrade("Delivery client reservation is no longer active.");
-            if(deliveryTrip.Length>0){try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}goSeeHomeTrip=null;}
+            if(deliveryTrip.Length>0){try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}goSeeHomeTrip=null;StopNativeHousing("Delivery travel stopped.");}
             deliveryRun=deliveryTrip=deliveryTrade="";deliveryNotice="Join this delivery again to verify this client's account.";return;
         }
         if(session!=null&&session.Members.TryGetValue(deliveryClientId,out var member)){
@@ -138,7 +138,7 @@ public sealed partial class Plugin
             }
             if(deliveryMustReconcile){if(session.Status=="paused")deliveryMustReconcile=false;else{PauseItemDelivery(session,"Connection was lost. Reconcile both inventories before resuming.");return;}}
             if(now>=deliveryHeartbeat){var c=CurrentSharedCharacter();DeliveryPost(new{type="heartbeat",id=session.Id,revision=session.Revision,clientId=deliveryClientId,characterId=c?.Id??"",contentId=c?.ContentId??""});deliveryHeartbeat=now.AddSeconds(4);return;}
-            if(session.Status=="paused"){CancelAssignedLogin("Delivery paused.");if(itemTrade.Running)StopItemTrade("Delivery partner paused or disconnected.");if(deliveryTrip.Length>0){try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}goSeeHomeTrip=null;}deliveryTrip=deliveryTrade="";return;}
+            if(session.Status=="paused"){CancelAssignedLogin("Delivery paused.");if(itemTrade.Running)StopItemTrade("Delivery partner paused or disconnected.");if(deliveryTrip.Length>0){try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}goSeeHomeTrip=null;StopNativeHousing("Delivery travel stopped.");}deliveryTrip=deliveryTrade="";return;}
             if(session.Status is "ready" or "trading"){
                 try{if(now>=deliveryTick){deliveryTick=now.AddMilliseconds(500);TickItemDelivery(session,member,now);}}catch(Exception e){PauseItemDelivery(session,e.Message);}if(deliveryRequest!=null)return;
             }
@@ -166,7 +166,7 @@ public sealed partial class Plugin
         EnsureBidWorlds();var world=bidWorlds!.FirstOrDefault(w=>w.Name==leg.Meeting.World);if(world.Id==0)throw new InvalidOperationException("Meeting world is unavailable.");
         var atMeeting=atOutdoorEstate&&currentAddress?.WorldId==world.Id&&currentAddress.Ward==leg.Meeting.Ward&&currentAddress.Plot==leg.Meeting.Plot&&currentAddress.DistrictName.Replace("The ","")==leg.Meeting.District.Replace("The ","");
         if(!atMeeting){if(deliveryTrip!=trip){if(LifestreamBusy()||followSession.Armed)throw new InvalidOperationException("Another travel operation is active.");GoSeeBid(world.Id,leg.Meeting.District,leg.Meeting.Ward,leg.Meeting.Plot);deliveryTrip=trip;}return;}
-        if(LifestreamBusy()||goSeeHomeTrip!=null)return;
+        if(nativeHousingTrip!=null||LifestreamBusy()||goSeeHomeTrip!=null)return;
         var home=bidWorlds.FirstOrDefault(w=>w.Name==partner.World);if(home.Id==0)throw new InvalidOperationException("Partner home world unavailable.");
         gilPartnerName=partner.Name;gilPartnerWorld=home.Id;gilPartnerContent=ulong.TryParse(partner.ContentId,out var content)?content:0;gilPartnerRequiresParty=false;
         if(GilTradePartner() is not {} nearby||Objects.LocalPlayer is not {} self||Vector3.Distance(self.Position,nearby.Position)>5)return;
