@@ -22,6 +22,16 @@ public sealed partial class Plugin
         deliveryNotice="Local delivery stopped. The partner will pause when this client stops reporting.";
         StopIndependentWalk(IndicatorStopReason);
     }
+    private void StopIndicatorTravel()
+    {
+        if(followSession.Armed)StopFollowThem(IndicatorStopReason);
+        StopEstateTravel(IndicatorStopReason);
+        if(shoppingTravel!=null||goSeeHomeTrip!=null||goSeeFriendTrip!=null){
+            shoppingTravel=null;goSeeHomeTrip=null;goSeeFriendTrip=null;
+            try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}
+        }
+        StopIndependentWalk(IndicatorStopReason);
+    }
     private IndicatorWork? CurrentIndicatorWork()
     {
         if(gardenTendRoute!=null||gardenCareRun?.Running==true||gardenAutoPlantPlan!=null||gardenHousePlant!=null||gardenHouseHarvest!=null){
@@ -34,7 +44,8 @@ public sealed partial class Plugin
         if(eventAccountActive)return new("Adventure",eventAccountStatus,$"{eventAccountCompleted}/{eventAccountCharacters.Length}",()=>StopEventAccount(IndicatorStopReason));
         if(nativeEventActive)return new("Event quest",questToolsStatus,"…",()=>StopNativeEventQuest(IndicatorStopReason));
         if(independentQuestId!=0&&!independentUserPaused)return new("Quest",questToolsStatus,"…",()=>StopIndependentQuest(IndicatorStopReason));
-        if(estateTrip!=null||estateHomeReturn!=null)return new("House travel",independentWalkStatus,"…",()=>StopEstateTravel(IndicatorStopReason));
+        if(estateTrip!=null||estateHomeReturn!=null)return new("House travel",independentWalkStatus,"…",StopIndicatorTravel);
+        if(shoppingTravel!=null||goSeeHomeTrip!=null||goSeeFriendTrip!=null)return new("Travel",independentWalkStatus,"…",StopIndicatorTravel);
         if(organizeRunning)return new("Organizer",organizeStatus,"…",()=>StopOrganize(IndicatorStopReason));
         if(retrievalRun.Running)return new("Transfer",retrievalRun.Status,"…",()=>retrievalRun.Stop(IndicatorStopReason));
         if(chestRunning)return new("Company chest",chestStatus,"…",()=>StopChest(IndicatorStopReason));
@@ -45,7 +56,7 @@ public sealed partial class Plugin
         if(keyboundBuying)return new("Rewards",keyboundBuyStatus,"…",()=>StopKeyboundBuying(IndicatorStopReason));
         if(keyboundEnabled&&!keyboundStatus.StartsWith("Paused",StringComparison.OrdinalIgnoreCase))return new("Keybound",keyboundStatus,"…",()=>StopKeybound(IndicatorStopReason));
         if((FlightActive||independentSearch!=null||independentPath!=null||independentEntranceForward!=null)&&!independentUserPaused)
-            return new("Navigation",independentWalkStatus,"…",()=>{if(followSession.Armed)StopFollowThem(IndicatorStopReason);StopIndependentWalk(IndicatorStopReason);});
+            return new("Navigation",independentWalkStatus,"…",StopIndicatorTravel);
         if(nativeFollowRequested&&followSession.Armed)return new("Following",followStatus,"…",()=>StopFollowThem(IndicatorStopReason));
         return null;
     }

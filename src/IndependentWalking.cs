@@ -244,7 +244,7 @@ public sealed partial class Plugin
                 independentCollisionAt=now.AddMilliseconds(150);independentCheckedWaypoint=independentWaypoint;
             }
             var stalled=now-independentProgressAt>TimeSpan.FromSeconds(independentInputOverrides>0?1.5:4);
-            if(stalled||checkCollision&&(!AvoidStalledTargets.ClearOfBlocked(self.Position,target,independentBlockedTargets)||!independentCollision.Traverse(self.Position,target))){
+            if(stalled||!AvoidStalledTargets.ClearOfBlocked(self.Position,target,independentBlockedTargets)||checkCollision&&!independentCollision.Traverse(self.Position,target)){
                 independentMoving=false;independentForwardHook?.Disable();
                 if(independentInputOverrides==0&&now-independentProgressAt>TimeSpan.FromSeconds(4))throw new InvalidOperationException($"Movement not delivered · ground reads {independentForwardReads}, game blocked {independentNativeGateRejects}, other input {independentNativeManualReads}, expired {independentExpiredReads}. {independentInputBlock}");
                 if(independentDirectOnly)throw new InvalidOperationException("The short plot-entry step became blocked; stopped without circling the plot.");

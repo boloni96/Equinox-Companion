@@ -82,6 +82,10 @@ Check(AvoidStalledTargets.ClearOfBlocked(new(0,4,0),new(0,4,2),[new(0,0,1)]),"bl
 var detour=new[]{Vector3.Zero,new Vector3(1,0,0),new Vector3(1,0,2),new Vector3(0,0,3)};
 var around=WalkingSteering.PursuitTarget(Vector3.Zero,detour,1,(a,b)=>AvoidStalledTargets.ClearOfBlocked(a,b,[new(.4f,0,.8f)]));
 Check(around==new Vector3(1,0,0),"pursuit follows the corner rather than cutting across a remembered obstacle");
+var remembered=new AvoidStalledTargets(new OpenCollision(),[new(0,0,1)]);
+var rememberedRoute=new CollisionRouteSearch(remembered,Vector3.Zero,new(0,0,3),.35f,.5f);
+for(var i=0;i<100&&!rememberedRoute.Finished;i++)rememberedRoute.Advance(100,10000);
+Check(rememberedRoute.Path!=null&&rememberedRoute.Path.Zip(rememberedRoute.Path.Skip(1)).All(e=>remembered.Traverse(e.First,e.Second)),"fine recovery grid finds a connected detour around a remembered furniture footprint");
 Console.WriteLine("Separate phase deadlines and blocked-target retry passed.");
 // Thin post offset between the old center and side tracks.
 Check(!WalkingClearance.BodyRoom(Vector3.Zero,.45f,(a,b)=>{
