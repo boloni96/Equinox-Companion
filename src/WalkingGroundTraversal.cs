@@ -62,3 +62,12 @@ internal sealed class WalkingTraversalCache
         return result;
     }
 }
+
+// Ground support and movement obstacles are different material categories.
+// Live Goblet corner probes found material 0x2004: invisible to support-only 0x4000.
+internal static class WalkingCollisionFilter
+{
+    public const int Support=0x4000;
+    public const int Movement=0x6000;
+    public static bool Matches(ulong material,int mask)=>(material&(ulong)mask)!=0;
+}

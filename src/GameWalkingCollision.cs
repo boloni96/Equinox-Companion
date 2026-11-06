@@ -13,7 +13,7 @@ internal sealed class GameWalkingCollision:IWalkingCollision
     public float RoutePenalty(Vector3 point)=>roadGuide?.Penalty(point)??0;
     private const float Radius=.6f,Height=1.85f;
     private readonly Dictionary<Vector3,float> wallCache=[];
-    private readonly Dictionary<(Vector3 Origin,Vector3 Direction,float Distance),(bool Found,RaycastHit Hit)> rayCache=[];
+    private readonly Dictionary<(Vector3 Origin,Vector3 Direction,float Distance,int Mask),(bool Found,RaycastHit Hit)> rayCache=[];
     public long NativeQueries { get; private set; }
     public long CacheHits { get; private set; }
     private long sliceDeadline;
@@ -34,7 +34,7 @@ internal sealed class GameWalkingCollision:IWalkingCollision
         Ready();const float preferred=3f;var nearest=preferred;
         for(var i=0;i<8;i++){
             var angle=i*MathF.PI/4;var direction=new Vector3(MathF.Cos(angle),0,MathF.Sin(angle));
-            if(Hit(point+new Vector3(0,.65f,0),direction,preferred,out var hit))nearest=MathF.Min(nearest,CollisionRouteSearch.Horizontal(point,hit.Point));
+            if(Hit(point+new Vector3(0,.65f,0),direction,preferred,out var hit,WalkingCollisionFilter.Movement))nearest=MathF.Min(nearest,CollisionRouteSearch.Horizontal(point,hit.Point));
         }
         var penalty=Math.Clamp((preferred-nearest)/(preferred-Radius),0,1);
         if(groundCache!=null&&wallCache.Count<100000)wallCache[point]=penalty;
@@ -43,7 +43,7 @@ internal sealed class GameWalkingCollision:IWalkingCollision
     }
     public bool ComfortableTraverse(Vector3 from,Vector3 to)=>Traverse(from,to)&&WalkingClearance.PreservesRoom(from,to,WallPenalty);
     internal Vector3? LastBlockedAt { get; private set; }
-    private bool OneWayBlocked(Vector3 a,Vector3 b){var delta=b-a;var length=delta.Length();return length>.001f&&Hit(a,delta/length,length,out _);}
+    private bool OneWayBlocked(Vector3 a,Vector3 b){var delta=b-a;var length=delta.Length();return length>.001f&&Hit(a,delta/length,length,out _,WalkingCollisionFilter.Movement);}
     private bool Blocked(Vector3 a,Vector3 b)=>WalkingClearance.SegmentBlocked(a,b,OneWayBlocked);
     internal static unsafe bool Available(){
         var f=GameFramework.Instance();var c=f==null?null:f->BGCollisionModule;
@@ -54,12 +54,16 @@ internal sealed class GameWalkingCollision:IWalkingCollision
         var f=GameFramework.Instance();var c=f==null?null:f->BGCollisionModule;
         if(c==null||c->ShuttingDown||c->LoadInProgressCounter>0)throw new InvalidOperationException("Waiting for collision geometry to finish loading.");
     }
-    private bool Hit(Vector3 origin,Vector3 direction,float distance,out RaycastHit hit)
+    private unsafe bool Hit(Vector3 origin,Vector3 direction,float distance,out RaycastHit hit,int materialMask=WalkingCollisionFilter.Support)
     {
-        var key=(origin,direction,distance);
+        var key=(origin,direction,distance,materialMask);
         if(groundCache!=null&&rayCache.TryGetValue(key,out var saved)){CacheHits++;hit=saved.Hit;return saved.Found;}
         if(sliceDeadline!=0&&System.Diagnostics.Stopwatch.GetTimestamp()>=sliceDeadline)throw new NavigationSliceExpiredException();
-        NativeQueries++;var found=BGCollisionModule.RaycastMaterialFilter(origin,direction,out hit,distance);
+        var framework=GameFramework.Instance();var module=framework==null?null:framework->BGCollisionModule;
+        if(module==null)throw new InvalidOperationException("Collision geometry is unavailable.");
+        int* flags=stackalloc int[4]{materialMask,0,0,0};
+        var result=default(RaycastHit);
+        NativeQueries++;var found=module->RaycastMaterialFilter(&result,&origin,&direction,distance,1,flags);hit=result;
         if(groundCache!=null&&rayCache.Count<65536)rayCache[key]=(found,hit);
         return found;
     }
@@ -79,7 +83,7 @@ internal sealed class GameWalkingCollision:IWalkingCollision
         if(normal.LengthSquared()<.0001f||Vector3.Normalize(normal).Y<.65f)return false;
         if(hit.Point.Y-near.Y>.65f||near.Y-hit.Point.Y>.7f)return false;
         ground=hit.Point;
-        if(Hit(ground+new Vector3(0,.12f,0),Vector3.UnitY,Height-.12f,out _))return false;
+        if(Hit(ground+new Vector3(0,.12f,0),Vector3.UnitY,Height-.12f,out _,WalkingCollisionFilter.Movement))return false;
         return true;
     }
     internal bool InteractionVisible(Vector3 floor,Vector3 marker)
@@ -88,7 +92,7 @@ internal sealed class GameWalkingCollision:IWalkingCollision
         var eye=floor+new Vector3(0,1.1f,0);
         var delta=marker-eye;var length=delta.Length();
         // Ignore the marker's own surface, but do not interact through intervening walls.
-        return length<.3f||!Hit(eye,delta/length,length-.25f,out _);
+        return length<.3f||!Hit(eye,delta/length,length-.25f,out _,WalkingCollisionFilter.Movement);
     }
     public bool Traverse(Vector3 from,Vector3 to)
     {
