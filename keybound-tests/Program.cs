@@ -277,3 +277,9 @@ Check(!KeyboundPolicy.CanCloseRegistration(true,10,10,true,true,false),"existing
 Check(!KeyboundPolicy.CanCloseRegistration(true,10,10,true,false,true),"active round is not closed by registration cleanup");
 Check(!KeyboundPolicy.FarmingStoppedUnexpectedly(true,false,false),"goal reached may transition to shopping after typing stops");
 Check(KeyboundPolicy.FarmingStoppedUnexpectedly(true,false,true),"real stopped farming remains an error while more MGC is needed");
+
+Check(KeyboundUsePolicy.ResolveUnlock(2,true)==1,"positive collection confirms consumed reward despite stale generic negative");
+Check(KeyboundUsePolicy.ResolveUnlock(4,true)==1,"specific collection recognizes unlock unsupported by generic check");
+Check(KeyboundUsePolicy.ResolveUnlock(2,false)==2,"two negative checks do not invent an unlock");
+Check(KeyboundUsePolicy.Confirmed(1,0,KeyboundUsePolicy.ResolveUnlock(2,true)),"report regression: consumed kit and positive specific collection complete use");
+Check(!KeyboundUsePolicy.Confirmed(1,0,KeyboundUsePolicy.ResolveUnlock(2,false)),"consumption with no positive unlock still needs verification");

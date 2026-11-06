@@ -46,7 +46,16 @@ public sealed partial class Plugin
         keyboundTraceFingerprint=fingerprint;keyboundTraceNext=now.AddSeconds(5);
         TraceKeyboundRun(keyboundBuyerRun,kind,keyboundBuyStatus);
     }
+    private object? KeyboundPendingUnlockDiagnostic()
+    {
+        if(keyboundUsePending is not {} item||!Player.IsLoaded)return null;
+        try{
+            var resolved=ReadKeyboundUnlockState(item.Item,out var native,out var collection);
+            return new{item=item.Item,before=keyboundUseBefore,held=KeyboundBagCount(item.Item),nativeUnlock=native,collectionUnlock=collection,resolvedUnlock=resolved};
+        }catch(Exception ex){return new{error=ex.GetType().Name};}
+    }
     private object KeyboundRunDiagnosticSnapshot()=>new {
+        pendingUnlock=KeyboundPendingUnlockDiagnostic(),
         session=keyboundTraceSession,buyerRun=keyboundBuyerRun,typingRun=keyboundTypingRun,accountRun=keyboundAccountRun,
         pendingSince=keyboundUsePending==null?(DateTimeOffset?)null:keyboundUseDeadline.AddSeconds(-30),
         pendingDeadline=keyboundUsePending==null?(DateTimeOffset?)null:keyboundUseDeadline,

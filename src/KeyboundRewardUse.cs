@@ -12,6 +12,8 @@ public sealed partial class Plugin
     private int keyboundUseReady,keyboundUsed,keyboundUseSkipped,keyboundUseBefore;
     private KeyboundOffer? keyboundUsePending;
     private DateTimeOffset keyboundUseDeadline;
+    private CatalogueEntry[][]? keyboundUnlockCatalogue;
+    private readonly Dictionary<uint,CatalogueEntry?> keyboundUnlockEntries=[];
     private static readonly InventoryType[] KeyboundUseBags=[InventoryType.Inventory1,InventoryType.Inventory2,InventoryType.Inventory3,InventoryType.Inventory4];
     private unsafe int KeyboundBagCount(uint item)
     {
@@ -31,17 +33,22 @@ public sealed partial class Plugin
         keyboundBuyStatus="Purchases finished · preparing reward use…";
         TraceKeyboundRun(keyboundBuyerRun,"use-phase-started",keyboundBuyStatus);
     }
-    private unsafe int KeyboundUnlockState(uint item)
+    private int KeyboundUnlockState(uint item)=>ReadKeyboundUnlockState(item,out _,out _);
+    private unsafe int ReadKeyboundUnlockState(uint item,out int native,out bool? collection)
     {
+        native=3;collection=null;
         var state=UIState.Instance();var row=ExdModule.GetItemRowById(item);
         if(state==null||!state->PlayerState.IsLoaded||row==null)return 3;
-        var native=(int)state->IsItemActionUnlocked(row);
-        if(native!=3||catalogueBase==null)return native;
-        var entries=catalogueBase.SelectMany(g=>g).Where(e=>e.ItemId==item&&e.Category is "mount" or "minion" or "orchestrion" or "emote" or "ornament" or "framerkit")
+        native=(int)state->IsItemActionUnlocked(row);
+        if(native==1||catalogueBase==null)return native;
+        if(!ReferenceEquals(keyboundUnlockCatalogue,catalogueBase)){keyboundUnlockCatalogue=catalogueBase;keyboundUnlockEntries.Clear();}
+        if(!keyboundUnlockEntries.TryGetValue(item,out var entry)){
+            var entries=catalogueBase.SelectMany(g=>g).Where(e=>e.ItemId==item&&e.Category is "mount" or "minion" or "orchestrion" or "emote" or "ornament" or "framerkit")
             .DistinctBy(e=>(e.Category,e.Id)).Take(2).ToArray();
-        if(entries.Length!=1)return native;
-        var entry=entries[0];
-        bool? unlocked=entry.Category switch{
+            entry=entries.Length==1?entries[0]:null;keyboundUnlockEntries[item]=entry;
+        }
+        if(entry==null)return native;
+        collection=entry.Category switch{
             "mount"=>state->PlayerState.IsMountUnlocked(entry.Id),
             "minion"=>state->IsCompanionUnlocked(entry.Id),
             "orchestrion"=>state->PlayerState.IsOrchestrionRollUnlocked(entry.Id),
@@ -50,7 +57,7 @@ public sealed partial class Plugin
             "framerkit"=>state->PlayerState.IsFramersKitUnlocked(entry.Id),
             _=>null
         };
-        return KeyboundUsePolicy.ResolveUnlock(native,unlocked);
+        return KeyboundUsePolicy.ResolveUnlock(native,collection);
     }
     private unsafe void UpdateKeyboundRewardUse(DateTimeOffset now)
     {
@@ -72,12 +79,18 @@ public sealed partial class Plugin
                 keyboundCollectionRefreshItems.Add(pending.Item);keyboundUsed++;keyboundUseRemaining.Remove(pending.Item);keyboundUsePending=null;keyboundUseDeadline=now.AddSeconds(30);RequestStorageRefresh();
                 keyboundBuyStatus="Unlocked: "+pending.Name;keyboundBuyNext=now.AddSeconds(1);return;
             }
+            if(now>=keyboundUseDeadline.AddSeconds(30)){
+                var held=KeyboundBagCount(pending.Item);var unlocked=KeyboundUnlockState(pending.Item);
+                var reason=$"Reward use needs verification: {pending.Name}. Bags {keyboundUseBefore} → {held}; unlock state {unlocked}. No repeat use sent. Export diagnostics before retrying.";
+                TraceKeyboundRun(keyboundBuyerRun,"item-use-confirmation-timeout",reason);
+                StopKeyboundBuying(reason);return;
+            }
             if(now>=keyboundUseDeadline){
-                var waiting="Waiting for item-use confirmation: "+pending.Name+". Checking inventory and collections automatically; no repeat use sent. Stop cancels this wait.";
+                var waiting="Verifying reward use: "+pending.Name+". Waiting up to 30 more seconds for collection confirmation; no repeat use sent.";
                 if(keyboundBuyStatus!=waiting){
                     keyboundBuyStatus=waiting;
                     TraceKeyboundRun(keyboundBuyerRun,"item-use-confirmation-delayed",waiting);
-                    RequestStorageRefresh();
+                    keyboundCollectionRefreshItems.Add(pending.Item);RequestStorageRefresh();
                 }
             }
             return; // Never send the same use request again while awaiting its result.

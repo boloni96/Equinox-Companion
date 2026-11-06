@@ -195,7 +195,7 @@ public sealed partial class Plugin
                 RefreshKeyboundBuyPlan();
                 if(WaitEventRewardData(now))return;
                 eventAccountBuyingStarted=false;
-                if(keyboundMissingPlan==null||keyboundMissingPlan.Count>0||keyboundUseReady>0||keyboundHeldRewards.Count>0)
+                if(keyboundUsePending!=null||keyboundMissingPlan==null||keyboundMissingPlan.Count>0||keyboundUseReady>0||keyboundHeldRewards.Count>0)
                     throw new InvalidOperationException("Purchases/use need attention: "+keyboundBuyStatus);
             }
             RefreshKeyboundBuyPlan();
