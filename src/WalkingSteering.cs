@@ -103,6 +103,7 @@ internal sealed class AvoidStalledTargets(IWalkingCollision inner,Vector3[] bloc
 // Cross the full footprint, not just three parallel tracks, to catch narrow posts.
 internal static class WalkingClearance
 {
+    public static bool SegmentBlocked(Vector3 from,Vector3 to,Func<Vector3,Vector3,bool> cast)=>cast(from,to)||cast(to,from);
     public static bool PreservesRoom(Vector3 from,Vector3 to,Func<Vector3,float> penalty){
         var allowed=MathF.Max(penalty(from),penalty(to))+.1f;
         for(var i=1;i<4;i++)if(penalty(Vector3.Lerp(from,to,i/4f))>allowed)return false;

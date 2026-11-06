@@ -161,7 +161,10 @@ public sealed partial class Plugin
                 var town=SellerAddon("TelepotTown");
                 if(town==null){if(now-trip.StageAt>TimeSpan.FromSeconds(10))throw new InvalidOperationException("Residential aethernet menu did not open.");return;}
                 var choices=AethernetChoices(town).Where(x=>x.Name.Trim()==shard.Name.Trim()).ToArray();
-                if(choices.Length!=1)throw new InvalidOperationException("The requested residential shard was not uniquely available.");
+                if(choices.Length!=1){
+                    if(now-trip.StageAt<TimeSpan.FromSeconds(10)){nativeHousingStatus="Waiting for residential shard destinations to load";return;}
+                    throw new InvalidOperationException("The requested residential shard was not uniquely available after waiting for the menu to load.");
+                }
                 NativeTravelCallback(town,11,(int)choices[0].Callback);trip.Selections++;
                 if(trip.Selections>=2)HousingStage(trip,9,"Waiting for residential shard arrival");return;
             }

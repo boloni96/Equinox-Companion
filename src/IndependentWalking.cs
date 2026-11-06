@@ -36,8 +36,11 @@ public sealed partial class Plugin
     private readonly NavigationPhaseTimer independentPhaseTimer=new();
     private bool independentNearbyApproach;
     private readonly List<Vector3> independentBlockedTargets=[];
+    private readonly RecentWalkingBlocks independentRecentBlocks=new();
+    private bool independentBacktracking;
+    private DateTimeOffset independentBacktrackUntil;
     private CollisionRouteSearch CreateIndependentSearch(Vector3 start,Vector3 goal,float range)=>
-        new(new AvoidStalledTargets(new GameWalkingCollision(cacheGround:true,roadGuide:independentRoadGuide),independentBlockedTargets.ToArray()),start,goal,range,independentBlockedTargets.Count>0?.5f:1f);
+        new(new AvoidStalledTargets(new GameWalkingCollision(cacheGround:true,roadGuide:independentRoadGuide),independentBlockedTargets.ToArray()),start,goal,range,independentBlockedTargets.Count>0&&Vector3.Distance(start,goal)<12?.5f:1f);
     private bool IndependentClearConnector(Vector3 from,Vector3 to)=>AvoidStalledTargets.ClearOfBlocked(from,to,independentBlockedTargets)&&independentCollision.ComfortableTraverse(from,to);
     private bool independentMoving,independentArrived,independentDirectOnly;
     private DateTimeOffset independentPulseUntil,independentSince,independentPlanningSince,independentProgressAt,independentCollisionAt;
@@ -118,7 +121,7 @@ public sealed partial class Plugin
         if(independentSearch!=null||independentPath!=null||independentEntranceForward!=null)
             RecordTravelPrompt("Navigation ended",new{run=independentNavigationRun,reason,goal=FollowTravelPosition.From(independentGoal),independentInputReads,independentInputOverrides,independentExpiredReads,independentInactiveReads,independentNativeGateRejects,independentNativeManualReads,independentReplans,independentPlanningSeconds,independentWalkStatus,controlMode=independentLegacyMode?"Legacy":"Standard",axes=new{x=independentAxes.X,y=independentAxes.Y},independentHeading,independentFacingOnly});
         if(independentSearch!=null||independentPath!=null||independentEntranceForward!=null)TraceKeyboundRun(independentNavigationRun,"navigation-stopped",reason,"companion-navigation",false);
-        independentInteractionTarget=0;independentEntranceForward=null;independentGroundReadiness.Reset();independentFacingAt=default;independentFacingOnly=false;
+        independentBacktracking=false;independentInteractionTarget=0;independentEntranceForward=null;independentGroundReadiness.Reset();independentFacingAt=default;independentFacingOnly=false;
         StopIndependentFlight();
         independentUserPaused=false;independentGameGateBlocked=false;independentGatePauseSince=default;independentHeading=null;independentMoving=false;independentPulseUntil=default;independentLease.Revoke();independentForwardHook?.Disable();
         independentSearch=null;independentPath=null;independentPendingPath=null;independentArrived=false;independentDirectOnly=false;independentWalkStatus=reason;independentWalkFailure="";
@@ -154,7 +157,7 @@ public sealed partial class Plugin
         independentForwardReads=independentExpiredReads=independentInactiveReads=0;independentNativeGateRejects=independentNativeManualReads=independentNativeExceptions=0;
         independentInputBlock=independentLastWalkFailure="";independentPositionChanged=false;independentLastRoutePoints=independentLastExpanded=0;independentPlanningSeconds=0;independentLease.Revoke();
         TraceKeyboundRun(independentNavigationRun,"navigation-started",$"Destination {destination}; range {range}",independentQuestId!=0?"quest:"+independentQuestRun:"event",false);
-        independentBlockedTargets.Clear();independentRecovery.Reset();independentWalkedPoints.Clear();independentWalkedPoints.Add(self.Position);independentPhaseTimer.Begin(now);
+        independentBacktracking=false;independentBlockedTargets.Clear();independentBlockedTargets.AddRange(independentRecentBlocks.Get(Client.TerritoryType,Player.CurrentWorld.RowId,now));independentRecovery.Reset();independentWalkedPoints.Clear();independentWalkedPoints.Add(self.Position);independentPhaseTimer.Begin(now);
         independentNearbyApproach=directDistance>4&&Vector3.Distance(self.Position,destination)<=16;
         independentInteractionTarget=interactionTarget?.GameObjectId??0;
         independentDirectOnly=directOnly;independentGoal=destination;independentRange=range;independentCharacter=Player.ContentId;independentTerritory=Client.TerritoryType;
@@ -164,6 +167,7 @@ public sealed partial class Plugin
         // do not need an area search or a detour to satisfy preferred wall clearance.
         var direct=directOnly?VerifiedWalkingOpening.Entrance(independentCollision,self.Position,destination):VerifiedWalkingOpening.ShortDirect(independentCollision,self.Position,destination,directDistance);
         if(!directOnly&&direct.Length>1&&!WalkingClearance.PreservesRoom(self.Position,destination,independentCollision.WallPenalty))direct=[];
+        if(direct.Length>1&&Enumerable.Range(1,direct.Length-1).Any(i=>!AvoidStalledTargets.ClearOfBlocked(direct[i-1],direct[i],independentBlockedTargets)))direct=[];
         if(direct.Length>1){
             independentPath=direct;independentWaypoint=1;independentCheckedWaypoint=-1;
             independentPhaseTimer.SetPlanning(false,now);independentWalkStatus="Short approach ready";return false;
@@ -174,10 +178,10 @@ public sealed partial class Plugin
             TraceKeyboundRun(independentNavigationRun,"entrance-forward-attempt",$"Collision model rejected entry; normal game movement from {self.Position} toward {destination}; max 3 yalms, stall limit 1.5s","estate-entry",false);
             independentWalkStatus="Trying the short entrance step · watching actual movement";return false;
         }
-        var cached=RecallIndependentRoute(self.Position,destination,range);
+        var cached=independentBlockedTargets.Count==0?RecallIndependentRoute(self.Position,destination,range):null;
         if(cached!=null){independentPath=cached;independentWaypoint=1;independentCheckedWaypoint=-1;independentPhaseTimer.SetPlanning(false,now);independentWalkStatus="Using a saved route · checking the next section";return false;}
         // The opening is fully checked; the remainder starts at its fixed endpoint.
-        var opening=VerifiedWalkingOpening.Build(independentCollision,self.Position,destination,range);
+        var opening=independentBlockedTargets.Count==0?VerifiedWalkingOpening.Build(independentCollision,self.Position,destination,range):[];
         if(opening.Length>1){independentPath=opening;independentWaypoint=1;independentCheckedWaypoint=-1;}
         independentSearch=CreateIndependentSearch(opening.Length>1?opening[^1]:self.Position,destination,range);
         independentWalkStatus=opening.Length>1?"Opening route ready · calculating ahead":"Checking collision geometry and finding a route";return false;
@@ -198,7 +202,7 @@ public sealed partial class Plugin
             if(independentUserPaused){
                 independentUserPaused=false;independentNativeManualReads=0;
                 if(Objects.LocalPlayer is {} moved){
-                    independentSearch=CreateIndependentSearch(moved.Position,independentGoal,independentRange);
+                    independentBacktracking=false;independentSearch=CreateIndependentSearch(moved.Position,independentGoal,independentRange);
                     independentPath=independentPendingPath=null;independentWaypoint=0;independentCheckedWaypoint=-1;
                     independentLastProgress=independentPrevious=moved.Position;independentReplans=0;
                     independentProgressAt=independentPlanningSince=independentSince=now;independentPhaseTimer.Begin(now);
@@ -257,6 +261,16 @@ public sealed partial class Plugin
                 independentLastProgress=self.Position;independentProgressAt=DateTimeOffset.UtcNow;
                 }
             }
+            if(independentBacktracking){
+                if(independentPath!=null&&Vector3.Distance(self.Position,independentPath[^1])<=.45f){
+                    independentMoving=false;independentLease.Revoke();independentForwardHook?.Disable();independentBacktracking=false;
+                    independentPath=null;independentWalkedPoints.Clear();independentWalkedPoints.Add(self.Position);independentPlanningSince=now;independentPhaseTimer.SetPlanning(true,now);
+                    independentSearch=CreateIndependentSearch(self.Position,independentGoal,independentRange);
+                    RecordTravelPrompt("Navigation backtrack complete",new{run=independentNavigationRun,position=FollowTravelPosition.From(self.Position)});
+                    independentWalkStatus="Back on the travelled path · finding an alternative";return;
+                }
+                if(now>independentBacktrackUntil)throw new InvalidOperationException("Could not back away from the obstruction within 6 seconds; movement stopped.");
+            }
             if(CollisionRouteSearch.Horizontal(self.Position,independentGoal)<=independentRange&&MathF.Abs(self.Position.Y-independentGoal.Y)<=1.2f){
                 independentWalkedPoints.Add(self.Position);RememberIndependentRoute(independentWalkedPoints.ToArray());
                 StopIndependentWalk("Arrived · movement released");independentArrived=true;return;
@@ -269,7 +283,7 @@ public sealed partial class Plugin
             if(independentPath==null||independentWaypoint>=independentPath.Length)throw new InvalidOperationException("Route ended without confirmed arrival.");
             var target=WalkingSteering.PursuitTarget(self.Position,independentPath,independentWaypoint,IndependentClearConnector);
             if(Vector3.Distance(self.Position,independentLastProgress)>.3f){independentProgressAt=now;independentLastProgress=self.Position;independentPositionChanged=true;
-                if(independentWalkedPoints.Count==0||Vector3.Distance(independentWalkedPoints[^1],self.Position)>=1)independentWalkedPoints.Add(self.Position);}
+                if(!independentBacktracking&&(independentWalkedPoints.Count==0||Vector3.Distance(independentWalkedPoints[^1],self.Position)>=.75f))independentWalkedPoints.Add(self.Position);}
             var checkCollision=now>=independentCollisionAt||independentCheckedWaypoint!=independentWaypoint;
             if(checkCollision){
                 independentCollisionAt=now.AddMilliseconds(150);independentCheckedWaypoint=independentWaypoint;
@@ -280,13 +294,26 @@ public sealed partial class Plugin
             if(noConnector||stalled||!AvoidStalledTargets.ClearOfBlocked(self.Position,target,independentBlockedTargets)||checkCollision&&!independentCollision.Traverse(self.Position,target)){
                 independentMoving=false;independentForwardHook?.Disable();
                 if(independentInputOverrides==0&&now-independentProgressAt>TimeSpan.FromSeconds(4))throw new InvalidOperationException($"Movement not delivered · ground reads {independentForwardReads}, game blocked {independentNativeGateRejects}, other input {independentNativeManualReads}, expired {independentExpiredReads}. {independentInputBlock}");
+                if(independentBacktracking)throw new InvalidOperationException("The checked backtrack became blocked; movement stopped.");
                 if(independentDirectOnly)throw new InvalidOperationException("The short plot-entry step became blocked; stopped without circling the plot.");
                 independentReplans++;
                 if(!independentRecovery.Try(self.Position))throw new InvalidOperationException("Route remained blocked after four replans without sufficient progress; stopped.");
                 var blockedAt=noConnector?WalkingSteering.BoundedTarget(self.Position,independentPath[independentWaypoint]):stalled?Vector3.Lerp(self.Position,target,MathF.Min(1,.6f/MathF.Max(.01f,Vector3.Distance(self.Position,target)))):independentCollision.LastBlockedAt??target;
-                ForgetIndependentRoute();independentPendingPath=null;independentBlockedTargets.Add(blockedAt);independentPhaseTimer.SetPlanning(true,now);independentPlanningSince=now;
+                ForgetIndependentRoute();independentPendingPath=null;independentBlockedTargets.Add(blockedAt);
+                if(stalled)independentRecentBlocks.Add(Client.TerritoryType,Player.CurrentWorld.RowId,blockedAt,now);
+                RecordNavigationObstruction(self.Position,target,blockedAt,stalled);independentPhaseTimer.SetPlanning(true,now);independentPlanningSince=now;
                 independentSearch=CreateIndependentSearch(self.Position,independentGoal,independentRange);independentPath=null;independentProgressAt=now;
                 TraceKeyboundRun(independentNavigationRun,"route-replan",$"Attempt {independentReplans}; avoiding obstacle {blockedAt}; target {target}; position {self.Position}; stalled {stalled}; no clearance-safe connector {noConnector}; input reads {independentInputReads}, overrides {independentInputOverrides}","companion-navigation",false);
+                if(stalled){
+                    var retreat=WalkingBacktrack.Build(self.Position,independentWalkedPoints,IndependentClearConnector);
+                    if(retreat.Length>1){
+                        independentSearch=null;independentPath=retreat;independentWaypoint=1;independentCheckedWaypoint=-1;
+                        independentBacktracking=true;independentBacktrackUntil=now.AddSeconds(6);independentHeading=null;
+                        independentLastProgress=self.Position;independentProgressAt=now;independentPhaseTimer.SetPlanning(false,now);
+                        RecordTravelPrompt("Navigation backtrack started",new{run=independentNavigationRun,points=retreat.Select(FollowTravelPosition.From).ToArray()});
+                        independentWalkStatus="Backing away along the checked travelled path";return;
+                    }
+                }
                 independentWalkStatus="Path changed or blocked · finding another route";return;
             }
             var cameras=CameraManager.Instance();

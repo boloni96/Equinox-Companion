@@ -61,7 +61,7 @@ public sealed partial class Plugin
         }
         UpdateQuestRecorder(now);
         UpdateLevelingGoal(now);
-        UpdateIndependentWalk(now);
+        var navigationStarted=System.Diagnostics.Stopwatch.GetTimestamp();UpdateIndependentWalk(now);RecordPerformanceElapsed("Navigation: walking and recovery",navigationStarted);
         UpdateIndependentQuest(now);
         UpdateNativeEventQuest(now);
         UpdateQuestChain(now);

@@ -34,7 +34,8 @@ internal sealed class GameWalkingCollision:IWalkingCollision
     }
     public bool ComfortableTraverse(Vector3 from,Vector3 to)=>Traverse(from,to)&&WalkingClearance.PreservesRoom(from,to,WallPenalty);
     internal Vector3? LastBlockedAt { get; private set; }
-    private bool Blocked(Vector3 a,Vector3 b){var delta=b-a;var length=delta.Length();return length>.001f&&Hit(a,delta/length,length,out _);}
+    private bool OneWayBlocked(Vector3 a,Vector3 b){var delta=b-a;var length=delta.Length();return length>.001f&&Hit(a,delta/length,length,out _);}
+    private bool Blocked(Vector3 a,Vector3 b)=>WalkingClearance.SegmentBlocked(a,b,OneWayBlocked);
     internal static unsafe bool Available(){
         var f=GameFramework.Instance();var c=f==null?null:f->BGCollisionModule;
         return c!=null&&!c->ShuttingDown&&c->LoadInProgressCounter==0;
