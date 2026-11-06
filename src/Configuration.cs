@@ -135,6 +135,7 @@ public sealed class Configuration : IPluginConfiguration
     public Dictionary<string,List<BidFavorite>> SavedPlotRecoveryCopies { get; set; } = [];
     public bool SavedPlotsMigrated { get; set; }
     public string SavedPlotsPairingHash { get; set; } = "";
+    public int TravelCity { get; set; }
     public int ShoppingCity { get; set; }
     public int ShoppingArrival { get; set; }
     public int Version { get; set; } = 4;

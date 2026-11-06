@@ -44,6 +44,7 @@ public sealed partial class Plugin
             SettingsSection("Chat",DrawChatMessageSettings);
             SettingsSection("Keybinds",DrawShortcutSettings);
             SettingsSection("Characters",DrawCharacterOrderSettings);
+            SettingsSection("Travel",DrawTravelSettings);
             SettingsSection("Windows",DrawFloatingLauncherSettings);
             SettingsSection("Loading icon",DrawWorkIndicatorSettings);
             SettingsSection("Connection",DrawConnection);

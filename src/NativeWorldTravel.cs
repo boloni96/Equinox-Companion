@@ -17,7 +17,7 @@ public sealed partial class Plugin
         public required int Service;public required DateTimeOffset Started;
         public NativeTravelStage Stage;public DateTimeOffset Next,StageAt;
         public bool ReturnHome,DcSelected,ContextSent,LoginSent,LoginConfirmed,GatewaySent,TransferCommitted;
-        public uint Gateway,RequestedLoginWorld;public bool ServiceSent,LogoutConfirmed,IntroSent;public int ApproachAttempt;public Vector3? ApproachGoal;
+        public uint Gateway,PreferredGateway,RequestedLoginWorld;public bool ServiceSent,LogoutConfirmed,IntroSent;public int ApproachAttempt;public Vector3? ApproachGoal;
     }
     private NativeWorldTrip? nativeWorldTrip;
     private string nativeTravelStatus="Choose a map, aetheryte or world.";
@@ -47,9 +47,9 @@ public sealed partial class Plugin
         var source=Player.CurrentWorld.RowId;var home=Player.HomeWorld.RowId;var cross=!NativeTravelPolicy.SameDataCenter(TravelDc(source),TravelDc(destination));var slot=CurrentLoginServiceAccount();
         if(cross&&slot is <0 or >15){nativeTravelStatus="Identify this client's service account before DC travel (log in once with Companion).";return false;}
         var returning=NativeTravelPolicy.ReturnFirst(source,home,TravelDc(source),TravelDc(destination));
-        var trip=new NativeWorldTrip{Owner=owner,Character=Player.ContentId,Name=Player.CharacterName,Home=home,Source=source,Destination=destination,Leg=returning?home:destination,Service=slot,Started=DateTimeOffset.UtcNow,ReturnHome=returning};
+        var trip=new NativeWorldTrip{PreferredGateway=TravelCityPolicy.Preferred(config.TravelCity,config.ShoppingCity,owner=="shopping"),Owner=owner,Character=Player.ContentId,Name=Player.CharacterName,Home=home,Source=source,Destination=destination,Leg=returning?home:destination,Service=slot,Started=DateTimeOffset.UtcNow,ReturnHome=returning};
         nativeWorldTrip=trip;StopIndependentWalk("Starting native travel",resetFailure:true);
-        RecordTravelPrompt("Travel requested",new{trip.Character,trip.Name,trip.Home,trip.Source,trip.Destination,trip.Service});
+        RecordTravelPrompt("Travel requested",new{trip.Character,trip.Name,trip.Home,trip.Source,trip.Destination,trip.Service,trip.Owner,trip.PreferredGateway});
         if(cross)BeginNativeTravelLogout(trip);else SetNativeTravelStage(trip,NativeTravelStage.Gateway,"Reaching a World Visit aetheryte");
         return true;
     }
@@ -99,9 +99,13 @@ public sealed partial class Plugin
             if(crystal==null||Vector3.Distance(crystal.Position,self.Position)>100){
                 if(trip.GatewaySent)return;
                 var telepo=Telepo.Instance();if(telepo==null)return;telepo->UpdateAetheryteList();
-                foreach(var t in telepo->TeleportList)if(t.AetheryteId is 2 or 8 or 9&&t.SubIndex==0){
-                    if(!telepo->Teleport(t.AetheryteId,0))throw new InvalidOperationException("The game refused the city teleport.");
-                    trip.GatewaySent=true;trip.Gateway=t.AetheryteId;nativeTravelStatus="Teleporting to the World Visit aetheryte";RecordTravelPrompt("City teleport requested",new{t.AetheryteId});return;
+                var unlocked=new List<uint>();
+                foreach(var t in telepo->TeleportList)if(t.AetheryteId is 2 or 8 or 9&&t.SubIndex==0)unlocked.Add(t.AetheryteId);
+                var gateway=TravelCityPolicy.Select(unlocked,trip.PreferredGateway);
+                if(gateway!=0){
+                    if(!telepo->Teleport(gateway,0))throw new InvalidOperationException("The game refused the city teleport.");
+                    trip.GatewaySent=true;trip.Gateway=gateway;nativeTravelStatus="Teleporting to the World Visit aetheryte";
+                    RecordTravelPrompt("City teleport requested",new{aetheryteId=gateway,trip.PreferredGateway,trip.Owner,fallback=trip.PreferredGateway!=0&&trip.PreferredGateway!=gateway});return;
                 }
                 throw new InvalidOperationException("Unlock a main aetheryte in Gridania, Limsa Lominsa or Ul'dah first.");
             }
