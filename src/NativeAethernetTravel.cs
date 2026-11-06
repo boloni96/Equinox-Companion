@@ -42,10 +42,10 @@ public sealed partial class Plugin
                     var main=sheet.FirstOrDefault(x=>x.IsAetheryte&&x.AethernetGroup==destination.AethernetGroup).RowId;
                     if(main==0||!RequestNativePublicTeleport(main))throw new InvalidOperationException("No available teleport to this aethernet group.");trip.Teleported=true;return;
                 }
-                if(Vector3.Distance(self.Position,crystal.Position)>NativeAetheryteApproach.Range(trip.ApproachAttempt,crystal.HitboxRadius)){
+                if(!TargetWithinInteractionRange(crystal)&&Vector3.Distance(self.Position,crystal.Position)>NativeAetheryteApproach.Range(trip.ApproachAttempt,crystal.HitboxRadius)){
                     var offset=self.Position-crystal.Position;offset.Y=0;if(offset.LengthSquared()<.01f)throw new InvalidOperationException("Aethernet crystal is on another floor.");
                     if(trip.ApproachGoal is not {} floor){if(!TryNativeTravelGround(NativeAetheryteApproach.InteractionEdge(self.Position,crystal.Position,NativeAetheryteApproach.Range(trip.ApproachAttempt,crystal.HitboxRadius)),self.Position,crystal.Position,out floor)){nativeAethernetStatus="Waiting for walkable ground beside the aethernet";return;}trip.ApproachGoal=floor;}
-                    IndependentWalk(floor,.65f,now,allowFlight:false,directDistance:8);nativeAethernetStatus="Approaching aethernet · "+independentWalkStatus;return;
+                    IndependentWalk(floor,.65f,now,allowFlight:false,directDistance:8,interactionTarget:crystal);nativeAethernetStatus="Approaching aethernet · "+independentWalkStatus;return;
                 }
                 StopIndependentWalk("At aethernet");var system=TargetSystem.Instance();if(system==null)return;
                 if(Targets.Target?.Address!=crystal.Address){Targets.Target=crystal;return;}

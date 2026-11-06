@@ -118,7 +118,7 @@ public sealed partial class Plugin
             return false;
         }
         if(Conditions[ConditionFlag.OccupiedInEvent])return false;
-        if(!EventAccountWalk(goal,2.5f,now)||npc==null)return false;
+        if(!EventAccountWalk(goal,2.5f,now,npc)||npc==null)return false;
         if(now-eventAccountActionAt<TimeSpan.FromSeconds(3))return false;
         var system=TargetSystem.Instance();if(system==null)return false;
         eventEntranceSceneOwned=false;eventEntranceInteractionAt=now;
@@ -212,7 +212,7 @@ public sealed partial class Plugin
                 StopKeybound();eventAccountFarmStarted=false;EventAccountStage("buy","Going to the MGC trader");
                 var trader=Objects.FirstOrDefault(KeyboundIsTrader);
                 if(trader==null){eventAccountStatus="Waiting for the MGC trader to load";return;}
-                if(!EventAccountWalk(trader.Position,trader.HitboxRadius+2.5f,now))return;
+                if(!EventAccountWalk(trader.Position,trader.HitboxRadius+2.5f,now,trader))return;
                 StartKeyboundBuying(true,"account-routine:"+keyboundAccountRun);
                 if(!keyboundBuying)throw new InvalidOperationException(keyboundBuyStatus);
                 eventAccountBuyingStarted=true;return;
@@ -221,7 +221,7 @@ public sealed partial class Plugin
             if(keyboundEnabled){eventAccountStatus=keyboundStatus;return;}
             var registrar=Objects.FirstOrDefault(o=>o.BaseId==1058751&&o.IsTargetable);
             if(registrar==null){eventAccountStatus="Waiting for the Keybound registrar to load";return;}
-            if(!EventAccountWalk(registrar.Position,registrar.HitboxRadius+2.5f,now))return;
+            if(!EventAccountWalk(registrar.Position,registrar.HitboxRadius+2.5f,now,registrar))return;
             keyboundTypingRun=Guid.NewGuid().ToString("N");TraceKeyboundRun(keyboundTypingRun,"typing-started","Farming selected character","account-routine:"+keyboundAccountRun);keyboundEnabled=true;keyboundNext=keyboundHold=keyboundMissing=default;
             keyboundStatus="Ready to register";eventAccountFarmStarted=true;
         }catch(Exception e){StopEventAccount(e.Message.StartsWith("Stopped:",StringComparison.Ordinal)?e.Message:"Stopped: "+e.Message);}

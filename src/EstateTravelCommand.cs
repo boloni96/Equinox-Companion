@@ -207,13 +207,15 @@ public sealed partial class Plugin
             if(trip.Door==0&&doors.Length>1&&Vector3.Distance(doors[1].Position,self.Position)-Vector3.Distance(door.Position,self.Position)<3)
                 throw new InvalidOperationException("Multiple entrances are equally close. Move nearer the correct door and retry.");
             trip.Door=door.GameObjectId;
+            if(!TargetWithinInteractionRange(door)){
             if(!GameWalkingCollision.Available())return;
             trip.DoorApproach??=EstateDoorApproach.Find(independentCollision,self.Position,door.Position,
                 point=>independentCollision.InteractionVisible(point,door.Position));
             if(trip.DoorApproach is not {} approach)throw new InvalidOperationException("No clear standing point within range of the estate entrance. Move nearer the door and retry.");
-            if(!IndependentWalk(approach,.35f,now,allowFlight:false))return;
+            if(!IndependentWalk(approach,.35f,now,allowFlight:false,interactionTarget:door))return;
+            }
             StopIndependentWalk("At estate door");
-            if(Vector3.Distance(self.Position,door.Position)>4)return;
+            if(!TargetWithinInteractionRange(door)&&Vector3.Distance(self.Position,door.Position)>4)return;
             var targetSystem=TargetSystem.Instance();if(targetSystem==null)return;
             Targets.Target=door;
             targetSystem->InteractWithObject((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)door.Address,false);

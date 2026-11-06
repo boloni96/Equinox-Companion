@@ -118,15 +118,17 @@ public sealed partial class Plugin
         if(independentSearch!=null||independentPath!=null||independentEntranceForward!=null)
             RecordTravelPrompt("Navigation ended",new{run=independentNavigationRun,reason,goal=FollowTravelPosition.From(independentGoal),independentInputReads,independentInputOverrides,independentExpiredReads,independentInactiveReads,independentNativeGateRejects,independentNativeManualReads,independentReplans,independentPlanningSeconds,independentWalkStatus,controlMode=independentLegacyMode?"Legacy":"Standard",axes=new{x=independentAxes.X,y=independentAxes.Y},independentHeading,independentFacingOnly});
         if(independentSearch!=null||independentPath!=null||independentEntranceForward!=null)TraceKeyboundRun(independentNavigationRun,"navigation-stopped",reason,"companion-navigation",false);
-        independentEntranceForward=null;independentGroundReadiness.Reset();independentFacingAt=default;independentFacingOnly=false;
+        independentInteractionTarget=0;independentEntranceForward=null;independentGroundReadiness.Reset();independentFacingAt=default;independentFacingOnly=false;
         StopIndependentFlight();
         independentUserPaused=false;independentGameGateBlocked=false;independentGatePauseSince=default;independentHeading=null;independentMoving=false;independentPulseUntil=default;independentLease.Revoke();independentForwardHook?.Disable();
         independentSearch=null;independentPath=null;independentPendingPath=null;independentArrived=false;independentDirectOnly=false;independentWalkStatus=reason;independentWalkFailure="";
         if(resetFailure)independentLastWalkFailure="";
     }
-    private unsafe bool IndependentWalk(Vector3 destination,float range,DateTimeOffset now,bool allowFlight=true,bool preferFlight=false,bool directOnly=false,float directDistance=4)
+    private unsafe bool IndependentWalk(Vector3 destination,float range,DateTimeOffset now,bool allowFlight=true,bool preferFlight=false,bool directOnly=false,float directDistance=4,Dalamud.Game.ClientState.Objects.Types.IGameObject? interactionTarget=null)
     {
         if(Objects.LocalPlayer is not {} self)return false;
+        if(interactionTarget!=null&&StopAtInteractionTarget(interactionTarget))return true;
+        independentInteractionTarget=interactionTarget?.GameObjectId??0;
         if(FlightActive){if(Vector3.DistanceSquared(flightGoal,destination)<1)return false;StopIndependentWalk("Flight destination changed");}
         if(followStopPending||followStopUnconfirmed||nativeFollowRequested)throw new InvalidOperationException("Waiting for game follow to stop before navigating.");
         if(!GameWalkingCollision.Available()){independentWalkStatus="Waiting for collision geometry to load";return false;}
@@ -153,6 +155,7 @@ public sealed partial class Plugin
         TraceKeyboundRun(independentNavigationRun,"navigation-started",$"Destination {destination}; range {range}",independentQuestId!=0?"quest:"+independentQuestRun:"event",false);
         independentBlockedTargets.Clear();independentRecovery.Reset();independentWalkedPoints.Clear();independentWalkedPoints.Add(self.Position);independentPhaseTimer.Begin(now);
         independentNearbyApproach=directDistance>4&&Vector3.Distance(self.Position,destination)<=16;
+        independentInteractionTarget=interactionTarget?.GameObjectId??0;
         independentDirectOnly=directOnly;independentGoal=destination;independentRange=range;independentCharacter=Player.ContentId;independentTerritory=Client.TerritoryType;
         independentWalkFailure="";independentArrived=false;independentReplans=0;independentSince=independentPlanningSince=independentProgressAt=now;
         independentPrevious=independentLastProgress=self.Position;
@@ -179,6 +182,8 @@ public sealed partial class Plugin
     }
     private unsafe void UpdateIndependentWalk(DateTimeOffset now)
     {
+        if(independentInteractionTarget!=0&&Player.ContentId==independentCharacter&&Client.TerritoryType==independentTerritory&&
+            StopAtInteractionTarget(Objects.FirstOrDefault(x=>x.GameObjectId==independentInteractionTarget)))return;
         if(FlightActive){TickIndependentFlight(now);return;}
         if(independentSearch==null&&independentPath==null&&independentEntranceForward==null)return;
         try{

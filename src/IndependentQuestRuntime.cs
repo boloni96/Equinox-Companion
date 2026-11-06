@@ -128,7 +128,7 @@ public sealed partial class Plugin
             if(position==null&&step.TryGetProperty("Position",out var p))position=new(p.GetProperty("X").GetSingle(),p.GetProperty("Y").GetSingle(),p.GetProperty("Z").GetSingle());
             var range=kind=="WalkTo"?.35f:2.5f;
             if(step.TryGetProperty("StopDistance",out var dist))range=Math.Clamp(dist.GetSingle(),.25f,5);
-            if(position is {} goal&&!IndependentWalk(goal,range,now,!step.TryGetProperty("Fly",out var flightPreference)||flightPreference.ValueKind!=JsonValueKind.False,step.TryGetProperty("Fly",out var requestedFlight)&&requestedFlight.ValueKind==JsonValueKind.True)){questToolsStatus+=" · "+independentWalkStatus;return;}
+            if(position is {} goal&&!IndependentWalk(goal,range,now,!step.TryGetProperty("Fly",out var flightPreference)||flightPreference.ValueKind!=JsonValueKind.False,step.TryGetProperty("Fly",out var requestedFlight)&&requestedFlight.ValueKind==JsonValueKind.True,interactionTarget:kind is "AcceptQuest" or "CompleteQuest" or "Interact"?npc:null)){questToolsStatus+=" · "+independentWalkStatus;return;}
             if(kind is "None" or "WalkTo"){NextIndependentStep(now);return;}
             if(kind=="WaitForNpcAtPosition"){if(npc!=null)NextIndependentStep(now);return;}
             if(kind is "AcceptQuest" or "CompleteQuest" or "Interact"){

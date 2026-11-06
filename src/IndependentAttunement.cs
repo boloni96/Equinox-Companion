@@ -40,13 +40,13 @@ public sealed partial class Plugin
         var crystal=Objects.FirstOrDefault(o=>o.ObjectKind==Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Aetheryte&&o.BaseId==id&&o.IsTargetable);
         var position=crystal?.Position??IndependentCrystalPosition(id);
         if(position==null){StopIndependentQuest("No verified position for attunement: "+name,true);return true;}
-        if(crystal==null||Vector3.Distance(self.Position,position.Value)>8){
+        if(crystal==null||!TargetWithinInteractionRange(crystal)&&Vector3.Distance(self.Position,position.Value)>8){
             var offset=self.Position-position.Value;offset.Y=0;
             if(offset.LengthSquared()<.01f){StopIndependentQuest("Attunement crystal is on another floor.",true);return true;}
             var approach=position.Value+Vector3.Normalize(offset)*4;
             if((independentSearch!=null||independentPath!=null)&&Vector3.Distance(independentGoal,position.Value)<8)approach=independentGoal;
             if(!independentCollision.Ground(approach,out var floor)){StopIndependentQuest("No supported approach to "+name,true);return true;}
-            IndependentWalk(floor,.75f,now);questToolsStatus="Approaching "+name+" · "+independentWalkStatus;return true;
+            IndependentWalk(floor,.75f,now,interactionTarget:crystal);questToolsStatus="Approaching "+name+" · "+independentWalkStatus;return true;
         }
         var system=TargetSystem.Instance();if(system==null)return true;
         StopIndependentWalk();Targets.Target=crystal;independentActionAt=now;independentStepSent=true;

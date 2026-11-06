@@ -1,0 +1,7 @@
+# Companion 0.5.1.451
+
+Interaction approaches can stop before their planned standing point. A shared target-aware walker checks the live target each update using EventFramework.CheckInteractRange for normal object interaction (type 0, error logging disabled), plus collision line of sight. A positive check releases the movement lease and stops route following; the owning operation performs its existing interaction and waits for its normal menu/progress confirmation. Target identity is retained by object ID and scoped to the navigation character/territory. Targets must be loaded and targetable; airborne/loading states cannot trigger early arrival.
+
+Wired into estate doors, native world-visit crystals, aethernet crystals, quest aethernet approaches, attunement, event vendors/registration and quest accept/complete/interact NPCs. Ordinary walking and non-interaction quest actions retain their existing distance completion rules. The native range check falls back to existing bounded approach behavior if unavailable; no universal ten-yalm assumption is introduced. Exports record the target and positions when early stopping occurs.
+
+Validation: Release build, independent-navigation and Keybound regression suites locally, all five suites in release CI. The native range check and object-specific boundaries require in-game validation, especially large aetheryte collision surfaces and doors.

@@ -13,7 +13,7 @@ public sealed partial class Plugin
         if(eventAccountMoveOwned||eventSaucerTravelOwned){try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}}
         eventAccountMoveOwned=eventSaucerTravelOwned=false;eventSaucerTravelAt=default;
     }
-    private bool EventAccountWalk(Vector3 destination,float range,DateTimeOffset now)=>IndependentWalk(destination,range,now);
+    private bool EventAccountWalk(Vector3 destination,float range,DateTimeOffset now,Dalamud.Game.ClientState.Objects.Types.IGameObject? target=null)=>IndependentWalk(destination,range,now,interactionTarget:target);
     private unsafe bool EventReachSaucer(DateTimeOffset now){
         if(Client.TerritoryType==144){if(!eventSaucerTravelOwned)eventSaucerTravelAt=default;return true;}
         eventAccountStatus="Travelling to the Gold Saucer";

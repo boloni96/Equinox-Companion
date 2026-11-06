@@ -120,8 +120,8 @@ public sealed partial class Plugin
         var npc=Objects.FirstOrDefault(o=>o.BaseId==id&&o.IsTargetable);
         // Recorded reachable position on the player side of the Magitype counter.
         var approach=id==1058752?new Vector3(-11.240237f,.025748253f,-26.007284f):npc?.Position??fallback;
-        if(!EventAccountWalk(approach,id==1058752?.4f:2.5f,now)||npc==null)return;
-        if(id==1058752&&CollisionRouteSearch.Horizontal(Objects.LocalPlayer!.Position,npc.Position)>4) return;
+        if(!EventAccountWalk(approach,id==1058752?.4f:2.5f,now,npc)||npc==null)return;
+        if(id==1058752&&!TargetWithinInteractionRange(npc)&&CollisionRouteSearch.Horizontal(Objects.LocalPlayer!.Position,npc.Position)>4) return;
         if(now-nativeEventActionAt<TimeSpan.FromSeconds(3)||Conditions[ConditionFlag.OccupiedInEvent])return;
         if(nativeEventNpc==id&&now-nativeEventInteractionAt<TimeSpan.FromSeconds(15))return;
         var system=TargetSystem.Instance();if(system==null)return;
