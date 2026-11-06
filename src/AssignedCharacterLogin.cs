@@ -13,6 +13,7 @@ public sealed partial class Plugin
     private readonly HashSet<ushort> loginWorldChecked=[];
     private ushort loginWorldPending,loginWorldSample;private DateTimeOffset loginWorldSentAt,loginWorldStableAt;
     private string assignedLoginError="";
+    private uint assignedVisitingReturnFromDc;
     private bool identificationDcSent;
     private string LastLoginWorld(SharedCharacter target)
     {
@@ -40,7 +41,7 @@ public sealed partial class Plugin
         try{
             var ui=UIModule.Instance();if(ui==null)throw new InvalidOperationException("Game menu unavailable.");
             assignedLogin=new(target,Player.ContentId,index,config.PairingKey,LastLoginWorld(target),DateTimeOffset.UtcNow.AddMinutes(5));
-            assignedDcSent=assignedServiceSent=assignedLoginSent=assignedLoginConfirmed=assignedLogoutConfirmed=assignedAccountReturnSent=false;assignedLoginNext=default;loginWorldChecked.Clear();loginWorldNext=default;loginWorldPending=loginWorldSample=0;assignedLoginError="";
+            assignedVisitingReturnFromDc=0;assignedDcSent=assignedServiceSent=assignedLoginSent=assignedLoginConfirmed=assignedLogoutConfirmed=assignedAccountReturnSent=false;assignedLoginNext=default;loginWorldChecked.Clear();loginWorldNext=default;loginWorldPending=loginWorldSample=0;assignedLoginError="";
             using var command=new Utf8String();command.SetString("/logout");ui->ProcessChatBoxEntry(&command,0,false);
             characterSwitchFrom=Player.ContentId;characterSwitchTarget=target;characterSwitchUntil=assignedLogin.Deadline;
             characterTravelStatus=$"Switching using this client's verified service account {index+1}: {target.Name} @ {target.World}.";return true;
@@ -51,7 +52,7 @@ public sealed partial class Plugin
         var slot=CurrentLoginServiceAccount();
         if(slot is <0 or >15||assignedLogin!=null)return false;
         assignedLogin=new(target,0,slot,config.PairingKey,LastLoginWorld(target),DateTimeOffset.UtcNow.AddMinutes(5));
-        assignedDcSent=assignedServiceSent=assignedLoginSent=assignedLoginConfirmed=assignedLogoutConfirmed=assignedAccountReturnSent=false;
+        assignedVisitingReturnFromDc=0;assignedDcSent=assignedServiceSent=assignedLoginSent=assignedLoginConfirmed=assignedLogoutConfirmed=assignedAccountReturnSent=false;
         assignedLoginNext=default;loginWorldChecked.Clear();loginWorldNext=default;loginWorldPending=loginWorldSample=0;assignedLoginError="";
         characterSwitchFrom=0;characterSwitchTarget=target;characterSwitchUntil=assignedLogin.Deadline;
         return true;
@@ -66,7 +67,10 @@ public sealed partial class Plugin
         foreach(var item in entries){
             var entry=item.Value;
             if(entry!=null&&entry->ContentId.ToString()==target.ContentId&&entry->NameString==target.Name&&WorldName(entry->HomeWorldId)==target.World&&
-                (entry->LoginFlags&CharaSelectCharacterEntryLoginFlags.Locked)==0){index=current;matches++;}
+                (entry->LoginFlags&CharaSelectCharacterEntryLoginFlags.Locked)==0){
+                if(TravelDc(entry->CurrentWorldId)==0||TravelDc(entry->CurrentWorldId)!=TravelDc(lobby->LobbyData.CurrentWorldId))return false;
+                index=current;matches++;
+            }
             current++;
         }
         if(matches!=1||index<0||index>250)return false;
@@ -195,6 +199,37 @@ public sealed partial class Plugin
         if(assignedLogin==null)return;assignedLogin=null;assignedLoginError=reason;characterSwitchTarget=null;characterSwitchUntil=default;
         characterTravelStatus=reason;
     }
+    private unsafe bool RedirectAssignedVisitingCharacter(AssignedLogin run,AgentLobby* lobby)
+    {
+        var displayedDc=TravelDc(lobby->LobbyData.CurrentWorldId);
+        if(assignedVisitingReturnFromDc!=0){
+            if(displayedDc==assignedVisitingReturnFromDc)return true;
+            assignedVisitingReturnFromDc=0;
+        }
+        if(lobby->TemporaryLocked||SellerAddon("_CharaSelectListMenu")==null)return false;
+        if(lobby->LobbyData.CharaSelectEntries.LongCount is <=0 or >512)return false;
+        CharaSelectCharacterEntry* match=null;var count=0;
+        foreach(var item in lobby->LobbyData.CharaSelectEntries){
+            var entry=item.Value;
+            if(entry!=null&&entry->ContentId.ToString()==run.Target.ContentId&&entry->NameString==run.Target.Name&&WorldName(entry->HomeWorldId)==run.Target.World){match=entry;count++;}
+        }
+        if(count!=1||match==null)return false;
+        var visiting=WorldName(match->CurrentWorldId);var visitingDc=TravelDc(match->CurrentWorldId);
+        if(visitingDc==0||displayedDc==0||string.IsNullOrEmpty(visiting))throw new InvalidOperationException("This character is visiting another data center, but its current world could not be verified. Export diagnostics or select its visiting data center manually.");
+        if(visitingDc==displayedDc){
+            if((match->LoginFlags&CharaSelectCharacterEntryLoginFlags.DCTraveling)!=0&&visitingDc==TravelDc(match->HomeWorldId))
+                throw new InvalidOperationException("The game marks this character as visiting another data center, but has not supplied its visiting world. Select its visiting data center manually and retry; no home-world login was attempted.");
+            return false;
+        }
+        if(SellerAddon("SelectYesno")!=null||SellerAddon("SelectOk")!=null||SellerAddon("ContextMenu")!=null)return true;
+        if(!ClickLoginMenuButton("_CharaSelectReturn",4))return true;
+        assignedLogin=run with{World=visiting};assignedVisitingReturnFromDc=displayedDc;
+        assignedDcSent=assignedServiceSent=assignedLoginSent=assignedLoginConfirmed=assignedAccountReturnSent=false;
+        loginWorldChecked.Clear();loginWorldNext=default;loginWorldPending=loginWorldSample=0;
+        characterTravelStatus=$"{run.Target.Name} is visiting {visiting}; selecting that data center on the same service account.";
+        RecordTravelPrompt("Visiting character login redirected",new{character=run.Target.ContentId,home=run.Target.World,visiting,displayedDc,visitingDc,slot=run.ServiceAccount});
+        return true;
+    }
     private unsafe void UpdateAssignedLogin(DateTimeOffset now)
     {
         if(assignedLogin is not {} run||now<assignedLoginNext)return;assignedLoginNext=now.AddMilliseconds(500);
@@ -232,6 +267,7 @@ public sealed partial class Plugin
                 }
                 return;
             }
+            if(RedirectAssignedVisitingCharacter(run,lobby))return;
             if(assignedLoginSent){
                 var target=TitleLoginTarget(run.Target.Id);
                 if(target!=null&&ulong.TryParse(target.ContentId,out var cid)&&ConfirmNativeLogin(true,cid,target.World,run.ServiceAccount,target.Name))

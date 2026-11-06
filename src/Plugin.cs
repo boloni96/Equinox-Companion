@@ -330,6 +330,7 @@ public sealed partial class Plugin : IDalamudPlugin
     private unsafe void UpdateCore(IFramework framework)
     {
         var now = DateTimeOffset.UtcNow;
+        if(UpdateLoginBackupReminder(now))return;
         UpdateQuestTools(now);
         UpdateTravelPromptRecorder(now);
         UpdateNativeWorldTravel(now);
