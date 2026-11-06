@@ -16,12 +16,22 @@ public sealed partial class Plugin
         public required (int Property,int Mode,string Label) Destination;
         public required DateTimeOffset Started;
         public DateTimeOffset Next;
-        public bool DcSelected,ContextSent,ReturnRequested,LoginSent,LoginConfirmed,LogoutConfirmed;
+        public bool DcSelected,ContextSent,ReturnRequested,LoginSent,LoginConfirmed,LogoutConfirmed,NativeWorldRoute;
         public ushort WorldRequested;
     }
     private EstateHomeReturn? estateHomeReturn;
     private unsafe void BeginEstateHomeReturn((int Property,int Mode,string Label) destination)
     {
+        if(NativeTravelPolicy.SameDataCenter(TravelDc(Player.CurrentWorld.RowId),TravelDc(Player.HomeWorld.RowId))){
+            var sameDc=new EstateHomeReturn{Character=Player.ContentId,HomeWorld=(ushort)Player.HomeWorld.RowId,VisitingWorld=(ushort)Player.CurrentWorld.RowId,
+                Name=Player.CharacterName,ServiceSlot=CurrentLoginServiceAccount(),Destination=destination,Started=DateTimeOffset.UtcNow,NativeWorldRoute=true};
+            // Start before assigning the continuation: the native engine rejects
+            // an already active estate return as a competing journey.
+            if(!StartNativeWorldTravel(sameDc.HomeWorld,"estate"))throw new InvalidOperationException(nativeTravelStatus);
+            estateHomeReturn=sameDc;
+            FollowChatNotice("TRAVEL — Returning home through World Visit, then continuing to "+destination.Label+". /et stop cancels the remaining steps.");
+            return;
+        }
         var slot=CurrentLoginServiceAccount();
         if(slot is <0 or >15)throw new InvalidOperationException("This client's service-account slot is unknown; no logout was requested.");
         var ui=UIModule.Instance();if(ui==null)throw new InvalidOperationException("Game travel menu unavailable.");
@@ -37,6 +47,13 @@ public sealed partial class Plugin
         run.Next=now.AddMilliseconds(500);
         try{
             if(now-run.Started>TimeSpan.FromMinutes(15))throw new InvalidOperationException("Home-world return timed out; no alternate account or character was selected.");
+            if(run.NativeWorldRoute){
+                if(Player.IsLoaded&&Player.ContentId!=run.Character)throw new InvalidOperationException("A different character loaded. Estate travel cancelled.");
+                if(nativeWorldTrip!=null)return;
+                if(!Player.IsLoaded||Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51])return;
+                if(!EstateTravelCommand.CanResume(run.Character,Player.ContentId,run.HomeWorld,Player.CurrentWorld.RowId))throw new InvalidOperationException("Home-world travel stopped before arrival. "+nativeTravelStatus);
+                estateHomeReturn=null;StartEstateTravelCommand(run.Destination);return;
+            }
             if(Player.IsLoaded){
                 if(Player.ContentId!=run.Character)throw new InvalidOperationException("A different character loaded. Estate travel cancelled.");
                 if(EstateTravelCommand.CanResume(run.Character,Player.ContentId,run.HomeWorld,Player.CurrentWorld.RowId)){
@@ -120,7 +137,7 @@ public sealed partial class Plugin
             var data=new AtkEventData();((byte*)&data)[6]=1;
             menu->ReceiveEvent(AtkEventType.MouseClick,eventIndex,&evt,&data);
             run.ContextSent=true;
-        }catch(Exception ex){estateHomeReturn=null;FollowChatNotice("TRAVEL — "+ex.Message);}
+        }catch(Exception ex){if(run.NativeWorldRoute&&nativeWorldTrip?.Owner=="estate")StopNativeWorldTravel(ex.Message);estateHomeReturn=null;FollowChatNotice("TRAVEL — "+ex.Message);}
     }
     private unsafe bool SelectEstateLoginWorld(ushort world)
     {

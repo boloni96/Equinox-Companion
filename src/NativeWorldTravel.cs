@@ -44,7 +44,7 @@ public sealed partial class Plugin
             nativeTravelStatus="Finish combat, duty, casting, loading or the current conversation first.";return false;
         }
         if(LifestreamBusy()||estateTrip!=null||estateHomeReturn!=null||assignedLogin!=null||titleLoginProbe.Active||loginMenuReturn.Active||independentMoving||independentSearch!=null||owner=="command"&&(QuestToolsOtherOperation()||independentQuestId!=0||eventAccountActive||gardenTendRoute!=null||shoppingTravel!=null||goSeeHomeTrip!=null||goSeeFriendTrip!=null)){nativeTravelStatus="Stop the active routine or journey before starting world travel.";return false;}
-        var source=Player.CurrentWorld.RowId;var home=Player.HomeWorld.RowId;var cross=TravelDc(source)!=TravelDc(destination);var slot=CurrentLoginServiceAccount();
+        var source=Player.CurrentWorld.RowId;var home=Player.HomeWorld.RowId;var cross=!NativeTravelPolicy.SameDataCenter(TravelDc(source),TravelDc(destination));var slot=CurrentLoginServiceAccount();
         if(cross&&slot is <0 or >15){nativeTravelStatus="Identify this client's service account before DC travel (log in once with Companion).";return false;}
         var returning=NativeTravelPolicy.ReturnFirst(source,home,TravelDc(source),TravelDc(destination));
         var trip=new NativeWorldTrip{Owner=owner,Character=Player.ContentId,Name=Player.CharacterName,Home=home,Source=source,Destination=destination,Leg=returning?home:destination,Service=slot,Started=DateTimeOffset.UtcNow,ReturnHome=returning};

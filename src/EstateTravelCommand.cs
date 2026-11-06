@@ -27,7 +27,7 @@ public sealed partial class Plugin
     private EstateTrip? estateTrip;
     private void StopEstateTravel(string reason)
     {
-        if(estateHomeReturn!=null){estateHomeReturn=null;FollowChatNotice("TRAVEL — Home return stopped. Any transfer already accepted by the game may finish.");}
+        if(estateHomeReturn!=null){if(estateHomeReturn.NativeWorldRoute&&nativeWorldTrip?.Owner=="estate")StopNativeWorldTravel(reason);estateHomeReturn=null;FollowChatNotice("TRAVEL — Home return stopped. Any transfer already accepted by the game may finish.");}
         if(estateTrip==null)return;
         estateTrip=null;StopIndependentWalk("Estate travel: "+reason);
         FollowChatNotice("TRAVEL — "+reason);
