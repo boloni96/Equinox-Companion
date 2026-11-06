@@ -1292,6 +1292,7 @@ public sealed partial class Plugin : IDalamudPlugin
 
     public void Dispose()
     {
+        StopCelebrationCheck();
         DisposeQuestTools();
         itemDeliveryClient.Dispose();
         DisposeEquinoxMarket();

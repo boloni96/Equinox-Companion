@@ -59,41 +59,44 @@ public sealed partial class Plugin
         QueueAccountCelebration(identity,person.Name+" / "+current.Account,$"Fashion Report (week of {FashionCompletion.Cycle(now):yyyy-MM-dd})");
     }
     private void CelebrateEventAccount()=>RequestCelebrationCheck();
-    private unsafe void ObserveEventAccountCompletion()
+    private IEnumerable<bool> ObserveEventAccountCompletion(long evidenceRevision)
     {
         completedEventCelebration=null;
         eventCelebrationStatus="Waiting for a linked character and account.";
-        if(!Player.IsLoaded)return;
-        if(keyboundBuying){eventCelebrationStatus="Waiting for buying / reward use to finish.";return;}
-        var current=CurrentSharedCharacter();if(current==null||string.IsNullOrEmpty(current.AccountId))return;
+        if(!Player.IsLoaded)yield break;
+        if(keyboundBuying){eventCelebrationStatus="Waiting for buying / reward use to finish.";yield break;}
+        var current=CurrentSharedCharacter();if(current==null||string.IsNullOrEmpty(current.AccountId))yield break;
         var person=(config.SharedRoster?.People??[]).SingleOrDefault(p=>p.Characters.Any(c=>c.Id==current.Id));
-        if(person==null)return;
+        if(person==null)yield break;
         // Wanted rewards define the account's event participants, independently of
         // which characters were selected for an automatic routine.
         var characters=person.Characters.Where(c=>c.AccountId==current.AccountId&&c.KeyboundWishlist?.Any(w=>w.Wanted)==true).DistinctBy(c=>c.Id).ToArray();
-        if(characters.Length==0){eventCelebrationStatus="No wanted event rewards are selected for this account.";return;}
+        if(characters.Length==0){eventCelebrationStatus="No wanted event rewards are selected for this account.";yield break;}
         var identity=$"keybound-5466-wishlist-v3|{person.Id}|{current.AccountId}|"+string.Join(",",characters.Select(c=>c.Id).Order());
         var tasks=adventureBoards.SelectMany(b=>b.Stops).SelectMany(s=>s.Tasks).Where(t=>t.Rule?.Kind=="event"&&t.Rule.Quests?.Any(q=>QuestToolsPolicy.ShortId(q)==QuestToolsPolicy.KeywardBound)==true).ToArray();
-        try{
+        {
+            foreach(var step in PrepareCelebrationOffers())yield return step;
+            keyboundPurchases??=new(Path.Combine(Pi.GetPluginConfigDirectory(),"keybound-purchases.json"));
             var loadStarted=System.Diagnostics.Stopwatch.GetTimestamp();
-            try{LoadKeyboundOffers();}
-            finally{RecordPerformanceElapsed("Celebration: reward catalogue",loadStarted);}
-            loadStarted=System.Diagnostics.Stopwatch.GetTimestamp();
             try{keyboundPurchases!.Reload();}
             finally{RecordPerformanceElapsed("Celebration: purchase history",loadStarted);}
+            yield return true;
             config.EventCelebrationEvidence??=[];
             var pending=new List<string>();var done=0;
             foreach(var c in characters){
-                var evidence=ReadEventCelebrationEvidence(c,current,tasks);
+                AccountEventEvidence? evidence=null;
+                foreach(var step in ReadEventCelebrationEvidence(c,current,tasks,value=>evidence=value))yield return step;
+                if(evidence==null)yield break;
                 var missing=c.KeyboundWishlist!.Where(w=>w.Wanted&&!AccountCelebrationPolicy.RewardComplete(w.Obtained,
-                    keyboundOffers!.Any(o=>o.Key==KeyboundShoppingPolicy.PrizeKey(w.Name)&&evidence.Items.Contains(o.Item)))).ToArray();
+                    celebrationOffers!.Any(o=>o.Key==KeyboundShoppingPolicy.PrizeKey(w.Name)&&evidence.Items.Contains(o.Item)))).ToArray();
                 if(!evidence.QuestComplete)pending.Add(c.Name+": event quest completion not confirmed");
                 if(missing.Length>0)pending.Add(c.Name+": "+missing.Length+" reward(s) not confirmed ("+string.Join(", ",missing.Take(2).Select(w=>w.Name))+")");
                 if(evidence.QuestComplete&&missing.Length==0)done++;
             }
             eventCelebrationStatus=$"{current.Account}: {done}/{characters.Length} event characters complete.";
-            if(pending.Count>0){eventCelebrationStatus+="\n"+string.Join("\n",pending.Take(6));if(pending.Count>6)eventCelebrationStatus+="\nMore characters still need confirmation.";return;}
-        }catch(Exception e){eventCelebrationStatus="Completion check is waiting: "+e.Message;return;}
+            if(pending.Count>0){eventCelebrationStatus+="\n"+string.Join("\n",pending.Take(6));if(pending.Count>6)eventCelebrationStatus+="\nMore characters still need confirmation.";yield break;}
+        }
+        if(evidenceRevision!=celebrationEvidenceRevision)yield break; // New evidence will run next; never celebrate an obsolete wishlist.
         completedEventCelebration=(identity,person.Name+" / "+current.Account);
         eventCelebrationStatus+=" Good Job is ready; it waits until this game client is in front. You can replay it below.";
         // Catch up once when the first synchronized observation is already complete.

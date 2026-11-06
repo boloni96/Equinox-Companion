@@ -10,34 +10,75 @@ public sealed partial class Plugin
     private static bool CelebrationActorMatches(Actor actor,SharedCharacter c)=>
         !string.IsNullOrWhiteSpace(c.ContentId)?actor.ContentId==c.ContentId:
         string.Equals(actor.Name,c.Name,StringComparison.OrdinalIgnoreCase)&&!string.IsNullOrWhiteSpace(c.World)&&string.Equals(actor.HomeWorldName,c.World,StringComparison.OrdinalIgnoreCase);
-    private unsafe AccountEventEvidence ReadEventCelebrationEvidence(SharedCharacter c,SharedCharacter current,IEnumerable<AdventureTask> tasks)
+    private static bool CelebrationStorage(string key)=>key.StartsWith("bag:")||key.StartsWith("retainer:")||key is "armoire" or "dresser";
+    private static unsafe bool CelebrationLiveQuest()=>QuestManager.IsQuestComplete(QuestToolsPolicy.KeywardBound);
+    private unsafe bool CelebrationLiveReward(uint item)
+    {
+        // Check bag ownership first. Avoid expensive unlock queries for owned items.
+        if(ArmoireInventory(item).Held>0)return true;
+        var state=UIState.Instance();
+        if(state==null||!state->PlayerState.IsLoaded)return false;
+        var row=ExdModule.GetItemRowById(item);
+        return row!=null&&state->IsItemActionUnlocked(row)==1;
+    }
+    private IEnumerable<bool> ReadEventCelebrationEvidence(SharedCharacter c,SharedCharacter current,AdventureTask[] tasks,Action<AccountEventEvidence> receive)
     {
         var key=EventEvidenceKey(c);var saved=config.EventCelebrationEvidence.GetValueOrDefault(key);
-        var observations=DiscoveryReads().Kind("collection.observed").Where(e=>CelebrationActorMatches(e.Actor,c)&&e.Collection!=null).ToArray();
-        var quest=saved?.QuestComplete==true||
-            (c.Id==current.Id&&QuestManager.IsQuestComplete(QuestToolsPolicy.KeywardBound))||
-            tasks.Any(t=>t.Done&&t.ServerConfirmed&&AdventurePolicy.TaskCharacterId(t,[c])==c.Id)||
-            observations.Any(e=>e.Collection!.Category=="quest"&&e.Collection.Unlocked.Any(q=>QuestToolsPolicy.ShortId(q)==QuestToolsPolicy.KeywardBound));
+        var rewards=celebrationOffers!.Select(o=>o.Item).ToHashSet();
         var items=(saved?.Items??[]).ToHashSet();
-        foreach(var e in DiscoveryReads().Kind("storage.observed").Where(e=>CelebrationActorMatches(e.Actor,c)&&e.Storage!=null&&(e.Storage.Key.StartsWith("bag:")||e.Storage.Key.StartsWith("retainer:")||e.Storage.Key is "armoire" or "dresser")))items.UnionWith(e.Storage!.Items);
-        items.UnionWith((config.SharedRoster?.ItemLocations??[]).Where(l=>l.OwnerId==c.Id&&(l.Key.StartsWith("bag:")||l.Key.StartsWith("retainer:")||l.Key is "armoire" or "dresser")).SelectMany(l=>l.Items));
-        if(ulong.TryParse(c.ContentId,out var cid))items.UnionWith(keyboundPurchases!.Entries.Where(r=>r.Character==cid&&r.Confirmed).Select(r=>r.Item));
-        var rewardIds=keyboundOffers!.Select(o=>o.Item).ToHashSet();
-        if(catalogueBase!=null)foreach(var entry in catalogueBase.SelectMany(g=>g).Where(e=>rewardIds.Contains(e.ItemId)))
-            if(observations.Any(e=>e.Collection!.Category==entry.Category&&(e.Collection.Unlocked.Contains(entry.Id)||e.Collection.Obtained.Contains(entry.Id))))items.Add(entry.ItemId);
-        if(c.Id==current.Id){
-            var state=UIState.Instance();
-            if(state!=null&&state->PlayerState.IsLoaded)foreach(var offer in keyboundOffers!){
-                var row=ExdModule.GetItemRowById(offer.Item);
-                if(row!=null&&state->IsItemActionUnlocked(row)==1||ArmoireInventory(offer.Item).Held>0)items.Add(offer.Item);
-            }
+        var quest=saved?.QuestComplete==true||(c.Id==current.Id&&CelebrationLiveQuest());
+        yield return true;
+        foreach(var task in tasks){
+            if(!quest&&task.Done&&task.ServerConfirmed&&AdventurePolicy.TaskCharacterId(task,[c])==c.Id)quest=true;
+            yield return true;
         }
-        var eventItems=items.Intersect(keyboundOffers!.Select(o=>o.Item)).Order().ToArray();
+        var reads=DiscoveryReads();
+        var collections=reads.Kind("collection.observed");
+        var collectionCount=collections.Count;
+        var unlocked=new Dictionary<string,HashSet<uint>>();
+        for(var i=0;i<collectionCount&&i<collections.Count;i++){
+            var e=collections[i];
+            yield return true;
+            if(!CelebrationActorMatches(e.Actor,c)||e.Collection is not {} collection)continue;
+            if(!unlocked.TryGetValue(collection.Category,out var ids))unlocked[collection.Category]=ids=[];
+            foreach(var id in collection.Unlocked){
+                ids.Add(id);
+                if(collection.Category=="quest"&&QuestToolsPolicy.ShortId(id)==QuestToolsPolicy.KeywardBound)quest=true;
+                yield return true;
+            }
+            foreach(var id in collection.Obtained){ids.Add(id);yield return true;}
+        }
+        // Retain only event rewards, not every item in the account's storage history.
+        var storage=reads.Kind("storage.observed");var storageCount=storage.Count;
+        for(var i=0;i<storageCount&&i<storage.Count;i++){
+            var e=storage[i];yield return true;
+            if(!CelebrationActorMatches(e.Actor,c)||e.Storage is not {} location||!CelebrationStorage(location.Key))continue;
+            foreach(var item in location.Items){if(rewards.Contains(item))items.Add(item);yield return true;}
+        }
+        foreach(var location in config.SharedRoster?.ItemLocations??[]){
+            yield return true;
+            if(location.OwnerId!=c.Id||!CelebrationStorage(location.Key))continue;
+            foreach(var item in location.Items){if(rewards.Contains(item))items.Add(item);yield return true;}
+        }
+        if(ulong.TryParse(c.ContentId,out var cid))foreach(var receipt in keyboundPurchases!.Entries.ToArray()){
+            if(receipt.Character==cid&&receipt.Confirmed&&rewards.Contains(receipt.Item))items.Add(receipt.Item);
+            yield return true;
+        }
+        // Use the completed catalogue too; catalogueBase is cleared after loading.
+        foreach(var group in collectionGroups??catalogueBase??[])foreach(var entry in group){
+            if(rewards.Contains(entry.ItemId)&&unlocked.TryGetValue(entry.Category,out var ids)&&ids.Contains(entry.Id))items.Add(entry.ItemId);
+            yield return true;
+        }
+        if(c.Id==current.Id)foreach(var offer in celebrationOffers!){
+            if(!items.Contains(offer.Item)&&CelebrationLiveReward(offer.Item))items.Add(offer.Item);
+            yield return true;
+        }
+        var eventItems=items.Intersect(rewards).Order().ToArray();
         var evidence=new AccountEventEvidence(quest,eventItems);
         if((quest||eventItems.Length>0)&&(saved==null||saved.QuestComplete!=quest||!saved.Items.SequenceEqual(eventItems))){
             config.EventCelebrationEvidence=new(config.EventCelebrationEvidence){[key]=evidence};SaveConfiguration();
         }
-        return evidence;
+        receive(evidence);
     }
     private void DrawEventCelebrationStatus()
     {

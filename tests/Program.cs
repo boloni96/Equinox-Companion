@@ -1833,3 +1833,14 @@ Check("unchanged evidence never repeats",celebrationGate.Take(time.AddSeconds(2)
 celebrationGate.Request(time.AddSeconds(3));
 Check("unready character retains evidence",celebrationGate.Take(time.AddSeconds(4),false).ToString(),"False");
 Check("ready character checks pending evidence",celebrationGate.Take(time.AddSeconds(5),true).ToString(),"True");
+
+var celebrationSteps=0;
+IEnumerable<bool> CelebrationSteps(){for(var i=0;i<10;i++){celebrationSteps++;yield return true;}}
+using(var work=CelebrationSteps().GetEnumerator()){
+    Check("celebration frame yields before finishing",CelebrationWorkBudget.Advance(work,3,1000).ToString(),"True");
+    Check("celebration frame limits work",celebrationSteps.ToString(),"3");
+    Check("celebration work resumes",CelebrationWorkBudget.Advance(work,3,1000).ToString(),"True");
+    Check("celebration resume keeps progress",celebrationSteps.ToString(),"6");
+    while(CelebrationWorkBudget.Advance(work,3,1000)){}
+    Check("celebration completes all work",celebrationSteps.ToString(),"10");
+}

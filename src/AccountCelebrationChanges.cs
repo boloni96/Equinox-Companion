@@ -3,13 +3,26 @@ namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
     private readonly CelebrationCheckGate celebrationChecks=new();
+    private IEnumerator<bool>? celebrationEventWork;
+    private string celebrationWorkPairing="";
+    private long celebrationEvidenceRevision;
+    private ulong celebrationWorkCharacter;
+    private void StopCelebrationCheck(){celebrationEventWork?.Dispose();celebrationEventWork=null;}
+    private void AdvanceCelebrationCheck()
+    {
+        if(celebrationEventWork==null)return;
+        var started=System.Diagnostics.Stopwatch.GetTimestamp();
+        try{if(!CelebrationWorkBudget.Advance(celebrationEventWork))StopCelebrationCheck();}
+        catch(Exception e){StopCelebrationCheck();eventCelebrationStatus="Completion check is waiting: "+e.Message;}
+        finally{RecordPerformanceElapsed("Celebration: event check slice",started);}
+    }
     private SharedRoster? celebrationRoster;
     private AdventureBoard[]? celebrationBoards;
     private int? celebrationRosterStamp,celebrationBoardStamp;
     private ulong celebrationCharacter;
     private DateTimeOffset celebrationFashionCycle;
     private bool celebrationFashionOpen;
-    private void RequestCelebrationCheck()=>celebrationChecks.Request(DateTimeOffset.UtcNow);
+    private void RequestCelebrationCheck(){celebrationEvidenceRevision++;celebrationChecks.Request(DateTimeOffset.UtcNow);}
     private void UpdateCelebrationChecks(DateTimeOffset now)
     {
         ResetCelebrationScope();
@@ -48,9 +61,13 @@ public sealed partial class Plugin
             var stamp=hash.ToHashCode();
             if(celebrationBoardStamp!=stamp){celebrationBoardStamp=stamp;RequestCelebrationCheck();}
         }
-        if(!celebrationChecks.Take(now,characterId!=0&&!keyboundBuying&&!Conditions[ConditionFlag.BetweenAreas]&&!Conditions[ConditionFlag.BetweenAreas51]))return;
-        var started=System.Diagnostics.Stopwatch.GetTimestamp();
-        try{ObserveSafely("Celebration: fashion check",ObserveAccountFashionCompletion);ObserveSafely("Celebration: event check",ObserveEventAccountCompletion);}
-        finally{RecordPerformanceElapsed("Celebration: changed evidence",started);}
+        if(celebrationEventWork!=null&&(celebrationWorkCharacter!=characterId||celebrationWorkPairing!=config.PairingKey))StopCelebrationCheck();
+        var ready=characterId!=0&&!keyboundBuying&&!Conditions[ConditionFlag.BetweenAreas]&&!Conditions[ConditionFlag.BetweenAreas51];
+        if(celebrationEventWork==null&&celebrationChecks.Take(now,ready)){
+            ObserveSafely("Celebration: fashion check",ObserveAccountFashionCompletion);
+            celebrationWorkCharacter=characterId;celebrationWorkPairing=config.PairingKey;
+            celebrationEventWork=ObserveEventAccountCompletion(celebrationEvidenceRevision).GetEnumerator();
+        }
+        if(ready)AdvanceCelebrationCheck();
     }
 }
