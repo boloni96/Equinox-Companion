@@ -98,7 +98,10 @@ public sealed partial class Plugin
                 }else{workIndicatorDragging=false;SaveConfiguration();}
             }
             var draw=ImGui.GetWindowDrawList();var style=Math.Clamp(config.WorkIndicatorStyle,0,2);
-            var center=top+new Vector2(.515f*size,.63f*size);var radius=size*.285f;
+            // Match the blue track in goddess-loading.png; its frame is slightly elliptical.
+            var center=top+(style==0?new Vector2(.4972f,.6319f):new Vector2(.515f,.63f))*size;
+            var radii=(style==0?new Vector2(.3216f,.3128f):new Vector2(.285f))*size;
+            var radius=MathF.Min(radii.X,radii.Y);
             if(style<2){
                 var file=style==0?"goddess-loading.png":"goddess-complete.png";
                 var image=Textures.GetFromFile(Path.Combine(Pi.AssemblyLocation.DirectoryName!,file)).GetWrapOrDefault();
@@ -110,13 +113,17 @@ public sealed partial class Plugin
             var time=(float)ImGui.GetTime();
             uint C(float r,float g,float b,float a)=>ImGui.ColorConvertFloat4ToU32(new(r,g,b,a));
             draw.AddCircleFilled(center,radius*.72f,C(.02f,.05f,.12f,.8f),48);
-            draw.AddCircle(center,radius,C(.15f,.5f,1,.35f),64,2);
+            if(style!=0)draw.AddCircle(center,radius,C(.15f,.5f,1,.35f),64,2);
             var angle=time*2.7f;var pulse=.75f+.25f*MathF.Sin(time*3);
             for(var i=0;i<32;i++){
                 var a=angle+i*.045f;var b=a+.05f;var alpha=(i+1)/32f;
-                var p=center+new Vector2(MathF.Cos(a),MathF.Sin(a))*radius;var q=center+new Vector2(MathF.Cos(b),MathF.Sin(b))*radius;
-                draw.AddLine(p,q,C(.15f,.65f,1,alpha*.25f),7);
-                draw.AddLine(p,q,C(.35f,.9f,1,alpha*pulse),3);
+                // Let the streak pass behind the hand/hair on the upper-left frame.
+                var phase=(a+.025f)%(2*MathF.PI);
+                if(style==0&&phase>3.65f&&phase<4.55f)continue;
+                var p=center+new Vector2(MathF.Cos(a),MathF.Sin(a))*radii;var q=center+new Vector2(MathF.Cos(b),MathF.Sin(b))*radii;
+                draw.AddLine(p,q,C(.15f,.65f,1,alpha*.35f),size*.045f);
+                draw.AddLine(p,q,C(.2f,.85f,1,alpha*pulse),size*.024f);
+                draw.AddLine(p,q,C(.8f,1,1,alpha*alpha*pulse),size*.009f);
             }
             var count=preview?"3/8":work?.Count??"…";var font=ImGui.GetFont();var fontSize=Math.Clamp(size*.15f,15,28);
             var countSize=ImGui.CalcTextSize(count)*(fontSize/ImGui.GetFontSize());
