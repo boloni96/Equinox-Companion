@@ -24,6 +24,8 @@ public sealed partial class Plugin
     private float independentRange;
     private Vector2 independentAxes;
     private float independentSpeed=1;
+    private DateTimeOffset independentFacingAt;
+    private bool independentFacingOnly,independentLegacyMode;
     private bool independentGameGateBlocked;
     private DateTimeOffset independentGatePauseSince;
     private Vector3[]? independentPendingPath;
@@ -78,8 +80,24 @@ public sealed partial class Plugin
             var cameras=CameraManager.Instance();var camera=cameras==null?null:(FFXIVClientStructs.FFXIV.Client.Game.Camera*)cameras->GetActiveCamera();
             if(camera==null)return;
             var legacy=MarketGameConfig.UiControl.TryGetUInt("MoveMode",out var mode)&&mode==1;
-            var reference=legacy?camera->DirH+MathF.PI:player.Rotation;
-            independentAxes=new(MathF.Sin(heading-reference)*independentSpeed,MathF.Cos(heading-reference)*independentSpeed);
+            independentLegacyMode=legacy;
+            if(legacy){
+                var reference=camera->DirH+MathF.PI;
+                independentAxes=new(MathF.Sin(heading-reference)*independentSpeed,MathF.Cos(heading-reference)*independentSpeed);
+                independentFacingOnly=false;independentFacingAt=default;
+            }else{
+                // Standard controls otherwise strafe relative to the existing
+                // facing. Turn the local character, then supply forward input.
+                // All game/manual-input checks above still take priority.
+                var now=DateTimeOffset.UtcNow;
+                var dt=independentFacingAt==default?1f/60:(float)(now-independentFacingAt).TotalSeconds;
+                independentFacingAt=now;
+                var facing=WalkingSteering.SmoothHeading(player.Rotation,heading,dt);
+                ((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)player.Address)->SetRotation(facing);
+                var scale=WalkingSteering.ForwardAlignment(heading-facing);
+                independentFacingOnly=scale<.05f;
+                independentAxes=new(0,independentSpeed*scale);
+            }
             *left=independentAxes.X;*forward=independentAxes.Y;independentInputOverrides++;independentInputBlock="";
         }catch(Exception e){independentNativeExceptions++;independentInputBlock=e.GetType().Name;independentLease.Revoke();}
     }
@@ -98,9 +116,9 @@ public sealed partial class Plugin
     private void StopIndependentWalk(string reason="Stopped",bool resetFailure=false)
     {
         if(independentSearch!=null||independentPath!=null||independentEntranceForward!=null)
-            RecordTravelPrompt("Navigation ended",new{run=independentNavigationRun,reason,goal=FollowTravelPosition.From(independentGoal),independentInputReads,independentInputOverrides,independentExpiredReads,independentInactiveReads,independentNativeGateRejects,independentNativeManualReads,independentReplans,independentPlanningSeconds,independentWalkStatus});
+            RecordTravelPrompt("Navigation ended",new{run=independentNavigationRun,reason,goal=FollowTravelPosition.From(independentGoal),independentInputReads,independentInputOverrides,independentExpiredReads,independentInactiveReads,independentNativeGateRejects,independentNativeManualReads,independentReplans,independentPlanningSeconds,independentWalkStatus,controlMode=independentLegacyMode?"Legacy":"Standard",axes=new{x=independentAxes.X,y=independentAxes.Y},independentHeading,independentFacingOnly});
         if(independentSearch!=null||independentPath!=null||independentEntranceForward!=null)TraceKeyboundRun(independentNavigationRun,"navigation-stopped",reason,"companion-navigation",false);
-        independentEntranceForward=null;independentGroundReadiness.Reset();
+        independentEntranceForward=null;independentGroundReadiness.Reset();independentFacingAt=default;independentFacingOnly=false;
         StopIndependentFlight();
         independentUserPaused=false;independentGameGateBlocked=false;independentGatePauseSince=default;independentHeading=null;independentMoving=false;independentPulseUntil=default;independentLease.Revoke();independentForwardHook?.Disable();
         independentSearch=null;independentPath=null;independentPendingPath=null;independentArrived=false;independentDirectOnly=false;independentWalkStatus=reason;independentWalkFailure="";
@@ -248,6 +266,7 @@ public sealed partial class Plugin
             if(checkCollision){
                 independentCollisionAt=now.AddMilliseconds(150);independentCheckedWaypoint=independentWaypoint;
             }
+            if(independentFacingOnly)independentProgressAt=now;
             var stalled=now-independentProgressAt>TimeSpan.FromSeconds(independentInputOverrides>0?1.5:4);
             if(stalled||!AvoidStalledTargets.ClearOfBlocked(self.Position,target,independentBlockedTargets)||checkCollision&&!independentCollision.Traverse(self.Position,target)){
                 independentMoving=false;independentForwardHook?.Disable();
