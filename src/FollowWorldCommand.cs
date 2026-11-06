@@ -62,17 +62,19 @@ public sealed partial class Plugin
         if(worldName.Trim().Equals("stop",StringComparison.OrdinalIgnoreCase)){StopEstateTravel("Stopped");return;}
         if(EstateTravelCommand.Parse(worldName) is {} estate){StartEstateTravelCommand(estate);return;}
         worldName=TeleportNameSearch.Query(worldName);
-        var worldOnly=worldName.StartsWith("world ",StringComparison.OrdinalIgnoreCase);
-        var teleportOnly=worldName.StartsWith("tp ",StringComparison.OrdinalIgnoreCase);
-        if(worldOnly)worldName=TeleportNameSearch.Query(worldName[6..]);
-        if(teleportOnly)worldName=TeleportNameSearch.Query(worldName[3..]);
+        var parts=worldName.Split((char[]?)null,2,StringSplitOptions.RemoveEmptyEntries);
+        var prefix=parts.FirstOrDefault()??"";
+        var worldOnly=prefix.Equals("world",StringComparison.OrdinalIgnoreCase)||prefix.Equals("w",StringComparison.OrdinalIgnoreCase);
+        var teleportOnly=prefix.Equals("tp",StringComparison.OrdinalIgnoreCase);
+        if(worldOnly||teleportOnly)worldName=parts.Length>1?TeleportNameSearch.Query(parts[1]):"";
+        if(worldOnly&&worldName.Length==0){FollowChatNotice("TRAVEL — /et world <name> or /et w <name>. Example: /et w sophia");return;}
         if(worldName.Length==0){FollowChatNotice("TRAVEL — /et <aetheryte, map or world name>. Examples: /et saucer, /et golden, /et sau. Estates: fc, priv, efc, epriv, workshop.");return;}
         var exactWorld=DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().Any(x=>x.IsPublic&&string.Equals(x.Name.ToString(),worldName,StringComparison.OrdinalIgnoreCase));
         if(!worldOnly&&(teleportOnly||!exactWorld)&&TryNamedTeleport(worldName,teleportOnly||worldName.StartsWith('#')))return;
         var world=ResolveFollowWorld(worldName);
         if(world==0){
             var matches=FollowWorldNames.Matches(DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().Where(x=>x.IsPublic).Select(x=>(x.RowId,x.Name.ToString())),worldName);
-            FollowChatNotice(matches.Length>1?"TRAVEL — Ambiguous World: "+string.Join(", ",matches.Select(x=>x.Name)):"TRAVEL — No unlocked teleport or world matches. Use an aetheryte/map name, /et world <name>, fc, priv, efc, epriv, or workshop.");return;
+            FollowChatNotice(matches.Length>1?"TRAVEL — Ambiguous World: "+string.Join(", ",matches.Select(x=>x.Name)):"TRAVEL — No unlocked teleport or world matches. Use an aetheryte/map name, /et world <name> (or /et w <name>), fc, priv, efc, epriv, or workshop.");return;
         }
         try{
             if(LifestreamBusy()){FollowChatNotice("TRAVEL — Lifestream is already busy.");return;}

@@ -214,7 +214,7 @@ public sealed partial class Plugin : IDalamudPlugin
         itemSearchCommandRegistered=Commands.AddHandler("/doihaveit",new CommandInfo((_,args)=>OpenItemSearch(args)){HelpMessage="Search recorded item locations across paired characters."});
         InitializeCameraCommand();
         Commands.AddHandler("/equinox", new CommandInfo(OnCommand) { HelpMessage = "Open Equinox Companion, shared profiles, housing and settings." });
-        shortTravelCommandRegistered = Commands.AddHandler("/et", new CommandInfo((command,args)=>StartSharedWorldTravel(args)) { HelpMessage = "Travel: /et <partial aetheryte/map/world name> (e.g. saucer). /et tp <name> or world <name> selects the type. Estates: fc, priv/private, efc, epriv/eprivate, workshop." });
+        shortTravelCommandRegistered = Commands.AddHandler("/et", new CommandInfo((command,args)=>StartSharedWorldTravel(args)) { HelpMessage = "Travel: /et <partial aetheryte/map/world name> (e.g. saucer). /et tp <name>, world <name> or w <name> selects the type. Estates: fc, priv/private, efc, epriv/eprivate, workshop." });
         if(!shortTravelCommandRegistered)Log.Warning("/et is already registered; use /eqtravel or /equinox travel.");
         travelCommandRegistered = Commands.AddHandler("/eqtravel", new CommandInfo((command,args)=>StartSharedWorldTravel(args)) { HelpMessage = "Travel: World name/prefix, fc, priv/private, efc, epriv/eprivate, workshop." });
         gardeningCommandRegistered = Commands.AddHandler("/gardening", new CommandInfo(OnPlantingCommand) { HelpMessage = "Open this house’s Gardening guide; follows selected synced beds." });
