@@ -58,7 +58,13 @@ public sealed partial class Plugin
             if(!TryNativeTravelGround(edge,self.Position,target.Position,out floor))return false;
             trip.Approach=floor;
         }
-        IndependentWalk(floor,.5f,now,allowFlight:false,directDistance:8,interactionTarget:target);
+        if(IndependentWalk(floor,.5f,now,allowFlight:false,directDistance:8,interactionTarget:target)){
+            if(TargetWithinInteractionRange(target))return true;
+            if(trip.Attempt>=2)throw new InvalidOperationException("Reached the housing approach, but the target is still not within verified interaction reach. Export the travel report.");
+            trip.Attempt++;trip.Approach=null;
+            RecordTravelPrompt("Housing approach retry",new{target=target.BaseId,trip.Attempt,position=FollowTravelPosition.From(self.Position),targetPosition=FollowTravelPosition.From(target.Position),reason="Walking arrived without verified interaction reach"});
+            StopIndependentWalk("Trying a closer housing interaction approach");
+        }
         nativeHousingStatus="Approaching housing travel target · "+independentWalkStatus;return false;
     }
     private unsafe bool HousingInteract(IGameObject target)
@@ -107,6 +113,15 @@ public sealed partial class Plugin
                     if(trip.TeleportSent)return;
                     if(!RequestNativePublicTeleport(trip.District.Gateway))throw new InvalidOperationException("This character cannot teleport to the district's city. Unlock its aetheryte first.");
                     trip.TeleportSent=true;return;
+                }
+                // A manually opened, recognized travel menu is already evidence
+                // that the target interaction succeeded; don't keep approaching it.
+                var openMenu=SellerAddon("SelectString");
+                if(openMenu!=null){
+                    var residentialText=DataManager.GetExcelSheet<NativeEventQuestText>(name:"transport/Aetheryte").GetRowOrDefault(2)?.Text??"";
+                    var wardText=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Addon>().GetRow(6349).Text.ToString().Trim();
+                    var recognized=TransportChoices(openMenu).Any(text=>NativeEventPolicy.Prompt(residentialText,text)||NativeEventPolicy.Prompt(wardText,text));
+                    if(recognized){HousingStage(trip,3,"Reading the open residential travel menu");return;}
                 }
                 if(!HousingApproach(trip,main,now))return;
                 if(HousingInteract(main))HousingStage(trip,3,"Opening residential district travel");return;

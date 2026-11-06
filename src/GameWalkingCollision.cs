@@ -92,7 +92,10 @@ internal sealed class GameWalkingCollision:IWalkingCollision
         var eye=floor+new Vector3(0,1.1f,0);
         var delta=marker-eye;var length=delta.Length();
         // Ignore the marker's own surface, but do not interact through intervening walls.
-        return length<.3f||!Hit(eye,delta/length,length-.25f,out _,WalkingCollisionFilter.Movement);
+        // Interaction markers may be inside the target's own movement collider.
+        // Do not mistake that collider for an intervening visibility wall.
+        // Physical walking still uses the stricter movement filter everywhere.
+        return length<.3f||!Hit(eye,delta/length,length-.25f,out _);
     }
     public bool Traverse(Vector3 from,Vector3 to)
     {
