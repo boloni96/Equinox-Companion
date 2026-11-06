@@ -11,7 +11,7 @@ public sealed partial class Plugin
     private sealed class NativeAethernetTrip
     {
         public required uint Destination,World;public required ulong Character;public required DateTimeOffset Started;
-        public DateTimeOffset Next,InteractionAt;public int Stage,Selections,ApproachAttempt;public bool Teleported;public Vector3 Source;
+        public DateTimeOffset Next,InteractionAt;public int Stage,Selections,ApproachAttempt;public bool Teleported;public Vector3 Source;public Vector3? ApproachGoal;
     }
     private NativeAethernetTrip? nativeAethernetTrip;
     private string nativeAethernetStatus="";private bool nativeAethernetSucceeded;
@@ -44,11 +44,13 @@ public sealed partial class Plugin
                 }
                 if(Vector3.Distance(self.Position,crystal.Position)>NativeAetheryteApproach.Range(trip.ApproachAttempt,crystal.HitboxRadius)){
                     var offset=self.Position-crystal.Position;offset.Y=0;if(offset.LengthSquared()<.01f)throw new InvalidOperationException("Aethernet crystal is on another floor.");
-                    if(!TryNativeTravelGround(NativeAetheryteApproach.InteractionEdge(self.Position,crystal.Position,NativeAetheryteApproach.Range(trip.ApproachAttempt,crystal.HitboxRadius)),self.Position,crystal.Position,out var floor)){nativeAethernetStatus="Waiting for walkable ground beside the aethernet";return;}
+                    if(trip.ApproachGoal is not {} floor){if(!TryNativeTravelGround(NativeAetheryteApproach.InteractionEdge(self.Position,crystal.Position,NativeAetheryteApproach.Range(trip.ApproachAttempt,crystal.HitboxRadius)),self.Position,crystal.Position,out floor)){nativeAethernetStatus="Waiting for walkable ground beside the aethernet";return;}trip.ApproachGoal=floor;}
                     IndependentWalk(floor,.65f,now,allowFlight:false,directDistance:8);nativeAethernetStatus="Approaching aethernet · "+independentWalkStatus;return;
                 }
                 StopIndependentWalk("At aethernet");var system=TargetSystem.Instance();if(system==null)return;
-                trip.Source=self.Position;trip.Stage=1;trip.InteractionAt=now;Targets.Target=crystal;system->InteractWithObject((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)crystal.Address,false);return;
+                if(Targets.Target?.Address!=crystal.Address){Targets.Target=crystal;return;}
+                RecordTravelPrompt("Aetheryte interaction",new{crystal=crystal.BaseId,distance=Vector3.Distance(self.Position,crystal.Position),trip.ApproachAttempt});
+                trip.Source=self.Position;trip.Stage=1;trip.InteractionAt=now;system->InteractWithObject((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)crystal.Address,false);return;
             }
             var menu=(AddonSelectString*)SellerAddon("SelectString");
             if(trip.Stage==1&&menu!=null){
@@ -60,7 +62,7 @@ public sealed partial class Plugin
             var town=SellerAddon("TelepotTown");
             if(trip.Stage==1&&menu==null&&town==null&&now-trip.InteractionAt>=TimeSpan.FromSeconds(trip.ApproachAttempt==0?2:5)){
                 if(trip.ApproachAttempt>=2)throw new InvalidOperationException("The aethernet menu did not open after the closer approach.");
-                trip.ApproachAttempt++;trip.Stage=0;nativeAethernetStatus="Aethernet did not respond; moving a little closer";return;
+                trip.ApproachAttempt++;trip.ApproachGoal=null;trip.Stage=0;nativeAethernetStatus="Aethernet did not respond; moving a little closer";return;
             }
             if(town==null||trip.Selections>=2)return;
             var agent=AgentTelepotTown.Instance();if(agent==null||agent->Data==null||agent->Data->AetheryteCount>64)return;

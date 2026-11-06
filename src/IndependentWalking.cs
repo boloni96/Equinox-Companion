@@ -36,7 +36,7 @@ public sealed partial class Plugin
     private readonly List<Vector3> independentBlockedTargets=[];
     private CollisionRouteSearch CreateIndependentSearch(Vector3 start,Vector3 goal,float range)=>
         new(new AvoidStalledTargets(new GameWalkingCollision(cacheGround:true),independentBlockedTargets.ToArray()),start,goal,range,independentBlockedTargets.Count>0?.5f:1f);
-    private bool IndependentClearConnector(Vector3 from,Vector3 to)=>AvoidStalledTargets.ClearOfBlocked(from,to,independentBlockedTargets)&&independentCollision.ComfortableTraverse(from,to);
+    private bool IndependentClearConnector(Vector3 from,Vector3 to)=>AvoidStalledTargets.ClearOfBlocked(from,to,independentBlockedTargets)&&independentCollision.Traverse(from,to);
     private bool independentMoving,independentArrived,independentDirectOnly;
     private DateTimeOffset independentPulseUntil,independentSince,independentPlanningSince,independentProgressAt,independentCollisionAt;
     private int independentCheckedWaypoint=-1,independentInputReads,independentInputOverrides;
@@ -97,6 +97,8 @@ public sealed partial class Plugin
     }
     private void StopIndependentWalk(string reason="Stopped",bool resetFailure=false)
     {
+        if(independentSearch!=null||independentPath!=null||independentEntranceForward!=null)
+            RecordTravelPrompt("Navigation ended",new{run=independentNavigationRun,reason,goal=FollowTravelPosition.From(independentGoal),independentInputReads,independentInputOverrides,independentExpiredReads,independentInactiveReads,independentNativeGateRejects,independentNativeManualReads,independentReplans,independentPlanningSeconds,independentWalkStatus});
         if(independentSearch!=null||independentPath!=null||independentEntranceForward!=null)TraceKeyboundRun(independentNavigationRun,"navigation-stopped",reason,"companion-navigation",false);
         independentEntranceForward=null;independentGroundReadiness.Reset();
         StopIndependentFlight();
@@ -264,19 +266,19 @@ public sealed partial class Plugin
             if(camera==null)throw new InvalidOperationException("Movement camera unavailable.");
             var legacy=MarketGameConfig.UiControl.TryGetUInt("MoveMode",out var mode)&&mode==1;
             var delta=target-self.Position;var heading=MathF.Atan2(delta.X,delta.Z);
-            independentHeading??=self.Rotation;
+            independentHeading??=heading;
             if(independentHeading is {} previousHeading){
                 var smooth=WalkingSteering.SmoothHeading(previousHeading,heading,(float)(now-independentSteeringAt).TotalSeconds);
                 if(MathF.Abs(MathF.IEEERemainder(smooth-heading,2*MathF.PI))>.01f){
                     var probe=self.Position+new Vector3(MathF.Sin(smooth),0,MathF.Cos(smooth))*.6f;
                     if(independentCollision.Ground(probe,out var floor)&&IndependentClearConnector(self.Position,floor))heading=smooth;
-                    else {independentHeading=smooth;independentSteeringAt=now;independentProgressAt=now;independentWalkStatus="Turning toward the clear route";return;}
+                    // If the rounded turn is obstructed, use the already checked route
+                    // heading instead of repeatedly stopping to turn into the obstacle.
                 }
             }
             independentHeading=heading;independentSteeringAt=now;
             var turnError=MathF.Abs(MathF.IEEERemainder(MathF.Atan2(delta.X,delta.Z)-heading,2*MathF.PI));
-            if(turnError>1.05f){independentProgressAt=now;independentWalkStatus="Aligning with the route";return;}
-            var speed=turnError>.5f?.4f:1f;independentSpeed=speed;
+            var speed=WalkingSteering.TurnSpeed(turnError);independentSpeed=speed;
             var reference=legacy?camera->DirH+MathF.PI:self.Rotation;
             independentAxes=new(MathF.Sin(heading-reference)*speed,MathF.Cos(heading-reference)*speed);
             EnsureIndependentGroundInput();

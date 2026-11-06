@@ -17,7 +17,7 @@ public sealed partial class Plugin
         public required int Service;public required DateTimeOffset Started;
         public NativeTravelStage Stage;public DateTimeOffset Next,StageAt;
         public bool ReturnHome,DcSelected,ContextSent,LoginSent,LoginConfirmed,GatewaySent,TransferCommitted;
-        public uint Gateway,RequestedLoginWorld;public bool ServiceSent,LogoutConfirmed,IntroSent;public int ApproachAttempt;
+        public uint Gateway,RequestedLoginWorld;public bool ServiceSent,LogoutConfirmed,IntroSent;public int ApproachAttempt;public Vector3? ApproachGoal;
     }
     private NativeWorldTrip? nativeWorldTrip;
     private string nativeTravelStatus="Choose a map, aetheryte or world.";
@@ -108,10 +108,12 @@ public sealed partial class Plugin
             if(Vector3.Distance(crystal.Position,self.Position)>NativeAetheryteApproach.Range(trip.ApproachAttempt,crystal.HitboxRadius)){
                 var offset=self.Position-crystal.Position;offset.Y=0;if(offset.LengthSquared()<.01f)throw new InvalidOperationException("The crystal is on another floor.");
                 var approach=NativeAetheryteApproach.InteractionEdge(self.Position,crystal.Position,NativeAetheryteApproach.Range(trip.ApproachAttempt,crystal.HitboxRadius));
-                if(!TryNativeTravelGround(approach,self.Position,crystal.Position,out var floor)){nativeTravelStatus="Waiting for walkable ground beside the aetheryte";return;}
+                if(trip.ApproachGoal is not {} floor){if(!TryNativeTravelGround(approach,self.Position,crystal.Position,out floor)){nativeTravelStatus="Waiting for walkable ground beside the aetheryte";return;}trip.ApproachGoal=floor;}
                 IndependentWalk(floor,.65f,now,allowFlight:false,directDistance:8);nativeTravelStatus="Approaching aetheryte · "+independentWalkStatus;return;
             }
-            StopIndependentWalk("At World Visit aetheryte");Targets.Target=crystal;
+            StopIndependentWalk("At World Visit aetheryte");
+            if(Targets.Target?.Address!=crystal.Address){Targets.Target=crystal;return;}
+            RecordTravelPrompt("Aetheryte interaction",new{crystal=crystal.BaseId,distance=Vector3.Distance(self.Position,crystal.Position),trip.ApproachAttempt});
             var system=TargetSystem.Instance();if(system==null)return;
             SetNativeTravelStage(trip,NativeTravelStage.AetheryteMenu,"Opening World Visit");
             usingSharedTravel=true;try{system->InteractWithObject((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)crystal.Address,false);}finally{usingSharedTravel=false;}return;
@@ -121,7 +123,7 @@ public sealed partial class Plugin
             if(menu==null){
                 if(now-trip.StageAt<TimeSpan.FromSeconds(trip.ApproachAttempt==0?2:5))return;
                 if(trip.ApproachAttempt>=2)throw new InvalidOperationException("The aetheryte menu did not open after the closer approach.");
-                trip.ApproachAttempt++;SetNativeTravelStage(trip,NativeTravelStage.Gateway,"Aetheryte did not respond; moving a little closer");return;
+                trip.ApproachAttempt++;trip.ApproachGoal=null;SetNativeTravelStage(trip,NativeTravelStage.Gateway,"Aetheryte did not respond; moving a little closer");return;
             }
             var label=DataManager.GetExcelSheet<NativeEventQuestText>(name:"transport/Aetheryte").GetRowOrDefault(3)?.Text??"";
             var choices=TransportChoices((AtkUnitBase*)menu);var index=choices.FindIndex(x=>NativeEventPolicy.Prompt(label,x));
