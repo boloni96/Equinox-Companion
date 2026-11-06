@@ -71,7 +71,9 @@ public sealed partial class Plugin
             if(Player.IsLoaded&&NativeTravelPolicy.Arrival(trip.Character,Player.ContentId,trip.Leg,Player.CurrentWorld.RowId,loading)){
                 if(trip.Leg==trip.Destination){var following=trip.Owner=="follow";StopNativeWorldTravel("Arrived at "+WorldName(trip.Destination)+".");if(following)ResumeAfterConfirmedTravel();return;}
                 trip.Source=trip.Leg;trip.Leg=trip.Destination;trip.ReturnHome=false;trip.DcSelected=trip.ContextSent=trip.LoginSent=trip.LoginConfirmed=trip.TransferCommitted=false;trip.RequestedLoginWorld=0;
-                BeginNativeTravelLogout(trip);return;
+                if(TravelDc(trip.Source)==TravelDc(trip.Destination))SetNativeTravelStage(trip,NativeTravelStage.Gateway,"Home return complete; continuing to the requested world");
+                else BeginNativeTravelLogout(trip);
+                return;
             }
             if(trip.Stage is not (NativeTravelStage.WorldQueue or NativeTravelStage.TransferWait or NativeTravelStage.Login)&&now-trip.StageAt>TimeSpan.FromMinutes(3))throw new InvalidOperationException("Timed out during "+trip.Stage+". Export diagnostics to include the prompts and last action.");
             if(loading){StopIndependentWalk("Waiting for travel loading");return;}
