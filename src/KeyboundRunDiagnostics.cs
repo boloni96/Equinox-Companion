@@ -51,7 +51,7 @@ public sealed partial class Plugin
         if(keyboundUsePending is not {} item||!Player.IsLoaded)return null;
         try{
             var resolved=ReadKeyboundUnlockState(item.Item,out var native,out var collection);
-            return new{item=item.Item,before=keyboundUseBefore,held=KeyboundBagCount(item.Item),nativeUnlock=native,collectionUnlock=collection,resolvedUnlock=resolved};
+            return new{item=item.Item,gameFramerKitId=item.Key=="framer"?FramerKitReader.GameId(item.Item):null,catalogueReady=collectionGroups!=null,collectionPreparing=catalogueBase!=null,before=keyboundUseBefore,held=KeyboundBagCount(item.Item),nativeUnlock=native,collectionUnlock=collection,resolvedUnlock=resolved};
         }catch(Exception ex){return new{error=ex.GetType().Name};}
     }
     private object KeyboundRunDiagnosticSnapshot()=>new {

@@ -65,6 +65,8 @@ public sealed partial class Plugin
                 if (entry.ItemId == 0 || !hairstyleUnlocks!.TryGetValue(entry.ItemId, out var links) || links.Length != 1) continue;
                 hairstyleLink = links[0];
             }
+            var framerUnlocked=entry.Category=="framerkit"?ReadFramerKitUnlock(entry.ItemId):null;
+            if(entry.Category=="framerkit"&&framerUnlocked==null)continue;
             known.Add(entry.Id);
             var owned = entry.Category switch
             {
@@ -76,7 +78,7 @@ public sealed partial class Plugin
                 "barding" => state->Buddy.CompanionInfo.IsBuddyEquipUnlocked(entry.Id),
                 "card" => state->IsTripleTriadCardUnlocked((ushort)entry.Id),
                 "ornament" => state->PlayerState.IsOrnamentUnlocked(entry.Id),
-                "framerkit" => state->PlayerState.IsFramersKitUnlocked(entry.Id) || entry.ItemId==51997 && KeyboundUnlockState(entry.ItemId)==1,
+                "framerkit" => framerUnlocked==true,
                 "quest" => QuestManager.IsQuestComplete(entry.Id),
                 _ => false
             };

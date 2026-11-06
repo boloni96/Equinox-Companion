@@ -40,10 +40,16 @@ public sealed partial class Plugin
         var state=UIState.Instance();var row=ExdModule.GetItemRowById(item);
         if(state==null||!state->PlayerState.IsLoaded||row==null)return 3;
         native=(int)state->IsItemActionUnlocked(row);
-        if(native==1||catalogueBase==null)return native;
-        if(!ReferenceEquals(keyboundUnlockCatalogue,catalogueBase)){keyboundUnlockCatalogue=catalogueBase;keyboundUnlockEntries.Clear();}
+        if(native==1)return native;
+        // Reward use must also work with collection sync disabled.
+        if(keyboundOffers?.Any(o=>o.Item==item&&o.Key=="framer")==true){
+            collection=ReadFramerKitUnlock(item);return KeyboundUsePolicy.ResolveUnlock(native,collection);
+        }
+        var catalogue=collectionGroups??catalogueBase;
+        if(catalogue==null)return native;
+        if(!ReferenceEquals(keyboundUnlockCatalogue,catalogue)){keyboundUnlockCatalogue=catalogue;keyboundUnlockEntries.Clear();}
         if(!keyboundUnlockEntries.TryGetValue(item,out var entry)){
-            var entries=catalogueBase.SelectMany(g=>g).Where(e=>e.ItemId==item&&e.Category is "mount" or "minion" or "orchestrion" or "emote" or "ornament" or "framerkit")
+            var entries=catalogue.SelectMany(g=>g).Where(e=>e.ItemId==item&&e.Category is "mount" or "minion" or "orchestrion" or "emote" or "ornament" or "framerkit")
             .DistinctBy(e=>(e.Category,e.Id)).Take(2).ToArray();
             entry=entries.Length==1?entries[0]:null;keyboundUnlockEntries[item]=entry;
         }
@@ -54,7 +60,7 @@ public sealed partial class Plugin
             "orchestrion"=>state->PlayerState.IsOrchestrionRollUnlocked(entry.Id),
             "emote" when entry.Id<=ushort.MaxValue=>state->IsEmoteUnlocked((ushort)entry.Id),
             "ornament"=>state->PlayerState.IsOrnamentUnlocked(entry.Id),
-            "framerkit"=>state->PlayerState.IsFramersKitUnlocked(entry.Id),
+            "framerkit"=>ReadFramerKitUnlock(entry.ItemId),
             _=>null
         };
         return KeyboundUsePolicy.ResolveUnlock(native,collection);
