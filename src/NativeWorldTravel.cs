@@ -23,6 +23,20 @@ public sealed partial class Plugin
     private string nativeTravelStatus="Choose a map, aetheryte or world.";
     private uint TravelDc(uint world)=>DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().GetRowOrDefault(world)?.DataCenter.RowId??0;
     private string TravelDcName(uint world)=>DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().GetRowOrDefault(world)?.DataCenter.Value.Name.ToString()??"";
+    private bool CanRequestWorldTravel(uint destination,out string reason)
+    {
+        reason="";
+        var worlds=DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>();
+        var target=worlds.GetRowOrDefault(destination);
+        var home=worlds.GetRowOrDefault(Player.HomeWorld.RowId);
+        if(!Player.IsLoaded||home==null||target==null||!target.Value.IsPublic){reason="Wait for your character to load and choose a public world.";return false;}
+        var homeRegion=home.Value.DataCenter.Value.Region.RowId;
+        var targetRegion=target.Value.DataCenter.Value.Region.RowId;
+        if(NativeTravelPolicy.RegionReachable(homeRegion,targetRegion))return true;
+        reason=$"Travel unavailable: a character from {home.Value.Name} cannot visit {target.Value.Name} under the supported regional travel rules. No journey started.";
+        RecordTravelPrompt("Travel request rejected",new{home=Player.HomeWorld.RowId,current=Player.CurrentWorld.RowId,destination,homeRegion,targetRegion,reason});
+        return false;
+    }
     private void SetNativeTravelStage(NativeWorldTrip trip,NativeTravelStage stage,string message)
     {
         trip.Stage=stage;trip.StageAt=DateTimeOffset.UtcNow;trip.Next=trip.StageAt.AddMilliseconds(500);nativeTravelStatus=message;
@@ -39,6 +53,7 @@ public sealed partial class Plugin
     {
         if(nativeWorldTrip!=null||nativeAethernetTrip!=null){nativeTravelStatus="A trip is already running. Use /et stop first.";return false;}
         if(!Player.IsLoaded||Player.ContentId==0||TravelDc(destination)==0){nativeTravelStatus="Wait for your character to load and choose a public world.";return false;}
+        if(!CanRequestWorldTravel(destination,out var rejection)){nativeTravelStatus=rejection;return false;}
         if(destination==Player.CurrentWorld.RowId){nativeTravelStatus="Already on "+WorldName(destination)+".";return true;}
         if(Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.BoundByDuty]||Conditions[ConditionFlag.Casting]||Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]||HelperInCutscene()||QuestConversationVisible()||VisibleFollowAddon("SelectYesno")){
             nativeTravelStatus="Finish combat, duty, casting, loading or the current conversation first.";return false;
