@@ -33,6 +33,13 @@ public sealed class NavigationRoadMap
         for(var i=0;i<cost.Length;i++)cost[i]=(byte)Math.Clamp((road[i]?.3f*(1-MathF.Min(1,distance[i]*worldPerCell/3)):1)*255,0,255);
         return new(cost,gw,gh,size,x,z,coverage);
     }
+    internal int Width=>width;
+    internal int Height=>height;
+    internal float CellSize=>2048f/width/scale;
+    internal (int X,int Z) Cell(Vector3 p)=>((int)MathF.Floor(((p.X+offsetX)*scale+1024)/2048*width),(int)MathF.Floor(((p.Z+offsetZ)*scale+1024)/2048*height));
+    internal Vector3 World(int x,int z)=>new(((x+.5f)/width*2048-1024)/scale-offsetX,0,((z+.5f)/height*2048-1024)/scale-offsetZ);
+    internal float Cost(int x,int z)=>1+6*costs[z*width+x]/255f;
+    public NavigationRoadRoute? BuildRoute(Vector3 start,Vector3 goal)=>NavigationRoadRoute.Build(this,start,goal);
     public float Penalty(Vector3 point)
     {
         if(!float.IsFinite(point.X)||!float.IsFinite(point.Z))return 0;
@@ -40,5 +47,59 @@ public sealed class NavigationRoadMap
         var v=((point.Z+offsetZ)*scale+1024)/2048*height;
         if(u<0||v<0||u>=width||v>=height)return 0;
         return costs[(int)v*width+(int)u]/255f;
+    }
+}
+
+// A connected 2D road-distance field, not a walkability mesh. Built on a worker
+// from managed texture data. Every selected 3D edge still needs collision approval.
+public sealed class NavigationRoadRoute
+{
+    private readonly NavigationRoadMap map;
+    private readonly int minX,minZ,width,height;
+    private readonly float[] toGoal,toStart;
+    public Vector3[] Points { get; }
+    public int Cells=>width*height;
+    private NavigationRoadRoute(NavigationRoadMap map,int x,int z,int w,int h,float[] goal,float[] start,Vector3[] points){
+        this.map=map;minX=x;minZ=z;width=w;height=h;toGoal=goal;toStart=start;Points=points;
+    }
+    public float Remaining(Vector3 point,bool reverse=false){
+        var cell=map.Cell(point);var x=cell.X-minX;var z=cell.Z-minZ;
+        if(x<0||z<0||x>=width||z>=height)return 0;
+        var d=(reverse?toStart:toGoal)[z*width+x];
+        // Weighting guides, never excludes, an off-road alternative.
+        return float.IsFinite(d)?d/2:0;
+    }
+    internal static NavigationRoadRoute? Build(NavigationRoadMap map,Vector3 start,Vector3 goal){
+        if(!float.IsFinite(start.X)||!float.IsFinite(start.Z)||!float.IsFinite(goal.X)||!float.IsFinite(goal.Z))return null;
+        var a=map.Cell(start);var b=map.Cell(goal);
+        bool Inside((int X,int Z) p)=>p.X>=0&&p.Z>=0&&p.X<map.Width&&p.Z<map.Height;
+        if(!Inside(a)||!Inside(b))return null;
+        var margin=(int)MathF.Ceiling(Math.Clamp(Vector3.Distance(start,goal),64,256)/map.CellSize);
+        var x0=Math.Max(0,Math.Min(a.X,b.X)-margin);var z0=Math.Max(0,Math.Min(a.Z,b.Z)-margin);
+        var x1=Math.Min(map.Width-1,Math.Max(a.X,b.X)+margin);var z1=Math.Min(map.Height-1,Math.Max(a.Z,b.Z)+margin);
+        var w=x1-x0+1;var h=z1-z0+1;
+        var ai=(a.Z-z0)*w+a.X-x0;var bi=(b.Z-z0)*w+b.X-x0;
+        (float[] Distance,int[] Next) Flood(int root){
+            var distance=new float[w*h];Array.Fill(distance,float.PositiveInfinity);
+            var next=new int[w*h];Array.Fill(next,-1);
+            var queue=new PriorityQueue<int,float>();distance[root]=0;queue.Enqueue(root,0);
+            while(queue.TryDequeue(out var index,out var cost)){
+                if(cost>distance[index])continue;var x=index%w;var z=index/w;
+                for(var dz=-1;dz<=1;dz++)for(var dx=-1;dx<=1;dx++){
+                    if(dx==0&&dz==0)continue;var xx=x+dx;var zz=z+dz;
+                    if(xx<0||zz<0||xx>=w||zz>=h)continue;
+                    var other=zz*w+xx;
+                    var weight=(map.Cost(x+x0,z+z0)+map.Cost(xx+x0,zz+z0))*.5f;
+                    var value=cost+map.CellSize*(dx!=0&&dz!=0?1.4142136f:1)*weight;
+                    if(value>=distance[other])continue;distance[other]=value;next[other]=index;queue.Enqueue(other,value);
+                }
+            }
+            return(distance,next);
+        }
+        var end=Flood(bi);var beginning=Flood(ai);var points=new List<Vector3>();
+        for(var i=ai;i>=0&&points.Count<=w*h;i=end.Next[i]){
+            points.Add(map.World(i%w+x0,i/w+z0));if(i==bi)break;
+        }
+        return new(map,x0,z0,w,h,end.Distance,beginning.Distance,points.ToArray());
     }
 }

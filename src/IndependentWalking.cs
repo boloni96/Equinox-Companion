@@ -41,7 +41,7 @@ public sealed partial class Plugin
     private bool independentBacktracking;
     private DateTimeOffset independentBacktrackUntil;
     private CollisionRouteSearch CreateIndependentSearch(Vector3 start,Vector3 goal,float range)=>
-        new(new AvoidStalledTargets(new GameWalkingCollision(cacheGround:true,roadGuide:independentRoadGuide),independentBlockedTargets.ToArray()),start,goal,range,independentBlockedTargets.Count>0&&Vector3.Distance(start,goal)<12?.5f:1f);
+        new(new AvoidStalledTargets(new GameWalkingCollision(cacheGround:true,roadGuide:independentRoadGuide),independentBlockedTargets.ToArray()),start,goal,range,independentBlockedTargets.Count>0&&Vector3.Distance(start,goal)<12?.5f:1f,roads:independentRoadRoute);
     private bool IndependentClearConnector(Vector3 from,Vector3 to)=>AvoidStalledTargets.ClearOfBlocked(from,to,independentBlockedTargets)&&independentCollision.ComfortableTraverse(from,to);
     private bool independentMoving,independentArrived,independentDirectOnly;
     private DateTimeOffset independentPulseUntil,independentSince,independentPlanningSince,independentProgressAt,independentCollisionAt;
@@ -154,7 +154,7 @@ public sealed partial class Plugin
             throw new InvalidOperationException($"No walkable ground beneath the character after 10s · territory {Client.TerritoryType} · position {self.Position}.");
         }
         independentGroundReadiness.Reset();
-        if(!PrepareNavigationMap(now))return false;
+        if(!PrepareNavigationMap(now,self.Position,destination))return false;
         independentLastSearchDiagnostic=null;independentNavigationRun=Guid.NewGuid().ToString("N");independentInputReads=independentInputOverrides=0;
         independentForwardReads=independentExpiredReads=independentInactiveReads=0;independentNativeGateRejects=independentNativeManualReads=independentNativeExceptions=0;
         independentInputBlock=independentLastWalkFailure="";independentPositionChanged=false;independentLastRoutePoints=independentLastExpanded=0;independentPlanningSeconds=0;independentLease.Revoke();
