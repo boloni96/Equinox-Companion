@@ -14,7 +14,7 @@ public sealed partial class Plugin
     {
         var ms = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
         performanceStages[stage] = Math.Max(performanceStages.GetValueOrDefault(stage), ms);
-        rollingPerformance.Record(stage,ms,PerformanceClock);
+        RecordPerformanceSample(stage,ms);
     }
     private long configurationRevision;
     private void SaveConfiguration()
@@ -45,6 +45,7 @@ public sealed partial class Plugin
     }
     private void Update(IFramework framework)
     {
+        BeginPerformanceFrame();
         var started=Stopwatch.GetTimestamp();
         try{UpdateCore(framework);PumpConfiguration();}
         finally{maxUpdateMs=Math.Max(maxUpdateMs,Stopwatch.GetElapsedTime(started).TotalMilliseconds);RecordPerformanceElapsed("Update",started); }
@@ -62,7 +63,7 @@ public sealed partial class Plugin
         ImGui.TextUnformatted(configurationDirty||configurationWriter.Busy?"Local save pending…":"Local save complete.");
         if(configurationError.Length>0)ImGui.TextWrapped(configurationError);
         foreach(var stage in performanceStages.OrderByDescending(x => x.Value)) ImGui.TextUnformatted($"{stage.Key}: {stage.Value:F2} ms peak");
-        if(ImGui.Button("Reset timing measurements")) { maxDrawMs=maxUpdateMs=maxSnapshotMs=0; performanceStages.Clear(); }
+        if(ImGui.Button("Reset timing measurements")) ResetPerformanceReport();
         SettingsHelp("Reset, reproduce one hitch, then note these values. File serialization and writing run on a single background worker. These timings do not measure other plugins or the game's rendering.");
         ImGui.Separator();
     }

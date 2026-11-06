@@ -728,7 +728,7 @@ public sealed partial class Plugin : IDalamudPlugin
         var last = observations.LastDiscovery(e);
         if (!force && last is not null && !GardenTargetMap.CanRepeatObservation(e.Kind, e.At - last.At) && !(e.GardenTarget is not null && e.At-last.At > TimeSpan.FromDays(30)) && !(e.Kind is "garden.ready" or "garden.observed" or "garden.status" or "garden.empty" or "garden.dead" && observations.PlantedAfter(e,last.At)) && JsonSerializer.Serialize(new { last.Actor, last.Address, last.House, last.Character, last.Crop, last.Collection, last.Fashion, last.Voyage, last.GardenTarget, last.Storage, last.Company, last.CachedVoyage, last.Supplies, last.Lottery, last.LotteryResult, last.SharedEstates }) == JsonSerializer.Serialize(new { e.Actor, e.Address, e.House, e.Character, e.Crop, e.Collection, e.Fashion, e.Voyage, e.GardenTarget, e.Storage, e.Company, e.CachedVoyage, e.Supplies, e.Lottery, e.LotteryResult, e.SharedEstates })) return;
         config.Discoveries.Add(e);
-        if(e.Kind is "fashion.observed" or "collection.observed" or "storage.observed")RequestCelebrationCheck();
+        if(e.Kind is "fashion.observed" or "collection.observed" or "storage.observed")RequestCelebrationCheck(e.Kind);
         WakeObservationSync();
         if(collectingStorage)storageChanged=true;else if(save)SaveConfiguration();
     }
@@ -1050,7 +1050,7 @@ public sealed partial class Plugin : IDalamudPlugin
             // Capture game-facing state now. Published record values are immutable;
             // copy collection containers before the worker serializes them.
             var snapshot=new {
-                schemaVersion = 7, characterSync = ReadCharacterSyncStatus(), characterLogin = CaptureNativeLoginDiagnostic(), followTravel = followTravelDiagnostics.ToArray(), pluginVersion = typeof(Plugin).Assembly.GetName().Version?.ToString(), exportedAt = DateTimeOffset.UtcNow,
+                schemaVersion = 8, characterSync = ReadCharacterSyncStatus(), characterLogin = CaptureNativeLoginDiagnostic(), followTravel = followTravelDiagnostics.ToArray(), pluginVersion = typeof(Plugin).Assembly.GetName().Version?.ToString(), exportedAt = DateTimeOffset.UtcNow,
                 syncDiagnostics = new { enabled = config.SyncEnabled, paired = config.PairingKey.Length == 64, endpoint = "https://equinoxjournal.pages.dev", status = syncStatus, pending = pendingSyncRecords, eligible = readySyncRecords, held = heldSyncRecords, historicalHeld = historicalHeldSyncRecords, unsupported = unsupportedSyncRecords, acknowledgedLocal = config.SentEvents.Count, lastSyncReceiptAt, lastSyncBatchSize, lastSyncBatchOldest, lastSyncBatchNewest, nextAttemptAt = nextSync, inFlight = syncTask is not null },
                 gardenPickerDetails=gardenPickerCaptures.ToArray(),
                 organizerStorage=GearStorageDiagnostics(),
@@ -1074,7 +1074,7 @@ public sealed partial class Plugin : IDalamudPlugin
                 keyboundBuyer = new { useAfterBuying=keyboundBuyAndUse, usingRewards=keyboundUsingRewards, useItem=keyboundUsePending?.Name, unlocked=keyboundUsed, skippedUse=keyboundUseSkipped, running=keyboundBuying, status=keyboundBuyStatus, shop=keyboundBuyShop, item=keyboundBuyItem?.Name, submitted=keyboundBuyIntent?.Submitted, equipmentAccepted=keyboundBuyIntent?.EquipmentAccepted, remaining=keyboundBuyRemaining.Count, missing=keyboundMissingPlan, held=keyboundHeldRewards.ToArray(), confirmation=keyboundConfirmationDiagnostic, requestedTab=keyboundRequestedTab, previousRows=keyboundPreviousRows, rows=keyboundRowFingerprint },
                 activityKeepAlive = new { status=activityStatus, lastPulse=activityLastPulse, pulses=activityPulseCount, followerOption=config.FollowAntiAfk, following=followSession.Armed, eventOption=keyboundAntiAfk, eventRunning=keyboundEnabled, territory=Client.TerritoryType },
                 keyboundTyping = new { enabled=keyboundEnabled, available=config.EnableKeyboundBrawler, status=keyboundStatus, word=keyboundWord, sent=keyboundSent, expected=keyboundExpected, awaiting=keyboundAwaiting, clearing=keyboundClearing, recalling=keyboundRecalling },
-                mode = "local-diagnostics", gardeningConfirmed = false, performance = new { maxDrawMs,maxUpdateMs,maxSnapshotMs, configurationError, stages=performanceStages.ToDictionary(x=>x.Key,x=>x.Value), recent=rollingPerformance.Snapshot(PerformanceClock), optionalTools=optionalToolFailures.ToDictionary(x=>x.Key,x=>x.Value) },
+                mode = "local-diagnostics", gardeningConfirmed = false, performance = CapturePerformanceReport(),
                 houseObservations = config.Houses.ToArray(), confirmedTending = config.Tending.ToArray(), confirmedPlanting = config.Planting.ToArray(), observedDetails = config.Discoveries.ToArray(), diagnostics=diagnostics.ToArray()
             };
             diagnosticExportTask=DiagnosticExportWriter.Start(path,snapshot,json,errorJournal.Snapshot,gardenMessageJournal.Snapshot);

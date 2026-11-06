@@ -109,7 +109,7 @@ public sealed partial class Plugin
         if(DiagnosticExportBusy||(gardenPickerCaptures.Count==0&&gardenMarkerStates.Count==0))return;
         diagnosticExportError="";exportPath=null;
         var path=Path.Combine(Pi.GetPluginConfigDirectory(),"exports",$"equinox-picker-{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.json");
-        diagnosticExportTask=DiagnosticExportWriter.Start(path,new {schemaVersion=2,pluginVersion=typeof(Plugin).Assembly.GetName().Version?.ToString(),exportedAt=DateTimeOffset.UtcNow,pickers=gardenPickerCaptures.ToArray(),markerStates=gardenMarkerStates.ToArray(),currentMarkerStatus=gardenMarkerStatus,pickerCheck=gardenPickerCheck},json,()=>[],()=>[]);
+        diagnosticExportTask=DiagnosticExportWriter.Start(path,new {schemaVersion=3,performance=CapturePerformanceReport(),pluginVersion=typeof(Plugin).Assembly.GetName().Version?.ToString(),exportedAt=DateTimeOffset.UtcNow,pickers=gardenPickerCaptures.ToArray(),markerStates=gardenMarkerStates.ToArray(),currentMarkerStatus=gardenMarkerStatus,pickerCheck=gardenPickerCheck},json,()=>[],()=>[]);
     }
     private void DrawGardenPickerDiagnostics()
     {

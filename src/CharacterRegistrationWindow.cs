@@ -21,16 +21,28 @@ public sealed partial class Plugin
         var session=config.PairingKey+":"+Player.ContentId;
         if(session!=registrationSession){minimizedLaunchers.Remove("New Character");registrationSession=session;registrationStartedAt=now;nextDiscovery=default;nextCharacterRefresh=default;registrationDeferred=false;registrationPerson="";registrationPersonName="";registrationNewAccount="";registrationNewPersonMode=false;registrationNewAccountMode=false;registrationSnapshot=null;registrationWindow.IsOpen=false;nextRosterRead=default;}
         if(now<characterReadyAt||registrationFreshKey!=config.PairingKey||config.SharedRoster is not {ProtocolVersion:>=14} roster)return;
+        var measured=System.Diagnostics.Stopwatch.GetTimestamp();
         var actor=ReadActor();
+        RecordPerformanceElapsed("Registration: character identity",measured);
         if(!SyncValidation.ActorReady(actor))return;
-        var pending=DiscoveryReads().Kind("character.registered").LastOrDefault(e=>e.Kind=="character.registered"&&e.Actor.ContentId==actor.ContentId&&e.Registration?.PairingScope==RegistrationScope);
-        if(CharacterRegistrationPolicy.Find(roster,actor) is {} known){
+        measured=System.Diagnostics.Stopwatch.GetTimestamp();
+        var reads=DiscoveryReads();
+        RecordPerformanceElapsed("Registration: observation index",measured);
+        measured=System.Diagnostics.Stopwatch.GetTimestamp();
+        var pending=reads.Kind("character.registered").LastOrDefault(e=>e.Kind=="character.registered"&&e.Actor.ContentId==actor.ContentId&&e.Registration?.PairingScope==RegistrationScope);
+        RecordPerformanceElapsed("Registration: pending history",measured);
+        measured=System.Diagnostics.Stopwatch.GetTimestamp();
+        var known=CharacterRegistrationPolicy.Find(roster,actor);
+        RecordPerformanceElapsed("Registration: roster match",measured);
+        if(known is not null){
             registrationWindow.IsOpen=false;minimizedLaunchers.Remove("New Character");
             if(pending is not null&&registrationNotified.Add(pending.Id))PrintEquinox($"[Equinox] {known.Name} added to the Journal · {roster.People.First(p=>p.Characters.Contains(known)).Name} / {known.Account}.");
             return;
         }
         if(pending is not null){registrationWindow.IsOpen=false;minimizedLaunchers.Remove("New Character");return;}
-        registrationSnapshot=DiscoveryReads().Kind("character.updated").LastOrDefault(e=>e.Kind=="character.updated"&&e.Actor.ContentId==actor.ContentId&&e.At>=registrationStartedAt&&e.At>=characterReadyAt.AddSeconds(-15)&&SyncValidation.CharacterReady(e.Character));
+        measured=System.Diagnostics.Stopwatch.GetTimestamp();
+        registrationSnapshot=reads.Kind("character.updated").LastOrDefault(e=>e.Kind=="character.updated"&&e.Actor.ContentId==actor.ContentId&&e.At>=registrationStartedAt&&e.At>=characterReadyAt.AddSeconds(-15)&&SyncValidation.CharacterReady(e.Character));
+        RecordPerformanceElapsed("Registration: character history",measured);
         if(registrationSnapshot is null)return;
         if(CharacterRegistrationPolicy.Destination(roster,registrationSnapshot.Character!.AccountKey) is {} destination){SubmitCharacterRegistration(destination.Person,destination.Account);return;}
         if(!registrationDeferred)registrationWindow.IsOpen=true;

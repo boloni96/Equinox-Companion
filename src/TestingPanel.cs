@@ -64,7 +64,7 @@ public sealed partial class Plugin
  private string TestingDraftKey(PlayTest t)=>testingScope+"|"+config.TestingTesterId+"|"+t.Id+"|"+t.Revision;
  private void DrawTesting()
  {
-  windowStatus=testingMessage;windowFooter=()=>{if(ImGui.SmallButton("Export results")&&testingExport is null)ExportTesting();ImGui.SameLine();if(ImGui.SmallButton("Open exports folder")){var path=Path.Combine(Pi.GetPluginConfigDirectory(),"exports");Directory.CreateDirectory(path);Dalamud.Utility.Util.OpenLink(path);}if(ImGui.IsItemHovered())ImGui.SetTooltip("The export includes test definitions, all downloaded reports, notes, versions and local pending results. Share it for review; no pairing key or game records are included.");};
+  windowStatus=testingMessage;windowFooter=()=>{if(ImGui.SmallButton("Export results")&&testingExport is null)ExportTesting();ImGui.SameLine();if(ImGui.SmallButton("Open exports folder")){var path=Path.Combine(Pi.GetPluginConfigDirectory(),"exports");Directory.CreateDirectory(path);Dalamud.Utility.Util.OpenLink(path);}if(ImGui.IsItemHovered())ImGui.SetTooltip("The export includes test definitions, all downloaded reports, notes, versions, local pending results and performance history with activity context. Share it for review; no pairing key is included.");};
   if(ImGui.Button("Quest tools / recorder"))questToolsWindow.IsOpen=true;
   if(scopeMissing()){ImGui.TextWrapped("Connect to your shared Journal in Settings to receive the testing checklist.");if(ImGui.Button("Open Settings"))OpenSettings();return;}
   ImGui.SetNextItemWidth(190);
@@ -109,7 +109,7 @@ public sealed partial class Plugin
  }
  private void ExportTesting()
  {
-  var snapshot=new {format="equinox-playtest-export",schema=1,exportedAt=DateTimeOffset.UtcNow,completeHistory=testingState.Complete,catalog=testingState.Catalog,reports=testingState.Reports??[],pending=testingState.Pending??[],drafts=config.TestingDrafts.Where(x=>x.Key.StartsWith(testingScope+"|",StringComparison.Ordinal)).ToDictionary(x=>x.Key[(testingScope.Length+1)..],x=>x.Value),versions=new{plugin=typeof(Plugin).Assembly.GetName().Version?.ToString(),server=testingState.ServerVersion}};
+  var snapshot=new {format="equinox-playtest-export",schema=2,performance=CapturePerformanceReport(),exportedAt=DateTimeOffset.UtcNow,completeHistory=testingState.Complete,catalog=testingState.Catalog,reports=testingState.Reports??[],pending=testingState.Pending??[],drafts=config.TestingDrafts.Where(x=>x.Key.StartsWith(testingScope+"|",StringComparison.Ordinal)).ToDictionary(x=>x.Key[(testingScope.Length+1)..],x=>x.Value),versions=new{plugin=typeof(Plugin).Assembly.GetName().Version?.ToString(),server=testingState.ServerVersion}};
   var path=Path.Combine(Pi.GetPluginConfigDirectory(),"exports","Equinox-Test-Results-"+DateTime.UtcNow.ToString("yyyyMMdd-HHmmss")+"-"+Guid.NewGuid().ToString("N")[..6]+".json");
   testingExport=Task.Run(()=>{Directory.CreateDirectory(Path.GetDirectoryName(path)!);File.WriteAllText(path,JsonSerializer.Serialize(snapshot,new JsonSerializerOptions(JsonSerializerDefaults.Web){WriteIndented=true}));return path;});testingMessage="Exporting checklist…";
  }

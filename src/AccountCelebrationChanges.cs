@@ -6,6 +6,8 @@ public sealed partial class Plugin
     private IEnumerator<bool>? celebrationEventWork;
     private string celebrationWorkPairing="";
     private long celebrationEvidenceRevision;
+    private string celebrationLastTrigger="Startup";
+    private DateTimeOffset celebrationLastTriggerAt;
     private ulong celebrationWorkCharacter;
     private void StopCelebrationCheck(){celebrationEventWork?.Dispose();celebrationEventWork=null;}
     private void AdvanceCelebrationCheck()
@@ -22,7 +24,7 @@ public sealed partial class Plugin
     private ulong celebrationCharacter;
     private DateTimeOffset celebrationFashionCycle;
     private bool celebrationFashionOpen;
-    private void RequestCelebrationCheck(){celebrationEvidenceRevision++;celebrationChecks.Request(DateTimeOffset.UtcNow);}
+    private void RequestCelebrationCheck(string reason="Completion request"){celebrationLastTrigger=reason;celebrationLastTriggerAt=DateTimeOffset.UtcNow;celebrationEvidenceRevision++;celebrationChecks.Request(celebrationLastTriggerAt);}
     private void UpdateCelebrationChecks(DateTimeOffset now)
     {
         ResetCelebrationScope();
@@ -30,7 +32,7 @@ public sealed partial class Plugin
         var cycle=FashionCompletion.Cycle(now);
         var fashionOpen=FashionCompletion.IsOpen(now);
         if(characterId!=celebrationCharacter||cycle!=celebrationFashionCycle||fashionOpen!=celebrationFashionOpen){
-            celebrationCharacter=characterId;celebrationFashionCycle=cycle;celebrationFashionOpen=fashionOpen;RequestCelebrationCheck();
+            celebrationCharacter=characterId;celebrationFashionCycle=cycle;celebrationFashionOpen=fashionOpen;RequestCelebrationCheck("Character or Fashion cycle changed");
         }
         // Roster refresh timestamps, prices, house timers and presence are not
         // completion evidence. Inspect the relevant fields only when inputs change.
@@ -50,7 +52,7 @@ public sealed partial class Plugin
                 foreach(var item in location.Items)hash.Add(item);
             }
             var stamp=hash.ToHashCode();
-            if(celebrationRosterStamp!=stamp){celebrationRosterStamp=stamp;RequestCelebrationCheck();}
+            if(celebrationRosterStamp!=stamp){celebrationRosterStamp=stamp;RequestCelebrationCheck("Journal completion evidence changed");}
         }
         if(!ReferenceEquals(celebrationBoards,adventureBoards)){
             celebrationBoards=adventureBoards;var hash=new HashCode();
@@ -59,7 +61,7 @@ public sealed partial class Plugin
                 hash.Add(task.Id);hash.Add(task.Done);hash.Add(task.ServerConfirmed);hash.Add(task.Rule?.Cid);hash.Add(task.Label);
             }
             var stamp=hash.ToHashCode();
-            if(celebrationBoardStamp!=stamp){celebrationBoardStamp=stamp;RequestCelebrationCheck();}
+            if(celebrationBoardStamp!=stamp){celebrationBoardStamp=stamp;RequestCelebrationCheck("Adventure completion evidence changed");}
         }
         if(celebrationEventWork!=null&&(celebrationWorkCharacter!=characterId||celebrationWorkPairing!=config.PairingKey))StopCelebrationCheck();
         var ready=characterId!=0&&!keyboundBuying&&!Conditions[ConditionFlag.BetweenAreas]&&!Conditions[ConditionFlag.BetweenAreas51];

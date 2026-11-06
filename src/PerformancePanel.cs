@@ -7,7 +7,7 @@ public sealed partial class Plugin
     private PerformanceReading[] performancePanelRows=[];
     private double nextPerformancePanelRead;
     private static double PerformanceClock=>(double)Stopwatch.GetTimestamp()/Stopwatch.Frequency;
-    private void RecordPerformanceElapsed(string stage,long started)=>rollingPerformance.Record(stage,Stopwatch.GetElapsedTime(started).TotalMilliseconds,PerformanceClock);
+    private void RecordPerformanceElapsed(string stage,long started)=>RecordPerformanceSample(stage,Stopwatch.GetElapsedTime(started).TotalMilliseconds);
     private void DrawRecentPerformanceDiagnostics()
     {
         var clock=PerformanceClock;
@@ -26,8 +26,10 @@ public sealed partial class Plugin
             }
             ImGui.EndTable();
         }
+        ImGui.TextWrapped("Exports include these timings and up to 256 slow-stage samples from the last 10 minutes, with activity context. No recording needs to be started.");
+        if(ImGui.SmallButton("Export performance report")&&!DiagnosticExportBusy)Export();
         ImGui.TextDisabled(configurationDirty||configurationWriter.Busy?"Local save pending…":"Local save complete.");
         if(configurationError.Length>0)ImGui.TextWrapped(configurationError);
-        if(ImGui.SmallButton("Reset measurements")){rollingPerformance.Clear();performancePanelRows=[];nextPerformancePanelRead=0;maxDrawMs=maxUpdateMs=maxSnapshotMs=0;performanceStages.Clear();}
+        if(ImGui.SmallButton("Reset measurements"))ResetPerformanceReport();
     }
 }
