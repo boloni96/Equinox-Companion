@@ -33,8 +33,12 @@ public sealed partial class Plugin
             if(move.Plot is {} destination&&atOutdoorEstate){
                 if(SharedGardenLocation.Match(currentAddress,[destination])!=destination.HouseId)
                     throw new InvalidOperationException("Plot entry reached a different estate; garden movement stopped.");
-                RecordTravelPrompt("Garden plot entry confirmed",new{destination.HouseId,destination.Plot,destination.Ward});
-                StopNativeGardenMove("Inside the requested plot · ready to approach the garden");return;
+                if(Objects.LocalPlayer is not {} entering)return;
+                move.Entry??=new(new Vector3(MathF.Sin(entering.Rotation),0,MathF.Cos(entering.Rotation)));
+                if(move.Entry.Confirm(entering.Position,true)){
+                    RecordTravelPrompt("Garden plot entry confirmed",new{destination.HouseId,destination.Plot,destination.Ward,position=FollowTravelPosition.From(entering.Position)});
+                    StopNativeGardenMove("Plot entry segment complete · ready to approach the garden");return;
+                }
             }
             if(move.Plot!=null){
                 if(!NativeTravelMovementReady())return;

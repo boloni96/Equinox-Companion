@@ -105,7 +105,10 @@ public sealed partial class Plugin
                 var housing=HousingManager.Instance();var at=housing==null?null:AddressOf(housing->GetCurrentHouseId());
                 if(at!=null){
                     if(at.WorldId!=trip.World||at.Ward!=trip.Ward||at.Plot!=trip.Plot)throw new InvalidOperationException("Estate landing reached a different plot.");
-                    StopNativeHousing($"Reached the plot entrance at {trip.District.Name} W{trip.Ward} P{trip.Plot}.");return;
+                    trip.Entry??=new(new Vector3(MathF.Sin(self.Rotation),0,MathF.Cos(self.Rotation)));
+                    if(trip.Entry.Confirm(self.Position,true)){
+                        StopNativeHousing($"Completed the plot entrance approach at {trip.District.Name} W{trip.Ward} P{trip.Plot}.");return;
+                    }
                 }
                 trip.Entry??=new(new Vector3(MathF.Sin(self.Rotation),0,MathF.Cos(self.Rotation)));
                 WalkOutdoorPlotEntry(trip.Entry,now);nativeHousingStatus="Entering the requested plot · no door interaction";return;
@@ -186,7 +189,7 @@ public sealed partial class Plugin
                 // Using the same shard cannot shorten this trip. Walk directly from
                 // the current street/plot instead of approaching it and cancelling.
                 var nearest=trip.Geometry.Result.Shards.MinBy(s=>Vector3.DistanceSquared(self.Position,s.Position));
-                if(nearest?.Id==shard.Id||Vector3.Distance(self.Position,targetPlot)<25||Vector3.Distance(self.Position,shard.Position)<12){HousingStage(trip,10,"Walking to plot "+trip.Plot);return;}
+                if(nearest?.Id==shard.Id||nearest!=null&&AethernetTravelPolicy.PreferWalking(self.Position,targetPlot,nearest.Position,shard.Position)||Vector3.Distance(self.Position,shard.Position)<12){HousingStage(trip,10,"Walking to plot "+trip.Plot);return;}
                 var source=Objects.Where(x=>x.IsTargetable&&x.ObjectKind is ObjectKind.Aetheryte or ObjectKind.EventObj&&
                     trip.Geometry.Result.Shards.Any(s=>Vector3.DistanceSquared(s.Position,x.Position)<16)).MinBy(x=>Vector3.DistanceSquared(self.Position,x.Position));
                 if(source==null){
@@ -215,11 +218,11 @@ public sealed partial class Plugin
             }
             if(trip.Stage is 10 or 11){
                 var manager=HousingManager.Instance();var address=manager==null?null:AddressOf(manager->GetCurrentHouseId());
-                if(address!=null&&address.WorldId==trip.World&&address.Ward==trip.Ward&&address.Plot==trip.Plot){
-                    StopNativeHousing($"Reached the plot entrance at {trip.District.Name} W{trip.Ward} P{trip.Plot} on {WorldName(trip.World)}.");return;
+                if(address!=null&&address.WorldId==trip.World&&address.Ward==trip.Ward&&address.Plot==trip.Plot&&trip.Entry!=null&&trip.Entry.Confirm(self.Position,true)){
+                    StopNativeHousing($"Completed the plot entrance approach at {trip.District.Name} W{trip.Ward} P{trip.Plot} on {WorldName(trip.World)}.");return;
                 }
                 if(trip.Stage==11){
-                    if(address!=null)throw new InvalidOperationException("Plot entrance approach reached a different estate.");
+                    if(address!=null&&(address.WorldId!=trip.World||address.Ward!=trip.Ward||address.Plot!=trip.Plot))throw new InvalidOperationException("Plot entrance approach reached a different estate.");
                     WalkOutdoorPlotEntry(trip.Entry!,now);nativeHousingStatus="Entering the plot boundary · "+trip.Plot;return;
                 }
                 if(Vector3.Distance(self.Position,targetPlot)<=4.5f&&independentCollision.InteractionVisible(self.Position,targetPlot)){

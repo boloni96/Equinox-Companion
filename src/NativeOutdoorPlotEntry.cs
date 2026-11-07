@@ -8,7 +8,7 @@ public sealed partial class Plugin
         var goal=entry.Goal??entry.Next(player.Position);
         // Prepare the following checked segment before the current one ends.
         // Keep the existing path and input lease instead of stop/start per step.
-        if(entry.Steps<6&&independentPath is {Length:>1}&&independentSearch==null&&
+        if(!entry.FinishingEntry&&entry.Steps<6&&independentPath is {Length:>1}&&independentSearch==null&&
             Vector3.Distance(independentGoal,goal)<.1f&&Vector3.Distance(player.Position,goal)<1.2f){
             var end=goal;var next=end+entry.Direction*3;
             var continuation=VerifiedWalkingOpening.ShortDirect(independentCollision,end,next);
