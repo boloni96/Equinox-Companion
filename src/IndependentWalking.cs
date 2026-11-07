@@ -171,7 +171,7 @@ public sealed partial class Plugin
         // Short verified approaches (including the shared three-yalm estate step)
         // do not need an area search or a detour to satisfy preferred wall clearance.
         var direct=directOnly?VerifiedWalkingOpening.Entrance(independentCollision,self.Position,destination):VerifiedWalkingOpening.ShortDirect(independentCollision,self.Position,destination,directDistance);
-        if(!directOnly&&direct.Length>1&&!WalkingClearance.PreservesRoom(self.Position,destination,independentCollision.WallPenalty))direct=[];
+        if(!directOnly&&interactionTarget==null&&direct.Length>1&&!WalkingClearance.PreservesRoom(self.Position,destination,independentCollision.WallPenalty))direct=[];
         if(direct.Length>1&&Enumerable.Range(1,direct.Length-1).Any(i=>!AvoidStalledTargets.ClearOfBlocked(direct[i-1],direct[i],independentBlockedTargets)))direct=[];
         if(direct.Length>1){
             independentPath=direct;independentWaypoint=1;independentCheckedWaypoint=-1;

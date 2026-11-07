@@ -47,6 +47,7 @@ public sealed class CollisionRouteSearch
     private Vector3 reverseGoal;
     private Node? committedRoadEnd;
     private Task<NavigationRoadRoute?>? roadDetourTask;
+    private bool rebasingRoadGuide;
     private readonly Func<Func<NavigationRoadRoute?>,Task<NavigationRoadRoute?>> roadWorker;
     private readonly List<Vector3> roadObstacles=[];
     private int roadDetours,priorExpanded;
@@ -93,7 +94,19 @@ public sealed class CollisionRouteSearch
         if(bidirectional&&Vector3.Distance(origin,goal)>=12&&collision.Ground(goal,out var end)&&MathF.Abs(end.Y-goal.Y)<=1.2f){
             reverseRoot=end;backward=new(true);backward.Open.Enqueue(new(Address(end),end,0,null),0);
         }
-        if(Vector3.Distance(origin,goal)>=12&&(streetGuide??roads?.Points) is {} guide)roadSeed=new(collision,origin,guide);
+        if(Vector3.Distance(origin,goal)>=12){
+            if(streetGuide!=null)roadSeed=new(collision,origin,streetGuide);
+            else if(roads!=null){
+                if(roads.Points.Length>0&&Horizontal(origin,roads.Points[0])<=1)
+                    roadSeed=new(collision,origin,roads.Points);
+                else{
+                    // A cached opening changes the search origin. Never walk
+                    // back to the old map route's start to reuse its directions.
+                    var mapRoute=roads;var from=origin;var to=goal;
+                    rebasingRoadGuide=true;roadDetourTask=roadWorker(()=>mapRoute.Detour(from,to,[]));
+                }
+            }
+        }
         active=forward;
     }
     public void Advance(double milliseconds=1.5,int edgeBudget=24,CancellationToken cancellation=default)
@@ -106,8 +119,9 @@ public sealed class CollisionRouteSearch
                 if(roadDetourTask?.IsCompleted==true){
                     var task=roadDetourTask;roadDetourTask=null;
                     if(task.IsCompletedSuccessfully&&task.Result is {} detour){
-                        CompletedRoadDetours++;roads=detour;searchRadius=MathF.Max(searchRadius,detour.SearchRadius(goal));roadSeed=new(collision,committedRoadEnd?.Point??origin,detour.Points);
+                        if(!rebasingRoadGuide)CompletedRoadDetours++;roads=detour;searchRadius=MathF.Max(searchRadius,detour.SearchRadius(goal));roadSeed=new(collision,committedRoadEnd?.Point??origin,detour.Points);
                     }else if(task.IsFaulted){_ = task.Exception;}
+                    rebasingRoadGuide=false;
                 }
                 if(roadSeed is {} seed){
                     seed.Step();roadSeedPoints=seed.Count;roadSeedStop=seed.StopReason;
@@ -269,7 +283,7 @@ public sealed class CollisionRouteSearch
     }
     private float Heuristic(Vector3 p,bool reverse){
         var direct=RemainingDistance(p,reverse?reverseGoal:goal,reverse?0:range);
-        return reverse&&reverseGoal!=origin?direct:MathF.Max(direct,roads?.Remaining(p,reverse)??0);
+        return reverse&&(reverseGoal!=origin||roads!=null&&(roads.Points.Length==0||Horizontal(roads.Points[0],reverseGoal)>1))?direct:MathF.Max(direct,roads?.Remaining(p,reverse)??0);
     }
     public static float Horizontal(Vector3 a,Vector3 b)=>new Vector2(a.X-b.X,a.Z-b.Z).Length();
     private static bool Finite(Vector3 p)=>float.IsFinite(p.X)&&float.IsFinite(p.Y)&&float.IsFinite(p.Z);

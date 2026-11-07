@@ -47,11 +47,30 @@ internal static class NavigationStreetCorridors
         Vector3[][] streets=territory switch{339=>[MistUpperStreet],341=>[Goblet22],641=>[Shirogane11,Shirogane3],_=>[]};
         foreach(var street in streets){
             var arrivalMargin=territory==341?8:6;
-            if(Vector3.Distance(start,street[0])<=6&&Vector3.Distance(goal,street[^1])<=arrivalMargin)
-                return street.Append(goal).ToArray();
-            if(Vector3.Distance(start,street[^1])<=arrivalMargin&&Vector3.Distance(goal,street[0])<=6)
-                return street.Reverse().Append(goal).ToArray();
+            if(Vector3.Distance(goal,street[^1])<=arrivalMargin){
+                if(Resume(street,start) is {} remaining)return remaining.Append(goal).ToArray();
+                if(Vector3.Distance(start,street[0])<=6)return street.Append(goal).ToArray();
+            }
+            if(Vector3.Distance(goal,street[0])<=6){
+                var reverse=street.Reverse().ToArray();
+                if(Resume(reverse,start) is {} remaining)return remaining.Append(goal).ToArray();
+                if(Vector3.Distance(start,street[^1])<=arrivalMargin)return reverse.Append(goal).ToArray();
+            }
         }
         return null;
+    }
+    internal static Vector3[]? Resume(IReadOnlyList<Vector3> street,Vector3 start){
+        var best=float.MaxValue;var index=-1;var join=default(Vector3);
+        for(var i=1;i<street.Count;i++){
+            var edge=street[i]-street[i-1];var length=edge.LengthSquared();if(length<.000001f)continue;
+            var t=Math.Clamp(Vector3.Dot(start-street[i-1],edge)/length,0,1);
+            var point=street[i-1]+t*edge;
+            var distance=Vector3.DistanceSquared(start,point);
+            if(CollisionRouteSearch.Horizontal(start,point)>2||MathF.Abs(start.Y-point.Y)>1||distance>=best)continue;
+            best=distance;index=i;join=point;
+        }
+        if(index<0)return null;
+        // Still only a hint: the seed validates the join and every onward step.
+        return new[]{join}.Concat(street.Skip(index)).ToArray();
     }
 }
