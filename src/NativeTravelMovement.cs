@@ -14,7 +14,7 @@ public sealed partial class Plugin
     private bool TryNativeTravelGround(Vector3 approach,Vector3 player,Vector3 crystal,out Vector3 floor)
     {
         // Object origins can float above the floor. Ground() only probes within
-        // 0.7 yalms of the supplied height; start at the character's floor height.
+        // 0.7 yalms of the supplied height; preserve the destination platform hint.
         // Retain a planned goal so approaching does not continually restart it.
         if((independentSearch!=null||independentPath!=null)&&Vector3.DistanceSquared(independentGoal,approach)<1){floor=independentGoal;return true;}
         var collision=new GameWalkingCollision(cacheGround:true);
@@ -25,7 +25,7 @@ public sealed partial class Plugin
         var angle=MathF.Atan2(offset.Z,offset.X);
         foreach(var turn in new[]{1,-1,2,-2,3,-3}){
             var a=angle+turn*MathF.PI/6;
-            var candidate=new Vector3(crystal.X+MathF.Cos(a)*radius,player.Y,crystal.Z+MathF.Sin(a)*radius);
+            var candidate=new Vector3(crystal.X+MathF.Cos(a)*radius,approach.Y,crystal.Z+MathF.Sin(a)*radius);
             if(NativeAetheryteApproach.Ground(collision,candidate,player,out floor)&&collision.InteractionVisible(floor,crystal)){
                 RecordNativeMovementWait("Selected connected alternative aetheryte approach",new{turn,position=FollowTravelPosition.From(floor)});return true;
             }
