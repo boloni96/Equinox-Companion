@@ -27,7 +27,7 @@ internal static class WalkingSteering
         next=Math.Min(best,path.Length-1);
         return next;
     }
-    public static Vector3 PursuitTarget(Vector3 position,Vector3[] path,int next,Func<Vector3,Vector3,bool> clear)
+    public static Vector3 PursuitTarget(Vector3 position,Vector3[] path,int next,Func<Vector3,Vector3,bool> clear,Func<Vector3,Vector3,bool>? traversable=null)
     {
         var start=path[Math.Max(0,next-1)];var segment=path[next]-start;
         var length=segment.LengthSquared();var t=length<.0001f?1:Math.Clamp(Vector3.Dot(position-start,segment)/length,0,1);
@@ -40,7 +40,18 @@ internal static class WalkingSteering
         point=BoundedTarget(position,point);
         if(clear(position,point))return point;
         var fallback=BoundedTarget(position,path[next]);
-        return clear(position,fallback)?fallback:position;
+        if(clear(position,fallback))return fallback;
+        // Extra wall space is a preference, not an impassable obstacle. When a
+        // shortcut loses that space, follow the next route point with the same
+        // physical checks as planning. Shorten steep stair connectors rather than
+        // rejecting a whole staircase because a lookahead spans too much rise.
+        if(traversable!=null){
+            for(var distance=Vector3.Distance(position,fallback);distance>=.2f;distance*=.5f){
+                var step=Vector3.Lerp(position,fallback,distance/MathF.Max(.001f,Vector3.Distance(position,fallback)));
+                if(traversable(position,step))return step;
+            }
+        }
+        return position;
     }
     public static Vector3 BoundedTarget(Vector3 position,Vector3 target){
         var distance=Vector3.Distance(position,target);
