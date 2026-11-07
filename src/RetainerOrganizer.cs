@@ -22,7 +22,7 @@ public sealed partial class Plugin
     private string organizeStatus="Preview or organise the selected plan. Assignments choose homes for eligible listed items.";
     private void OrganizeStage(int stage){organizeStage=stage;organizeStatus=$"{organizeTransferred} delivered · {organizeMoveIndex}/{organizeMoves.Length} transfers · "+(stage switch{0=>"Preparing",1 or 2 or 3=>$"Refreshing missing inventory {organizeSourceIndex+1}/{organizeSources.Length}",4 or 5=>"Opening retainer",6 or 7=>"Moving batch",9=>"Calculating batch space",10 or 11 or 12 or 13 or 14=>$"Sorting retainer {organizeSortIndex+1}/{organizeSortRetainers.Length}",_=>"Next retainer"});organizeDeadline=DateTimeOffset.UtcNow.AddSeconds(60);}
     private void StopOrganize(string reason){ClearOrganizerSortMenu();organizeRunning=false;organizePort?.Release();organizePending=null;organizeStatus=reason+(organizerDeferred>0?$" · {organizerDeferred} item types deferred after unconfirmed moves.":"")+(organizeCarry>0?$" · {organizeCarry} transferred items remain in your bags.":"");SaveOrganizerInventories();InvalidateOrganizePreview();retrievalRefreshPending=true;Log.Information("Retainer organizer: {Status}",organizeStatus);}
-    private uint OrganizeCategory(uint item)=>DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>().GetRowOrDefault(item)?.ItemUICategory.RowId??0;
+    private uint OrganizeCategory(uint item)=>DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>().GetRowOrDefault(item) is {} row?GearCategorySelection.Category(row.ItemUICategory.RowId,row.LevelEquip,row.EquipSlotCategory.RowId>0):0;
     private void DrawRetainerOrganizer()
     {
         ImGui.BeginDisabled(gearRouting||armoireRunning||organizeRunning||retrievalRun.Running||chestRunning);

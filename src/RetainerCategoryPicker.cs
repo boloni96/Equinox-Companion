@@ -22,6 +22,7 @@ public sealed partial class Plugin
                 }
                 ImGui.PopID();
             }
+            ImGui.TextDisabled("Level 1 wearable gear → Outfits only");
             ImGui.EndCombo();
         }
         return changed;
