@@ -30,7 +30,7 @@ internal static class WalkingGroundTraversal
                 {
                     // Test above the higher support: a legal stair riser is not a body obstacle.
                     var a=previous+offset;var b=floor+offset;
-                    a.Y=b.Y=MathF.Max(previousSupport.Y,support.Y)+height;
+                    a.Y=b.Y=MathF.Max(MathF.Max(previous.Y,floor.Y),MathF.Max(previousSupport.Y,support.Y))+height;
                     var direction=b-a;var length=direction.Length();
                     if(length>.001f&&blocked(a,b)){rejected?.Invoke("Longitudinal body ray blocked");blockedAt=floor;return false;}
                 }

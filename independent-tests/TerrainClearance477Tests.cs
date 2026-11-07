@@ -11,6 +11,8 @@ internal static class TerrainClearance477Tests
         var rising=new Terrain(p=>p.X*.9f);
         Check(rising,Vector3.Zero,new(1,.9f,0),"rising body footprint");
         Check(rising,new(1,.9f,0),Vector3.Zero,"descending body footprint");
+        var crest=new Terrain(p=>1-MathF.Abs(p.X)*.9f);
+        Check(crest,new(0,1,0),new(0,1,1),"convex crest retains center-floor clearance");
         var steps=new Terrain(p=>MathF.Floor(p.X/.3f)*.3f);
         Check(steps,new(.05f,0,0),new(.95f,.9f,0),"consecutive legal risers under footprint");
         var route=new CollisionRouteSearch(sideways,Vector3.Zero,new(0,0,12),.4f);

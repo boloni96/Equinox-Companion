@@ -151,7 +151,7 @@ internal static class WalkingClearance
             // A cross-body ray must clear the ground at both ends. Using the
             // center's height casts the low ray into an otherwise walkable slope.
             foreach(var height in (ReadOnlySpan<float>)[.5f,1.05f,1.75f]){
-                var a=low;var b=high;a.Y=b.Y=MathF.Max(low.Y,high.Y)+height;
+                var a=low;var b=high;a.Y=b.Y=MathF.Max(floor.Y,MathF.Max(low.Y,high.Y))+height;
                 if(blocked(a,b))return false;
             }
         }

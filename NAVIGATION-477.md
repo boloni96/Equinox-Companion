@@ -31,7 +31,8 @@ Changes:
 - Acquire footprint support in <=.3-yalm steps with the existing .45-yalm maximum
   individual rise/drop. Avoid rejecting a sequence of valid small steps just
   because its total rise across the footprint exceeds one step.
-- Place cross-body checks above the higher supported end of each diameter.
+- Place cross-body checks above the center and both supported ends of each diameter,
+  so descending sides cannot lower a check into the center of a convex crest.
   Missing support, excessive individual steps, headroom checks and obstacle rays
   remain enforced. Body radius .6, height 1.85 and native material masks remain.
 - Reuse exact ground samples within one live sweep, then clear them in finally.
@@ -43,7 +44,7 @@ Changes:
 
 Validation:
 The new cross-slope fixture fails against published .476's traversal and passes
-with this correction. Rising/descending slopes, consecutive legal risers and a
+with this correction. Rising/descending slopes, a convex crest, consecutive legal risers and a
 complete open cross-slope route pass. Walls across slopes, unsupported/excessive
 side ledges and an off-center thin post still block movement. Existing cache
 interruption, native approach, stage-7 elevation, navigation and quest tests pass.
