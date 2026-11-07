@@ -8,7 +8,7 @@ public sealed record NavigationSearchPoint(float X,float Y,float Z)
     public static NavigationSearchPoint From(Vector3 p)=>new(p.X,p.Y,p.Z);
 }
 public sealed record NavigationRejectedConnection(NavigationSearchPoint From,NavigationSearchPoint To,string Reason);
-public sealed record NavigationSearchDiagnostic(NavigationSearchPoint Origin,NavigationSearchPoint Goal,int Expanded,int Frontier,int BudgetYields,int GroundRejected,int TraverseRejected,int AcceptedEdges,long NativeQueries,long CacheHits,NavigationSearchPoint[] Explored,NavigationSearchPoint[] Rejected,NavigationSearchPoint[] ClosestPath,int ReverseExpanded,NavigationSearchPoint[] ReverseExplored,bool RoadGuided,int RoadSeedPoints,string? RoadSeedStop,NavigationRejectedConnection[] RejectedConnections,int RoadDetours,int CompletedRoadDetours,NavigationSearchPoint[] RoadObstacles);
+public sealed record NavigationSearchDiagnostic(NavigationSearchPoint Origin,NavigationSearchPoint Goal,int Expanded,int Frontier,int BudgetYields,int GroundRejected,int TraverseRejected,int AcceptedEdges,long NativeQueries,long CacheHits,NavigationSearchPoint[] Explored,NavigationSearchPoint[] Rejected,NavigationSearchPoint[] ClosestPath,int ReverseExpanded,NavigationSearchPoint[] ReverseExplored,bool RoadGuided,int RoadSeedPoints,string? RoadSeedStop,NavigationRejectedConnection[] RejectedConnections,int RoadDetours,int CompletedRoadDetours,NavigationSearchPoint[] RoadObstacles,int DirectPoints,string? DirectStopReason);
 
 public interface IWalkingCollision
 {
@@ -44,6 +44,9 @@ public sealed class CollisionRouteSearch
     private Frontier? backward,active;
     private Node? closest;
     private WalkingRoadSeed? roadSeed;
+    private WalkingDirectApproach? directApproach;
+    private int directPoints;
+    private string? directStopReason;
     private Vector3[]? verifiedPrefix;
     private Vector3 reverseGoal;
     private Node? committedRoadEnd;
@@ -58,7 +61,7 @@ public sealed class CollisionRouteSearch
     // A completed, collision-verified guide section can be walked while this
     // search continues from its endpoint. Ownership is transferred only once.
     public Vector3[]? TakeVerifiedPrefix(){
-        if(verifiedPrefix==null&&!Finished&&roadSeed==null&&roadDetourTask==null)StreamGeometryPrefix();
+        if(verifiedPrefix==null&&!Finished&&directApproach==null&&roadSeed==null&&roadDetourTask==null)StreamGeometryPrefix();
         var result=verifiedPrefix;verifiedPrefix=null;return result;
     }
     private void StreamGeometryPrefix(){
@@ -109,7 +112,7 @@ public sealed class CollisionRouteSearch
         var reverseStride=Math.Max(1,(int)Math.Ceiling(reverseExplored.Count/512d));
         return new(NavigationSearchPoint.From(origin),NavigationSearchPoint.From(goal),Expanded,forward.Open.Count+(backward?.Open.Count??0),BudgetYields,groundRejected,traverseRejected,acceptedEdges,collision.NativeQueries,collision.CacheHits,
             explored.Where((_,i)=>i%stride==0).Select(NavigationSearchPoint.From).ToArray(),rejected.Select(NavigationSearchPoint.From).ToArray(),path.Take(256).Select(NavigationSearchPoint.From).ToArray(),
-            backward?.Closed.Count??0,reverseExplored.Where((_,i)=>i%reverseStride==0).Select(NavigationSearchPoint.From).ToArray(),roads!=null,roadSeedPoints,roadSeedStop,rejectedConnections.ToArray(),roadDetours,CompletedRoadDetours,roadObstacles.Select(NavigationSearchPoint.From).ToArray());
+            backward?.Closed.Count??0,reverseExplored.Where((_,i)=>i%reverseStride==0).Select(NavigationSearchPoint.From).ToArray(),roads!=null,roadSeedPoints,roadSeedStop,rejectedConnections.ToArray(),roadDetours,CompletedRoadDetours,roadObstacles.Select(NavigationSearchPoint.From).ToArray(),directApproach?.Points.Length??directPoints,directApproach?.Reason??directStopReason);
     }
     private static List<Vector3> Trail(Node? node){var p=new List<Vector3>();for(var n=node;n!=null;n=n.Previous)p.Add(n.Point);p.Reverse();return p;}
     private void Rejected(Vector3 point){rejected.Enqueue(point);if(rejected.Count>128)rejected.Dequeue();}
@@ -129,7 +132,8 @@ public sealed class CollisionRouteSearch
         if(arrival==null&&bidirectional&&Vector3.Distance(origin,goal)>=12&&collision.Ground(goal,out var end)&&MathF.Abs(end.Y-goal.Y)<=1.2f){
             reverseRoot=end;backward=new(true);backward.Open.Enqueue(new(Address(end),end,0,null),0);
         }
-        if(Vector3.Distance(origin,goal)>=12){
+        if(arrival!=null)directApproach=new(collision,origin,goal,arrival);
+        if(arrival==null&&Vector3.Distance(origin,goal)>=12){
             if(streetGuide!=null)roadSeed=new(collision,origin,streetGuide);
             else if(roads!=null){
                 if(roads.Points.Length>0&&Horizontal(origin,roads.Points[0])<=1)
@@ -151,6 +155,29 @@ public sealed class CollisionRouteSearch
         try{
             while(edgeBudget-->0&&clock.Elapsed.TotalMilliseconds<milliseconds){
                 cancellation.ThrowIfCancellationRequested();
+                if(directApproach is {} direct){
+                    direct.Step();directPoints=direct.Points.Length;directStopReason=direct.Reason;
+                    if(direct.Arrived){Path=direct.Points;directApproach=null;return;}
+                    if(direct.TakePrefix() is {} section)
+                        verifiedPrefix=verifiedPrefix==null?section:verifiedPrefix.Concat(section.Skip(1)).ToArray();
+                    if(direct.Finished){
+                        var points=direct.Points;Node? end=null;
+                        foreach(var point in points)end=new(Address(point),point,0,end,true);
+                        CommitPrefix(end!);directApproach=null;
+                        if(direct.RejectedPoint is {} rejectedPoint){
+                            rejectedConnections.Enqueue(new(NavigationSearchPoint.From(points[^1]),NavigationSearchPoint.From(rejectedPoint),direct.Reason??"Direct approach rejected"));
+                            traverseRejected++;
+                        }
+                        // Near an interaction target, search locally around the
+                        // actual obstruction instead of committing another map loop.
+                        if(Horizontal(points[^1],goal)<=range+12){roads=null;roadSeed=null;}
+                        else if(roads is {} map){
+                            var from=points[^1];rebasingRoadGuide=true;
+                            roadDetourTask=roadWorker(()=>map.Detour(from,goal,[]));
+                        }
+                    }
+                    continue;
+                }
                 if(roadDetourTask?.IsCompleted==true){
                     var task=roadDetourTask;roadDetourTask=null;
                     if(task.IsCompletedSuccessfully&&task.Result is {} detour){

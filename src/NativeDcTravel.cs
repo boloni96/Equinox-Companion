@@ -17,6 +17,18 @@ public sealed partial class Plugin
             SetNativeTravelStage(trip,NativeTravelStage.CharacterMenu,"Finding the exact character on service account "+(trip.Service+1));
         }
         if(Player.IsLoaded||Client.IsLoggedIn||trip.LoginConfirmed)return;
+        // A rejection can arrive before the final confirmation advances the stage.
+        // Inspect it before selecting another data center or waiting on lobby locks.
+        var failure=(AddonSelectOk*)SellerAddon("SelectOk");
+        if(failure!=null&&failure->PromptText!=null){
+            var message=TravelMenuText(failure->PromptText->NodeText.StringPtr)??"";
+            if(NativeTravelPolicy.HomeReturnRejected(trip.Stage,trip.ReturnHome,message)){
+                RecordTravelPrompt("Home return rejected",new{message,trip.Source,trip.Leg,stage=trip.Stage.ToString()});
+                trip.TransferCommitted=false;
+                StopNativeWorldTravel("The game refused the home-world return [1000]. Dismiss the game message before retrying.");
+                return;
+            }
+        }
         if(SellerAddon("SelectString")!=null){if(!trip.ServiceSent&&SelectVerifiedServiceAccount(trip.Service)){trip.ServiceSent=true;RecordTravelPrompt("Service account selected",new{slot=trip.Service});}return;}
         trip.ServiceSent=false;
         var loginWorld=trip.TransferCommitted||trip.Stage==NativeTravelStage.Login?trip.Leg:trip.Source;
