@@ -12,7 +12,7 @@ public sealed partial class Plugin
 {
     private const ulong GlamourStorageDestination=ulong.MaxValue-2;
     private bool gearRouting,gearFromRetainers,gearMoveOwned,gearLookupOwned,gearSkipDyed=true;
-    private bool gearContextSent,gearConfirmationSent,gearPausePrepared;
+    private bool gearContextSent,gearConfirmationSent,gearPausePrepared,gearDresserTransitionObserved;
     private int gearPhase,gearStored,gearSkipped,gearRechecks,gearOpenRetries,gearReserve=2;
     private ulong gearCharacter;
     private uint gearWorld,gearTerritory;
@@ -67,7 +67,7 @@ public sealed partial class Plugin
         gearSelection.Clear();gearSelection.UnionWith(ids);gearRemaining.Clear();foreach(var id in ids)gearRemaining.Enqueue(id);gearDeliveries.Clear();gearBatch=[];
         gearPause=new(new SellerAutoRetainerPort());gearPausePrepared=false;gearRouting=true;gearNext=default;gearMoveOwned=gearLookupOwned=false;GearPhase(0,"Opening dresser / checking destinations");
     }
-    private void GearPhase(int phase,string status){gearPhase=phase;gearRechecks=gearOpenRetries=0;gearDeadline=DateTimeOffset.UtcNow.AddSeconds(30);gearInteractAt=default;gearStatus=status+(gearCopy is {} copy?" · "+SearchItemName(copy.Item):"");StorageTrace("gear","step",gearCopy?.Item??0,gearStatus);}
+    private void GearPhase(int phase,string status){gearDresserTransitionObserved=false;gearPhase=phase;gearRechecks=gearOpenRetries=0;gearDeadline=DateTimeOffset.UtcNow.AddSeconds(30);gearInteractAt=default;gearStatus=status+(gearCopy is {} copy?" · "+SearchItemName(copy.Item):"");StorageTrace("gear","step",gearCopy?.Item??0,gearStatus);}
     private void GearSkip(uint item,string reason){gearSkipped++;gearStatus="Skipped "+SearchItemName(item)+" · "+reason;StorageTrace("gear","skipped",item,reason);}
     private unsafe void StopGearStorage(string reason)
     {
@@ -263,14 +263,36 @@ public sealed partial class Plugin
                 if(SellerAddon("ContextMenu")!=null||SellerAddon("SelectYesno")!=null)throw new InvalidOperationException("Close the existing item menu or confirmation.");
                 gearContextSent=gearConfirmationSent=false;GearPhase(5,"Storing individual glamour");return;
             }
-            if(gearPhase==5){if(!ArmoireDresserReady())throw new InvalidOperationException("Dresser closed.");GearStoreIndividual();return;}
+            if(gearPhase==5){
+                // Selecting a crystallize row can change the main dresser state.
+                // The owned confirmation below is authoritative after that selection.
+                if(!ArmoireDresserReady()){
+                    TraceGearDresserTransition();
+                    if(!gearContextSent){gearStatus="Waiting for dresser item list to become ready";return;}
+                }
+                GearStoreIndividual();return;
+            }
             if(gearPhase==6){
-                if(!ArmoireDresserReady())throw new InvalidOperationException("Dresser closed before confirming storage.");
+                // Receipt verification is read-only; closing or refreshing the main
+                // addon does not invalidate an already submitted storage action.
+                if(!ArmoireDresserReady())TraceGearDresserTransition();
+                var mirage=MirageManager.Instance();var state=UIState.Instance();
+                if(gearDestination==GearStorageDestination.Armoire?(state==null||!state->Cabinet.IsCabinetLoaded()):(mirage==null||!mirage->PrismBoxLoaded)){
+                    gearStatus="Waiting for storage data to confirm the submitted item";return;
+                }
                 var present=gearDestination==GearStorageDestination.Armoire?UIState.Instance()->Cabinet.IsItemInCabinet(armoireRows![gearItem]):GearInDresser(gearItem);
                 if(!GearStoragePolicy.DeliveryConfirmed(ArmoireInventory(gearItem).Held==0,present)){gearStatus="Waiting for "+gearDestination+" receipt · "+SearchItemName(gearItem)+" · recheck "+gearRechecks+"/2";return;}
                 StorageTrace("gear","confirmed",gearItem,gearDestination.ToString());gearKnownDresser.Add(gearItem);gearStored++;gearCopy=null;GearPhase(4,$"{gearStored} stored · delivering batch");
             }
         }catch(Exception e){StopGearStorage("Stopped: "+e.Message);Log.Warning(e,"Gear storage route stopped");}
+    }
+    private unsafe void TraceGearDresserTransition()
+    {
+        if(gearDresserTransitionObserved)return;gearDresserTransitionObserved=true;
+        var agent=AgentMiragePrismPrismBox.Instance();var mirage=MirageManager.Instance();
+        var confirm=SellerAddon("SelectYesno");var list=SellerAddon("MiragePrismPrismBoxCrystallize");
+        StorageTrace("gear","dresser transition",gearItem,
+            $"phase={gearPhase}; rowSelected={gearContextSent}; confirmationSent={gearConfirmationSent}; active={agent!=null&&agent->IsAgentActive()}; dataLoaded={agent!=null&&agent->IsDataLoaded}; boxLoaded={mirage!=null&&mirage->PrismBoxLoaded}; list={list!=null}; confirmation={confirm!=null}; ownedConfirmation={agent!=null&&confirm!=null&&agent->ContextAddonId==confirm->Id}");
     }
     private unsafe bool GearNeedsDresserSlot(uint item)
     {
