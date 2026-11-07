@@ -8,7 +8,7 @@ public sealed record NavigationSearchPoint(float X,float Y,float Z)
     public static NavigationSearchPoint From(Vector3 p)=>new(p.X,p.Y,p.Z);
 }
 public sealed record NavigationRejectedConnection(NavigationSearchPoint From,NavigationSearchPoint To,string Reason);
-public sealed record NavigationSearchDiagnostic(NavigationSearchPoint Origin,NavigationSearchPoint Goal,int Expanded,int Frontier,int BudgetYields,int GroundRejected,int TraverseRejected,int AcceptedEdges,long NativeQueries,long CacheHits,NavigationSearchPoint[] Explored,NavigationSearchPoint[] Rejected,NavigationSearchPoint[] ClosestPath,int ReverseExpanded,NavigationSearchPoint[] ReverseExplored,bool RoadGuided,int RoadSeedPoints,string? RoadSeedStop,NavigationRejectedConnection[] RejectedConnections);
+public sealed record NavigationSearchDiagnostic(NavigationSearchPoint Origin,NavigationSearchPoint Goal,int Expanded,int Frontier,int BudgetYields,int GroundRejected,int TraverseRejected,int AcceptedEdges,long NativeQueries,long CacheHits,NavigationSearchPoint[] Explored,NavigationSearchPoint[] Rejected,NavigationSearchPoint[] ClosestPath,int ReverseExpanded,NavigationSearchPoint[] ReverseExplored,bool RoadGuided,int RoadSeedPoints,string? RoadSeedStop,NavigationRejectedConnection[] RejectedConnections,int RoadDetours,int CompletedRoadDetours,NavigationSearchPoint[] RoadObstacles);
 
 public interface IWalkingCollision
 {
@@ -37,13 +37,21 @@ public sealed class CollisionRouteSearch
     private readonly IWalkingCollision collision;
     private readonly Vector3 origin,goal;
     private readonly float range,spacing,heuristicWeight,searchRadius;
-    private readonly NavigationRoadRoute? roads;
+    private NavigationRoadRoute? roads;
     private readonly Frontier forward=new(false);
     private Frontier? backward,active;
     private Node? closest;
     private WalkingRoadSeed? roadSeed;
     private Vector3[]? verifiedPrefix;
     private Vector3 reverseGoal;
+    private Node? committedRoadEnd;
+    private Task<NavigationRoadRoute?>? roadDetourTask;
+    private readonly Func<Func<NavigationRoadRoute?>,Task<NavigationRoadRoute?>> roadWorker;
+    private readonly List<Vector3> roadObstacles=[];
+    private int roadDetours,priorExpanded;
+    private Vector3 reverseRoot;
+    public int CompletedRoadDetours { get; private set; }
+    public int RoadDetours=>roadDetours;
     // A completed, collision-verified guide section can be walked while this
     // search continues from its endpoint. Ownership is transferred only once.
     public Vector3[]? TakeVerifiedPrefix(){var result=verifiedPrefix;verifiedPrefix=null;return result;}
@@ -57,7 +65,7 @@ public sealed class CollisionRouteSearch
     private static readonly (int X,int Z)[] Directions=[(4,0),(-4,0),(0,4),(0,-4),(4,4),(4,-4),(-4,4),(-4,-4),(2,0),(-2,0),(0,2),(0,-2),(2,2),(2,-2),(-2,2),(-2,-2)];
     public string Error { get; private set; }="";
     public Vector3[]? Path { get; private set; }
-    public int Expanded=>forward.Closed.Count+(backward?.Closed.Count??0);
+    public int Expanded=>priorExpanded+forward.Closed.Count+(backward?.Closed.Count??0);
     public int BudgetYields { get; private set; }
     public bool Finished=>Path!=null||Error.Length>0;
     public NavigationSearchDiagnostic DiagnosticSnapshot(){
@@ -65,12 +73,13 @@ public sealed class CollisionRouteSearch
         var reverseStride=Math.Max(1,(int)Math.Ceiling(reverseExplored.Count/512d));
         return new(NavigationSearchPoint.From(origin),NavigationSearchPoint.From(goal),Expanded,forward.Open.Count+(backward?.Open.Count??0),BudgetYields,groundRejected,traverseRejected,acceptedEdges,collision.NativeQueries,collision.CacheHits,
             explored.Where((_,i)=>i%stride==0).Select(NavigationSearchPoint.From).ToArray(),rejected.Select(NavigationSearchPoint.From).ToArray(),path.Take(256).Select(NavigationSearchPoint.From).ToArray(),
-            backward?.Closed.Count??0,reverseExplored.Where((_,i)=>i%reverseStride==0).Select(NavigationSearchPoint.From).ToArray(),roads!=null,roadSeedPoints,roadSeedStop,rejectedConnections.ToArray());
+            backward?.Closed.Count??0,reverseExplored.Where((_,i)=>i%reverseStride==0).Select(NavigationSearchPoint.From).ToArray(),roads!=null,roadSeedPoints,roadSeedStop,rejectedConnections.ToArray(),roadDetours,CompletedRoadDetours,roadObstacles.Select(NavigationSearchPoint.From).ToArray());
     }
     private static List<Vector3> Trail(Node? node){var p=new List<Vector3>();for(var n=node;n!=null;n=n.Previous)p.Add(n.Point);p.Reverse();return p;}
     private void Rejected(Vector3 point){rejected.Enqueue(point);if(rejected.Count>128)rejected.Dequeue();}
-    public CollisionRouteSearch(IWalkingCollision collision,Vector3 start,Vector3 goal,float range,float spacing=1f,float heuristicWeight=4f,NavigationRoadRoute? roads=null,bool bidirectional=true,IReadOnlyList<Vector3>? streetGuide=null)
+    public CollisionRouteSearch(IWalkingCollision collision,Vector3 start,Vector3 goal,float range,float spacing=1f,float heuristicWeight=4f,NavigationRoadRoute? roads=null,bool bidirectional=true,IReadOnlyList<Vector3>? streetGuide=null,Func<Func<NavigationRoadRoute?>,Task<NavigationRoadRoute?>>? mapDetourWorker=null)
     {
+        roadWorker=mapDetourWorker??(work=>Task.Run(work));
         this.collision=collision;this.goal=goal;this.range=Math.Clamp(range,.25f,5f);this.spacing=spacing/2;this.heuristicWeight=heuristicWeight;this.roads=roads;
         searchRadius=MathF.Max(Horizontal(start,goal)+35,roads?.Points.Max(p=>Horizontal(p,goal))+16??0);
         if(!float.IsFinite(heuristicWeight)||heuristicWeight is <1 or >8)throw new ArgumentException("Invalid search priority");
@@ -81,7 +90,7 @@ public sealed class CollisionRouteSearch
         // Start from the actual upper/lower destination floor too. Reverse edges
         // are validated in the direction the character will eventually walk.
         if(bidirectional&&Vector3.Distance(origin,goal)>=12&&collision.Ground(goal,out var end)&&MathF.Abs(end.Y-goal.Y)<=1.2f){
-            backward=new(true);backward.Open.Enqueue(new(Address(end),end,0,null),0);
+            reverseRoot=end;backward=new(true);backward.Open.Enqueue(new(Address(end),end,0,null),0);
         }
         if(Vector3.Distance(origin,goal)>=12&&(streetGuide??roads?.Points) is {} guide)roadSeed=new(collision,origin,guide);
         active=forward;
@@ -93,11 +102,18 @@ public sealed class CollisionRouteSearch
         try{
             while(edgeBudget-->0&&clock.Elapsed.TotalMilliseconds<milliseconds){
                 cancellation.ThrowIfCancellationRequested();
+                if(roadDetourTask?.IsCompleted==true){
+                    var task=roadDetourTask;roadDetourTask=null;
+                    if(task.IsCompletedSuccessfully&&task.Result is {} detour){
+                        CompletedRoadDetours++;roads=detour;roadSeed=new(collision,committedRoadEnd?.Point??origin,detour.Points);
+                    }else if(task.IsFaulted){_ = task.Exception;}
+                }
                 if(roadSeed is {} seed){
                     seed.Step();roadSeedPoints=seed.Count;roadSeedStop=seed.StopReason;
                     if(seed.Finished){
-                        var points=seed.Points;Node? parent=null;var cost=0f;
+                        var points=seed.Points;Node? parent=committedRoadEnd;var cost=0f;
                         foreach(var point in points){
+                            if(parent!=null&&Vector3.DistanceSquared(parent.Point,point)<.000001f)continue;
                             if(parent!=null)cost+=Vector3.Distance(parent.Point,point);
                             parent=new(Address(point),point,cost,parent,true);
                         }
@@ -106,12 +122,27 @@ public sealed class CollisionRouteSearch
                             // stair detour behind cheaper, unproductive origin nodes.
                             // Keep its chain for the complete returned path, but
                             // price the remaining search from the new walking end.
-                            verifiedPrefix=points;reverseGoal=points[^1];
-                            forward.Open.Clear();
-                            forward.Open.Enqueue(parent with{Cost=0},0);
+                            // Append if two sections finish inside the same frame.
+                            verifiedPrefix=verifiedPrefix==null?points:verifiedPrefix.Concat(points.Skip(1)).ToArray();
+                            reverseGoal=points[^1];committedRoadEnd=parent with{Cost=0};
+                            priorExpanded+=forward.Closed.Count+(backward?.Closed.Count??0);
+                            forward.Open.Clear();forward.Closed.Clear();forward.Pending=null;
+                            forward.Open.Enqueue(committedRoadEnd,0);testedJoins.Clear();
+                            if(backward!=null){
+                                backward.Open.Clear();backward.Closed.Clear();backward.Pending=null;
+                                backward.Open.Enqueue(new(Address(reverseRoot),reverseRoot,0,null),0);
+                            }
+                            active=forward;
                         }
                         else if(points.Length>2&&parent!=null)forward.Open.Enqueue(parent,cost+heuristicWeight*Heuristic(parent.Point,false));
                         roadSeed=null;
+                        if(seed.BlockedPoint is {} block&&roads!=null&&roadDetours<4){
+                            roadObstacles.Add(block);roadDetours++;
+                            var guide=roads;var restart=committedRoadEnd?.Point??origin;var destination=goal;var obstacles=roadObstacles.ToArray();
+                            // Only immutable managed map data goes to the worker.
+                            // Native collision checks and movement remain on Update.
+                            roadDetourTask=roadWorker(()=>guide.Detour(restart,destination,obstacles));
+                        }
                     }
                     continue;
                 }
@@ -123,7 +154,10 @@ public sealed class CollisionRouteSearch
                     }
                     if(side.Pending==null){
                         var other=side.Reverse?forward:backward;
-                        if(other==null||(other.Pending==null&&other.Open.Count==0)){Error="No connected walkable route found.";return;}
+                        if(other==null||(other.Pending==null&&other.Open.Count==0)){
+                            if(roadDetourTask!=null)return;
+                            Error="No connected walkable route found.";return;
+                        }
                         active=other;continue;
                     }
                 }

@@ -124,7 +124,7 @@ public sealed partial class Plugin
     {
         if(independentSearch!=null)independentLastSearchDiagnostic=independentSearch.DiagnosticSnapshot();
         if(independentSearch!=null||independentPath!=null||independentEntranceForward!=null)
-            RecordTravelPrompt("Navigation ended",new{run=independentNavigationRun,reason,planning=independentSearch?.DiagnosticSnapshot(),goal=FollowTravelPosition.From(independentGoal),independentInputReads,independentInputOverrides,independentExpiredReads,independentInactiveReads,independentNativeGateRejects,independentNativeManualReads,independentReplans,independentPlanningSeconds,independentWalkStatus,controlMode=independentLegacyMode?"Legacy":"Standard",axes=new{x=independentAxes.X,y=independentAxes.Y},independentHeading,independentFacingOnly});
+            RecordTravelPrompt("Navigation ended",new{run=independentNavigationRun,reason,planning=independentSearch?.DiagnosticSnapshot()??independentLastSearchDiagnostic,goal=FollowTravelPosition.From(independentGoal),independentInputReads,independentInputOverrides,independentExpiredReads,independentInactiveReads,independentNativeGateRejects,independentNativeManualReads,independentReplans,independentPlanningSeconds,independentWalkStatus,controlMode=independentLegacyMode?"Legacy":"Standard",axes=new{x=independentAxes.X,y=independentAxes.Y},independentHeading,independentFacingOnly});
         if(independentSearch!=null||independentPath!=null||independentEntranceForward!=null)TraceKeyboundRun(independentNavigationRun,"navigation-stopped",reason,"companion-navigation",false);
         independentBacktracking=false;independentInteractionTarget=0;independentEntranceForward=null;independentGroundReadiness.Reset();independentSupportPaused=false;independentFacingAt=default;independentFacingOnly=false;
         StopIndependentFlight();
@@ -297,7 +297,7 @@ public sealed partial class Plugin
                 }
                 else {independentPath=found;independentWaypoint=1;independentCheckedWaypoint=-1;}
                 // Save after observed arrival, not merely after planning succeeds.
-                independentLastRoutePoints=found.Length;independentSearch=null;
+                independentLastRoutePoints=found.Length;independentLastSearchDiagnostic=independentSearch.DiagnosticSnapshot();independentSearch=null;
                 independentLastProgress=self.Position;independentProgressAt=DateTimeOffset.UtcNow;
                 }
             }

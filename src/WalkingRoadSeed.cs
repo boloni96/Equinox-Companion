@@ -8,6 +8,7 @@ internal sealed class WalkingRoadSeed(IWalkingCollision collision,Vector3 start,
     private int next;
     public bool Finished { get; private set; }
     public string? StopReason { get; private set; }
+    public Vector3? BlockedPoint { get; private set; }
     public Vector3[] Points=>points.ToArray();
     public int Count=>points.Count;
     public void Step(){
@@ -16,14 +17,14 @@ internal sealed class WalkingRoadSeed(IWalkingCollision collision,Vector3 start,
         var current=points[^1];var delta=guide[next]-current;delta.Y=0;
         if(delta.Length()<.1f){next++;return;}
         var probe=current+Vector3.Normalize(delta)*MathF.Min(.5f,delta.Length());
-        if(!collision.Ground(probe,out var floor)){StopReason=$"Ground unavailable at {probe}";Finished=true;return;}
-        if(MathF.Abs(floor.Y-current.Y)>.45f){StopReason=$"Step height rejected from {current} to {floor}";Finished=true;return;}
+        if(!collision.Ground(probe,out var floor)){BlockedPoint=probe;StopReason=$"Ground unavailable at {probe}";Finished=true;return;}
+        if(MathF.Abs(floor.Y-current.Y)>.45f){BlockedPoint=floor;StopReason=$"Step height rejected from {current} to {floor}";Finished=true;return;}
         if(!collision.Traverse(current,floor)){
             var rejection=collision.TraversalFailure;
             // Map centerlines are only hints. Try a fully checked side passage
             // around a railing/post before abandoning the connected street.
             if(TrySidePass(current,guide[next]))return;
-            StopReason=$"Connection blocked from {current} to {floor}: {rejection??"unspecified collision rejection"}";Finished=true;return;
+            BlockedPoint=floor;StopReason=$"Connection blocked from {current} to {floor}: {rejection??"unspecified collision rejection"}";Finished=true;return;
         }
         points.Add(floor);
     }

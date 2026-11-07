@@ -69,7 +69,8 @@ public sealed class NavigationRoadRoute
         // Weighting guides, never excludes, an off-road alternative.
         return float.IsFinite(d)?d/2:0;
     }
-    internal static NavigationRoadRoute? Build(NavigationRoadMap map,Vector3 start,Vector3 goal){
+    internal NavigationRoadRoute? Detour(Vector3 start,Vector3 goal,Vector3[] blocked)=>Build(map,start,goal,blocked);
+    internal static NavigationRoadRoute? Build(NavigationRoadMap map,Vector3 start,Vector3 goal,IReadOnlyList<Vector3>? blocked=null){
         if(!float.IsFinite(start.X)||!float.IsFinite(start.Z)||!float.IsFinite(goal.X)||!float.IsFinite(goal.Z))return null;
         var a=map.Cell(start);var b=map.Cell(goal);
         bool Inside((int X,int Z) p)=>p.X>=0&&p.Z>=0&&p.X<map.Width&&p.Z<map.Height;
@@ -79,6 +80,26 @@ public sealed class NavigationRoadRoute
         var x1=Math.Min(map.Width-1,Math.Max(a.X,b.X)+margin);var z1=Math.Min(map.Height-1,Math.Max(a.Z,b.Z)+margin);
         var w=x1-x0+1;var h=z1-z0+1;
         var ai=(a.Z-z0)*w+a.X-x0;var bi=(b.Z-z0)*w+b.X-x0;
+        // Native geometry can disprove a map connection. Exclude that small
+        // area from this route's 2D guide, then let geometry validate the detour.
+        // This is per-search feedback, never a persistent or cross-floor ban.
+        var forbidden=new bool[w*h];
+        if(blocked!=null){
+            var radius=MathF.Max(3f,map.CellSize*1.5f);
+            for(var z=0;z<h;z++)for(var x=0;x<w;x++){
+                var point=map.World(x+x0,z+z0);
+                forbidden[z*w+x]=blocked.Any(p=>{
+                    if(CollisionRouteSearch.Horizontal(p,point)>radius)return false;
+                    var away=new Vector2(start.X-p.X,start.Z-p.Z);
+                    var step=new Vector2(point.X-start.X,point.Z-start.Z);
+                    // When already beside a newly found boundary, leave room to
+                    // escape sideways/away; never trap the start inside its buffer.
+                    var escape=away.Length()<radius&&Vector2.Dot(step,away)>=0&&CollisionRouteSearch.Horizontal(p,point)>=away.Length();
+                    return !escape;
+                });
+            }
+        }
+        forbidden[ai]=forbidden[bi]=false;
         (float[] Distance,int[] Next) Flood(int root){
             var distance=new float[w*h];Array.Fill(distance,float.PositiveInfinity);
             var next=new int[w*h];Array.Fill(next,-1);
@@ -89,6 +110,7 @@ public sealed class NavigationRoadRoute
                     if(dx==0&&dz==0)continue;var xx=x+dx;var zz=z+dz;
                     if(xx<0||zz<0||xx>=w||zz>=h)continue;
                     var other=zz*w+xx;
+                    if(forbidden[other]||dx!=0&&dz!=0&&(forbidden[z*w+xx]||forbidden[zz*w+x]))continue;
                     var weight=(map.Cost(x+x0,z+z0)+map.Cost(xx+x0,zz+z0))*.5f;
                     var value=cost+map.CellSize*(dx!=0&&dz!=0?1.4142136f:1)*weight;
                     if(value>=distance[other])continue;distance[other]=value;next[other]=index;queue.Enqueue(other,value);
@@ -96,10 +118,14 @@ public sealed class NavigationRoadRoute
             }
             return(distance,next);
         }
-        var end=Flood(bi);var beginning=Flood(ai);var points=new List<Vector3>();
-        for(var i=ai;i>=0&&points.Count<=w*h;i=end.Next[i]){
-            points.Add(map.World(i%w+x0,i/w+z0));if(i==bi)break;
+        var end=Flood(bi);if(!float.IsFinite(end.Distance[ai]))return null;
+        var beginning=Flood(ai);var points=new List<Vector3>{start};
+        // Cell centres near a wall are not interchangeable with the real actor
+        // position. Start/end at the requested coordinates; geometry checks joins.
+        for(var i=end.Next[ai];i>=0&&points.Count<=w*h;i=end.Next[i]){
+            points.Add(i==bi?goal:map.World(i%w+x0,i/w+z0));if(i==bi)break;
         }
+        if(ai==bi&&Vector3.DistanceSquared(start,goal)>.000001f)points.Add(goal);
         return new(map,x0,z0,w,h,end.Distance,beginning.Distance,points.ToArray());
     }
 }

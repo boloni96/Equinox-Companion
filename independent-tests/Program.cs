@@ -1,5 +1,6 @@
 using EquinoxCompanion;
 using System.Numerics;
+GenericRoad480Tests.Run();
 void Check(bool condition,string name){if(!condition)throw new Exception(name);}
 Check(IndependentStepPolicy.CanWalkWithoutShortcut("CompleteQuest",true,132,132,132),"locked Archers Guild shortcut falls back to walking within New Gridania");
 Check(!IndependentStepPolicy.CanWalkWithoutShortcut("CompleteQuest",true,132,133,133),"locked cross-zone shortcut cannot walk coordinates in the wrong zone");

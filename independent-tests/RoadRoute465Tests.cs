@@ -32,7 +32,7 @@ internal static class RoadRoute465Tests
         for(var i=0;i<4000&&!impossible.Finished;i++)impossible.Advance(100,2000);
         if(!impossible.Finished||impossible.Path!=null)throw new Exception("Reverse search accepted an illegal upward edge.");
         // Disagreeing map artwork cannot override an impassable geometry wall.
-        var wall=new Wall();var guided=new CollisionRouteSearch(wall,new(-64,0,-64),new(64,0,-64),.4f,roads:roads);
+        var wall=new Wall();var guided=new CollisionRouteSearch(wall,new(-64,0,-64),new(64,0,-64),.4f,roads:roads,mapDetourWorker:work=>Task.FromResult(work()));
         for(var i=0;i<4000&&!guided.Finished;i++)guided.Advance(100,2000);
         if(!guided.Finished||guided.Path!=null)throw new Exception("Map guidance invented a crossing through a wall.");
         Console.WriteLine($"Connected map roads, stacked-floor stair detour, directional joins and geometry authority passed ({search.Expanded} areas, {geometry.Probes} traversal checks).");
