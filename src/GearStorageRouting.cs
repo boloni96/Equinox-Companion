@@ -16,7 +16,7 @@ public sealed partial class Plugin
     private int gearPhase,gearStored,gearSkipped,gearRechecks,gearOpenRetries,gearReserve=2;
     private ulong gearCharacter;
     private uint gearWorld,gearTerritory;
-    private DateTimeOffset gearNext,gearDeadline,gearInteractAt;
+    private DateTimeOffset gearNext,gearDeadline,gearInteractAt,gearDresserSelectionAt;
     private readonly Queue<uint> gearRemaining=[];
     private readonly Queue<uint> gearDeliveries=[];
     private uint[] gearBatch=[];
@@ -290,7 +290,7 @@ public sealed partial class Plugin
     {
         if(gearDresserTransitionObserved)return;gearDresserTransitionObserved=true;
         var agent=AgentMiragePrismPrismBox.Instance();var mirage=MirageManager.Instance();
-        var confirm=SellerAddon("SelectYesno");var list=SellerAddon("MiragePrismPrismBoxCrystallize");
+        var confirm=GearDresserConfirmation();var list=SellerAddon("MiragePrismPrismBoxCrystallize");
         StorageTrace("gear","dresser transition",gearItem,
             $"phase={gearPhase}; rowSelected={gearContextSent}; confirmationSent={gearConfirmationSent}; active={agent!=null&&agent->IsAgentActive()}; dataLoaded={agent!=null&&agent->IsDataLoaded}; boxLoaded={mirage!=null&&mirage->PrismBoxLoaded}; list={list!=null}; confirmation={confirm!=null}; ownedConfirmation={agent!=null&&confirm!=null&&agent->ContextAddonId==confirm->Id}");
     }
@@ -335,23 +335,43 @@ public sealed partial class Plugin
                 GearPhase(4,"Skipped "+SearchItemName(copy.Item)+" · not offered in the dresser item list; item kept");
                 return;
             }
-            // Native crystallize callback 0 selects a row and opens its confirmation.
-            // Match the selected inventory copy before sending, and verify ownership
-            // and that same copy again before confirming below.
-            var values=stackalloc AtkValue[2];
-            values[0]=new AtkValue{Type=AtkValueType.Int,Int=0};
-            values[1]=new AtkValue{Type=AtkValueType.Int,Int=found};
-            list->FireCallback(2,values,true);gearContextSent=true;return;
+            // The agent's normal-item selection event is UInt(14, candidate, 0).
+            // Callback 0 on the list closes the dresser; it is not row selection.
+            // Reference: SpringCleaning NativeUi.OpenDresserStorage (95f5b9bd).
+            var values=stackalloc AtkValue[3];
+            values[0]=new AtkValue{Type=AtkValueType.UInt,UInt=14};
+            values[1]=new AtkValue{Type=AtkValueType.UInt,UInt=(uint)found};
+            values[2]=new AtkValue{Type=AtkValueType.UInt,UInt=0};
+            AtkValue result=default;
+            owner->ReceiveEvent(&result,values,3,0);
+            gearContextSent=true;gearDresserSelectionAt=DateTimeOffset.UtcNow;
+            gearStatus="Waiting for dresser item confirmation · "+SearchItemName(copy.Item);
+            StorageTrace("gear","dresser selection",copy.Item,$"candidate={found}; container={copy.Container}; slot={copy.Slot}; agent event=14");return;
         }
         if(GearInDresser(gearItem)&&ArmoireInventory(gearItem).Held==0){GearPhase(6,"Checking dresser receipt");return;}
-        var confirm=SellerAddon("SelectYesno");if(confirm==null||gearConfirmationSent)return;
+        var confirm=GearDresserConfirmation();
+        if(confirm==null){
+            if(DateTimeOffset.UtcNow-gearDresserSelectionAt>TimeSpan.FromSeconds(8))
+                throw new InvalidOperationException("The dresser did not open its item confirmation; no storage confirmation was sent.");
+            return;
+        }
+        if(gearConfirmationSent)return;
         var dresser=AgentMiragePrismPrismBox.Instance();
         if(dresser==null||dresser->Data==null||dresser->ContextAddonId!=confirm->Id||dresser->Data->CrystallizeSelectedItem.Inventory!=(InventoryType)copy.Container||dresser->Data->CrystallizeSelectedItem.Slot!=copy.Slot||dresser->Data->CrystallizeSelectedItem.ItemId%1000000!=copy.Item)
             throw new InvalidOperationException("The confirmation is not owned by the selected dresser operation.");
         var name=SearchItemName(gearItem);var matches=false;
-        for(var i=0;i<Math.Min(20,(int)confirm->AtkValuesCount);i++)if(confirm->AtkValues[i].Type==AtkValueType.String&&(TravelMenuText(confirm->AtkValues[i].String)??"").Contains(name,StringComparison.Ordinal))matches=true;
+        for(var i=0;i<Math.Min(128,(int)confirm->AtkValuesCount);i++)if(confirm->AtkValues[i].Type==AtkValueType.String&&(TravelMenuText(confirm->AtkValues[i].String)??"").Contains(name,StringComparison.Ordinal))matches=true;
         if(!matches||GearLiveCopy(copy)==null)throw new InvalidOperationException("Dresser confirmation does not match the selected item.");
-        var yes=new AtkValue{Type=AtkValueType.Int,Int=0};confirm->FireCallback(1,&yes,true);gearConfirmationSent=true;GearPhase(6,"Waiting for individual dresser receipt");
+        StorageTrace("gear","dresser confirmation",copy.Item,$"addon={confirm->NameString}; id={confirm->Id}; values={confirm->AtkValuesCount}; selected copy verified");
+        confirm->FireCallbackInt(0);gearConfirmationSent=true;GearPhase(6,"Waiting for individual dresser receipt");
+    }
+    private static unsafe AtkUnitBase* GearDresserConfirmation()
+    {
+        var agent=AgentMiragePrismPrismBox.Instance();var stage=AtkStage.Instance();
+        if(agent==null||stage==null||stage->RaptureAtkUnitManager==null||agent->ContextAddonId is 0 or > ushort.MaxValue)return null;
+        var addon=stage->RaptureAtkUnitManager->AtkUnitManager.GetAddonById((ushort)agent->ContextAddonId);
+        // The dresser uses its own glamour confirmation, not necessarily SelectYesno.
+        return addon!=null&&addon->IsVisible&&addon->IsReady?addon:null;
     }
 }
 
