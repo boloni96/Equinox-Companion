@@ -11,6 +11,9 @@ internal static class WalkingSteering
     }
     public static int AdvanceWaypoint(Vector3 position,Vector3[] path,int next,Func<Vector3,Vector3,bool> clear)
     {
+        // A reached waypoint is consumed even if extra wall space is unavailable.
+        // Pursuit still validates every step toward the following waypoint.
+        while(next<path.Length-1&&Vector3.Distance(position,path[next])<=.25f)next++;
         // Recover forward progress after a rounded corner or a slow frame.
         // Only join a nearby onward segment through a checked connector.
         var bestDistance=float.MaxValue;var best=next;

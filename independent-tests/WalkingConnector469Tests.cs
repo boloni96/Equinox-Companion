@@ -11,6 +11,8 @@ internal static class WalkingConnector469Tests
         if(Vector3.Distance(target,route[1])>.001f)throw new Exception("A soft wall-space rejection must follow the physical route waypoint, not stop or cut the corner.");
         target=WalkingSteering.PursuitTarget(position,route,1,(_,_)=>false,(_,_)=>false);
         if(target!=position)throw new Exception("Physical obstruction must still stop movement.");
+        var next=WalkingSteering.AdvanceWaypoint(route[1],route,1,(_,_)=>false);
+        if(next!=2)throw new Exception("A reached waypoint must advance even in a narrow passage; pursuit checks the next step.");
         Vector3[] stairs=[Vector3.Zero,new(0,1.8f,2)];
         target=WalkingSteering.PursuitTarget(Vector3.Zero,stairs,1,(_,_)=>false,(a,b)=>b.Y-a.Y<=1.2f);
         if(target==Vector3.Zero||target.Y>1.2f)throw new Exception("Steep lookahead must shorten to a physically checked stair step.");

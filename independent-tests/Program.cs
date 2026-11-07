@@ -99,7 +99,10 @@ Check(MathF.Abs(WalkingSteering.SmoothHeading(0,1,.02f)-.048f)<.001f,"turn rate 
 Check(WalkingSteering.SmoothHeading(3.13f,-3.13f,.02f)>3.13f,"heading wraps along shortest turn");
 Check(WalkingSteering.AdvanceWaypoint(new(1.1f,0,0),[Vector3.Zero,new(1,0,0),new(2,0,0)],1,(_,_)=>true)==2,"passed waypoint never turns back");
 Check(WalkingSteering.AdvanceWaypoint(new(1.8f,0,0),[Vector3.Zero,new(2,0,0)],1,(_,_)=>true)==1,"final endpoint retained outside arrival range");
-Check(WalkingSteering.AdvanceWaypoint(new(1.1f,0,0),[Vector3.Zero,new(1,0,0),new(2,0,0)],1,(_,_)=>false)==1,"passed waypoint does not cut obstacle");
+var blockedPosition=new Vector3(1.1f,0,0);
+Vector3[] blockedRoute=[Vector3.Zero,new(1,0,0),new(2,0,0)];
+var consumed=WalkingSteering.AdvanceWaypoint(blockedPosition,blockedRoute,1,(_,_)=>false);
+Check(WalkingSteering.PursuitTarget(blockedPosition,blockedRoute,consumed,(_,_)=>false,(_,_)=>false)==blockedPosition,"consumed waypoint does not permit movement through an obstacle");
 Check(WalkingSteering.PursuitTarget(new(.5f,0,0),[Vector3.Zero,new(1,0,0),new(2,0,0),new(3,0,0)],1,(_,_)=>true).X>2.6f,"pursuit advances continuously along route");
 var exact=new CollisionRouteSearch(collision,Vector3.Zero,new(-.5f,0,-.5f),.4f);
 for(var i=0;i<100&&!exact.Finished;i++)exact.Advance(100,1000);
