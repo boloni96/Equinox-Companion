@@ -29,8 +29,11 @@ internal static class WalkingRouteNetwork
         while(open.TryDequeue(out var current,out _)){
             if(!closed.Add(current))continue;
             var p=points[current];
-            if(Vector3.Distance(p,goal)<=2.2f&&clear(p,goal)){
-                var path=new List<Vector3>{goal};for(var i=current;i>=0;i=parents[i])path.Add(points[i]);path.Add(start);path.Reverse();return path.ToArray();
+            // Interaction routes end at their accepted stopping range, not at
+            // the object's centre. Reuse that observed endpoint on return trips.
+            var inRange=CollisionRouteSearch.Horizontal(p,goal)<=range&&MathF.Abs(p.Y-goal.Y)<=1.2f;
+            if(inRange||Vector3.Distance(p,goal)<=2.2f&&clear(p,goal)){
+                var path=new List<Vector3>();if(!inRange)path.Add(goal);for(var i=current;i>=0;i=parents[i])path.Add(points[i]);path.Add(start);path.Reverse();return path.ToArray();
             }
             var next=new List<int>(edges[current]);
             if(connectorBudget>0)foreach(var i in Near(p).Where(i=>i!=current&&!next.Contains(i)&&!closed.Contains(i)).OrderBy(i=>Vector3.DistanceSquared(points[i],p)).Take(3)){

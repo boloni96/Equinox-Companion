@@ -29,6 +29,25 @@ internal static class WalkingSteering
             bestDistance=distance;best=candidate;
         }
         next=Math.Min(best,path.Length-1);
+        // A rounded, checked corner need not be visited again just because the
+        // player is more than .9 yalms from the old grid segment. Join a nearby
+        // onward sample directly, and advance progress with that same decision.
+        // Bound both route distance and query count: no distant loop/floor joins.
+        var end=next;var arc=Vector3.Distance(position,path[next]);
+        for(var i=next+1;i<path.Length&&i<=next+16;i++){
+            arc+=Vector3.Distance(path[i-1],path[i]);
+            if(arc>4.4f)break;
+            end=i;
+        }
+        var checks=0;
+        for(var i=end;i>next&&checks<3;i--){
+            var distance=Vector3.Distance(position,path[i]);
+            if(distance>2.2f||distance<.25f)continue;
+            checks++;
+            // Check the entire connector, not a truncated step toward a point
+            // whose remaining connection has never been tested.
+            if(clear(position,path[i]))return i;
+        }
         return next;
     }
     private static bool ReachedWaypoint(Vector3 position,Vector3? previous,Vector3 point){

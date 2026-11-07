@@ -72,10 +72,15 @@ internal static class WalkingRouteMemory
                 if(Vector3.Distance(start,route.Points[i])>2.2f)continue;
                 if(checks--<=0)return best;
                 if(!clear(start,route.Points[i]))continue;
-                for(var end=i+1;end<route.Points.Length;end++){
-                    var remaining=Vector3.Distance(route.Points[end],goal);
-                    if(remaining>=bestRemaining)continue;
-                    bestRemaining=remaining;best=new[]{start}.Concat(route.Points.Skip(i).Take(end-i+1)).ToArray();
+                foreach(var direction in new[]{1,-1}){
+                    for(var end=i+direction;end>=0&&end<route.Points.Length;end+=direction){
+                        // Do not bridge a discontinuity in observed movement.
+                        if(Vector3.Distance(route.Points[end-direction],route.Points[end])>2.9f)break;
+                        var remaining=Vector3.Distance(route.Points[end],goal);
+                        if(remaining>=bestRemaining)continue;
+                        bestRemaining=remaining;
+                        best=new[]{start}.Concat(Enumerable.Range(0,Math.Abs(end-i)+1).Select(n=>route.Points[i+n*direction])).ToArray();
+                    }
                 }
                 break;
             }
