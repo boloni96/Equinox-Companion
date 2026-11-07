@@ -2,8 +2,9 @@ using System.Numerics;
 namespace EquinoxCompanion;
 internal static class WalkingSteering
 {
-    public static float ForwardAlignment(float error)=>Math.Clamp(1-MathF.Abs(MathF.IEEERemainder(error,2*MathF.PI))/.25f,0,1);
-    public static float TurnSpeed(float error)=>1-.65f*Math.Clamp(MathF.Abs(error)/1.2f,0,1);
+    // Facing is visual; velocity stays on the collision-checked world heading.
+    public static Vector2 HeadingAxes(float heading,float reference,float speed)=>
+        new(MathF.Sin(heading-reference)*speed,MathF.Cos(heading-reference)*speed);
     public static float SmoothHeading(float current,float desired,float seconds){
         var difference=MathF.IEEERemainder(desired-current,2*MathF.PI);
         var dt=Math.Clamp(seconds,0,.05f);

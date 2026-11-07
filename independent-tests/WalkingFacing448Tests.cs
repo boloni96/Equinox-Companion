@@ -1,14 +1,24 @@
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using EquinoxCompanion;
 internal static class WalkingFacing448Tests
 {
     [ModuleInitializer] internal static void Run()
     {
-        if(WalkingSteering.ForwardAlignment(MathF.PI/2)!=0||WalkingSteering.ForwardAlignment(MathF.PI)!=0)throw new Exception("Standard navigation must turn before moving sideways or backward.");
-        if(WalkingSteering.ForwardAlignment(0)!=1||WalkingSteering.ForwardAlignment(.1f)<=0||MathF.Abs(WalkingSteering.ForwardAlignment(.1f)-WalkingSteering.ForwardAlignment(-.1f))>.001f)throw new Exception("Forward speed must ramp symmetrically as facing aligns.");
-        var facing=0f;var desired=MathF.PI/2;
-        for(var n=0;n<180;n++){var next=WalkingSteering.SmoothHeading(facing,desired,1f/60);if(next<facing||next-facing>.041f)throw new Exception("Facing must turn continuously toward the route.");facing=next;}
-        if(WalkingSteering.ForwardAlignment(desired-facing)<.99f)throw new Exception("Turning must converge to full forward movement.");
-        Console.WriteLine("Forward-facing standard movement and continuous alignment passed.");
+        // Standard controls: changing facing must not stall or steer off the
+        // already checked path. Reconstruct world velocity from local axes.
+        foreach(var desired in new[]{.24f,.26f,MathF.PI/2,-MathF.PI/2,MathF.PI}){
+            var facing=0f;
+            for(var n=0;n<180;n++){
+                var next=WalkingSteering.SmoothHeading(facing,desired,1f/60);
+                if(MathF.Abs(MathF.IEEERemainder(next-facing,2*MathF.PI))>.041f)throw new Exception("Facing turn must remain bounded.");
+                facing=next;
+                var axes=WalkingSteering.HeadingAxes(desired,facing,1);
+                var world=new Vector2(axes.X*MathF.Cos(facing)+axes.Y*MathF.Sin(facing),-axes.X*MathF.Sin(facing)+axes.Y*MathF.Cos(facing));
+                if(MathF.Abs(axes.Length()-1)>.0001f||Vector2.Distance(world,new(MathF.Sin(desired),MathF.Cos(desired)))>.0001f)
+                    throw new Exception("Turning must retain full speed exactly along the checked world direction.");
+            }
+        }
+        Console.WriteLine("470 continuous Standard movement during smooth facing passed.");
     }
 }

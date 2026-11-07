@@ -88,20 +88,19 @@ public sealed partial class Plugin
             independentLegacyMode=legacy;
             if(legacy){
                 var reference=camera->DirH+MathF.PI;
-                independentAxes=new(MathF.Sin(heading-reference)*independentSpeed,MathF.Cos(heading-reference)*independentSpeed);
+                independentAxes=WalkingSteering.HeadingAxes(heading,reference,independentSpeed);
                 independentFacingOnly=false;independentFacingAt=default;
             }else{
-                // Standard controls otherwise strafe relative to the existing
-                // facing. Turn the local character, then supply forward input.
+                // Turn visually without suppressing speed or moving along the
+                // old facing. Project the checked direction into current controls.
                 // All game/manual-input checks above still take priority.
                 var now=DateTimeOffset.UtcNow;
                 var dt=independentFacingAt==default?1f/60:(float)(now-independentFacingAt).TotalSeconds;
                 independentFacingAt=now;
                 var facing=WalkingSteering.SmoothHeading(player.Rotation,heading,dt);
                 ((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)player.Address)->SetRotation(facing);
-                var scale=WalkingSteering.ForwardAlignment(heading-facing);
-                independentFacingOnly=scale<.05f;
-                independentAxes=new(0,independentSpeed*scale);
+                independentFacingOnly=false;
+                independentAxes=WalkingSteering.HeadingAxes(heading,player.Rotation,independentSpeed);
             }
             *left=independentAxes.X;*forward=independentAxes.Y;independentInputOverrides++;independentInputBlock="";
         }catch(Exception e){independentNativeExceptions++;independentInputBlock=e.GetType().Name;independentLease.Revoke();}
@@ -291,7 +290,6 @@ public sealed partial class Plugin
             if(checkCollision){
                 independentCollisionAt=now.AddMilliseconds(150);independentCheckedWaypoint=independentWaypoint;
             }
-            if(independentFacingOnly)independentProgressAt=now;
             var stalled=now-independentProgressAt>TimeSpan.FromSeconds(independentInputOverrides>0?1.5:4);
             var noConnector=Vector3.DistanceSquared(self.Position,target)<.0001f;
             if(noConnector||stalled||!AvoidStalledTargets.ClearOfBlocked(self.Position,target,independentBlockedTargets)||checkCollision&&!independentCollision.Traverse(self.Position,target)){
@@ -324,21 +322,12 @@ public sealed partial class Plugin
             if(camera==null)throw new InvalidOperationException("Movement camera unavailable.");
             var legacy=MarketGameConfig.UiControl.TryGetUInt("MoveMode",out var mode)&&mode==1;
             var delta=target-self.Position;var heading=MathF.Atan2(delta.X,delta.Z);
-            independentHeading??=heading;
-            if(independentHeading is {} previousHeading){
-                var smooth=WalkingSteering.SmoothHeading(previousHeading,heading,(float)(now-independentSteeringAt).TotalSeconds);
-                if(MathF.Abs(MathF.IEEERemainder(smooth-heading,2*MathF.PI))>.01f){
-                    var probe=self.Position+new Vector3(MathF.Sin(smooth),0,MathF.Cos(smooth))*.6f;
-                    if(independentCollision.Ground(probe,out var floor)&&IndependentClearConnector(self.Position,floor))heading=smooth;
-                    // If the rounded turn is obstructed, use the already checked route
-                    // heading instead of repeatedly stopping to turn into the obstacle.
-                }
-            }
+            // Pursuit has already chosen a checked path chord. Smoothing this
+            // world heading again drifted off that chord and modulated speed.
             independentHeading=heading;independentSteeringAt=now;
-            var turnError=MathF.Abs(MathF.IEEERemainder(MathF.Atan2(delta.X,delta.Z)-heading,2*MathF.PI));
-            var speed=WalkingSteering.TurnSpeed(turnError);independentSpeed=speed;
+            independentSpeed=1;
             var reference=legacy?camera->DirH+MathF.PI:self.Rotation;
-            independentAxes=new(MathF.Sin(heading-reference)*speed,MathF.Cos(heading-reference)*speed);
+            independentAxes=WalkingSteering.HeadingAxes(heading,reference,independentSpeed);
             EnsureIndependentGroundInput();
             // Start the lease AFTER collision work and hook setup, not at frame start.
             if(!independentForwardHook!.IsEnabled)independentForwardHook.Enable();

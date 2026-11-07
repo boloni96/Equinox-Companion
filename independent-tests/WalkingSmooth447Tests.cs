@@ -4,10 +4,14 @@ internal static class WalkingSmooth447Tests
 {
     [ModuleInitializer] internal static void Run()
     {
-        if(MathF.Abs(WalkingSteering.TurnSpeed(.499f)-WalkingSteering.TurnSpeed(.501f))>.01f)throw new Exception("Small heading changes must not jump between slow and full movement.");
-        var previous=1f;
-        for(var angle=0f;angle<=MathF.PI;angle+=.01f){var speed=WalkingSteering.TurnSpeed(angle);if(speed<.34f||speed>previous+.001f)throw new Exception("Clear turns must slow continuously without alternating stop/start.");previous=speed;}
-        if(WalkingSteering.TurnSpeed(0)!=1)throw new Exception("Straight route should retain full movement.");
-        Console.WriteLine("Continuous clear-turn movement speed passed.");
+        foreach(var speed in new[]{0f,.5f,1f})
+        for(var heading=-MathF.PI;heading<=MathF.PI;heading+=.01f){
+            var axes=WalkingSteering.HeadingAxes(heading,2.8f,speed);
+            if(MathF.Abs(axes.Length()-speed)>.0001f)throw new Exception("Heading changes must preserve requested speed, including entrance steps and game-gate pauses.");
+        }
+        var a=WalkingSteering.HeadingAxes(MathF.PI-.001f,0,1);
+        var b=WalkingSteering.HeadingAxes(-MathF.PI+.001f,0,1);
+        if(System.Numerics.Vector2.Distance(a,b)>.003f)throw new Exception("Heading wrap must not interrupt movement.");
+        Console.WriteLine("470 constant speed across route headings and angle wrap passed.");
     }
 }
