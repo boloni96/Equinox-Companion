@@ -19,6 +19,21 @@ public static class EstateDoorApproach
                 candidates.Add(floor);break;
             }
         }
-        return candidates.Count==0?null:candidates.OrderBy(p=>Vector3.DistanceSquared(start,p)).First();
+        foreach(var candidate in candidates.OrderBy(p=>Vector3.DistanceSquared(start,p)))
+            if(HasIncomingConnection(collision,start,candidate))return candidate;
+        return null;
+    }
+    // A standing point alone can be a disconnected ledge or decoration. Verify
+    // an incoming edge on the same lattice used by the route search.
+    public static bool HasIncomingConnection(IWalkingCollision collision,Vector3 start,Vector3 point)
+    {
+        var x=MathF.Round(point.X-start.X);var z=MathF.Round(point.Z-start.Z);
+        for(var dz=-1;dz<=1;dz++)for(var dx=-1;dx<=1;dx++){
+            if(dx==0&&dz==0)continue;
+            var near=new Vector3(start.X+x+dx,point.Y,start.Z+z+dz);
+            if(!collision.Ground(near,out var floor)&&!collision.Ground(near+new Vector3(0,.45f,0),out floor)&&!collision.Ground(near-new Vector3(0,.45f,0),out floor))continue;
+            if(collision.Traverse(floor,point))return true;
+        }
+        return false;
     }
 }

@@ -191,7 +191,7 @@ public sealed partial class Plugin
                     StopNativeHousing($"Arrived at {trip.District.Name} W{trip.Ward} P{trip.Plot} on {WorldName(trip.World)}.");return;
                 }
                 if(trip.Approach is not {} goal){
-                    trip.Approach=EstateDoorApproach.Find(independentCollision,self.Position,targetPlot,p=>independentCollision.InteractionVisible(p,targetPlot),4.5f);
+                    trip.Approach=EstateDoorApproach.Find(new GameWalkingCollision(cacheGround:true),self.Position,targetPlot,p=>independentCollision.InteractionVisible(p,targetPlot),4.5f);
                     if(trip.Approach is not {} point)throw new InvalidOperationException("No verified walkable approach to this plot's placard. Export the housing route report.");goal=point;
                 }
                 IndependentWalk(goal,.4f,now,allowFlight:false,directDistance:8);nativeHousingStatus="Plot "+trip.Plot+" · "+independentWalkStatus;

@@ -42,7 +42,7 @@ public sealed class CollisionRouteSearch
     private readonly List<Vector3> explored=[],reverseExplored=[];
     private readonly Queue<Vector3> rejected=[];
     private int groundRejected,traverseRejected,acceptedEdges;
-    private static readonly (int X,int Z)[] Directions=[(1,0),(-1,0),(0,1),(0,-1),(1,1),(1,-1),(-1,1),(-1,-1)];
+    private static readonly (int X,int Z)[] Directions=[(2,0),(-2,0),(0,2),(0,-2),(2,2),(2,-2),(-2,2),(-2,-2),(1,0),(-1,0),(0,1),(0,-1),(1,1),(1,-1),(-1,1),(-1,-1)];
     public string Error { get; private set; }="";
     public Vector3[]? Path { get; private set; }
     public int Expanded=>forward.Closed.Count+(backward?.Closed.Count??0);
@@ -142,7 +142,9 @@ public sealed class CollisionRouteSearch
         // Both searches use the same horizontal lattice; retain each real floor height.
         var cell=Address(parent.Point);
         var candidate=new Vector3(origin.X+(cell.X+direction.X)*spacing,parent.Point.Y,origin.Z+(cell.Z+direction.Z)*spacing);
-        if(Horizontal(candidate,origin)>2048||Horizontal(candidate,goal)>searchRadius)return;
+        // Longer connectors reduce expansion on open roads; unit steps remain
+        // available at every node for narrow gates and stairs. All are swept.
+        if(Horizontal(candidate,parent.Point)>2.9f||Horizontal(candidate,origin)>2048||Horizontal(candidate,goal)>searchRadius)return;
         if(!collision.Ground(candidate,out var point)&&!collision.Ground(candidate+new Vector3(0,.45f,0),out point)&&!collision.Ground(candidate-new Vector3(0,.45f,0),out point)){
             groundRejected++;Rejected(candidate);return;
         }
