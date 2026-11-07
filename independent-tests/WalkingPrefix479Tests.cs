@@ -4,6 +4,11 @@ using EquinoxCompanion;
 internal static class WalkingPrefix479Tests
 {
     [ModuleInitializer] internal static void Run(){
+        var goblet=NavigationStreetCorridors.Guide(341,new(159.14963f,-30,-32.31259f),new(112.62928f,-14.994898f,-24.354433f));
+        if(goblet==null||!goblet.Any(p=>p.X<130&&p.Z<-36))throw new Exception("Goblet 22 needs the actual stair turn, not the map shortcut along the retaining wall.");
+        var shiro=NavigationStreetCorridors.Guide(641,new(100.159904f,30.07f,24.50072f),new(78.73712f,22.02f,47.635876f));
+        if(shiro==null||!shiro.Any(p=>p.X<87&&p.Z<=20))throw new Exception("Shirogane 11 must approach the street's stair corner.");
+        if(NavigationStreetCorridors.Guide(341,new(159,-30,-32),new(200,-14,-24))!=null)throw new Exception("A different plot must not inherit this street hint.");
         var geometry=new Corridor();
         Vector3[] guide=[new(0,0,12),new(12,0,12),new(12,0,0)];
         var search=new CollisionRouteSearch(geometry,Vector3.Zero,new(12,0,0),.25f,streetGuide:guide);
