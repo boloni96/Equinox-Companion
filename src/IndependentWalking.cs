@@ -287,6 +287,7 @@ public sealed partial class Plugin
                     var combined=independentPath==null?prefix:WalkingSteering.JoinContinuation(independentPath,prefix);
                     if(combined!=null){
                         if(independentPath==null){independentWaypoint=1;independentCheckedWaypoint=-1;}
+                        independentPhaseTimer.SetPlanning(false,now);
                         independentPath=combined;independentProgressAt=now;independentLastProgress=self.Position;
                         RecordTravelPrompt("Navigation verified section ready",new{run=independentNavigationRun,points=prefix.Length,start=FollowTravelPosition.From(prefix[0]),end=FollowTravelPosition.From(prefix[^1]),planningContinues=independentSearch.Path==null});
                     }
@@ -328,7 +329,7 @@ public sealed partial class Plugin
             if(independentPath!=null)independentWaypoint=WalkingSteering.AdvanceWaypoint(self.Position,independentPath,independentWaypoint,IndependentTraversableConnector,independentPrevious);
             if(independentPath==null||independentWaypoint>=independentPath.Length)throw new InvalidOperationException("Route ended without confirmed arrival.");
             var target=WalkingSteering.PursuitTarget(self.Position,independentPath,independentWaypoint,IndependentClearConnector,IndependentTraversableConnector);
-            if(Vector3.Distance(self.Position,independentLastProgress)>.3f){independentProgressAt=now;independentLastProgress=self.Position;independentPositionChanged=true;
+            if(Vector3.Distance(self.Position,independentLastProgress)>.3f){independentPhaseTimer.Progress(now);independentProgressAt=now;independentLastProgress=self.Position;independentPositionChanged=true;
                 if(!independentBacktracking&&(independentWalkedPoints.Count==0||Vector3.Distance(independentWalkedPoints[^1],self.Position)>=.75f))independentWalkedPoints.Add(self.Position);}
             var checkCollision=now>=independentCollisionAt||independentCheckedWaypoint!=independentWaypoint;
             if(checkCollision){

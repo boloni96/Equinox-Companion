@@ -57,7 +57,40 @@ public sealed class CollisionRouteSearch
     public int RoadDetours=>roadDetours;
     // A completed, collision-verified guide section can be walked while this
     // search continues from its endpoint. Ownership is transferred only once.
-    public Vector3[]? TakeVerifiedPrefix(){var result=verifiedPrefix;verifiedPrefix=null;return result;}
+    public Vector3[]? TakeVerifiedPrefix(){
+        if(verifiedPrefix==null&&!Finished&&roadSeed==null&&roadDetourTask==null)StreamGeometryPrefix();
+        var result=verifiedPrefix;verifiedPrefix=null;return result;
+    }
+    private void StreamGeometryPrefix(){
+        if(closest==null)return;
+        var nodes=new List<Node>();for(var n=closest;n!=null;n=n.Previous)nodes.Add(n);nodes.Reverse();
+        var start=committedRoadEnd?.Point??origin;
+        var index=nodes.FindLastIndex(n=>Vector3.DistanceSquared(n.Point,start)<.000001f);
+        if(index<0)return;
+        var length=0f;
+        for(var i=index+1;i<nodes.Count;i++){
+            length+=Vector3.Distance(nodes[i-1].Point,nodes[i].Point);
+            if(length>12)return;
+            if(length<3||Horizontal(start,nodes[i].Point)<2||
+                RemainingDistance(start,goal,range)-RemainingDistance(nodes[i].Point,goal,range)<2)continue;
+            // Every edge in this closed-node ancestry has passed collision checks.
+            // Commit the walked prefix so subsequent routes cannot switch back to
+            // an unrelated branch at the original start.
+            verifiedPrefix=nodes.Skip(index).Take(i-index+1).Select(n=>n.Point).ToArray();
+            CommitPrefix(nodes[i]);return;
+        }
+    }
+    private void CommitPrefix(Node end){
+        reverseGoal=end.Point;committedRoadEnd=end with{Cost=0};closest=null;
+        priorExpanded+=forward.Closed.Count+(backward?.Closed.Count??0);
+        forward.Open.Clear();forward.Closed.Clear();forward.Pending=null;
+        forward.Open.Enqueue(committedRoadEnd,0);testedJoins.Clear();
+        if(backward!=null){
+            backward.Open.Clear();backward.Closed.Clear();backward.Pending=null;
+            backward.Open.Enqueue(new(Address(reverseRoot),reverseRoot,0,null),0);
+        }
+        active=forward;
+    }
     private int roadSeedPoints;
     private string? roadSeedStop;
     private readonly HashSet<(Key Forward,Key Backward)> testedJoins=[];
@@ -141,15 +174,7 @@ public sealed class CollisionRouteSearch
                             // price the remaining search from the new walking end.
                             // Append if two sections finish inside the same frame.
                             verifiedPrefix=verifiedPrefix==null?points:verifiedPrefix.Concat(points.Skip(1)).ToArray();
-                            reverseGoal=points[^1];committedRoadEnd=parent with{Cost=0};
-                            priorExpanded+=forward.Closed.Count+(backward?.Closed.Count??0);
-                            forward.Open.Clear();forward.Closed.Clear();forward.Pending=null;
-                            forward.Open.Enqueue(committedRoadEnd,0);testedJoins.Clear();
-                            if(backward!=null){
-                                backward.Open.Clear();backward.Closed.Clear();backward.Pending=null;
-                                backward.Open.Enqueue(new(Address(reverseRoot),reverseRoot,0,null),0);
-                            }
-                            active=forward;
+                            CommitPrefix(parent);
                         }
                         else if(points.Length>2&&parent!=null)forward.Open.Enqueue(parent,cost+heuristicWeight*Heuristic(parent.Point,false));
                         roadSeed=null;

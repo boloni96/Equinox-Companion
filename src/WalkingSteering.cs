@@ -170,7 +170,9 @@ internal sealed class NavigationPhaseTimer
     private bool planning;
     public void Begin(DateTimeOffset now){started=now;planning=true;}
     public void SetPlanning(bool value,DateTimeOffset now){if(value==planning)return;planning=value;started=now;}
-    public bool Expired(DateTimeOffset now)=>now-started>TimeSpan.FromSeconds(90);
+    public DateTimeOffset Deadline=>started.AddSeconds(90);
+    public void Progress(DateTimeOffset now){if(!planning)started=now;}
+    public bool Expired(DateTimeOffset now)=>now>Deadline;
 }
 internal sealed class AvoidStalledTargets(IWalkingCollision inner,Vector3[] blocked):IWalkingCollision
 {

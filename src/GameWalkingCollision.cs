@@ -23,9 +23,9 @@ internal sealed class GameWalkingCollision:IWalkingCollision
     private readonly Dictionary<(Vector3 Origin,Vector3 Direction,float Distance,int Mask),(bool Found,RaycastHit Hit)> rayCache=[];
     public long NativeQueries { get; private set; }
     public long CacheHits { get; private set; }
+    private readonly Queue<(Vector3 Origin,Vector3 Direction,float Distance,int Mask)> rayOrder=[];
     private long sliceDeadline;
     public void BeginSlice(double milliseconds){
-        if(rayCache.Count>60000)rayCache.Clear();
         sliceDeadline=System.Diagnostics.Stopwatch.GetTimestamp()+(long)(Math.Max(.1,milliseconds)*System.Diagnostics.Stopwatch.Frequency/1000);
     }
     public void EndSlice()=>sliceDeadline=0;
@@ -72,7 +72,12 @@ internal sealed class GameWalkingCollision:IWalkingCollision
         int* flags=stackalloc int[4]{materialMask,0,0,0};
         var result=default(RaycastHit);
         NativeQueries++;var found=module->RaycastMaterialFilter(&result,&origin,&direction,distance,1,flags);hit=result;
-        if(groundCache!=null&&rayCache.Count<65536)rayCache[key]=(found,hit);
+        if(groundCache!=null){
+            // Evict oldest entries individually. Clearing the whole cache used
+            // to discard partial swept checks between time-budgeted slices.
+            if(rayCache.Count>=65536&&rayOrder.TryDequeue(out var oldest))rayCache.Remove(oldest);
+            rayCache[key]=(found,hit);rayOrder.Enqueue(key);
+        }
         return found;
     }
     public bool Ground(Vector3 near,out Vector3 ground)

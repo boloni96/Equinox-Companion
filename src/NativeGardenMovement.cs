@@ -6,7 +6,7 @@ public sealed partial class Plugin
     private sealed class NativeGardenMove
     {
         public required Queue<Vector3> Points;public required string Owner;public required DateTimeOffset Deadline;
-        public required ulong Character;public required uint World,Territory;public ulong Target;public SharedGardenPlan? Plot;public OutdoorPlotEntry? Entry;
+        public DateTimeOffset HardDeadline;public required ulong Character;public required uint World,Territory;public ulong Target;public SharedGardenPlan? Plot;public OutdoorPlotEntry? Entry;
     }
     private NativeGardenMove? nativeGardenMove;
     private string nativeGardenMoveFailure="";
@@ -17,7 +17,7 @@ public sealed partial class Plugin
         var route=points.ToArray();if(route.Length is <1 or >8||route.Any(p=>!NativeHousingPolicy.Position(p)))throw new InvalidOperationException("Garden route has invalid points.");
         if(LifestreamBusy()||nativeHousingTrip!=null||nativeWorldTrip!=null||nativeAethernetTrip!=null)throw new InvalidOperationException("Finish the active journey before garden walking.");
         StopIndependentWalk("Starting native garden movement",resetFailure:true);nativeGardenMoveFailure="";
-        nativeGardenMove=new(){Points=new(route),Owner=owner,Deadline=DateTimeOffset.UtcNow.AddSeconds(45),Character=Player.ContentId,World=Player.CurrentWorld.RowId,Territory=Client.TerritoryType,Target=target?.GameObjectId??0,Plot=plot};
+        nativeGardenMove=new(){Points=new(route),Owner=owner,Deadline=DateTimeOffset.UtcNow.AddSeconds(90),HardDeadline=DateTimeOffset.UtcNow.AddMinutes(3),Character=Player.ContentId,World=Player.CurrentWorld.RowId,Territory=Client.TerritoryType,Target=target?.GameObjectId??0,Plot=plot};
         RecordTravelPrompt("Garden movement started",new{owner,target=target?.BaseId,plot=plot?.Plot,ward=plot?.Ward,points=route.Select(FollowTravelPosition.From).ToArray()});
     }
     private void StopNativeGardenMove(string reason,string? owner=null)
@@ -46,6 +46,12 @@ public sealed partial class Plugin
                 if(Objects.LocalPlayer is not {} player)return;
                 move.Entry??=new(new Vector3(MathF.Sin(player.Rotation),0,MathF.Cos(player.Rotation)));
                 WalkOutdoorPlotEntry(move.Entry,now);return;
+            }
+            // Share the navigator's phase/progress deadline instead of cutting
+            // off a valid walk at 45 seconds including all preceding planning.
+            if(independentSearch!=null||independentPath!=null){
+                var deadline=independentPhaseTimer.Deadline;
+                if(deadline>move.Deadline)move.Deadline=deadline<move.HardDeadline?deadline:move.HardDeadline;
             }
             if(now>move.Deadline)throw new InvalidOperationException("Native garden approach timed out.");
             var target=move.Target==0?null:Objects.FirstOrDefault(x=>x.GameObjectId==move.Target);
