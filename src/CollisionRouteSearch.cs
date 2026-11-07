@@ -35,6 +35,7 @@ public sealed class CollisionRouteSearch
         public int Neighbor=-3;
     }
     private readonly IWalkingCollision collision;
+    private readonly Func<Vector3,bool>? arrival;
     private readonly Vector3 origin,goal;
     private readonly float range,spacing,heuristicWeight;
     private float searchRadius;
@@ -79,8 +80,9 @@ public sealed class CollisionRouteSearch
     }
     private static List<Vector3> Trail(Node? node){var p=new List<Vector3>();for(var n=node;n!=null;n=n.Previous)p.Add(n.Point);p.Reverse();return p;}
     private void Rejected(Vector3 point){rejected.Enqueue(point);if(rejected.Count>128)rejected.Dequeue();}
-    public CollisionRouteSearch(IWalkingCollision collision,Vector3 start,Vector3 goal,float range,float spacing=1f,float heuristicWeight=4f,NavigationRoadRoute? roads=null,bool bidirectional=true,IReadOnlyList<Vector3>? streetGuide=null,Func<Func<NavigationRoadRoute?>,Task<NavigationRoadRoute?>>? mapDetourWorker=null)
+    public CollisionRouteSearch(IWalkingCollision collision,Vector3 start,Vector3 goal,float range,float spacing=1f,float heuristicWeight=4f,NavigationRoadRoute? roads=null,bool bidirectional=true,IReadOnlyList<Vector3>? streetGuide=null,Func<Func<NavigationRoadRoute?>,Task<NavigationRoadRoute?>>? mapDetourWorker=null,Func<Vector3,bool>? arrival=null)
     {
+        this.arrival=arrival;
         roadWorker=mapDetourWorker??(work=>Task.Run(work));
         this.collision=collision;this.goal=goal;this.range=Math.Clamp(range,.25f,5f);this.spacing=spacing/2;this.heuristicWeight=heuristicWeight;this.roads=roads;
         searchRadius=MathF.Max(Horizontal(start,goal)+35,roads?.SearchRadius(goal)??0);
@@ -91,7 +93,7 @@ public sealed class CollisionRouteSearch
         reverseGoal=origin;forward.Open.Enqueue(new(Address(origin),origin,0,null),0);
         // Start from the actual upper/lower destination floor too. Reverse edges
         // are validated in the direction the character will eventually walk.
-        if(bidirectional&&Vector3.Distance(origin,goal)>=12&&collision.Ground(goal,out var end)&&MathF.Abs(end.Y-goal.Y)<=1.2f){
+        if(arrival==null&&bidirectional&&Vector3.Distance(origin,goal)>=12&&collision.Ground(goal,out var end)&&MathF.Abs(end.Y-goal.Y)<=1.2f){
             reverseRoot=end;backward=new(true);backward.Open.Enqueue(new(Address(end),end,0,null),0);
         }
         if(Vector3.Distance(origin,goal)>=12){
@@ -210,8 +212,8 @@ public sealed class CollisionRouteSearch
                     if(TryJoin(side,current))return;
                     if(!side.Reverse){
                         Vector3? endpoint=null;
-                        var arrived=Horizontal(current.Point,goal)<=range&&MathF.Abs(current.Point.Y-goal.Y)<=1.2f;
-                        if(!arrived&&range<1&&Horizontal(current.Point,goal)<=2.6f&&collision.Ground(goal,out var floor)&&MathF.Abs(floor.Y-goal.Y)<=1.2f&&collision.Traverse(current.Point,floor))endpoint=floor;
+                        var arrived=arrival!=null?arrival(current.Point):Horizontal(current.Point,goal)<=range&&MathF.Abs(current.Point.Y-goal.Y)<=1.2f;
+                        if(arrival==null&&!arrived&&range<1&&Horizontal(current.Point,goal)<=2.6f&&collision.Ground(goal,out var floor)&&MathF.Abs(floor.Y-goal.Y)<=1.2f&&collision.Traverse(current.Point,floor))endpoint=floor;
                         if(arrived||endpoint.HasValue){var path=Trail(current);if(endpoint is {} end)path.Add(end);Path=path.ToArray();return;}
                     }
                     side.Neighbor=0;

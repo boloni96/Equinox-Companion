@@ -229,7 +229,7 @@ public sealed partial class Plugin
                     var landing=trip.Geometry.Result.InteriorLandings[trip.Plot-1]??throw new InvalidOperationException("Plot entrance destination is unavailable.");
                     var direction=landing-self.Position;direction.Y=0;
                     if(direction.Length()<.1f)throw new InvalidOperationException("Plot boundary is not confirmed at the entry destination.");
-                    trip.Entry=new(direction);StopIndependentWalk("At plot approach · checking the entrance boundary");
+                    trip.Entry=new(direction,landing);StopIndependentWalk("At plot approach · checking the entrance boundary");
                     HousingStage(trip,11,"Reaching the plot entrance");return;
                 }
                 // Re-evaluate the approach once from the actual nearby street. A

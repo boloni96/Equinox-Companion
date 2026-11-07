@@ -6,6 +6,11 @@ public sealed partial class Plugin
     {
         if(Objects.LocalPlayer is not {} player)return;
         var goal=entry.Goal??entry.Next(player.Position);
+        if(entry.GeometryRoute){
+            if(IndependentWalk(goal,.4f,now,allowFlight:false,directDistance:3,geometryOnly:true))
+                throw new InvalidOperationException("Reached the yard destination without confirming the requested plot boundary.");
+            return;
+        }
         // Prepare the following checked segment before the current one ends.
         // Keep the existing path and input lease instead of stop/start per step.
         if(!entry.FinishingEntry&&entry.Steps<6&&independentPath is {Length:>1}&&independentSearch==null&&
