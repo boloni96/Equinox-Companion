@@ -8,6 +8,8 @@ internal sealed class GameWalkingCollision:IWalkingCollision
 {
     private readonly Dictionary<Vector3,(bool Found,Vector3 Ground)>? groundCache;
     private readonly NavigationRoadMap? roadGuide;
+    private readonly Dictionary<Vector3,(bool Found,Vector3 Ground)> liveSweepGround=[];
+    private bool samplingLiveSweep;
     private readonly WalkingTraversalCache traversalCache=new();
     internal GameWalkingCollision(bool cacheGround=false,NavigationRoadMap? roadGuide=null){this.roadGuide=roadGuide;if(cacheGround)groundCache=new();}
     public float RoutePenalty(Vector3 point)=>roadGuide?.Penalty(point)??0;
@@ -43,6 +45,7 @@ internal sealed class GameWalkingCollision:IWalkingCollision
     }
     public bool ComfortableTraverse(Vector3 from,Vector3 to)=>Traverse(from,to)&&WalkingClearance.PreservesRoom(from,to,WallPenalty);
     internal Vector3? LastBlockedAt { get; private set; }
+    public string? TraversalFailure { get; private set; }
     private bool OneWayBlocked(Vector3 a,Vector3 b){var delta=b-a;var length=delta.Length();return length>.001f&&Hit(a,delta/length,length,out _,WalkingCollisionFilter.Movement);}
     private bool Blocked(Vector3 a,Vector3 b)=>WalkingClearance.SegmentBlocked(a,b,OneWayBlocked);
     internal static unsafe bool Available(){
@@ -69,9 +72,10 @@ internal sealed class GameWalkingCollision:IWalkingCollision
     }
     public bool Ground(Vector3 near,out Vector3 ground)
     {
-        if(groundCache!=null&&groundCache.TryGetValue(near,out var cached)){ground=cached.Ground;return cached.Found;}
+        var samples=groundCache??(samplingLiveSweep?liveSweepGround:null);
+        if(samples!=null&&samples.TryGetValue(near,out var cached)){ground=cached.Ground;return cached.Found;}
         var found=ReadGround(near,out ground);
-        if(groundCache!=null&&groundCache.Count<100000)groundCache[near]=(found,ground);
+        if(samples!=null&&samples.Count<100000)samples[near]=(found,ground);
         return found;
     }
     internal string GroundFailure { get; private set; }="";
@@ -101,9 +105,16 @@ internal sealed class GameWalkingCollision:IWalkingCollision
     public bool Traverse(Vector3 from,Vector3 to)
     {
         Ready();
-        Vector3? blockedAt;
-        var clear=groundCache!=null?traversalCache.Check(this,from,to,Blocked,out blockedAt):WalkingGroundTraversal.Check(this,from,to,Blocked,out blockedAt);
-        LastBlockedAt=blockedAt;
-        return clear;
+        // Reuse exact support samples only within this live sweep. Never carry
+        // them into a later movement decision where geometry may have changed.
+        samplingLiveSweep=groundCache==null;liveSweepGround.Clear();
+        try{
+            Vector3? blockedAt;
+            TraversalFailure=null;
+            var clear=groundCache!=null?traversalCache.Check(this,from,to,Blocked,out blockedAt):WalkingGroundTraversal.Check(this,from,to,Blocked,out blockedAt,rejected:reason=>TraversalFailure=reason);
+            if(groundCache!=null)TraversalFailure=traversalCache.Failure;
+            LastBlockedAt=blockedAt;
+            return clear;
+        }finally{samplingLiveSweep=false;liveSweepGround.Clear();}
     }
 }

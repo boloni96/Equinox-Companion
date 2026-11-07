@@ -18,7 +18,7 @@ internal sealed class WalkingRoadSeed(IWalkingCollision collision,Vector3 start,
         var probe=current+Vector3.Normalize(delta)*MathF.Min(.5f,delta.Length());
         if(!collision.Ground(probe,out var floor)){StopReason=$"Ground unavailable at {probe}";Finished=true;return;}
         if(MathF.Abs(floor.Y-current.Y)>.45f){StopReason=$"Step height rejected from {current} to {floor}";Finished=true;return;}
-        if(!collision.Traverse(current,floor)){StopReason=$"Connection blocked from {current} to {floor}";Finished=true;return;}
+        if(!collision.Traverse(current,floor)){StopReason=$"Connection blocked from {current} to {floor}: {collision.TraversalFailure??"unspecified collision rejection"}";Finished=true;return;}
         points.Add(floor);
     }
 }

@@ -7,10 +7,12 @@ public sealed record NavigationSearchPoint(float X,float Y,float Z)
 {
     public static NavigationSearchPoint From(Vector3 p)=>new(p.X,p.Y,p.Z);
 }
-public sealed record NavigationSearchDiagnostic(NavigationSearchPoint Origin,NavigationSearchPoint Goal,int Expanded,int Frontier,int BudgetYields,int GroundRejected,int TraverseRejected,int AcceptedEdges,long NativeQueries,long CacheHits,NavigationSearchPoint[] Explored,NavigationSearchPoint[] Rejected,NavigationSearchPoint[] ClosestPath,int ReverseExpanded,NavigationSearchPoint[] ReverseExplored,bool RoadGuided,int RoadSeedPoints,string? RoadSeedStop);
+public sealed record NavigationRejectedConnection(NavigationSearchPoint From,NavigationSearchPoint To,string Reason);
+public sealed record NavigationSearchDiagnostic(NavigationSearchPoint Origin,NavigationSearchPoint Goal,int Expanded,int Frontier,int BudgetYields,int GroundRejected,int TraverseRejected,int AcceptedEdges,long NativeQueries,long CacheHits,NavigationSearchPoint[] Explored,NavigationSearchPoint[] Rejected,NavigationSearchPoint[] ClosestPath,int ReverseExpanded,NavigationSearchPoint[] ReverseExplored,bool RoadGuided,int RoadSeedPoints,string? RoadSeedStop,NavigationRejectedConnection[] RejectedConnections);
 
 public interface IWalkingCollision
 {
+    string? TraversalFailure=>null;
     long NativeQueries=>0;
     long CacheHits=>0;
     void BeginSlice(double milliseconds) { }
@@ -45,6 +47,7 @@ public sealed class CollisionRouteSearch
     private readonly HashSet<(Key Forward,Key Backward)> testedJoins=[];
     private readonly List<Vector3> explored=[],reverseExplored=[];
     private readonly Queue<Vector3> rejected=[];
+    private readonly Queue<NavigationRejectedConnection> rejectedConnections=[];
     private int groundRejected,traverseRejected,acceptedEdges;
     private static readonly (int X,int Z)[] Directions=[(4,0),(-4,0),(0,4),(0,-4),(4,4),(4,-4),(-4,4),(-4,-4),(2,0),(-2,0),(0,2),(0,-2),(2,2),(2,-2),(-2,2),(-2,-2)];
     public string Error { get; private set; }="";
@@ -57,7 +60,7 @@ public sealed class CollisionRouteSearch
         var reverseStride=Math.Max(1,(int)Math.Ceiling(reverseExplored.Count/512d));
         return new(NavigationSearchPoint.From(origin),NavigationSearchPoint.From(goal),Expanded,forward.Open.Count+(backward?.Open.Count??0),BudgetYields,groundRejected,traverseRejected,acceptedEdges,collision.NativeQueries,collision.CacheHits,
             explored.Where((_,i)=>i%stride==0).Select(NavigationSearchPoint.From).ToArray(),rejected.Select(NavigationSearchPoint.From).ToArray(),path.Take(256).Select(NavigationSearchPoint.From).ToArray(),
-            backward?.Closed.Count??0,reverseExplored.Where((_,i)=>i%reverseStride==0).Select(NavigationSearchPoint.From).ToArray(),roads!=null,roadSeedPoints,roadSeedStop);
+            backward?.Closed.Count??0,reverseExplored.Where((_,i)=>i%reverseStride==0).Select(NavigationSearchPoint.From).ToArray(),roads!=null,roadSeedPoints,roadSeedStop,rejectedConnections.ToArray());
     }
     private static List<Vector3> Trail(Node? node){var p=new List<Vector3>();for(var n=node;n!=null;n=n.Previous)p.Add(n.Point);p.Reverse();return p;}
     private void Rejected(Vector3 point){rejected.Enqueue(point);if(rejected.Count>128)rejected.Dequeue();}
@@ -125,7 +128,10 @@ public sealed class CollisionRouteSearch
                     if(current.Previous is {} parent&&!collision.Traverse(side.Reverse?current.Point:parent.Point,side.Reverse?parent.Point:current.Point)){
                         // Refine only a rejected unit-length edge. Open roads keep
                         // their coarse stride instead of quadrupling the search area.
+                        var reason=collision.TraversalFailure??"Swept connection rejected";
                         RefineEdge(side,parent,current.Point);
+                        rejectedConnections.Enqueue(new(NavigationSearchPoint.From(side.Reverse?current.Point:parent.Point),NavigationSearchPoint.From(side.Reverse?parent.Point:current.Point),reason));
+                        if(rejectedConnections.Count>64)rejectedConnections.Dequeue();
                         traverseRejected++;Rejected(current.Point);side.Pending=null;continue;
                     }
                     if(current.Previous!=null)acceptedEdges++;

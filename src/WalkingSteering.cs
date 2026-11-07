@@ -140,12 +140,20 @@ internal static class WalkingClearance
         for(var i=1;i<4;i++)if(penalty(Vector3.Lerp(from,to,i/4f))>allowed)return false;
         return true;
     }
-    public static bool BodyRoom(Vector3 floor,float radius,Func<Vector3,Vector3,bool> blocked)
+    public static bool BodyRoom(Vector3 floor,float radius,Func<Vector3,Vector3,bool> blocked,Func<Vector3,Vector3?>? support=null)
     {
-        foreach(var height in (ReadOnlySpan<float>)[.5f,1.05f,1.75f])
         foreach(var axis in (ReadOnlySpan<Vector3>)[Vector3.UnitX,Vector3.UnitZ,new(.707107f,0,.707107f),new(.707107f,0,-.707107f)]){
-            var center=floor+new Vector3(0,height,0);
-            if(blocked(center-axis*radius,center+axis*radius))return false;
+            var low=floor-axis*radius;var high=floor+axis*radius;
+            if(support!=null){
+                if(support(low) is not {} a||support(high) is not {} b)return false;
+                low=a;high=b;
+            }
+            // A cross-body ray must clear the ground at both ends. Using the
+            // center's height casts the low ray into an otherwise walkable slope.
+            foreach(var height in (ReadOnlySpan<float>)[.5f,1.05f,1.75f]){
+                var a=low;var b=high;a.Y=b.Y=MathF.Max(low.Y,high.Y)+height;
+                if(blocked(a,b))return false;
+            }
         }
         return true;
     }
