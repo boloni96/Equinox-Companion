@@ -8,7 +8,7 @@ internal static class WalkingConnector469Tests
         var position=new Vector3(127.02366f,-25.999998f,-19.895237f);
         Vector3[] route=[new(128.12811f,-26,-18.454803f),new(128.22739f,-26,-19.318748f),new(128.44185f,-25.891405f,-20.21749f)];
         var target=WalkingSteering.PursuitTarget(position,route,1,(_,_)=>false,(_,_)=>true);
-        if(Vector3.Distance(target,route[1])>.001f)throw new Exception("A soft wall-space rejection must follow the physical route waypoint, not stop or cut the corner.");
+        if(target==position||Vector3.Distance(position,target)>2.21f)throw new Exception("A soft wall-space rejection must retain bounded, physically checked movement.");
         target=WalkingSteering.PursuitTarget(position,route,1,(_,_)=>false,(_,_)=>false);
         if(target!=position)throw new Exception("Physical obstruction must still stop movement.");
         var next=WalkingSteering.AdvanceWaypoint(route[1],route,1,(_,_)=>false);

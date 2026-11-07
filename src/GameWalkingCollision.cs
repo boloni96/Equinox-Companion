@@ -10,6 +10,11 @@ internal sealed class GameWalkingCollision:IWalkingCollision
     private readonly NavigationRoadMap? roadGuide;
     private readonly Dictionary<Vector3,(bool Found,Vector3 Ground)> liveSweepGround=[];
     private bool samplingLiveSweep;
+    private bool liveDecision;
+    private readonly Dictionary<(Vector3,Vector3),(bool Clear,Vector3? Blocked,string? Failure)> decisionSweeps=[];
+    internal void BeginLiveDecision(){liveDecision=true;decisionSweeps.Clear();liveSweepGround.Clear();}
+    internal void EndLiveDecision(){liveDecision=false;decisionSweeps.Clear();liveSweepGround.Clear();}
+
     private readonly WalkingTraversalCache traversalCache=new();
     internal GameWalkingCollision(bool cacheGround=false,NavigationRoadMap? roadGuide=null){this.roadGuide=roadGuide;if(cacheGround)groundCache=new();}
     public float RoutePenalty(Vector3 point)=>roadGuide?.Penalty(point)??0;
@@ -72,7 +77,7 @@ internal sealed class GameWalkingCollision:IWalkingCollision
     }
     public bool Ground(Vector3 near,out Vector3 ground)
     {
-        var samples=groundCache??(samplingLiveSweep?liveSweepGround:null);
+        var samples=groundCache??(samplingLiveSweep||liveDecision?liveSweepGround:null);
         if(samples!=null&&samples.TryGetValue(near,out var cached)){ground=cached.Ground;return cached.Found;}
         var found=ReadGround(near,out ground);
         if(samples!=null&&samples.Count<100000)samples[near]=(found,ground);
@@ -107,14 +112,18 @@ internal sealed class GameWalkingCollision:IWalkingCollision
         Ready();
         // Reuse exact support samples only within this live sweep. Never carry
         // them into a later movement decision where geometry may have changed.
-        samplingLiveSweep=groundCache==null;liveSweepGround.Clear();
+        if(liveDecision&&decisionSweeps.TryGetValue((from,to),out var saved)){
+            LastBlockedAt=saved.Blocked;TraversalFailure=saved.Failure;return saved.Clear;
+        }
+        samplingLiveSweep=groundCache==null;if(!liveDecision)liveSweepGround.Clear();
         try{
             Vector3? blockedAt;
             TraversalFailure=null;
             var clear=groundCache!=null?traversalCache.Check(this,from,to,Blocked,out blockedAt):WalkingGroundTraversal.Check(this,from,to,Blocked,out blockedAt,rejected:reason=>TraversalFailure=reason);
             if(groundCache!=null)TraversalFailure=traversalCache.Failure;
             LastBlockedAt=blockedAt;
+            if(liveDecision)decisionSweeps[(from,to)]=(clear,blockedAt,TraversalFailure);
             return clear;
-        }finally{samplingLiveSweep=false;liveSweepGround.Clear();}
+        }finally{samplingLiveSweep=false;if(!liveDecision)liveSweepGround.Clear();}
     }
 }

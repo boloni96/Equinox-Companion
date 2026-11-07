@@ -45,6 +45,14 @@ internal static class WalkingSteering
     }
     public static Vector3 PursuitTarget(Vector3 position,Vector3[] path,int next,Func<Vector3,Vector3,bool> clear,Func<Vector3,Vector3,bool>? traversable=null)
     {
+        // Dense support samples are not steering instructions. Aim along a
+        // straight run until a real bend; the immediate chord is checked below.
+        var runEnd=StraightRunEnd(path,Math.Max(0,next-1));
+        if(runEnd>next){
+            var along=BoundedTarget(position,path[runEnd]);
+            if(clear(position,along))return along;
+            if(traversable!=null&&traversable(position,along))return along;
+        }
         var start=path[Math.Max(0,next-1)];var segment=path[next]-start;
         var length=segment.LengthSquared();var t=length<.0001f?1:Math.Clamp(Vector3.Dot(position-start,segment)/length,0,1);
         var point=Vector3.Lerp(start,path[next],t);var remaining=2.2f;
@@ -55,6 +63,9 @@ internal static class WalkingSteering
         }
         point=BoundedTarget(position,point);
         if(clear(position,point))return point;
+        // A three-yalm wall-space preference must not reduce a clear corridor
+        // to half-yalm steering targets. Keep pursuit when physical checks pass.
+        if(traversable!=null&&traversable(position,point))return point;
         var fallback=BoundedTarget(position,path[next]);
         if(clear(position,fallback))return fallback;
         // Extra wall space is a preference, not an impassable obstacle. When a
@@ -62,12 +73,47 @@ internal static class WalkingSteering
         // physical checks as planning. Shorten steep stair connectors rather than
         // rejecting a whole staircase because a lookahead spans too much rise.
         if(traversable!=null){
+            if(traversable(position,fallback))return fallback;
+            if(SideDetour(position,fallback,traversable) is {} detour)return detour;
             for(var distance=Vector3.Distance(position,fallback);distance>=.2f;distance*=.5f){
                 var step=Vector3.Lerp(position,fallback,distance/MathF.Max(.001f,Vector3.Distance(position,fallback)));
                 if(traversable(position,step))return step;
             }
         }
         return position;
+    }
+    // Check both legs of a short detour; never take a blind sidestep.
+    internal static Vector3? SideDetour(Vector3 position,Vector3 onward,Func<Vector3,Vector3,bool> traversable)
+    {
+        var edge=onward-position;var horizontal=new Vector3(edge.X,0,edge.Z);
+        if(horizontal.LengthSquared()<.04f)return null;
+        var side=Vector3.Normalize(new Vector3(-edge.Z,0,edge.X));
+        foreach(var width in (ReadOnlySpan<float>)[.75f,1.25f]){
+            foreach(var sign in (ReadOnlySpan<float>)[1,-1]){
+                var candidate=Vector3.Lerp(position,onward,.5f)+side*(width*sign);
+                if(Vector3.Distance(position,candidate)>2.2f||Vector3.Distance(candidate,onward)>2.2f)continue;
+                if(traversable(position,candidate)&&traversable(candidate,onward))return candidate;
+            }
+        }
+        return null;
+    }
+    internal static int StraightRunEnd(Vector3[] path,int start)
+    {
+        var end=Math.Min(start+1,path.Length-1);
+        // Bound CPU work and preserve height changes as well as horizontal bends.
+        for(var candidate=end+1;candidate<path.Length&&candidate<=start+128;candidate++){
+            var edge=path[candidate]-path[start];var length=edge.LengthSquared();
+            if(length<.0001f)break;
+            var previous=0f;var straight=true;
+            for(var i=start+1;i<candidate;i++){
+                var t=Vector3.Dot(path[i]-path[start],edge)/length;
+                if(t<previous||t>1||Vector3.DistanceSquared(path[i],path[start]+edge*t)>.0025f){straight=false;break;}
+                previous=t;
+            }
+            if(!straight)break;
+            end=candidate;
+        }
+        return end;
     }
     public static Vector3 BoundedTarget(Vector3 position,Vector3 target){
         var distance=Vector3.Distance(position,target);
@@ -112,8 +158,11 @@ internal sealed class AvoidStalledTargets(IWalkingCollision inner,Vector3[] bloc
         return result;
     }
     public float RoutePenalty(Vector3 point)=>inner.RoutePenalty(point);
-    public bool Traverse(Vector3 from,Vector3 to)=>
-        ClearOfBlocked(from,to,blocked)&&inner.Traverse(from,to);
+    public string? TraversalFailure { get; private set; }
+    public bool Traverse(Vector3 from,Vector3 to){
+        if(!ClearOfBlocked(from,to,blocked)){TraversalFailure="Previously stalled obstacle exclusion";return false;}
+        var result=inner.Traverse(from,to);TraversalFailure=inner.TraversalFailure;return result;
+    }
     public static bool ClearOfBlocked(Vector3 from,Vector3 to,IEnumerable<Vector3> blocked)
     {
         var edge=new Vector2(to.X-from.X,to.Z-from.Z);

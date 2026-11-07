@@ -197,8 +197,12 @@ public sealed partial class Plugin
             StopAtInteractionTarget(Objects.FirstOrDefault(x=>x.GameObjectId==independentInteractionTarget)))return;
         if(FlightActive){TickIndependentFlight(now);return;}
         if(independentSearch==null&&independentPath==null&&independentEntranceForward==null)return;
+        var renewed=false;
+        independentCollision.BeginLiveDecision();
         try{
-            independentPulseUntil=default;independentLease.Revoke();independentMoving=false;
+            // Keep the previous short lease while preparing its replacement.
+            // Every pause/early return revokes it in finally; a delayed update
+            // still expires after 180 ms, as before.
             if(QuestOwnsMovement&&QuestManualMovementHeld(now)){
                 independentUserPaused=true;independentNativeManualReads=0;independentHeading=null;
                 independentProgressAt=independentSince=now;independentPhaseTimer.Begin(now);
@@ -232,7 +236,7 @@ public sealed partial class Plugin
                 if(now-independentGatePauseSince>TimeSpan.FromSeconds(60))throw new InvalidOperationException("The game kept movement locked for 60 seconds. Finish the current scene or prompt and restart.");
                 independentSpeed=0;independentProgressAt=now;
                 // Recheck the native gate with zero movement until the game releases it.
-                independentLease.Arm(DateTimeOffset.UtcNow);
+                independentLease.Arm(DateTimeOffset.UtcNow);renewed=true;independentMoving=false;
                 independentWalkStatus="Paused · game movement locked; waiting for scene or transition";return;
             }
             independentGatePauseSince=default;
@@ -246,7 +250,7 @@ public sealed partial class Plugin
                 independentHeading=entrance.Heading;independentSpeed=.5f;
                 EnsureIndependentGroundInput();
                 if(!independentForwardHook!.IsEnabled)independentForwardHook.Enable();
-                independentMoving=true;independentLease.Arm(DateTimeOffset.UtcNow);independentPulseUntil=independentLease.Until;
+                independentMoving=true;independentLease.Arm(DateTimeOffset.UtcNow);independentPulseUntil=independentLease.Until;renewed=true;
                 independentWalkStatus="Walking forward into the plot · watching actual progress";return;
             }
             // A transient stair/landing support miss must not poison route memory
@@ -357,9 +361,13 @@ public sealed partial class Plugin
             EnsureIndependentGroundInput();
             // Start the lease AFTER collision work and hook setup, not at frame start.
             if(!independentForwardHook!.IsEnabled)independentForwardHook.Enable();
-            independentMoving=true;independentLease.Arm(DateTimeOffset.UtcNow);independentPulseUntil=independentLease.Until;
+            independentMoving=true;independentLease.Arm(DateTimeOffset.UtcNow);independentPulseUntil=independentLease.Until;renewed=true;
             independentWalkStatus=independentPositionChanged?$"Walking · point {independentWaypoint}/{independentPath.Length-1}":"Ready to move · waiting for movement confirmation";independentPrevious=self.Position;
-        }catch(Exception e){StopIndependentWalk(e.Message);independentWalkFailure=independentLastWalkFailure=e.Message;Log.Warning(e,"Independent navigation stopped");}
+        }catch(Exception e){renewed=false;StopIndependentWalk(e.Message);independentWalkFailure=independentLastWalkFailure=e.Message;Log.Warning(e,"Independent navigation stopped");}
+        finally{
+            independentCollision.EndLiveDecision();
+            if(!renewed){independentPulseUntil=default;independentLease.Revoke();independentMoving=false;}
+        }
     }
     private bool IndependentMovementWindow()=>QuestConversationVisible()||VisibleFollowAddon("SelectYesno")||VisibleFollowAddon("SystemMenu");
     private bool IndependentOtherTravelBusy(){try{return LifestreamBusy();}catch{return false;}}
