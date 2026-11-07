@@ -42,6 +42,11 @@ public sealed class CollisionRouteSearch
     private Frontier? backward,active;
     private Node? closest;
     private WalkingRoadSeed? roadSeed;
+    private Vector3[]? verifiedPrefix;
+    private Vector3 reverseGoal;
+    // A completed, collision-verified guide section can be walked while this
+    // search continues from its endpoint. Ownership is transferred only once.
+    public Vector3[]? TakeVerifiedPrefix(){var result=verifiedPrefix;verifiedPrefix=null;return result;}
     private int roadSeedPoints;
     private string? roadSeedStop;
     private readonly HashSet<(Key Forward,Key Backward)> testedJoins=[];
@@ -72,7 +77,7 @@ public sealed class CollisionRouteSearch
         if(!Finite(start)||!Finite(goal)||!float.IsFinite(spacing)||spacing<.25f||spacing>2)throw new ArgumentException("Invalid navigation coordinates");
         if(Vector3.Distance(start,goal)>2048)throw new InvalidOperationException("Local route exceeds 2048 yalms; use travel first.");
         if(!collision.Ground(start,out origin)){Error="No walkable ground beneath the character.";return;}
-        forward.Open.Enqueue(new(Address(origin),origin,0,null),0);
+        reverseGoal=origin;forward.Open.Enqueue(new(Address(origin),origin,0,null),0);
         // Start from the actual upper/lower destination floor too. Reverse edges
         // are validated in the direction the character will eventually walk.
         if(bidirectional&&Vector3.Distance(origin,goal)>=12&&collision.Ground(goal,out var end)&&MathF.Abs(end.Y-goal.Y)<=1.2f){
@@ -96,7 +101,16 @@ public sealed class CollisionRouteSearch
                             if(parent!=null)cost+=Vector3.Distance(parent.Point,point);
                             parent=new(Address(point),point,cost,parent,true);
                         }
-                        if(points.Length>2&&parent!=null)forward.Open.Enqueue(parent,cost+heuristicWeight*Heuristic(parent.Point,false));
+                        if(points.Length>=5&&parent!=null&&Horizontal(points[0],points[^1])>=2){
+                            // Commit the checked prefix instead of leaving a long
+                            // stair detour behind cheaper, unproductive origin nodes.
+                            // Keep its chain for the complete returned path, but
+                            // price the remaining search from the new walking end.
+                            verifiedPrefix=points;reverseGoal=points[^1];
+                            forward.Open.Clear();
+                            forward.Open.Enqueue(parent with{Cost=0},0);
+                        }
+                        else if(points.Length>2&&parent!=null)forward.Open.Enqueue(parent,cost+heuristicWeight*Heuristic(parent.Point,false));
                         roadSeed=null;
                     }
                     continue;
@@ -219,8 +233,8 @@ public sealed class CollisionRouteSearch
         return MathF.Sqrt(horizontal*horizontal+vertical*vertical);
     }
     private float Heuristic(Vector3 p,bool reverse){
-        var direct=RemainingDistance(p,reverse?origin:goal,reverse?0:range);
-        return MathF.Max(direct,roads?.Remaining(p,reverse)??0);
+        var direct=RemainingDistance(p,reverse?reverseGoal:goal,reverse?0:range);
+        return reverse&&reverseGoal!=origin?direct:MathF.Max(direct,roads?.Remaining(p,reverse)??0);
     }
     public static float Horizontal(Vector3 a,Vector3 b)=>new Vector2(a.X-b.X,a.Z-b.Z).Length();
     private static bool Finite(Vector3 p)=>float.IsFinite(p.X)&&float.IsFinite(p.Y)&&float.IsFinite(p.Z);

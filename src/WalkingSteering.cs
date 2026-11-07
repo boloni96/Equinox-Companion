@@ -40,8 +40,16 @@ internal static class WalkingSteering
         return Vector3.DistanceSquared(point,before+motion*t)<=.0625f;
     }
     public static Vector3[]? JoinContinuation(Vector3[] path,Vector3[] continuation){
-        if(path.Length==0||continuation.Length<2||Vector3.DistanceSquared(path[^1],continuation[0])>.000001f)return null;
-        return path.Concat(continuation.Skip(1)).ToArray();
+        if(path.Length==0||continuation.Length<2)return null;
+        // A ready full route can repeat the verified prefix already being walked.
+        // Merge only an exact shared suffix/prefix, keeping the live waypoint index.
+        for(var start=0;start<path.Length;start++){
+            var overlap=path.Length-start;if(overlap>continuation.Length)continue;
+            var matches=true;
+            for(var i=0;i<overlap;i++)if(Vector3.DistanceSquared(path[start+i],continuation[i])>.000001f){matches=false;break;}
+            if(matches)return path.Concat(continuation.Skip(overlap)).ToArray();
+        }
+        return null;
     }
     public static Vector3 PursuitTarget(Vector3 position,Vector3[] path,int next,Func<Vector3,Vector3,bool> clear,Func<Vector3,Vector3,bool>? traversable=null)
     {

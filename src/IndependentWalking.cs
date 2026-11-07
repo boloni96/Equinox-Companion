@@ -277,6 +277,14 @@ public sealed partial class Plugin
                 independentLastExpanded=independentSearch.Expanded;independentPlanningSeconds=(DateTimeOffset.UtcNow-independentPlanningSince).TotalSeconds;
                 independentWalkStatus=$"Finding walkable route · {independentSearch.Expanded} areas checked";
                 if(independentSearch.Error.Length>0)throw new InvalidOperationException(independentSearch.Error);
+                if(independentSearch.TakeVerifiedPrefix() is {} prefix){
+                    var combined=independentPath==null?prefix:WalkingSteering.JoinContinuation(independentPath,prefix);
+                    if(combined!=null){
+                        if(independentPath==null){independentWaypoint=1;independentCheckedWaypoint=-1;}
+                        independentPath=combined;independentProgressAt=now;independentLastProgress=self.Position;
+                        RecordTravelPrompt("Navigation verified section ready",new{run=independentNavigationRun,points=prefix.Length,start=FollowTravelPosition.From(prefix[0]),end=FollowTravelPosition.From(prefix[^1]),planningContinues=independentSearch.Path==null});
+                    }
+                }
                 if(independentSearch.Path==null&&independentPath==null)return;
                 if(independentSearch.Path!=null){
                 TraceKeyboundRun(independentNavigationRun,"route-found",$"{independentSearch.Path.Length} points; {independentSearch.Expanded} nodes checked","companion-navigation",false);
