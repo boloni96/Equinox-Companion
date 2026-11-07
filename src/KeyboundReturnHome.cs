@@ -54,7 +54,7 @@ public sealed partial class Plugin
                 address==null&&now-eventReturnActionAt>=TimeSpan.FromSeconds(3)){
                 var pending=Conditions[ConditionFlag.Casting]||HelperInCutscene()||Telepo.Instance()!=null&&Telepo.Instance()->ActiveTeleportRequest;
                 if(eventReturnArrival.Ready(pending,player.Position,now)){
-                    var entrance=NativeGardenEntrance(Client.TerritoryType,destination.Plot);
+                    var entrance=NativeGardenInteriorLanding(Client.TerritoryType,destination.Plot);
                     if(entrance==null){eventAccountStatus="Reading native estate entrance";return;}
                     if(Vector3.Distance(player.Position,entrance.Value)>40)throw new InvalidOperationException("The native estate entrance is not nearby; character kept online.");
                     StartNativeGardenMove([entrance.Value],"event-return");

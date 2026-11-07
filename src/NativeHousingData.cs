@@ -4,7 +4,7 @@ namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
     private sealed record HousingShard(uint Id,uint Instance,string Name,byte Order,Vector3 Position);
-    private sealed record HousingGeometry(Vector3[] Placards,HousingShard[] Shards,Vector3?[] Entrances);
+    private sealed record HousingGeometry(Vector3[] Placards,HousingShard[] Shards,Vector3?[] InteriorLandings);
     private readonly Dictionary<uint,Task<HousingGeometry>> nativeHousingGeometry=[];
     private Task<HousingGeometry> LoadHousingGeometry(NativeHousingDistrict district)
     {

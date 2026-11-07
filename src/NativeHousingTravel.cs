@@ -15,13 +15,13 @@ public sealed partial class Plugin
         public required NativeHousingDistrict District;public required Task<HousingGeometry> Geometry;
         public required DateTimeOffset Started;public DateTimeOffset Next,StageAt;
         public int Stage,Attempt,Selections;public bool WorldSent,TeleportSent,WardSelected,MenuOpened;
-        public Vector3? Approach;public HousingShard? Shard;public Vector3 Source;
+        public bool NearApproachSelected;public Vector3? Approach;public HousingShard? Shard;public Vector3 Source;
     }
     private NativeHousingTrip? nativeHousingTrip;
     private string nativeHousingStatus="";
     private void HousingStage(NativeHousingTrip trip,int stage,string status)
     {
-        trip.Stage=stage;trip.StageAt=DateTimeOffset.UtcNow;trip.Approach=null;nativeHousingStatus=bidTravelMessage=characterTravelStatus=status;
+        trip.Stage=stage;trip.StageAt=DateTimeOffset.UtcNow;trip.Approach=null;trip.NearApproachSelected=false;nativeHousingStatus=bidTravelMessage=characterTravelStatus=status;
         RecordTravelPrompt("Housing travel step",new{stage,status,trip.World,trip.Ward,trip.Plot,territory=trip.District.Territory});
     }
     private void StopNativeHousing(string reason)
@@ -164,7 +164,10 @@ public sealed partial class Plugin
             if(!HousingAtWard(trip))throw new InvalidOperationException("The current residential district or ward differs from the requested address.");
             var shard=trip.Shard!;var targetPlot=trip.Geometry.Result.Placards[trip.Plot-1];
             if(trip.Stage==7){
-                if(Vector3.Distance(self.Position,targetPlot)<25||Vector3.Distance(self.Position,shard.Position)<12){HousingStage(trip,10,"Walking to plot "+trip.Plot);return;}
+                // Using the same shard cannot shorten this trip. Walk directly from
+                // the current street/plot instead of approaching it and cancelling.
+                var nearest=trip.Geometry.Result.Shards.MinBy(s=>Vector3.DistanceSquared(self.Position,s.Position));
+                if(nearest?.Id==shard.Id||Vector3.Distance(self.Position,targetPlot)<25||Vector3.Distance(self.Position,shard.Position)<12){HousingStage(trip,10,"Walking to plot "+trip.Plot);return;}
                 var source=Objects.Where(x=>x.IsTargetable&&x.ObjectKind is ObjectKind.Aetheryte or ObjectKind.EventObj&&
                     trip.Geometry.Result.Shards.Any(s=>Vector3.DistanceSquared(s.Position,x.Position)<16)).MinBy(x=>Vector3.DistanceSquared(self.Position,x.Position));
                 if(source==null){
@@ -194,6 +197,17 @@ public sealed partial class Plugin
             if(trip.Stage==10){
                 if(Vector3.Distance(self.Position,targetPlot)<=4.5f&&independentCollision.InteractionVisible(self.Position,targetPlot)){
                     StopNativeHousing($"Arrived at {trip.District.Name} W{trip.Ward} P{trip.Plot} on {WorldName(trip.World)}.");return;
+                }
+                // Re-evaluate the approach once from the actual nearby street. A
+                // point picked from the distant shard may be on the wrong side
+                // of the entrance steps; a manual retry previously corrected it.
+                if(!trip.NearApproachSelected&&Vector3.Distance(self.Position,targetPlot)<12){
+                    trip.NearApproachSelected=true;
+                    var nearby=EstateDoorApproach.Find(new GameWalkingCollision(cacheGround:true),self.Position,targetPlot,p=>independentCollision.InteractionVisible(p,targetPlot),4.5f);
+                    if(nearby is {} revised){
+                        trip.Approach=revised;
+                        RecordTravelPrompt("Housing nearby approach selected",new{trip.Plot,position=FollowTravelPosition.From(self.Position),goal=FollowTravelPosition.From(revised)});
+                    }
                 }
                 if(trip.Approach is not {} goal){
                     trip.Approach=EstateDoorApproach.Find(new GameWalkingCollision(cacheGround:true),self.Position,targetPlot,p=>independentCollision.InteractionVisible(p,targetPlot),4.5f);

@@ -1,0 +1,9 @@
+# Navigation 0.5.1.484
+
+Garden travel now treats plot entry as a separate geometry-only leg, followed by garden-bed movement only after the existing estate-address check confirms the requested plot. The game layout's RoomExit coordinate is an interior landing anchor, not a known street gate. Ground/body collision checks find the route around the boundary; garden entry stops as soon as the correct outdoor estate is observed, rather than continuing toward that anchor. Entering a different estate stops the operation. Garden care already verifies the estate before approaching any mapped bed.
+
+Street-map artwork and street corridor hints no longer guide plot-entry or bed movement, and those legs no longer inherit the five-second aetheryte approach deadline. The existing 45-second garden movement limit remains. Clear short connectors still require physical support and body clearance, but do not require preferred street wall spacing. The generic nearby timeout no longer incorrectly calls every destination an aetheryte.
+
+Housing travel walks directly toward the plot when the closest residential shard is already the destination shard. This avoids walking toward that same shard only to abandon the leg when the plot gets closer. A plot's interaction approach is re-evaluated once when within 12 yalms, using the actual street position; previously a restart could select the reachable side after an initial distant approach timed out.
+
+Validation: plugin build; full transition checks; independent navigation regressions, including geometry-only routes through left/right openings in a fenced yard. These are shared changes, with no new per-plot coordinates. Live garden entry, Shirogane 9 arrival, movement smoothness, and performance still require in-game confirmation. This does not claim that every historical support-ray or route-planning failure is resolved.

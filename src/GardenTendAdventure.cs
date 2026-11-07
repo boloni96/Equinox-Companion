@@ -83,10 +83,10 @@ public sealed partial class Plugin
         if(!config.GardenCareWalk)throw new InvalidOperationException("Enable Walk to mapped beds to approach the plot after teleporting, or move onto the plot first.");
         if(gardenPlotApproachAttempted)throw new InvalidOperationException("Plot entrance approach already attempted. Move inside the destination plot and restart.");
         if(Conditions[ConditionFlag.Unconscious]||Conditions[ConditionFlag.TradeOpen]||SellerAddonPresentForGarden())return;
-        var entrance=NativeGardenEntrance(Client.TerritoryType,plan.Plot);
+        var entrance=NativeGardenInteriorLanding(Client.TerritoryType,plan.Plot);
         if(entrance==null){gardenTendStatus="Reading native plot entrance";return;}
         if(Vector3.Distance(player.Position,entrance.Value)>40)throw new InvalidOperationException("The requested plot entrance is not nearby. Finish GO SEE first.");
-        StartNativeGardenMove([entrance.Value],"plot");
+        StartNativeGardenMove([entrance.Value],"plot",plot:plan);
         gardenPlotApproaching=gardenPlotApproachAttempted=true;gardenPlotApproachAt=now;
         gardenTendStatus="Walking through the plot entrance · "+plan.HouseName;
     }
