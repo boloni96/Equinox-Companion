@@ -12,11 +12,16 @@ public sealed partial class Plugin
     private ulong[] organizeSources=[],organizeOwnerOrder=[];private RetrieverPort? organizePort;
     private DateTimeOffset organizeNext,organizeDeadline;
     private ChestMove? organizePending;
-    private object? organizerLastTransfer;
+    private object? organizerLastTransfer,organizerSubmission;
+    private DateTimeOffset organizerSubmittedAt;
+    private readonly Queue<object> organizerTransferIssues=[];
+    private int organizerDeferred;
+    private readonly HashSet<(uint Item,bool Hq)> organizerDeferredItems=[];
+
     private int organizeCarry;
     private string organizeStatus="Preview or organise the selected plan. Assignments choose homes for eligible listed items.";
     private void OrganizeStage(int stage){organizeStage=stage;organizeStatus=$"{organizeTransferred} delivered · {organizeMoveIndex}/{organizeMoves.Length} transfers · "+(stage switch{0=>"Preparing",1 or 2 or 3=>$"Refreshing missing inventory {organizeSourceIndex+1}/{organizeSources.Length}",4 or 5=>"Opening retainer",6 or 7=>"Moving batch",9=>"Calculating batch space",10 or 11 or 12 or 13 or 14=>$"Sorting retainer {organizeSortIndex+1}/{organizeSortRetainers.Length}",_=>"Next retainer"});organizeDeadline=DateTimeOffset.UtcNow.AddSeconds(60);}
-    private void StopOrganize(string reason){ClearOrganizerSortMenu();organizeRunning=false;organizePort?.Release();organizePending=null;organizeStatus=reason+(organizeCarry>0?$" · {organizeCarry} transferred items remain in your bags.":"");SaveOrganizerInventories();InvalidateOrganizePreview();retrievalRefreshPending=true;Log.Information("Retainer organizer: {Status}",organizeStatus);}
+    private void StopOrganize(string reason){ClearOrganizerSortMenu();organizeRunning=false;organizePort?.Release();organizePending=null;organizeStatus=reason+(organizerDeferred>0?$" · {organizerDeferred} item types deferred after unconfirmed moves.":"")+(organizeCarry>0?$" · {organizeCarry} transferred items remain in your bags.":"");SaveOrganizerInventories();InvalidateOrganizePreview();retrievalRefreshPending=true;Log.Information("Retainer organizer: {Status}",organizeStatus);}
     private uint OrganizeCategory(uint item)=>DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>().GetRowOrDefault(item)?.ItemUICategory.RowId??0;
     private void DrawRetainerOrganizer()
     {
@@ -93,7 +98,7 @@ public sealed partial class Plugin
             organizeSortEnabled=config.SortItemsAfterOrganizing&&!bagsOnly;organizeSortRetainers=owned.ToArray();organizeSortItem=null;organizeSortMenu=null;if(organizeSortEnabled)PrepareOrganizerSort();
             organizeOwnerOrder=organizeSources.ToArray();var recorded=RecordedOrganizerInventories(organizeSources);
             organizePort=new(this){Character=Player.ContentId,World=Player.CurrentWorld.RowId,Quality=RetrievalQuality.Any};
-            organizeCarry=0;organizeTransferred=0;organizeSourceIndex=0;organizePending=null;organizeMoveIndex=0;organizeMoves=[];organizeRoutingTask=null;organizeInventories.Clear();foreach(var row in recorded)organizeInventories[row.Key]=row.Value;
+            organizerTransferIssues.Clear();organizerDeferredItems.Clear();organizerDeferred=0;organizerSubmission=null;organizerLastTransfer=null;organizeCarry=0;organizeTransferred=0;organizeSourceIndex=0;organizePending=null;organizeMoveIndex=0;organizeMoves=[];organizeRoutingTask=null;organizeInventories.Clear();foreach(var row in recorded)organizeInventories[row.Key]=row.Value;
             organizeSources=organizeSources.Where(id=>!recorded.ContainsKey(id)).ToArray();
             organizerVisitCache.Clear();organizerReplans.Clear();organizerEntrusted.Clear();organizerProtectedBagSlots.Clear();foreach(var slot in OrganizerInventory(false,false).Concat(OrganizerInventory(false,true)).Where(x=>x.Item>0&&x.Quantity>0))organizerProtectedBagSlots.Add((slot.Container,slot.Slot));
             organizeRunning=true;OrganizeStage(0);
@@ -108,7 +113,7 @@ public sealed partial class Plugin
         if(!organizeRunning||now<organizeNext)return;organizeNext=now.AddMilliseconds(250);
         try{
             if(organizePort==null||!organizePort.ContextMatches||retainerGilRunning||chestRunning||retrievalRun.Running){StopOrganize("Stopped: character, bell or active task changed.");return;}
-            if(now>organizeDeadline){StopOrganize("Stopped: timed out at stage "+organizeStage+". "+organizePort.InventoryStatus);return;}
+            if(now>organizeDeadline){StopOrganize(organizeStage==7&&organizePending is {} waiting?$"Stopped: item {waiting.Source.Item} transfer confirmation timed out; the last move is unconfirmed.":"Stopped: timed out at stage "+organizeStage+". "+organizePort.InventoryStatus);return;}
             if(organizeStage==0){if(organizePort.Prepare()){if(organizeSources.Length==0)BeginStorageCalculation();else OrganizeStage(1);}return;}
             var pause=organizePort.Pause.Check(now);if(!pause.Ready){StopOrganize(pause.Error);return;}
             var manager=InventoryManager.Instance();if(manager==null)return;
@@ -123,12 +128,14 @@ public sealed partial class Plugin
                     BeginStorageCalculation();break;
                 case 9:
                     if(organizeRoutingTask?.IsCompleted!=true)break;var plan=organizeRoutingTask.GetAwaiter().GetResult();organizeRoutingTask=null;
-                    organizeMoves=plan.Moves;organizeUnmoved=plan.Remaining;
+                    organizeMoves=plan.Moves.Where(x=>!organizerDeferredItems.Contains((x.Move.Source.Item,x.Move.Source.Hq))).ToArray();organizeUnmoved=plan.Remaining;
                     if(organizeMoves.Length==0){FinishOrganize(plan.Remaining==0?"Nothing needs moving.":$"No available route for {plan.Remaining} items. Check bag and retainer space.");return;}
                     organizeActiveRetainer=organizeMoves[0].Retainer;OrganizeStage(RetrieverActive(organizeActiveRetainer)?5:4);break;
                 case 4:if(organizePort.Select(organizeActiveRetainer))OrganizeStage(5);break;
                 case 5:if(organizePort.OpenInventory(organizeActiveRetainer)&&organizePort.Read(organizeActiveRetainer) is not null)BindOrganizerVisit();break;
                 case 6:
+                    if(!RetrieverActive(organizeActiveRetainer)){StopOrganize("Stopped: selected retainer changed.");return;}
+                    if(organizePort.Read(organizeActiveRetainer)==null)break;
                     var action=organizeMoves[organizeMoveIndex];var move=action.Move;
                     if(!PlanItemScope.Allows(action,organizeActiveRules,organizeBagsOnly,organizerEntrusted)){StopOrganize("Stopped: movement is outside the selected plan or its remaining quantity.");return;}
                     RefreshGearSetProtection();
@@ -141,10 +148,12 @@ public sealed partial class Plugin
                     if(organizeBagsOnly&&!InventoryTradeFilterAllows(src,organizeBagTradeFilter)){StopOrganize("Stopped: item no longer matches the selected tradability filter.");return;}
                     if(CrystalStorage.IsItem(src.Item)){
                         if(!organizePort.TransferCrystals(organizeActiveRetainer,move))break;
-                        organizePending=move;organizerLastTransfer=new {retainer=organizeActiveRetainer,action.Withdraw,move,command="Retainer crystal quantity",at=now};OrganizeStage(7);break;
+                        organizePending=move;organizerSubmittedAt=now;organizerLastTransfer=organizerSubmission=new {retainer=organizeActiveRetainer,action.Withdraw,move,command="Retainer crystal quantity",at=now};OrganizeStage(7);break;
                     }
-                    organizePending=move;var submitted=chestMove!(manager,(InventoryType)src.Container,(ushort)src.Slot,(InventoryType)dst.Container,(ushort)dst.Slot,move.Quantity);organizerLastTransfer=new {retainer=organizeActiveRetainer,action.Withdraw,action.Internal,move,nativeResult=submitted,at=now};OrganizeStage(7);break;
+                    organizePending=move;var submitted=chestMove!(manager,(InventoryType)src.Container,(ushort)src.Slot,(InventoryType)dst.Container,(ushort)dst.Slot,move.Quantity);organizerSubmittedAt=now;organizerLastTransfer=organizerSubmission=new {retainer=organizeActiveRetainer,action.Withdraw,action.Internal,move,nativeResult=submitted,at=now};OrganizeStage(7);break;
                 case 7:
+                    if(!RetrieverActive(organizeActiveRetainer)){StopOrganize("Stopped: selected retainer changed while a transfer was unconfirmed.");return;}
+                    if(organizePort.Read(organizeActiveRetainer)==null)break;
                     if(!OrganizerConfirmed())break;
                     var done=organizeMoves[organizeMoveIndex];if(done.Internal){}else if(done.Withdraw)organizeCarry+=done.Move.Quantity;else{if(!organizeBagsOnly)organizeCarry-=done.Move.Quantity;organizeTransferred+=done.Move.Quantity;}
                     RememberOrganizerInventory(organizeActiveRetainer,OrganizerInventory(true,false).Concat(OrganizerInventory(true,true)).ToArray());
@@ -176,8 +185,24 @@ public sealed partial class Plugin
         var move=organizePending!;
         var src=ReadChestContainer(move.Source.Container).First(s=>s.Slot==move.Source.Slot);
         var dst=ReadChestContainer(move.Destination.Container).First(s=>s.Slot==move.Destination.Slot);
-        var confirmed=ChestTransferPlanner.Confirmed(move,src,dst);
-        organizerLastTransfer=new {retainer=organizeActiveRetainer,move,sourceNow=src,destinationNow=dst,confirmed,at=DateTimeOffset.UtcNow};
+        var now=DateTimeOffset.UtcNow;
+        var state=OrganizerTransferRecovery.Check(move,src,dst,now-organizerSubmittedAt);
+        var confirmed=state==OrganizerTransferState.Confirmed;
+        organizerLastTransfer=new {retainer=organizeActiveRetainer,submission=organizerSubmission,move,sourceNow=src,destinationNow=dst,confirmed,state=state.ToString(),recentIssues=organizerTransferIssues.ToArray(),at=now};
+        if(state==OrganizerTransferState.Changed){
+            StopOrganize($"Stopped: item {move.Source.Item} changed without the expected transfer result. No retry sent.");return false;
+        }
+        if(state==OrganizerTransferState.Unchanged){
+            organizerTransferIssues.Enqueue(new {submission=organizerSubmission,sourceNow=src,destinationNow=dst,state=state.ToString(),at=now});while(organizerTransferIssues.Count>32)organizerTransferIssues.Dequeue();
+            organizerDeferredItems.Add((move.Source.Item,move.Source.Hq));organizerDeferred=organizerDeferredItems.Count;
+            FollowChatNotice($"ORGANIZER — Item {move.Source.Item} did not move; deferred it and its remaining transfers. Continuing other items.");
+            organizeMoves=OrganizerTransferRecovery.DeferItem(organizeMoves,organizeMoveIndex);
+            organizePending=null;
+            RememberOrganizerInventory(organizeActiveRetainer,OrganizerInventory(true,false).Concat(OrganizerInventory(true,true)).ToArray());
+            if(organizeMoveIndex<organizeMoves.Length&&organizeMoves[organizeMoveIndex].Retainer==organizeActiveRetainer)BindOrganizerVisit();
+            else OrganizeStage(8);
+            return false;
+        }
         if(confirmed){retainerCaptureStability.ConfirmTransfer(Player.ContentId,organizeActiveRetainer);}
         return confirmed;
     }
