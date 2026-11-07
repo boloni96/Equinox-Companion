@@ -36,7 +36,8 @@ public sealed class CollisionRouteSearch
     }
     private readonly IWalkingCollision collision;
     private readonly Vector3 origin,goal;
-    private readonly float range,spacing,heuristicWeight,searchRadius;
+    private readonly float range,spacing,heuristicWeight;
+    private float searchRadius;
     private NavigationRoadRoute? roads;
     private readonly Frontier forward=new(false);
     private Frontier? backward,active;
@@ -81,7 +82,7 @@ public sealed class CollisionRouteSearch
     {
         roadWorker=mapDetourWorker??(work=>Task.Run(work));
         this.collision=collision;this.goal=goal;this.range=Math.Clamp(range,.25f,5f);this.spacing=spacing/2;this.heuristicWeight=heuristicWeight;this.roads=roads;
-        searchRadius=MathF.Max(Horizontal(start,goal)+35,roads?.Points.Max(p=>Horizontal(p,goal))+16??0);
+        searchRadius=MathF.Max(Horizontal(start,goal)+35,roads?.SearchRadius(goal)??0);
         if(!float.IsFinite(heuristicWeight)||heuristicWeight is <1 or >8)throw new ArgumentException("Invalid search priority");
         if(!Finite(start)||!Finite(goal)||!float.IsFinite(spacing)||spacing<.25f||spacing>2)throw new ArgumentException("Invalid navigation coordinates");
         if(Vector3.Distance(start,goal)>2048)throw new InvalidOperationException("Local route exceeds 2048 yalms; use travel first.");
@@ -105,7 +106,7 @@ public sealed class CollisionRouteSearch
                 if(roadDetourTask?.IsCompleted==true){
                     var task=roadDetourTask;roadDetourTask=null;
                     if(task.IsCompletedSuccessfully&&task.Result is {} detour){
-                        CompletedRoadDetours++;roads=detour;roadSeed=new(collision,committedRoadEnd?.Point??origin,detour.Points);
+                        CompletedRoadDetours++;roads=detour;searchRadius=MathF.Max(searchRadius,detour.SearchRadius(goal));roadSeed=new(collision,committedRoadEnd?.Point??origin,detour.Points);
                     }else if(task.IsFaulted){_ = task.Exception;}
                 }
                 if(roadSeed is {} seed){

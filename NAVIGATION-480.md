@@ -2,6 +2,7 @@
 
 The screenshots describe how to walk around any plot, not a request for a catalogue of special-case routes. Known coordinate hints remain optional aids; the shared route planner now also adapts an ordinary game-map guide when native geometry disproves it. This mechanism applies to any route with usable map guidance, independent of territory or plot number.
 
+- Search bounds cover the map region being explored, including longer street detours, instead of staying tied to the rejected shortcut.
 - A rejected map-guide connection records its position. A managed worker rebuilds the 2D guide around the observed blocked areas, with a three-yalm guide buffer (or larger for coarse map cells). This buffer is a planning preference; all resulting steps must still pass native 3D support and collision checks.
 - The start can escape sideways or away when already beside a newly found boundary. A new guide starts at the actual requested position instead of snapping the player onto a map-cell centre that may lie inside a wall.
 - Up to four alternate map guides can be checked in one search. The general 3D search continues while a map calculation runs and remains the fallback when map guidance is unavailable or alternatives fail.

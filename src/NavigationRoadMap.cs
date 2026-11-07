@@ -59,6 +59,7 @@ public sealed class NavigationRoadRoute
     private readonly float[] toGoal,toStart;
     public Vector3[] Points { get; }
     public int Cells=>width*height;
+    internal float SearchRadius(Vector3 goal)=>new[]{map.World(minX,minZ),map.World(minX+width-1,minZ),map.World(minX,minZ+height-1),map.World(minX+width-1,minZ+height-1)}.Max(p=>CollisionRouteSearch.Horizontal(p,goal))+map.CellSize;
     private NavigationRoadRoute(NavigationRoadMap map,int x,int z,int w,int h,float[] goal,float[] start,Vector3[] points){
         this.map=map;minX=x;minZ=z;width=w;height=h;toGoal=goal;toStart=start;Points=points;
     }
