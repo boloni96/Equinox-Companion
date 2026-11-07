@@ -5,6 +5,7 @@ using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.UI;
 using FFXIVClientStructs.FFXIV.Client.Game.Control;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
+using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 namespace EquinoxCompanion;
 
@@ -21,6 +22,10 @@ public sealed partial class Plugin
     private readonly Queue<uint> gearDeliveries=[];
     private uint[] gearBatch=[];
     private uint gearItem;
+    private readonly HashSet<int> gearDresserCategoriesChecked=[];
+    private int gearDresserPreviousCategory=-1;
+    private DateTimeOffset gearDresserCategoryChangedAt;
+    private string gearCopyRejection="";
     private RetrievalQuality gearQuality;
     private int gearTradeFilter;
     private ChestStack? gearCopy;
@@ -67,7 +72,7 @@ public sealed partial class Plugin
         gearSelection.Clear();gearSelection.UnionWith(ids);gearRemaining.Clear();foreach(var id in ids)gearRemaining.Enqueue(id);gearDeliveries.Clear();gearBatch=[];
         gearPause=new(new SellerAutoRetainerPort());gearPausePrepared=false;gearRouting=true;gearNext=default;gearMoveOwned=gearLookupOwned=false;GearPhase(0,"Opening dresser / checking destinations");
     }
-    private void GearPhase(int phase,string status){gearDresserTransitionObserved=false;gearPhase=phase;gearRechecks=gearOpenRetries=0;gearDeadline=DateTimeOffset.UtcNow.AddSeconds(30);gearInteractAt=default;gearStatus=status+(gearCopy is {} copy?" · "+SearchItemName(copy.Item):"");StorageTrace("gear","step",gearCopy?.Item??0,gearStatus);}
+    private void GearPhase(int phase,string status){gearDresserTransitionObserved=false;gearDresserCategoriesChecked.Clear();gearDresserPreviousCategory=-1;gearDresserCategoryChangedAt=default;gearPhase=phase;gearRechecks=gearOpenRetries=0;gearDeadline=DateTimeOffset.UtcNow.AddSeconds(30);gearInteractAt=default;gearStatus=status+(gearCopy is {} copy?" · "+SearchItemName(copy.Item):"");StorageTrace("gear","step",gearCopy?.Item??0,gearStatus);}
     private void GearSkip(uint item,string reason){gearSkipped++;gearStatus="Skipped "+SearchItemName(item)+" · "+reason;StorageTrace("gear","skipped",item,reason);}
     private unsafe void StopGearStorage(string reason)
     {
@@ -157,29 +162,38 @@ public sealed partial class Plugin
         var eligible=armoireRows!.TryGetValue(item,out var row);
         return GearStoragePolicy.Destination(eligible,eligible&&state->Cabinet.IsItemInCabinet(row),gearKnownDresser.Contains(item),dyed,gearSkipDyed,ArmoireExclusions().Contains(item));
     }
-    private unsafe bool GearSlotAllowed(InventoryItem item,InventoryType container)
+    private unsafe bool GearSlotAllowed(InventoryItem item,InventoryType container)=>GearSlotRejection(item,container).Length==0;
+    private unsafe string GearSlotRejection(InventoryItem item,InventoryType container)
     {
-        if(OrganizerGearProtected(item.ItemId)||!gearSelection.Contains(item.ItemId%1000000)||item.IsSymbolic||gearFromRetainers&&!GearCategoryMatches(item.ItemId%1000000,gearCategories))return false;
+        if(OrganizerGearProtected(item.ItemId))return "Protected by a gear set";
+        if(!gearSelection.Contains(item.ItemId%1000000))return "Not selected";
+        if(item.IsSymbolic)return "Symbolic inventory entry";
+        if(gearFromRetainers&&!GearCategoryMatches(item.ItemId%1000000,gearCategories))return "Excluded by category filter";
         if(((uint)container>=10000||!gearFromRetainers)&&gearKeep.GetValueOrDefault(item.ItemId%1000000) is >0 and var keep){
-            var manager=InventoryManager.Instance();if(manager==null)return false;var count=0;
+            var manager=InventoryManager.Instance();if(manager==null)return "Inventory data unavailable";var count=0;
             var types=(uint)container>=10000?Enumerable.Range(10000,7).Select(i=>(InventoryType)i):ArmoireContainers.Where(t=>t!=InventoryType.EquippedItems);
-            foreach(var type in types){var c=manager->GetInventoryContainer(type);if(c==null||!c->IsLoaded||c->Items==null)return false;for(var i=0;i<c->Size;i++){var slot=c->Items[i];if(!slot.IsSymbolic&&slot.ItemId%1000000==item.ItemId%1000000&&RetainerRetrieval.AllowsQuality((slot.Flags&InventoryItem.ItemFlags.HighQuality)!=0,gearQuality))count+=slot.Quantity;}}
-            if(count<=keep)return false;
+            foreach(var type in types){var c=manager->GetInventoryContainer(type);if(c==null||!c->IsLoaded||c->Items==null)return "Inventory data unavailable for Keep check";for(var i=0;i<c->Size;i++){var slot=c->Items[i];if(!slot.IsSymbolic&&slot.ItemId%1000000==item.ItemId%1000000&&RetainerRetrieval.AllowsQuality((slot.Flags&InventoryItem.ItemFlags.HighQuality)!=0,gearQuality))count+=slot.Quantity;}}
+            if(count<=keep)return "Reserved by Keep amount";
         }
         var materia=false;for(var j=0;j<5;j++)materia|=item.Materia[j]!=0;
-        if(!GearStoragePolicy.SafeCopy(item.Quantity,container==InventoryType.EquippedItems,item.Stains[0],item.Stains[1],gearSkipDyed,materia,item.Condition))return false;
-        if(!RetainerRetrieval.AllowsQuality((item.Flags&InventoryItem.ItemFlags.HighQuality)!=0,gearQuality)||gearTradeFilter!=0&&!RetrievalAllowsTradeFilter(item,gearTradeFilter))return false;
-        return GearDestination(item.ItemId%1000000,item.Stains[0]!=0||item.Stains[1]!=0)!=GearStorageDestination.Skip;
+        var safety=GearStoragePolicy.CopyRejection(item.Quantity,container==InventoryType.EquippedItems,item.Stains[0],item.Stains[1],gearSkipDyed,materia,item.Condition);
+        if(safety.Length>0)return safety;
+        if(!RetainerRetrieval.AllowsQuality((item.Flags&InventoryItem.ItemFlags.HighQuality)!=0,gearQuality))return "Excluded by quality filter";
+        if(gearTradeFilter!=0&&!RetrievalAllowsTradeFilter(item,gearTradeFilter))return "Excluded by tradability filter";
+        return GearDestination(item.ItemId%1000000,item.Stains[0]!=0||item.Stains[1]!=0)==GearStorageDestination.Skip?"Already stored or excluded by storage options":"";
     }
     private unsafe ChestStack? GearFindCopy(uint item)
     {
+        gearCopyRejection="Inventory data unavailable";
         var manager=InventoryManager.Instance();if(manager==null)return null;
         // Native armoire storage chooses by item ID. Never let it consume an
         // unselected duplicate, including an equipped or differently dyed copy.
-        if(ArmoireInventory(item).Held!=1)return null;
+        var held=ArmoireInventory(item).Held;
+        if(held!=1){gearCopyRejection=held==0?"No copy found in bags / Armoury Chest":"Multiple copies found ("+held+"); duplicate protection";return null;}
+        gearCopyRejection="Copy not found in loaded source containers";
         foreach(var type in ArmoireContainers){
             var c=manager->GetInventoryContainer(type);if(c==null||!c->IsLoaded||c->Items==null)continue;
-            for(var i=0;i<c->Size;i++){var s=c->Items[i];if(s.ItemId%1000000==item&&GearSlotAllowed(s,type))return new((uint)type,i,item,1,(s.Flags&InventoryItem.ItemFlags.HighQuality)!=0,1);}
+            for(var i=0;i<c->Size;i++){var s=c->Items[i];if(s.ItemId%1000000!=item)continue;gearCopyRejection=GearSlotRejection(s,type);if(gearCopyRejection.Length==0)return new((uint)type,i,item,1,(s.Flags&InventoryItem.ItemFlags.HighQuality)!=0,1);}
         }
         return null;
     }
@@ -241,14 +255,14 @@ public sealed partial class Plugin
                 if(retrievalRun.Running){gearStatus=retrievalRun.Status;gearDeadline=now.AddSeconds(120);return;}
                 retrievalPort.GearFilter=false;
                 if(retrievalRun.Status.StartsWith("Stopped",StringComparison.Ordinal))throw new InvalidOperationException(retrievalRun.Status);
-                foreach(var id in gearBatch){if(GearFindCopy(id)!=null)gearDeliveries.Enqueue(id);else GearSkip(id,"No single safe copy found after withdrawal");}
+                foreach(var id in gearBatch){if(GearFindCopy(id)!=null)gearDeliveries.Enqueue(id);else GearSkip(id,gearCopyRejection);}
                 GearPhase(4,"Delivering batch to glamour storage");return;
             }
             if(gearPhase==4){
                 if(!GearOpen(false,now)||!GearLoadCabinet())return;
                 if(gearDeliveries.Count==0){GearPhase(1,"Reusing free inventory space for the next batch");return;}
                 RefreshGearDresser();gearItem=gearDeliveries.Dequeue();gearCopy=GearFindCopy(gearItem);
-                if(gearCopy==null){GearSkip(gearItem,"No single eligible copy: check dyes, condition, materia, duplicates and gear-set protection");return;}
+                if(gearCopy==null){GearSkip(gearItem,gearCopyRejection);return;}
                 var live=GearLiveCopy(gearCopy);if(live==null){GearSkip(gearItem,"Selected copy changed or became protected");gearCopy=null;return;}
                 gearDestination=GearDestination(gearItem,live->Stains[0]!=0||live->Stains[1]!=0);
                 if(gearDestination==GearStorageDestination.Armoire){
@@ -324,6 +338,20 @@ public sealed partial class Plugin
                 throw new InvalidOperationException("Open the dresser's item-storage list, then retry Store selected gear.");
             var data=owner->Data;
             if(data->IsPopulatingList||!data->IsPopulatingComplete)return;
+            var controls=(AddonMiragePrismPrismBoxCrystallize*)list;
+            if(controls->CategoryDropDown==null)throw new InvalidOperationException("Dresser category controls unavailable; item kept.");
+            var category=controls->CategoryDropDown->GetSelectedItemIndex();
+            if(category<0||category>=controls->CategoryLabels.Length)return;
+            if(gearDresserPreviousCategory>=0){
+                var elapsed=DateTimeOffset.UtcNow-gearDresserCategoryChangedAt;
+                if(category==gearDresserPreviousCategory){
+                    if(elapsed>TimeSpan.FromSeconds(5))throw new InvalidOperationException("Dresser category did not change; item kept.");
+                    return;
+                }
+                // Let the native category change rebuild the list before reading rows.
+                if(elapsed<TimeSpan.FromMilliseconds(750))return;
+                gearDresserPreviousCategory=-1;
+            }
             var count=Math.Min((int)data->CrystallizeItemCount,data->CrystallizeItems.Length);
             var found=-1;
             for(var i=0;i<count;i++){
@@ -331,9 +359,18 @@ public sealed partial class Plugin
                 if(GearDresserSelection.Matches(copy.Container,copy.Slot,copy.Item,(uint)row.Inventory,row.Slot,row.ItemId)){found=i;break;}
             }
             if(found<0){
-                gearSkipped++;gearCopy=null;
-                GearPhase(4,"Skipped "+SearchItemName(copy.Item)+" · not offered in the dresser item list; item kept");
-                return;
+                var newCategory=gearDresserCategoriesChecked.Add(category);
+                if(newCategory&&gearDresserCategoriesChecked.Count<controls->CategoryLabels.Length){
+                    var button=controls->CategoryNextButton;
+                    if(button==null||!button->IsEnabled||!GearDresserCategoryClick(button))
+                        throw new InvalidOperationException("Cannot change dresser category; item kept.");
+                    gearDresserPreviousCategory=category;gearDresserCategoryChangedAt=DateTimeOffset.UtcNow;
+                    gearStatus="Checking dresser categories · "+SearchItemName(copy.Item);
+                    StorageTrace("gear","dresser category",copy.Item,$"from={category}; checked={gearDresserCategoriesChecked.Count}; rows={count}; container={copy.Container}; slot={copy.Slot}");
+                    return;
+                }
+                GearSkip(copy.Item,"Not offered after checking all dresser source categories; check the game's list filters");
+                gearCopy=null;GearPhase(4,"Continuing after dresser category search");return;
             }
             // The agent's normal-item selection event is UInt(14, candidate, 0).
             // Callback 0 on the list closes the dresser; it is not row selection.
@@ -364,6 +401,18 @@ public sealed partial class Plugin
         if(!matches||GearLiveCopy(copy)==null)throw new InvalidOperationException("Dresser confirmation does not match the selected item.");
         StorageTrace("gear","dresser confirmation",copy.Item,$"addon={confirm->NameString}; id={confirm->Id}; values={confirm->AtkValuesCount}; selected copy verified");
         confirm->FireCallbackInt(0);gearConfirmationSent=true;GearPhase(6,"Waiting for individual dresser receipt");
+    }
+    private static unsafe bool GearDresserCategoryClick(AtkComponentButton* button)
+    {
+        // Dispatch the native next-category button's registered event, avoiding guessed callback IDs.
+        var owner=button->AtkComponentBase.OwnerNode;
+        var ownerNode=owner==null?null:&owner->AtkResNode;
+        var componentNode=button->AtkComponentBase.AtkResNode;
+        var node=ownerNode!=null&&ownerNode->IsEventRegistered(AtkEventType.ButtonClick)?ownerNode:
+            componentNode!=null&&componentNode->IsEventRegistered(AtkEventType.ButtonClick)?componentNode:null;
+        if(node==null)return false;
+        AtkEventDispatcher.Event click=default;click.State.EventType=AtkEventType.ButtonClick;
+        node->DispatchEvent(&click);return true;
     }
     private static unsafe AtkUnitBase* GearDresserConfirmation()
     {
