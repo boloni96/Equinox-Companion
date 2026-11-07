@@ -29,7 +29,7 @@ internal static class WalkingRouteNetwork
         while(open.TryDequeue(out var current,out _)){
             if(!closed.Add(current))continue;
             var p=points[current];
-            if(Vector3.Distance(p,goal)<=MathF.Min(2.2f,MathF.Max(range,.25f))&&clear(p,goal)){
+            if(Vector3.Distance(p,goal)<=2.2f&&clear(p,goal)){
                 var path=new List<Vector3>{goal};for(var i=current;i>=0;i=parents[i])path.Add(points[i]);path.Add(start);path.Reverse();return path.ToArray();
             }
             var next=new List<int>(edges[current]);

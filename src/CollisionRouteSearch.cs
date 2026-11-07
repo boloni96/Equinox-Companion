@@ -23,7 +23,7 @@ public interface IWalkingCollision
 public sealed class CollisionRouteSearch
 {
     private readonly record struct Key(int X,int Y,int Z);
-    private sealed record Node(Key Key,Vector3 Point,float Cost,Node? Previous);
+    private sealed record Node(Key Key,Vector3 Point,float Cost,Node? Previous,bool Priced=false);
     private sealed class Frontier(bool reverse)
     {
         public readonly bool Reverse=reverse;
@@ -94,6 +94,14 @@ public sealed class CollisionRouteSearch
                 }
                 var current=side.Pending!;
                 if(side.Neighbor==-3){
+                    // Price wall clearance only for promising candidates, instead
+                    // of probing eight directions around every unused neighbor.
+                    if(!current.Priced&&current.Previous is {} priceParent){
+                        var cost=current.Cost+Vector3.Distance(priceParent.Point,current.Point)*6*collision.WallPenalty(current.Point);
+                        var priced=current with{Cost=cost,Priced=true};
+                        side.Open.Enqueue(priced,cost+heuristicWeight*Heuristic(priced.Point,side.Reverse));
+                        side.Pending=null;continue;
+                    }
                     // Lazy edge validation: expensive swept-body probes run only
                     // when a candidate is selected, not for every unused branch.
                     if(current.Previous is {} parent&&!collision.Traverse(side.Reverse?current.Point:parent.Point,side.Reverse?parent.Point:current.Point)){
@@ -149,7 +157,7 @@ public sealed class CollisionRouteSearch
             groundRejected++;Rejected(candidate);return;
         }
         var key=Address(point);if(side.Closed.ContainsKey(key))return;
-        var cost=parent.Cost+Vector3.Distance(parent.Point,point)*(1+6*collision.WallPenalty(point)+3*collision.RoutePenalty(point));
+        var cost=parent.Cost+Vector3.Distance(parent.Point,point)*(1+3*collision.RoutePenalty(point));
         side.Open.Enqueue(new(key,point,cost,parent),cost+heuristicWeight*Heuristic(point,side.Reverse));
     }
     private Key Address(Vector3 p)=>new((int)MathF.Round((p.X-origin.X)/spacing),(int)MathF.Round(p.Y*4),(int)MathF.Round((p.Z-origin.Z)/spacing));
@@ -172,10 +180,10 @@ internal sealed class WalkingGroundReadiness
     private uint territory;
     private ulong character;
     public void Reset()=>since=null;
-    public bool MayWait(Vector3 current,uint area,ulong actor,DateTimeOffset now)
+    public bool MayWait(Vector3 current,uint area,ulong actor,DateTimeOffset now,double seconds=10)
     {
         if(since==null||area!=territory||actor!=character||Vector3.DistanceSquared(position,current)>.25f)
         {since=now;position=current;territory=area;character=actor;}
-        return now-since.Value<TimeSpan.FromSeconds(10);
+        return now-since.Value<TimeSpan.FromSeconds(seconds);
     }
 }

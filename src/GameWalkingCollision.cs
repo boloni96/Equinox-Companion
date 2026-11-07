@@ -30,14 +30,14 @@ internal sealed class GameWalkingCollision:IWalkingCollision
             var now=Environment.TickCount64;if(now-liveWallAt>150){liveWallAt=now;liveWallCache.Clear();}
             if(liveWallCache.TryGetValue(key,out var live))return live;
         }
-        if(groundCache!=null&&wallCache.TryGetValue(point,out var cached))return cached;
+        if(groundCache!=null&&wallCache.TryGetValue(key,out var cached))return cached;
         Ready();const float preferred=3f;var nearest=preferred;
         for(var i=0;i<8;i++){
             var angle=i*MathF.PI/4;var direction=new Vector3(MathF.Cos(angle),0,MathF.Sin(angle));
             if(Hit(point+new Vector3(0,.65f,0),direction,preferred,out var hit,WalkingCollisionFilter.Movement))nearest=MathF.Min(nearest,CollisionRouteSearch.Horizontal(point,hit.Point));
         }
         var penalty=Math.Clamp((preferred-nearest)/(preferred-Radius),0,1);
-        if(groundCache!=null&&wallCache.Count<100000)wallCache[point]=penalty;
+        if(groundCache!=null&&wallCache.Count<100000)wallCache[key]=penalty;
         if(groundCache==null&&liveWallCache.Count<512)liveWallCache[key]=penalty;
         return penalty;
     }
@@ -74,16 +74,17 @@ internal sealed class GameWalkingCollision:IWalkingCollision
         if(groundCache!=null&&groundCache.Count<100000)groundCache[near]=(found,ground);
         return found;
     }
+    internal string GroundFailure { get; private set; }="";
     private bool ReadGround(Vector3 near,out Vector3 ground)
     {
-        Ready();ground=default;
-        if(!Hit(near+new Vector3(0,.7f,0),-Vector3.UnitY,1.5f,out var hit))return false;
+        Ready();ground=default;GroundFailure="";
+        if(!Hit(near+new Vector3(0,.7f,0),-Vector3.UnitY,1.5f,out var hit)){GroundFailure="No support ray hit";return false;}
         // Triangle cross product is available even when a collider omits its normal.
         var normal=hit.Normal;if(normal.LengthSquared()<.1f)normal=Vector3.Cross(hit.V2-hit.V1,hit.V3-hit.V1);
-        if(normal.LengthSquared()<.0001f||Vector3.Normalize(normal).Y<.65f)return false;
-        if(hit.Point.Y-near.Y>.65f||near.Y-hit.Point.Y>.7f)return false;
+        if(normal.LengthSquared()<.0001f||Vector3.Normalize(normal).Y<.65f){GroundFailure=$"Support normal rejected: {normal}";return false;}
+        if(hit.Point.Y-near.Y>.65f||near.Y-hit.Point.Y>.7f){GroundFailure=$"Support height rejected: {hit.Point.Y-near.Y}";return false;}
         ground=hit.Point;
-        if(Hit(ground+new Vector3(0,.12f,0),Vector3.UnitY,Height-.12f,out _,WalkingCollisionFilter.Movement))return false;
+        if(Hit(ground+new Vector3(0,.12f,0),Vector3.UnitY,Height-.12f,out _,WalkingCollisionFilter.Movement)){GroundFailure="Headroom blocked";return false;}
         return true;
     }
     internal bool InteractionVisible(Vector3 floor,Vector3 marker)

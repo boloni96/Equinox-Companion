@@ -49,6 +49,39 @@ internal static class VerifiedWalkingOpening
 }
 internal static class WalkingRouteMemory
 {
+    // Split only connections near the obstruction. Other traversed sections
+    // remain usable by the route network, including the opposite side.
+    public static IEnumerable<RememberedWalkingRoute> Cut(RememberedWalkingRoute route,Vector3 blocked){
+        var chunk=new List<Vector3>();
+        for(var i=0;i<route.Points.Length;i++){
+            var p=route.Points[i];
+            var safePoint=Vector3.Distance(p,blocked)>.8f;
+            var safeEdge=i==0||AvoidStalledTargets.ClearOfBlocked(route.Points[i-1],p,[blocked]);
+            if(!safePoint||!safeEdge){
+                if(chunk.Count>=2)yield return new(route.Territory,chunk[^1],.25f,chunk.ToArray());
+                chunk.Clear();
+            }
+            if(safePoint)chunk.Add(p);
+        }
+        if(chunk.Count>=2)yield return new(route.Territory,chunk[^1],.25f,chunk.ToArray());
+    }
+    public static Vector3[]? Prefix(IEnumerable<RememberedWalkingRoute> routes,uint territory,Vector3 start,Vector3 goal,Func<Vector3,Vector3,bool> clear){
+        Vector3[]? best=null;var bestRemaining=Vector3.Distance(start,goal)-6;var checks=32;
+        foreach(var route in routes.Reverse().Where(r=>r.Territory==territory)){
+            for(var i=0;i<route.Points.Length;i++){
+                if(Vector3.Distance(start,route.Points[i])>2.2f)continue;
+                if(checks--<=0)return best;
+                if(!clear(start,route.Points[i]))continue;
+                for(var end=i+1;end<route.Points.Length;end++){
+                    var remaining=Vector3.Distance(route.Points[end],goal);
+                    if(remaining>=bestRemaining)continue;
+                    bestRemaining=remaining;best=new[]{start}.Concat(route.Points.Skip(i).Take(end-i+1)).ToArray();
+                }
+                break;
+            }
+        }
+        return best;
+    }
     public static Vector3[]? Join(IEnumerable<RememberedWalkingRoute> routes,uint territory,Vector3 position,Vector3 goal,float range,Func<Vector3,Vector3,bool> clear){
         foreach(var route in routes.Reverse()){
             if(route.Territory!=territory||Vector3.Distance(route.Goal,goal)>.1f||MathF.Abs(route.Range-range)>.1f||route.Points.Length<2)continue;
