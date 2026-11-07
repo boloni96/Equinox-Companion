@@ -17,6 +17,7 @@ internal static class RoadRoute465Tests
         if(map.BuildRoute(new(9999,0,0),Vector3.Zero)!=null)throw new Exception("Off-map coordinates cannot wrap.");
         var geometry=new Floors();var search=new CollisionRouteSearch(geometry,Vector3.Zero,new(8,12,0),.4f);
         for(var i=0;i<4000&&!search.Finished;i++)search.Advance(100,2000);
+        if(search.Expanded>600)throw new Exception("Fine-step fallback must not flood the stacked-floor search with additional grid lanes.");
         if(search.Path==null)throw new Exception("Bidirectional search did not connect floors through the distant ramp: "+search.Error);
         if(!search.Path.Any(p=>p.Z>=26)||!search.Path.Any(p=>p.Y is >2 and <10))throw new Exception("Stacked floors must connect by the ramp, never a vertical shortcut.");
         for(var i=1;i<search.Path.Length;i++)if(!geometry.Traverse(search.Path[i-1],search.Path[i]))throw new Exception("Returned reverse-search edges must be valid in walking direction.");

@@ -7,7 +7,7 @@ public sealed record NavigationSearchPoint(float X,float Y,float Z)
 {
     public static NavigationSearchPoint From(Vector3 p)=>new(p.X,p.Y,p.Z);
 }
-public sealed record NavigationSearchDiagnostic(NavigationSearchPoint Origin,NavigationSearchPoint Goal,int Expanded,int Frontier,int BudgetYields,int GroundRejected,int TraverseRejected,int AcceptedEdges,long NativeQueries,long CacheHits,NavigationSearchPoint[] Explored,NavigationSearchPoint[] Rejected,NavigationSearchPoint[] ClosestPath,int ReverseExpanded,NavigationSearchPoint[] ReverseExplored,bool RoadGuided,int RoadSeedPoints);
+public sealed record NavigationSearchDiagnostic(NavigationSearchPoint Origin,NavigationSearchPoint Goal,int Expanded,int Frontier,int BudgetYields,int GroundRejected,int TraverseRejected,int AcceptedEdges,long NativeQueries,long CacheHits,NavigationSearchPoint[] Explored,NavigationSearchPoint[] Rejected,NavigationSearchPoint[] ClosestPath,int ReverseExpanded,NavigationSearchPoint[] ReverseExplored,bool RoadGuided,int RoadSeedPoints,string? RoadSeedStop);
 
 public interface IWalkingCollision
 {
@@ -41,10 +41,12 @@ public sealed class CollisionRouteSearch
     private Node? closest;
     private WalkingRoadSeed? roadSeed;
     private int roadSeedPoints;
+    private string? roadSeedStop;
+    private readonly HashSet<(Key Forward,Key Backward)> testedJoins=[];
     private readonly List<Vector3> explored=[],reverseExplored=[];
     private readonly Queue<Vector3> rejected=[];
     private int groundRejected,traverseRejected,acceptedEdges;
-    private static readonly (int X,int Z)[] Directions=[(2,0),(-2,0),(0,2),(0,-2),(2,2),(2,-2),(-2,2),(-2,-2),(1,0),(-1,0),(0,1),(0,-1),(1,1),(1,-1),(-1,1),(-1,-1)];
+    private static readonly (int X,int Z)[] Directions=[(4,0),(-4,0),(0,4),(0,-4),(4,4),(4,-4),(-4,4),(-4,-4),(2,0),(-2,0),(0,2),(0,-2),(2,2),(2,-2),(-2,2),(-2,-2)];
     public string Error { get; private set; }="";
     public Vector3[]? Path { get; private set; }
     public int Expanded=>forward.Closed.Count+(backward?.Closed.Count??0);
@@ -55,13 +57,13 @@ public sealed class CollisionRouteSearch
         var reverseStride=Math.Max(1,(int)Math.Ceiling(reverseExplored.Count/512d));
         return new(NavigationSearchPoint.From(origin),NavigationSearchPoint.From(goal),Expanded,forward.Open.Count+(backward?.Open.Count??0),BudgetYields,groundRejected,traverseRejected,acceptedEdges,collision.NativeQueries,collision.CacheHits,
             explored.Where((_,i)=>i%stride==0).Select(NavigationSearchPoint.From).ToArray(),rejected.Select(NavigationSearchPoint.From).ToArray(),path.Take(256).Select(NavigationSearchPoint.From).ToArray(),
-            backward?.Closed.Count??0,reverseExplored.Where((_,i)=>i%reverseStride==0).Select(NavigationSearchPoint.From).ToArray(),roads!=null,roadSeedPoints);
+            backward?.Closed.Count??0,reverseExplored.Where((_,i)=>i%reverseStride==0).Select(NavigationSearchPoint.From).ToArray(),roads!=null,roadSeedPoints,roadSeedStop);
     }
     private static List<Vector3> Trail(Node? node){var p=new List<Vector3>();for(var n=node;n!=null;n=n.Previous)p.Add(n.Point);p.Reverse();return p;}
     private void Rejected(Vector3 point){rejected.Enqueue(point);if(rejected.Count>128)rejected.Dequeue();}
     public CollisionRouteSearch(IWalkingCollision collision,Vector3 start,Vector3 goal,float range,float spacing=1f,float heuristicWeight=4f,NavigationRoadRoute? roads=null,bool bidirectional=true,IReadOnlyList<Vector3>? streetGuide=null)
     {
-        this.collision=collision;this.goal=goal;this.range=Math.Clamp(range,.25f,5f);this.spacing=spacing;this.heuristicWeight=heuristicWeight;this.roads=roads;
+        this.collision=collision;this.goal=goal;this.range=Math.Clamp(range,.25f,5f);this.spacing=spacing/2;this.heuristicWeight=heuristicWeight;this.roads=roads;
         searchRadius=MathF.Max(Horizontal(start,goal)+35,roads?.Points.Max(p=>Horizontal(p,goal))+16??0);
         if(!float.IsFinite(heuristicWeight)||heuristicWeight is <1 or >8)throw new ArgumentException("Invalid search priority");
         if(!Finite(start)||!Finite(goal)||!float.IsFinite(spacing)||spacing<.25f||spacing>2)throw new ArgumentException("Invalid navigation coordinates");
@@ -84,7 +86,7 @@ public sealed class CollisionRouteSearch
             while(edgeBudget-->0&&clock.Elapsed.TotalMilliseconds<milliseconds){
                 cancellation.ThrowIfCancellationRequested();
                 if(roadSeed is {} seed){
-                    seed.Step();roadSeedPoints=seed.Count;
+                    seed.Step();roadSeedPoints=seed.Count;roadSeedStop=seed.StopReason;
                     if(seed.Finished){
                         var points=seed.Points;Node? parent=null;var cost=0f;
                         foreach(var point in points){
@@ -121,6 +123,9 @@ public sealed class CollisionRouteSearch
                     // Lazy edge validation: expensive swept-body probes run only
                     // when a candidate is selected, not for every unused branch.
                     if(current.Previous is {} parent&&!collision.Traverse(side.Reverse?current.Point:parent.Point,side.Reverse?parent.Point:current.Point)){
+                        // Refine only a rejected unit-length edge. Open roads keep
+                        // their coarse stride instead of quadrupling the search area.
+                        RefineEdge(side,parent,current.Point);
                         traverseRejected++;Rejected(current.Point);side.Pending=null;continue;
                     }
                     if(current.Previous!=null)acceptedEdges++;
@@ -151,11 +156,21 @@ public sealed class CollisionRouteSearch
     private bool TryJoin(Frontier side,Node current)
     {
         var other=side.Reverse?forward:backward;if(other==null)return false;
-        for(var dy=-1;dy<=1;dy++){
-            var key=current.Key with{Y=current.Key.Y+dy};
-            if(!other.Closed.TryGetValue(key,out var match)||Vector3.Distance(current.Point,match.Point)>.5f)continue;
+        // Two valid frontiers need not land on an identical lattice point.
+        // Nearby joins still use the complete directional swept-body check.
+        var candidates=new List<Node>();
+        var cells=(int)MathF.Ceiling(1.5f/spacing);
+        for(var dx=-cells;dx<=cells;dx++)for(var dz=-cells;dz<=cells;dz++)for(var dy=-4;dy<=4;dy++){
+            var key=current.Key with{X=current.Key.X+dx,Y=current.Key.Y+dy,Z=current.Key.Z+dz};
+            if(other.Closed.TryGetValue(key,out var match)&&Horizontal(current.Point,match.Point)<=1.5f&&MathF.Abs(current.Point.Y-match.Point.Y)<=1f)candidates.Add(match);
+        }
+        foreach(var match in candidates.OrderBy(n=>Vector3.DistanceSquared(n.Point,current.Point)).Take(4)){
             var a=side.Reverse?match:current;var b=side.Reverse?current:match;
-            if(Vector3.DistanceSquared(a.Point,b.Point)>.000001f&&!collision.Traverse(a.Point,b.Point))continue;
+            if(testedJoins.Contains((a.Key,b.Key)))continue;
+            var clear=Vector3.DistanceSquared(a.Point,b.Point)<=.000001f||collision.Traverse(a.Point,b.Point);
+            // Never remember an interrupted check as a failed connection.
+            testedJoins.Add((a.Key,b.Key));
+            if(!clear)continue;
             var path=Trail(a);for(var n=b;n!=null;n=n.Previous)if(Vector3.DistanceSquared(path[^1],n.Point)>.000001f)path.Add(n.Point);
             Path=path.ToArray();return true;
         }
@@ -170,10 +185,26 @@ public sealed class CollisionRouteSearch
         // available at every node for narrow gates and stairs. All are swept.
         if(Horizontal(candidate,parent.Point)>2.9f||Horizontal(candidate,origin)>2048||Horizontal(candidate,goal)>searchRadius)return;
         if(!collision.Ground(candidate,out var point)&&!collision.Ground(candidate+new Vector3(0,.45f,0),out point)&&!collision.Ground(candidate-new Vector3(0,.45f,0),out point)){
+            if(Math.Abs(direction.X)<=2&&Math.Abs(direction.Z)<=2)RefineEdge(side,parent,candidate);
             groundRejected++;Rejected(candidate);return;
         }
         var key=Address(point);if(side.Closed.ContainsKey(key))return;
         var cost=parent.Cost+Vector3.Distance(parent.Point,point)*(1+3*collision.RoutePenalty(point));
+        side.Open.Enqueue(new(key,point,cost,parent),cost+heuristicWeight*Heuristic(point,side.Reverse));
+    }
+    private void RefineEdge(Frontier side,Node parent,Vector3 destination)
+    {
+        var from=Address(parent.Point);var to=Address(destination);
+        var dx=Math.Abs(from.X-to.X);var dz=Math.Abs(from.Z-to.Z);
+        // Half of a one-yalm connector; never recursively subdivide below the
+        // half-yalm lattice (quarter-yalm in existing close recovery searches).
+        if(Math.Max(dx,dz)!=2)return;
+        var candidate=(parent.Point+destination)/2;candidate.Y=parent.Point.Y;
+        if(!collision.Ground(candidate,out var point)&&!collision.Ground(candidate+new Vector3(0,.45f,0),out point)&&!collision.Ground(candidate-new Vector3(0,.45f,0),out point))return;
+        var key=Address(point);if(side.Closed.ContainsKey(key))return;
+        // Prefer an available coarse route. A fixed fallback cost avoids filling
+        // open floors with shifted half-grid lanes while retaining tight turns.
+        var cost=parent.Cost+24+Vector3.Distance(parent.Point,point)*(1+3*collision.RoutePenalty(point));
         side.Open.Enqueue(new(key,point,cost,parent),cost+heuristicWeight*Heuristic(point,side.Reverse));
     }
     private Key Address(Vector3 p)=>new((int)MathF.Round((p.X-origin.X)/spacing),(int)MathF.Round(p.Y*4),(int)MathF.Round((p.Z-origin.Z)/spacing));
