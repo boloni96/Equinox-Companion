@@ -86,6 +86,11 @@ public sealed partial class Plugin
             if(Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.BoundByDuty])throw new InvalidOperationException("Housing travel interrupted by combat or duty.");
             if(Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]||Conditions[ConditionFlag.Casting])return;
             var self=Objects.LocalPlayer;if(self==null)return;
+            // Housing invokes ground/visibility queries before IndependentWalk.
+            // A shard teleport can finish its loading screen before collision is ready.
+            if(trip.Stage>=2&&!GameWalkingCollision.Available()){
+                nativeHousingStatus="Waiting for housing collision geometry";return;
+            }
             if(trip.Stage==0){
                 if(!trip.Geometry.IsCompleted)return;
                 if(!trip.Geometry.IsCompletedSuccessfully)throw new InvalidOperationException(trip.Geometry.Exception?.GetBaseException().Message??"Housing layout unavailable.");

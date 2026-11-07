@@ -132,7 +132,7 @@ public sealed partial class Plugin
     private unsafe bool IndependentWalk(Vector3 destination,float range,DateTimeOffset now,bool allowFlight=true,bool preferFlight=false,bool directOnly=false,float directDistance=4,Dalamud.Game.ClientState.Objects.Types.IGameObject? interactionTarget=null)
     {
         if(Objects.LocalPlayer is not {} self)return false;
-        if(interactionTarget!=null&&StopAtInteractionTarget(interactionTarget))return true;
+        if(interactionTarget!=null&&GameWalkingCollision.Available()&&StopAtInteractionTarget(interactionTarget))return true;
         independentInteractionTarget=interactionTarget?.GameObjectId??0;
         if(FlightActive){if(Vector3.DistanceSquared(flightGoal,destination)<1)return false;StopIndependentWalk("Flight destination changed");}
         if(followStopPending||followStopUnconfirmed||nativeFollowRequested)throw new InvalidOperationException("Waiting for game follow to stop before navigating.");
@@ -190,7 +190,7 @@ public sealed partial class Plugin
     }
     private unsafe void UpdateIndependentWalk(DateTimeOffset now)
     {
-        if(independentInteractionTarget!=0&&Player.ContentId==independentCharacter&&Client.TerritoryType==independentTerritory&&
+        if(GameWalkingCollision.Available()&&independentInteractionTarget!=0&&Player.ContentId==independentCharacter&&Client.TerritoryType==independentTerritory&&
             StopAtInteractionTarget(Objects.FirstOrDefault(x=>x.GameObjectId==independentInteractionTarget)))return;
         if(FlightActive){TickIndependentFlight(now);return;}
         if(independentSearch==null&&independentPath==null&&independentEntranceForward==null)return;

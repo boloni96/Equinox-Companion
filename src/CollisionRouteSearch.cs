@@ -7,7 +7,7 @@ public sealed record NavigationSearchPoint(float X,float Y,float Z)
 {
     public static NavigationSearchPoint From(Vector3 p)=>new(p.X,p.Y,p.Z);
 }
-public sealed record NavigationSearchDiagnostic(NavigationSearchPoint Origin,NavigationSearchPoint Goal,int Expanded,int Frontier,int BudgetYields,int GroundRejected,int TraverseRejected,int AcceptedEdges,long NativeQueries,long CacheHits,NavigationSearchPoint[] Explored,NavigationSearchPoint[] Rejected,NavigationSearchPoint[] ClosestPath,int ReverseExpanded,NavigationSearchPoint[] ReverseExplored,bool RoadGuided);
+public sealed record NavigationSearchDiagnostic(NavigationSearchPoint Origin,NavigationSearchPoint Goal,int Expanded,int Frontier,int BudgetYields,int GroundRejected,int TraverseRejected,int AcceptedEdges,long NativeQueries,long CacheHits,NavigationSearchPoint[] Explored,NavigationSearchPoint[] Rejected,NavigationSearchPoint[] ClosestPath,int ReverseExpanded,NavigationSearchPoint[] ReverseExplored,bool RoadGuided,int RoadSeedPoints);
 
 public interface IWalkingCollision
 {
@@ -39,6 +39,8 @@ public sealed class CollisionRouteSearch
     private readonly Frontier forward=new(false);
     private Frontier? backward,active;
     private Node? closest;
+    private WalkingRoadSeed? roadSeed;
+    private int roadSeedPoints;
     private readonly List<Vector3> explored=[],reverseExplored=[];
     private readonly Queue<Vector3> rejected=[];
     private int groundRejected,traverseRejected,acceptedEdges;
@@ -53,7 +55,7 @@ public sealed class CollisionRouteSearch
         var reverseStride=Math.Max(1,(int)Math.Ceiling(reverseExplored.Count/512d));
         return new(NavigationSearchPoint.From(origin),NavigationSearchPoint.From(goal),Expanded,forward.Open.Count+(backward?.Open.Count??0),BudgetYields,groundRejected,traverseRejected,acceptedEdges,collision.NativeQueries,collision.CacheHits,
             explored.Where((_,i)=>i%stride==0).Select(NavigationSearchPoint.From).ToArray(),rejected.Select(NavigationSearchPoint.From).ToArray(),path.Take(256).Select(NavigationSearchPoint.From).ToArray(),
-            backward?.Closed.Count??0,reverseExplored.Where((_,i)=>i%reverseStride==0).Select(NavigationSearchPoint.From).ToArray(),roads!=null);
+            backward?.Closed.Count??0,reverseExplored.Where((_,i)=>i%reverseStride==0).Select(NavigationSearchPoint.From).ToArray(),roads!=null,roadSeedPoints);
     }
     private static List<Vector3> Trail(Node? node){var p=new List<Vector3>();for(var n=node;n!=null;n=n.Previous)p.Add(n.Point);p.Reverse();return p;}
     private void Rejected(Vector3 point){rejected.Enqueue(point);if(rejected.Count>128)rejected.Dequeue();}
@@ -71,6 +73,7 @@ public sealed class CollisionRouteSearch
         if(bidirectional&&Vector3.Distance(origin,goal)>=12&&collision.Ground(goal,out var end)&&MathF.Abs(end.Y-goal.Y)<=1.2f){
             backward=new(true);backward.Open.Enqueue(new(Address(end),end,0,null),0);
         }
+        if(roads is not null&&Vector3.Distance(origin,goal)>=12)roadSeed=new(collision,origin,roads.Points);
         active=forward;
     }
     public void Advance(double milliseconds=1.5,int edgeBudget=24,CancellationToken cancellation=default)
@@ -80,6 +83,19 @@ public sealed class CollisionRouteSearch
         try{
             while(edgeBudget-->0&&clock.Elapsed.TotalMilliseconds<milliseconds){
                 cancellation.ThrowIfCancellationRequested();
+                if(roadSeed is {} seed){
+                    seed.Step();roadSeedPoints=seed.Count;
+                    if(seed.Finished){
+                        var points=seed.Points;Node? parent=null;var cost=0f;
+                        foreach(var point in points){
+                            if(parent!=null)cost+=Vector3.Distance(parent.Point,point);
+                            parent=new(Address(point),point,cost,parent,true);
+                        }
+                        if(points.Length>2&&parent!=null)forward.Open.Enqueue(parent,cost+heuristicWeight*Heuristic(parent.Point,false));
+                        roadSeed=null;
+                    }
+                    continue;
+                }
                 var side=active??forward;
                 if(side.Pending==null){
                     while(side.Open.TryDequeue(out var next,out _)){
