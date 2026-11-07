@@ -21,7 +21,7 @@ public sealed partial class Plugin
     {
         configurationRevision++;
         // Coalesce a burst without postponing persistence indefinitely.
-        if(!configurationDirty)configurationDue=DateTimeOffset.UtcNow.AddMilliseconds(250);
+        if(!configurationDirty)configurationDue=DateTimeOffset.UtcNow.AddSeconds(2);
         configurationDirty=true;
     }
     private void PumpConfiguration()
@@ -32,7 +32,8 @@ public sealed partial class Plugin
             if(!configurationDirty){configurationDirty=true;configurationDue=DateTimeOffset.UtcNow.AddSeconds(5);}
         }
         else configurationError="";
-        if(!configurationDirty||DateTimeOffset.UtcNow<configurationDue)return;
+        // Keep edits dirty while serialization is busy; capture the newest state once free.
+        if(!SaveSnapshotPolicy.Ready(configurationDirty,configurationWriter.Busy,DateTimeOffset.UtcNow,configurationDue))return;
         var started=Stopwatch.GetTimestamp();
         try{var snapshot=config.Snapshot();configurationWriter.Enqueue(snapshot);configurationDirty=false;}
         catch(Exception e){configurationDue=DateTimeOffset.UtcNow.AddSeconds(5);configurationError="Local snapshot failed: "+e.GetType().Name;}

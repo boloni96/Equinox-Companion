@@ -55,7 +55,7 @@ public sealed class Configuration : IPluginConfiguration
         small.TestingByPairing=[];small.MarketJournal=new();small.OrganizerInventories=[];
         small.CachedAdventures=[];small.SharedRoster=null;small.Discoveries=[];small.Houses=[];
         small.Planting=[];small.Tending=[];small.SentEvents=[];small.RetrievalPresets=[];
-        var copy=System.Text.Json.JsonSerializer.Deserialize<Configuration>(System.Text.Json.JsonSerializer.Serialize(small))!;
+        var copy=System.Text.Json.JsonSerializer.Deserialize<Configuration>(System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(small))!;
         copy.OrganizerInventories=OrganizerInventories.Select(r=>r with {Slots=r.Slots.ToArray()}).ToList();
         copy.RetrievalPresets=RetrievalPresets.Select(p=>p with {Items=p.Items.ToArray(),RecipeChoices=p.RecipeChoices is null?null:new(p.RecipeChoices),SendCategories=p.SendCategories?.ToArray(),Entrust=p.Entrust is {} e?new(new(e.Keep),new(e.CategoryKeep),e.Protected.ToArray()):null}).ToList();
         copy.TestingByPairing=new(TestingByPairing);copy.MarketJournal=MarketJournal.Snapshot();

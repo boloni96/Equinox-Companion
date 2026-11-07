@@ -31,3 +31,8 @@ public sealed class LatestSnapshotWriter<T>(Action<T> write) where T : class
         if(Failure is {} e)throw new IOException("Configuration could not be saved",e);
     }
 }
+
+public static class SaveSnapshotPolicy
+{
+    public static bool Ready(bool dirty,bool writerBusy,DateTimeOffset now,DateTimeOffset due)=>dirty&&!writerBusy&&now>=due;
+}

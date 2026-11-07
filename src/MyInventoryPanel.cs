@@ -11,6 +11,7 @@ public sealed partial class Plugin
     private ulong myInventoryCharacter,myInventoryDestination=StorageAutoRouting.AllRetainers;
     private DateTimeOffset myInventoryRefresh;
     private ChestStack[] myInventoryStock=[];
+    private readonly UiProjectionCache<(uint Id,string Name,int Quantity)[]> myInventoryRowsCache=new(250);
     private string MyInventoryName(uint id)=>retrievalCatalog?.Names.GetValueOrDefault(id)??id.ToString();
     private bool MyInventoryMatches(uint id)=>MyInventoryName(id).Contains(myInventorySearch,StringComparison.OrdinalIgnoreCase)&&(myInventoryAllCategories||(myInventoryDestination==GlamourStorageDestination?GearCategoryMatches(id,myInventoryCategories,false):myInventoryCategories.Contains(OrganizeCategory(id))))&&(myInventoryDestination!=GlamourStorageDestination||(GearStorageItemAllowed(id)&&GearSourceAllowed(id)));
     private unsafe bool InventoryTradeFilterAllows(ChestStack stack,int filter)
@@ -48,7 +49,12 @@ public sealed partial class Plugin
         }
         if(myInventoryDestination==GlamourStorageDestination){DrawGearAppearancePicker(ref gearAppearance);if(ImGui.CollapsingHeader("Storage eligibility / source filters"+((gearStorageKind!=0||gearSourceGroup!=0||gearSourceSubgroup!=0||gearOrigin.Length>0)?" · active":"")))DrawGearSourcePicker(false);}
         if(myInventoryRefresh==default){myInventoryStock=ReadMyInventory();myInventoryRefresh=DateTimeOffset.UtcNow.AddSeconds(1);}
-        var rows=myInventoryStock.Where(s=>RetainerRetrieval.AllowsQuality(s.Hq,myInventoryQuality)&&MyInventoryMatches(s.Item)).GroupBy(s=>s.Item).Select(g=>(Id:g.Key,Name:MyInventoryName(g.Key),Quantity:g.Sum(s=>s.Quantity))).OrderBy(x=>x.Name).ToArray();
+        var rowStamp=$"{myInventorySearch}|{myInventoryQuality}|{myInventoryAllCategories}|{string.Join(',',myInventoryCategories.Order())}|{myInventoryDestination}|{gearStorageKind}|{gearSourceGroup}|{gearSourceSubgroup}|{gearOrigin}";
+        var rows=myInventoryRowsCache.Get(myInventoryStock,rowStamp,Environment.TickCount64,()=>{
+            var started=System.Diagnostics.Stopwatch.GetTimestamp();
+            try{return myInventoryStock.Where(s=>RetainerRetrieval.AllowsQuality(s.Hq,myInventoryQuality)&&MyInventoryMatches(s.Item)).GroupBy(s=>s.Item).Select(g=>(Id:g.Key,Name:MyInventoryName(g.Key),Quantity:g.Sum(s=>s.Quantity))).OrderBy(x=>x.Name).ToArray();}
+            finally{RecordPerformanceElapsed("Organizer: inventory display rows",started);}
+        });
         if(ImGui.SmallButton("Select all"))foreach(var row in rows.Where(r=>!OrganizerGearProtected(r.Id)))myInventorySelected.TryAdd(row.Id,row.Quantity);ImGui.SameLine();
         if(ImGui.SmallButton("Clear selection"))myInventorySelected.Clear();ImGui.SameLine();if(ImGui.SmallButton("Refresh")){myInventoryRefresh=default;retrievalRefreshPending=true;RetrievalTry(RefreshRetrievalStock);}
         var names=retrievalKnownRetainers.GetValueOrDefault(Player.ContentId)??new Dictionary<ulong,string>();

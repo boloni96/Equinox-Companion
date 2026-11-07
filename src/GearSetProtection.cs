@@ -5,6 +5,9 @@ public sealed partial class Plugin
 {
     private Dictionary<uint,string> protectedGearSets=[];
     private bool protectedGearSetsReady;
+    private ulong gearProtectionDisplayOwner;
+    private bool gearProtectionDisplayEnabled;
+    private long gearProtectionDisplayUntil;
     private unsafe void RefreshGearSetProtection()
     {
         protectedGearSetsReady=false;protectedGearSets.Clear();
@@ -42,7 +45,14 @@ public sealed partial class Plugin
         if(ImGui.Checkbox("Protect gear used in gear sets",ref enabled)){
             config.ProtectOrganizerGearSets=enabled;SaveConfiguration();InvalidateOrganizePreview();
         }
-        RefreshGearSetProtection();
+        var owner=Player.IsLoaded?Player.ContentId:0;
+        var now=Environment.TickCount64;
+        if(owner!=gearProtectionDisplayOwner||enabled!=gearProtectionDisplayEnabled||now>=gearProtectionDisplayUntil){
+            var started=System.Diagnostics.Stopwatch.GetTimestamp();
+            try{RefreshGearSetProtection();}
+            finally{RecordPerformanceElapsed("Organizer: gear-set display refresh",started);}
+            gearProtectionDisplayOwner=owner;gearProtectionDisplayEnabled=enabled;gearProtectionDisplayUntil=now+250;
+        }
         foreach(var id in myInventorySelected.Keys.Where(OrganizerGearProtected).ToArray())myInventorySelected.Remove(id);
         browseSelected.RemoveWhere(OrganizerGearProtected);
         MarketHelp("Protects items referenced by any saved Gear Set List entry, not only your current set. Protected items cannot be selected or Shift-hovered and are skipped before storage transfers. Matching item IDs are protected across NQ/HQ and duplicate copies. Glamour appearances alone do not count as gear-set equipment.");

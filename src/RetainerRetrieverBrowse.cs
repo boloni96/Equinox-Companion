@@ -18,6 +18,12 @@ public sealed partial class Plugin
     private static string RetainerDestinationLabel(ulong id,string name)=>RetainerNameKnown(id,name)?name:"Name unavailable · …"+(id>9999?id.ToString()[^4..]:id.ToString());
     private void RefreshRetrievalStock()
     {
+        var started=System.Diagnostics.Stopwatch.GetTimestamp();
+        try{RefreshRetrievalStockCore();}
+        finally{RecordPerformanceElapsed("Organizer: stock refresh",started);}
+    }
+    private void RefreshRetrievalStockCore()
+    {
         if(!Player.IsLoaded)return;
         var owner=Player.ContentId;var ownerText=owner.ToString();var live=ReadSellerRetainers();
         if(!retrievalKnownRetainers.TryGetValue(owner,out var names))retrievalKnownRetainers[owner]=names=[];
