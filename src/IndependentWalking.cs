@@ -35,7 +35,7 @@ public sealed partial class Plugin
     private int independentLastRoutePoints,independentLastExpanded;
     private double independentPlanningSeconds;
     private readonly NavigationPhaseTimer independentPhaseTimer=new();
-    private bool independentNearbyApproach,independentGeometryOnly;
+    private bool independentNearbyApproach,independentGeometryOnly,independentInteractionRegion;
     private readonly List<Vector3> independentBlockedTargets=[];
     private readonly RecentWalkingBlocks independentRecentBlocks=new();
     private bool independentBacktracking;
@@ -43,7 +43,7 @@ public sealed partial class Plugin
     private CollisionRouteSearch CreateIndependentSearch(Vector3 start,Vector3 goal,float range){
         var street=independentGeometryOnly?null:NavigationStreetCorridors.Guide(Client.TerritoryType,start,goal);
         if(street!=null)RecordTravelPrompt("Navigation street corridor",new{run=independentNavigationRun,territory=Client.TerritoryType,points=street.Select(FollowTravelPosition.From).ToArray(),source="Known housing street corridor · every step requires native geometry validation"});
-        var target=independentGeometryOnly&&independentInteractionTarget!=0?Objects.FirstOrDefault(x=>x.GameObjectId==independentInteractionTarget):null;
+        var target=independentInteractionRegion&&independentInteractionTarget!=0?Objects.FirstOrDefault(x=>x.GameObjectId==independentInteractionTarget):null;
         var targetPosition=target?.Position;var limit=target==null?0:InteractionLimit(target)-.25f;
         Func<Vector3,bool>? arrival=targetPosition is {} position?p=>InteractionApproachPolicy.WithinDistance(p,position,limit)&&independentCollision.InteractionVisible(p,position):null;
         return new(new AvoidStalledTargets(new GameWalkingCollision(cacheGround:true,roadGuide:independentGeometryOnly?null:independentRoadGuide),independentBlockedTargets.ToArray()),start,goal,range,independentBlockedTargets.Count>0&&Vector3.Distance(start,goal)<12?.5f:1f,roads:independentGeometryOnly?null:independentRoadRoute,streetGuide:street,arrival:arrival);
@@ -135,11 +135,11 @@ public sealed partial class Plugin
         independentSearch=null;independentPath=null;independentPendingPath=null;independentArrived=false;independentDirectOnly=false;independentWalkStatus=reason;independentWalkFailure="";
         if(resetFailure)independentLastWalkFailure="";
     }
-    private unsafe bool IndependentWalk(Vector3 destination,float range,DateTimeOffset now,bool allowFlight=true,bool preferFlight=false,bool directOnly=false,float directDistance=4,Dalamud.Game.ClientState.Objects.Types.IGameObject? interactionTarget=null,bool geometryOnly=false)
+    private unsafe bool IndependentWalk(Vector3 destination,float range,DateTimeOffset now,bool allowFlight=true,bool preferFlight=false,bool directOnly=false,float directDistance=4,Dalamud.Game.ClientState.Objects.Types.IGameObject? interactionTarget=null,bool geometryOnly=false,bool useInteractionRegion=false)
     {
         if(Objects.LocalPlayer is not {} self)return false;
         if(interactionTarget!=null&&GameWalkingCollision.Available()&&StopAtInteractionTarget(interactionTarget))return true;
-        var interactionRegion=geometryOnly&&interactionTarget!=null;
+        var interactionRegion=(geometryOnly||useInteractionRegion)&&interactionTarget!=null;
         if(interactionRegion){destination=interactionTarget!.Position;range=InteractionLimit(interactionTarget)-.25f;}
         independentInteractionTarget=interactionTarget?.GameObjectId??0;
         if(FlightActive){if(Vector3.DistanceSquared(flightGoal,destination)<1)return false;StopIndependentWalk("Flight destination changed");}
@@ -163,7 +163,7 @@ public sealed partial class Plugin
         }
         independentGroundReadiness.Reset();
         if(!geometryOnly&&!PrepareNavigationMap(now,self.Position,destination))return false;
-        independentGeometryOnly=geometryOnly;
+        independentGeometryOnly=geometryOnly;independentInteractionRegion=interactionRegion;
         independentLastSearchDiagnostic=null;independentNavigationRun=Guid.NewGuid().ToString("N");independentInputReads=independentInputOverrides=0;
         independentForwardReads=independentExpiredReads=independentInactiveReads=0;independentNativeGateRejects=independentNativeManualReads=independentNativeExceptions=0;
         independentInputBlock=independentLastWalkFailure="";independentPositionChanged=false;independentLastRoutePoints=independentLastExpanded=0;independentPlanningSeconds=0;independentLease.Revoke();
@@ -318,7 +318,7 @@ public sealed partial class Plugin
                 }
                 if(now>independentBacktrackUntil)throw new InvalidOperationException("Could not back away from the obstruction within 6 seconds; movement stopped.");
             }
-            if(!(independentGeometryOnly&&independentInteractionTarget!=0)&&CollisionRouteSearch.Horizontal(self.Position,independentGoal)<=independentRange&&MathF.Abs(self.Position.Y-independentGoal.Y)<=1.2f){
+            if(!(independentInteractionRegion&&independentInteractionTarget!=0)&&CollisionRouteSearch.Horizontal(self.Position,independentGoal)<=independentRange&&MathF.Abs(self.Position.Y-independentGoal.Y)<=1.2f){
                 independentWalkedPoints.Add(self.Position);RememberIndependentRoute(independentWalkedPoints.ToArray());
                 StopIndependentWalk("Arrived · movement released");independentArrived=true;return;
             }

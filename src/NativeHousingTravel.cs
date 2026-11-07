@@ -59,12 +59,7 @@ public sealed partial class Plugin
     {
         if(TargetWithinInteractionRange(target)){StopIndependentWalk("Within reach of housing travel target");return true;}
         var self=Objects.LocalPlayer!;
-        if(trip.Approach is not {} floor){
-            var edge=NativeAetheryteApproach.InteractionEdge(self.Position,target.Position,InteractionLimit(target));
-            if(!TryNativeTravelGround(edge,self.Position,target.Position,out floor))return false;
-            trip.Approach=floor;
-        }
-        if(IndependentWalk(floor,.5f,now,allowFlight:false,directDistance:8,interactionTarget:target)){
+        if(IndependentWalk(target.Position,InteractionLimit(target),now,allowFlight:false,interactionTarget:target,useInteractionRegion:true)){
             if(TargetWithinInteractionRange(target))return true;
             if(trip.Attempt>=2)throw new InvalidOperationException("Reached the housing approach, but the target is still not within verified interaction reach. Export the travel report.");
             trip.Attempt++;trip.Approach=null;

@@ -125,10 +125,8 @@ public sealed partial class Plugin
                 throw new InvalidOperationException("Unlock a main aetheryte in Gridania, Limsa Lominsa or Ul'dah first.");
             }
             if(!TargetWithinInteractionRange(crystal)){
-                var offset=self.Position-crystal.Position;offset.Y=0;if(offset.LengthSquared()<.01f)throw new InvalidOperationException("The crystal is on another floor.");
-                var approach=NativeAetheryteApproach.InteractionEdge(self.Position,crystal.Position,InteractionLimit(crystal));
-                if(trip.ApproachGoal is not {} floor){if(!TryNativeTravelGround(approach,self.Position,crystal.Position,out floor)){nativeTravelStatus="Waiting for walkable ground beside the aetheryte";return;}trip.ApproachGoal=floor;}
-                IndependentWalk(floor,.65f,now,allowFlight:false,directDistance:8,interactionTarget:crystal);nativeTravelStatus="Approaching aetheryte · "+independentWalkStatus;return;
+                IndependentWalk(crystal.Position,InteractionLimit(crystal),now,allowFlight:false,interactionTarget:crystal,useInteractionRegion:true);
+                nativeTravelStatus="Approaching aetheryte · "+independentWalkStatus;return;
             }
             StopIndependentWalk("At World Visit aetheryte");
             if(Targets.Target?.Address!=crystal.Address){Targets.Target=crystal;return;}
