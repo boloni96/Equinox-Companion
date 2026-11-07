@@ -34,9 +34,9 @@ internal static class WalkingSteering
         // onward sample directly, and advance progress with that same decision.
         // Bound both route distance and query count: no distant loop/floor joins.
         var end=next;var arc=Vector3.Distance(position,path[next]);
-        for(var i=next+1;i<path.Length&&i<=next+16;i++){
+        for(var i=next+1;i<path.Length&&i<=next+64;i++){
             arc+=Vector3.Distance(path[i-1],path[i]);
-            if(arc>4.4f)break;
+            if(arc>16f)break;
             end=i;
         }
         var checks=0;
