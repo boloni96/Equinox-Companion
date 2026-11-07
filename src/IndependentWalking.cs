@@ -275,7 +275,11 @@ public sealed partial class Plugin
                 TraceKeyboundRun(independentNavigationRun,"route-found",$"{independentSearch.Path.Length} points; {independentSearch.Expanded} nodes checked","companion-navigation",false);
                 independentPhaseTimer.SetPlanning(false,DateTimeOffset.UtcNow);
                 var found=independentSearch.Path;
-                if(independentPath!=null)independentPendingPath=found;
+                if(independentPath!=null){
+                    var joined=WalkingSteering.JoinContinuation(independentPath,found);
+                    if(joined!=null){independentPath=joined;independentPendingPath=null;}
+                    else independentPendingPath=found;
+                }
                 else {independentPath=found;independentWaypoint=1;independentCheckedWaypoint=-1;}
                 // Save after observed arrival, not merely after planning succeeds.
                 independentLastRoutePoints=found.Length;independentSearch=null;
@@ -300,7 +304,7 @@ public sealed partial class Plugin
                 if(independentPendingPath!=null){independentPath=independentPendingPath;independentPendingPath=null;independentWaypoint=1;independentCheckedWaypoint=-1;}
                 else if(independentSearch!=null){independentProgressAt=now;independentWalkStatus="Verified section complete · calculating the next section";return;}
             }
-            if(independentPath!=null)independentWaypoint=WalkingSteering.AdvanceWaypoint(self.Position,independentPath,independentWaypoint,IndependentClearConnector);
+            if(independentPath!=null)independentWaypoint=WalkingSteering.AdvanceWaypoint(self.Position,independentPath,independentWaypoint,IndependentTraversableConnector,independentPrevious);
             if(independentPath==null||independentWaypoint>=independentPath.Length)throw new InvalidOperationException("Route ended without confirmed arrival.");
             var target=WalkingSteering.PursuitTarget(self.Position,independentPath,independentWaypoint,IndependentClearConnector,IndependentTraversableConnector);
             if(Vector3.Distance(self.Position,independentLastProgress)>.3f){independentProgressAt=now;independentLastProgress=self.Position;independentPositionChanged=true;

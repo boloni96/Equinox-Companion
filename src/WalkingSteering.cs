@@ -10,11 +10,11 @@ internal static class WalkingSteering
         var dt=Math.Clamp(seconds,0,.05f);
         return current+Math.Clamp(difference*(1-MathF.Exp(-8*dt)),-2.4f*dt,2.4f*dt);
     }
-    public static int AdvanceWaypoint(Vector3 position,Vector3[] path,int next,Func<Vector3,Vector3,bool> clear)
+    public static int AdvanceWaypoint(Vector3 position,Vector3[] path,int next,Func<Vector3,Vector3,bool> clear,Vector3? previous=null)
     {
         // A reached waypoint is consumed even if extra wall space is unavailable.
         // Pursuit still validates every step toward the following waypoint.
-        while(next<path.Length-1&&Vector3.Distance(position,path[next])<=.25f)next++;
+        while(next<path.Length-1&&ReachedWaypoint(position,previous,path[next]))next++;
         // Recover forward progress after a rounded corner or a slow frame.
         // Only join a nearby onward segment through a checked connector.
         var bestDistance=float.MaxValue;var best=next;
@@ -30,6 +30,18 @@ internal static class WalkingSteering
         }
         next=Math.Min(best,path.Length-1);
         return next;
+    }
+    private static bool ReachedWaypoint(Vector3 position,Vector3? previous,Vector3 point){
+        if(Vector3.Distance(position,point)<=.25f)return true;
+        if(previous is not {} before||Vector3.DistanceSquared(before,position)>6.25f)return false;
+        var motion=position-before;var length=motion.LengthSquared();
+        if(length<.000001f)return false;
+        var t=Math.Clamp(Vector3.Dot(point-before,motion)/length,0,1);
+        return Vector3.DistanceSquared(point,before+motion*t)<=.0625f;
+    }
+    public static Vector3[]? JoinContinuation(Vector3[] path,Vector3[] continuation){
+        if(path.Length==0||continuation.Length<2||Vector3.DistanceSquared(path[^1],continuation[0])>.000001f)return null;
+        return path.Concat(continuation.Skip(1)).ToArray();
     }
     public static Vector3 PursuitTarget(Vector3 position,Vector3[] path,int next,Func<Vector3,Vector3,bool> clear,Func<Vector3,Vector3,bool>? traversable=null)
     {
