@@ -18,7 +18,7 @@ public sealed partial class Plugin
         public required string Label;
         public required DateTimeOffset Started;
         public int Stage,EntrySteps,DoorRevealSteps,DoorAttempt;
-        public Vector3? EntryDirection;
+        public Vector3? EntryDirection;public OutdoorPlotEntry? Entry;
         public DateTimeOffset ActionAt,DoorMissingSince;
         public Vector3? Forward,DoorApproach;
         public ulong Door;
@@ -135,15 +135,8 @@ public sealed partial class Plugin
                 if(SameEstate(outside,trip.Destination)){
                     StopIndependentWalk("Requested plot confirmed");trip.Forward=null;trip.Stage=2;
                 }else{
-                    if(trip.Forward==null){
-                        if(!EstateTravelCommand.CanExtendEntry(false,trip.EntrySteps,trip.DoorRevealSteps))
-                            throw new InvalidOperationException("The requested plot was not reached after six checked forward steps.");
-                        trip.EntrySteps++;trip.Forward=self.Position+trip.EntryDirection!.Value*3;
-                    }
-                    if(!IndependentWalk(trip.Forward.Value,.3f,now,allowFlight:false,directOnly:true))return;
-                    StopIndependentWalk("Forward segment complete · checking plot");
-                    trip.Forward=null;
-                    // Re-read the physical plot next frame; completing a segment is not arrival.
+                    trip.Entry??=new(trip.EntryDirection!.Value);
+                    WalkOutdoorPlotEntry(trip.Entry,now);trip.EntrySteps=trip.Entry.Steps;
                     return;
                 }
             }

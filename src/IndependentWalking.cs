@@ -248,7 +248,7 @@ public sealed partial class Plugin
                 }
                 if(progress!=EntranceProgress.Walking)
                     throw new InvalidOperationException($"Entrance forward step stopped: {progress}; position {self.Position}. No circling or repeated push was started.");
-                independentHeading=entrance.Heading;independentSpeed=.5f;
+                independentHeading=entrance.Heading;independentSpeed=1;
                 EnsureIndependentGroundInput();
                 if(!independentForwardHook!.IsEnabled)independentForwardHook.Enable();
                 independentMoving=true;independentLease.Arm(DateTimeOffset.UtcNow);independentPulseUntil=independentLease.Until;renewed=true;
@@ -274,7 +274,7 @@ public sealed partial class Plugin
                 RecordTravelPrompt("Navigation support restored",new{run=independentNavigationRun,position=FollowTravelPosition.From(self.Position)});
             }
             if(independentSearch!=null){
-                independentMoving=false;independentSearch.Advance(milliseconds:independentNearbyApproach?1.5:3,edgeBudget:independentNearbyApproach?48:192);
+                independentSearch.Advance(milliseconds:independentNearbyApproach?1.5:3,edgeBudget:independentNearbyApproach?48:192);
                 independentLastExpanded=independentSearch.Expanded;independentPlanningSeconds=(DateTimeOffset.UtcNow-independentPlanningSince).TotalSeconds;
                 independentWalkStatus=$"Finding walkable route · {independentSearch.Expanded} areas checked";
                 if(independentSearch.Error.Length>0)throw new InvalidOperationException(independentSearch.Error);

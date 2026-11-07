@@ -1,0 +1,9 @@
+# Navigation 0.5.1.485
+
+The existing private/FC outdoor entry step is now shared with garden plot entry and GO SEE. It retains the settled teleport heading, makes bounded three-yalm entry steps (maximum six), and verifies the requested estate before continuing. Gardening stops this entry leg immediately on estate confirmation and only then approaches mapped beds. No garden/GO SEE door interaction is added. The normal-input fallback retains its stall, displacement, height and corridor limits.
+
+GO SEE estate and friend teleports now have an explicit settling/entry continuation instead of ending at teleport submission. Ward walking no longer reports arrival merely because the character is within placard interaction distance. It approaches the placard, then makes a bounded inward entry attempt toward the layout landing anchor and stops on observed plot identity. That anchor is not claimed to be a verified gate coordinate. If the inward approach is obstructed or reaches another estate, it stops instead of claiming arrival; live gate alignment remains to be validated, including empty plots.
+
+For smoother short entry movement, a physically checked next segment is appended before the current one ends; the existing path and input lease stay active. The normal-input entrance fallback uses the same movement magnitude as regular walking. Background planning no longer temporarily clears the moving indicator while a path is active. Entry-stage updates run at 50 ms instead of the general housing menu's 500 ms interval.
+
+Validation: independent navigation regressions, shared entry heading/step-limit and blocked/drift checks, transition tests, and plugin build. These do not prove live smoothness or successful entry at every plot. Retest Shirogane 15 gardening from its teleport landing and GO SEE on a different plot; successful live observations remain required.

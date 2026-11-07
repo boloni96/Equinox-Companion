@@ -62,7 +62,7 @@ public sealed partial class Plugin
    if(trip.MenuSeen&&!menuVisible){goSeeFriendTrip=null;bidTravelMessage="Estate travel cancelled when its window closed.";return;}
    trip.MenuSeen|=menuVisible;
    if(TrySelectFriendEstateRow(trip.Friend.Id,trip.Friend.Kind,trip.Target,uint.MaxValue)){
-    goSeeFriendTrip=null;bidTravelMessage="Direct estate teleport requested through "+trip.Friend.Name+"’s Friends List entry. Confirm any teleport prompt in game.";characterTravelStatus=bidTravelMessage;return;
+    goSeeFriendTrip=null;BeginNativeEstateLanding(trip.Target.WorldId,trip.Target.DistrictName??"",trip.Target.Ward,trip.Target.Plot);bidTravelMessage="Direct estate teleport requested through "+trip.Friend.Name+"’s Friends List entry. Confirm any teleport prompt in game.";characterTravelStatus=bidTravelMessage;return;
    }
    if(now-trip.Opened>=TimeSpan.FromSeconds(5))NextGoSeeFriend(trip);
   }catch(Exception){FallBackGoSeeFriend(trip);}

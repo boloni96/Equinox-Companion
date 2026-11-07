@@ -95,7 +95,7 @@ public sealed partial class Plugin
    usingSharedTravel=true;
    try{
     var accepted=telepo->Teleport(entry.AetheryteId,entry.SubIndex);
-    if(accepted)goSeeNativeUntil=DateTimeOffset.UtcNow.AddSeconds(10);
+    if(accepted){goSeeNativeUntil=DateTimeOffset.UtcNow.AddSeconds(10);BeginNativeEstateLanding(world,district,ward,plot);}
     bidTravelMessage=accepted?$"GO SEE requested: {district} W{ward} P{plot} using your available estate teleport. Confirm any game prompt.":"The game refused this estate teleport. Check your current state and try again.";
    }finally{usingSharedTravel=false;}
    // Do not start another travel route when a matching native request was refused.

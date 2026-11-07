@@ -15,7 +15,7 @@ public sealed partial class Plugin
         public required NativeHousingDistrict District;public required Task<HousingGeometry> Geometry;
         public required DateTimeOffset Started;public DateTimeOffset Next,StageAt;
         public int Stage,Attempt,Selections;public bool WorldSent,TeleportSent,WardSelected,MenuOpened;
-        public bool NearApproachSelected;public Vector3? Approach;public HousingShard? Shard;public Vector3 Source;
+        public readonly GardenArrivalGate EntryArrival=new();public OutdoorPlotEntry? Entry;public bool NearApproachSelected;public Vector3? Approach;public HousingShard? Shard;public Vector3 Source;
     }
     private NativeHousingTrip? nativeHousingTrip;
     private string nativeHousingStatus="";
@@ -43,6 +43,12 @@ public sealed partial class Plugin
         var now=DateTimeOffset.UtcNow;
         var trip=new NativeHousingTrip{World=world,Character=Player.ContentId,Ward=ward,Plot=plot,District=area,Geometry=LoadHousingGeometry(area),Started=now};
         nativeHousingTrip=trip;HousingStage(trip,0,"Reading game housing destinations");
+    }
+    private void BeginNativeEstateLanding(uint world,string district,int ward,int plot){
+        var area=NativeHousingPolicy.District(district)??throw new InvalidOperationException("Unknown estate district.");
+        var now=DateTimeOffset.UtcNow;
+        nativeHousingTrip=new(){World=world,Character=Player.ContentId,Ward=ward,Plot=plot,District=area,Geometry=LoadHousingGeometry(area),Started=now};
+        HousingStage(nativeHousingTrip,12,"Waiting for estate landing · then entering the plot");
     }
     private unsafe bool HousingAtWard(NativeHousingTrip trip)
     {
@@ -76,7 +82,7 @@ public sealed partial class Plugin
     }
     private unsafe void UpdateNativeHousing(DateTimeOffset now)
     {
-        if(nativeHousingTrip is not {} trip||now<trip.Next)return;trip.Next=now.AddMilliseconds(500);
+        if(nativeHousingTrip is not {} trip||now<trip.Next)return;trip.Next=now.AddMilliseconds(trip.Stage is 11 or 12?50:500);
         var started=System.Diagnostics.Stopwatch.GetTimestamp();
         try{
             if(now-trip.Started>TimeSpan.FromMinutes(15))throw new InvalidOperationException("Housing travel timed out.");
@@ -90,6 +96,19 @@ public sealed partial class Plugin
             // A shard teleport can finish its loading screen before collision is ready.
             if(trip.Stage>=2&&!GameWalkingCollision.Available()){
                 nativeHousingStatus="Waiting for housing collision geometry";return;
+            }
+            if(trip.Stage==12){
+                if(trip.Entry!=null&&(!HousingAtWard(trip)||Player.CurrentWorld.RowId!=trip.World))throw new InvalidOperationException("Estate entry stopped: world or ward changed.");
+                var pending=now-trip.Started<TimeSpan.FromSeconds(3)||!HousingAtWard(trip)||VisibleFollowAddon("SelectYesno")||
+                    FFXIVClientStructs.FFXIV.Client.Game.UI.Telepo.Instance()!=null&&FFXIVClientStructs.FFXIV.Client.Game.UI.Telepo.Instance()->ActiveTeleportRequest;
+                if(!trip.EntryArrival.Ready(pending,self.Position,now)&&trip.Entry==null)return;
+                var housing=HousingManager.Instance();var at=housing==null?null:AddressOf(housing->GetCurrentHouseId());
+                if(at!=null){
+                    if(at.WorldId!=trip.World||at.Ward!=trip.Ward||at.Plot!=trip.Plot)throw new InvalidOperationException("Estate landing reached a different plot.");
+                    StopNativeHousing($"Reached the plot entrance at {trip.District.Name} W{trip.Ward} P{trip.Plot}.");return;
+                }
+                trip.Entry??=new(new Vector3(MathF.Sin(self.Rotation),0,MathF.Cos(self.Rotation)));
+                WalkOutdoorPlotEntry(trip.Entry,now);nativeHousingStatus="Entering the requested plot · no door interaction";return;
             }
             if(trip.Stage==0){
                 if(!trip.Geometry.IsCompleted)return;
@@ -194,9 +213,21 @@ public sealed partial class Plugin
             if(trip.Stage==9){
                 if(Vector3.Distance(self.Position,shard.Position)<12&&Vector3.Distance(self.Position,trip.Source)>8)HousingStage(trip,10,"Walking to plot "+trip.Plot);return;
             }
-            if(trip.Stage==10){
+            if(trip.Stage is 10 or 11){
+                var manager=HousingManager.Instance();var address=manager==null?null:AddressOf(manager->GetCurrentHouseId());
+                if(address!=null&&address.WorldId==trip.World&&address.Ward==trip.Ward&&address.Plot==trip.Plot){
+                    StopNativeHousing($"Reached the plot entrance at {trip.District.Name} W{trip.Ward} P{trip.Plot} on {WorldName(trip.World)}.");return;
+                }
+                if(trip.Stage==11){
+                    if(address!=null)throw new InvalidOperationException("Plot entrance approach reached a different estate.");
+                    WalkOutdoorPlotEntry(trip.Entry!,now);nativeHousingStatus="Entering the plot boundary · "+trip.Plot;return;
+                }
                 if(Vector3.Distance(self.Position,targetPlot)<=4.5f&&independentCollision.InteractionVisible(self.Position,targetPlot)){
-                    StopNativeHousing($"Arrived at {trip.District.Name} W{trip.Ward} P{trip.Plot} on {WorldName(trip.World)}.");return;
+                    var landing=trip.Geometry.Result.InteriorLandings[trip.Plot-1]??throw new InvalidOperationException("Plot entrance destination is unavailable.");
+                    var direction=landing-self.Position;direction.Y=0;
+                    if(direction.Length()<.1f)throw new InvalidOperationException("Plot boundary is not confirmed at the entry destination.");
+                    trip.Entry=new(direction);StopIndependentWalk("At plot approach · checking the entrance boundary");
+                    HousingStage(trip,11,"Reaching the plot entrance");return;
                 }
                 // Re-evaluate the approach once from the actual nearby street. A
                 // point picked from the distant shard may be on the wrong side

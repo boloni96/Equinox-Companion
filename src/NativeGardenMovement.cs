@@ -6,7 +6,7 @@ public sealed partial class Plugin
     private sealed class NativeGardenMove
     {
         public required Queue<Vector3> Points;public required string Owner;public required DateTimeOffset Deadline;
-        public required ulong Character;public required uint World,Territory;public ulong Target;public SharedGardenPlan? Plot;
+        public required ulong Character;public required uint World,Territory;public ulong Target;public SharedGardenPlan? Plot;public OutdoorPlotEntry? Entry;
     }
     private NativeGardenMove? nativeGardenMove;
     private string nativeGardenMoveFailure="";
@@ -35,6 +35,13 @@ public sealed partial class Plugin
                     throw new InvalidOperationException("Plot entry reached a different estate; garden movement stopped.");
                 RecordTravelPrompt("Garden plot entry confirmed",new{destination.HouseId,destination.Plot,destination.Ward});
                 StopNativeGardenMove("Inside the requested plot · ready to approach the garden");return;
+            }
+            if(move.Plot!=null){
+                if(!NativeTravelMovementReady())return;
+                if(now>move.Deadline)throw new InvalidOperationException("Plot entry timed out before estate confirmation.");
+                if(Objects.LocalPlayer is not {} player)return;
+                move.Entry??=new(new Vector3(MathF.Sin(player.Rotation),0,MathF.Cos(player.Rotation)));
+                WalkOutdoorPlotEntry(move.Entry,now);return;
             }
             if(now>move.Deadline)throw new InvalidOperationException("Native garden approach timed out.");
             var target=move.Target==0?null:Objects.FirstOrDefault(x=>x.GameObjectId==move.Target);
