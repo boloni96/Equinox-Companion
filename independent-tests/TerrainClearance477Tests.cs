@@ -5,8 +5,8 @@ internal static class TerrainClearance477Tests
 {
     [ModuleInitializer] internal static void Run(){
         // A ray at center-floor + .2 cuts into the uphill side of this ramp.
-        var sideways=new Terrain(p=>p.X*.6f);
-        Check(sideways,Vector3.Zero,Vector3.UnitZ,"cross-slope rail height");
+        var sideways=new Terrain(p=>p.X*.4f+p.Z*.3f);
+        Check(sideways,Vector3.Zero,new(0,.3f,1),"cross-slope rail height");
         // The old center-height cross-body ray clips a valid rising surface.
         var rising=new Terrain(p=>p.X*.9f);
         Check(rising,Vector3.Zero,new(1,.9f,0),"rising body footprint");
@@ -15,7 +15,7 @@ internal static class TerrainClearance477Tests
         Check(crest,new(0,1,0),new(0,1,1),"convex crest retains center-floor clearance");
         var steps=new Terrain(p=>MathF.Floor(p.X/.3f)*.3f);
         Check(steps,new(.05f,0,0),new(.95f,.9f,0),"consecutive legal risers under footprint");
-        var route=new CollisionRouteSearch(sideways,Vector3.Zero,new(0,0,12),.4f);
+        var route=new CollisionRouteSearch(sideways,Vector3.Zero,new(0,3.6f,12),.4f);
         for(var i=0;i<500&&!route.Finished;i++)route.Advance(100,1000);
         if(route.Path==null||route.Expanded>20)throw new Exception("An open cross-slope road must plan directly instead of exploring rejected terrain rays.");
         for(var i=1;i<route.Path.Length;i++)Check(sideways,route.Path[i-1],route.Path[i],"planned slope connector");
@@ -38,9 +38,14 @@ internal static class TerrainClearance477Tests
         public bool Wall,Post;public string? Failure;
         public bool Ground(Vector3 p,out Vector3 floor){floor=p with{Y=height(p)};return MathF.Abs(p.Y-floor.Y)<=.7f;}
         public bool Blocked(Vector3 a,Vector3 b){
-            for(var i=0;i<=100;i++){
+            var previous=a.Y-height(a);
+            for(var i=1;i<=100;i++){
                 var p=Vector3.Lerp(a,b,i/100f);
-                if(p.Y<=height(p)+.001f)return true;
+                var separation=p.Y-height(p);
+                // Model a ray crossing a terrain surface, not an occupancy
+                // test that would also reject a ray wholly below the surface.
+                if(previous>0&&separation<=0||previous<0&&separation>=0)return true;
+                previous=separation;
                 if(Wall&&MathF.Abs(p.Z-.5f)<.03f&&p.Y<4)return true;
                 if(Post&&MathF.Abs(p.X-.24f)<.045f&&MathF.Abs(p.Z-.5f)<.045f&&p.Y<1.6f)return true;
             }
