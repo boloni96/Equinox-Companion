@@ -40,8 +40,11 @@ public sealed partial class Plugin
     private readonly RecentWalkingBlocks independentRecentBlocks=new();
     private bool independentBacktracking;
     private DateTimeOffset independentBacktrackUntil;
-    private CollisionRouteSearch CreateIndependentSearch(Vector3 start,Vector3 goal,float range)=>
-        new(new AvoidStalledTargets(new GameWalkingCollision(cacheGround:true,roadGuide:independentRoadGuide),independentBlockedTargets.ToArray()),start,goal,range,independentBlockedTargets.Count>0&&Vector3.Distance(start,goal)<12?.5f:1f,roads:independentRoadRoute);
+    private CollisionRouteSearch CreateIndependentSearch(Vector3 start,Vector3 goal,float range){
+        var street=NavigationStreetCorridors.Guide(Client.TerritoryType,start,goal);
+        if(street!=null)RecordTravelPrompt("Navigation street corridor",new{run=independentNavigationRun,territory=Client.TerritoryType,points=street.Select(FollowTravelPosition.From).ToArray(),source="Mist subdivision lower-to-upper street · every step requires native geometry validation"});
+        return new(new AvoidStalledTargets(new GameWalkingCollision(cacheGround:true,roadGuide:independentRoadGuide),independentBlockedTargets.ToArray()),start,goal,range,independentBlockedTargets.Count>0&&Vector3.Distance(start,goal)<12?.5f:1f,roads:independentRoadRoute,streetGuide:street);
+    }
     private bool IndependentTraversableConnector(Vector3 from,Vector3 to)=>AvoidStalledTargets.ClearOfBlocked(from,to,independentBlockedTargets)&&independentCollision.Traverse(from,to);
     private bool IndependentClearConnector(Vector3 from,Vector3 to)=>AvoidStalledTargets.ClearOfBlocked(from,to,independentBlockedTargets)&&independentCollision.ComfortableTraverse(from,to);
     private bool independentMoving,independentArrived,independentDirectOnly;

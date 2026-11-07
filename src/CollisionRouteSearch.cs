@@ -59,7 +59,7 @@ public sealed class CollisionRouteSearch
     }
     private static List<Vector3> Trail(Node? node){var p=new List<Vector3>();for(var n=node;n!=null;n=n.Previous)p.Add(n.Point);p.Reverse();return p;}
     private void Rejected(Vector3 point){rejected.Enqueue(point);if(rejected.Count>128)rejected.Dequeue();}
-    public CollisionRouteSearch(IWalkingCollision collision,Vector3 start,Vector3 goal,float range,float spacing=1f,float heuristicWeight=4f,NavigationRoadRoute? roads=null,bool bidirectional=true)
+    public CollisionRouteSearch(IWalkingCollision collision,Vector3 start,Vector3 goal,float range,float spacing=1f,float heuristicWeight=4f,NavigationRoadRoute? roads=null,bool bidirectional=true,IReadOnlyList<Vector3>? streetGuide=null)
     {
         this.collision=collision;this.goal=goal;this.range=Math.Clamp(range,.25f,5f);this.spacing=spacing;this.heuristicWeight=heuristicWeight;this.roads=roads;
         searchRadius=MathF.Max(Horizontal(start,goal)+35,roads?.Points.Max(p=>Horizontal(p,goal))+16??0);
@@ -73,7 +73,7 @@ public sealed class CollisionRouteSearch
         if(bidirectional&&Vector3.Distance(origin,goal)>=12&&collision.Ground(goal,out var end)&&MathF.Abs(end.Y-goal.Y)<=1.2f){
             backward=new(true);backward.Open.Enqueue(new(Address(end),end,0,null),0);
         }
-        if(roads is not null&&Vector3.Distance(origin,goal)>=12)roadSeed=new(collision,origin,roads.Points);
+        if(Vector3.Distance(origin,goal)>=12&&(streetGuide??roads?.Points) is {} guide)roadSeed=new(collision,origin,guide);
         active=forward;
     }
     public void Advance(double milliseconds=1.5,int edgeBudget=24,CancellationToken cancellation=default)

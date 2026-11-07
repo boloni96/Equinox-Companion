@@ -11,7 +11,7 @@ internal sealed class WalkingRoadSeed(IWalkingCollision collision,Vector3 start,
     public int Count=>points.Count;
     public void Step(){
         if(Finished)return;
-        if(next>=guide.Count||points.Count>=129){Finished=true;return;}
+        if(next>=guide.Count||points.Count>=257){Finished=true;return;}
         var current=points[^1];var delta=guide[next]-current;delta.Y=0;
         if(delta.Length()<.1f){next++;return;}
         var probe=current+Vector3.Normalize(delta)*MathF.Min(.5f,delta.Length());
