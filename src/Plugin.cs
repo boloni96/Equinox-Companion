@@ -333,6 +333,7 @@ public sealed partial class Plugin : IDalamudPlugin
         if(UpdateLoginBackupReminder(now))return;
         UpdateQuestTools(now);
         UpdateTravelPromptRecorder(now);
+        CaptureRoutineStatus(now);
         UpdateNativeWorldTravel(now);
         UpdateNativeAethernet(now);
         UpdateNativeHousing(now);
@@ -1061,7 +1062,7 @@ public sealed partial class Plugin : IDalamudPlugin
             // Capture game-facing state now. Published record values are immutable;
             // copy collection containers before the worker serializes them.
             var snapshot=new {
-                schemaVersion = 9, travelPrompts = TravelPromptExport(), shoppingJourney = new {active=shoppingTravel!=null,status=marketTravelStatus,trip=shoppingTravel}, characterSync = CaptureDiagnosticState("character sync",ReadCharacterSyncStatus), characterLogin = CaptureDiagnosticState("login state",CaptureNativeLoginDiagnostic), followTravel = followTravelDiagnostics.ToArray(), pluginVersion = typeof(Plugin).Assembly.GetName().Version?.ToString(), exportedAt = DateTimeOffset.UtcNow,
+                schemaVersion = 9, routineStatus = RoutineStatusExport(), travelPrompts = TravelPromptExport(), shoppingJourney = new {active=shoppingTravel!=null,status=marketTravelStatus,trip=shoppingTravel}, characterSync = CaptureDiagnosticState("character sync",ReadCharacterSyncStatus), characterLogin = CaptureDiagnosticState("login state",CaptureNativeLoginDiagnostic), followTravel = followTravelDiagnostics.ToArray(), pluginVersion = typeof(Plugin).Assembly.GetName().Version?.ToString(), exportedAt = DateTimeOffset.UtcNow,
                 syncDiagnostics = new { enabled = config.SyncEnabled, paired = config.PairingKey.Length == 64, endpoint = "https://equinoxjournal.pages.dev", status = syncStatus, pending = pendingSyncRecords, eligible = readySyncRecords, held = heldSyncRecords, historicalHeld = historicalHeldSyncRecords, unsupported = unsupportedSyncRecords, acknowledgedLocal = config.SentEvents.Count, lastSyncReceiptAt, lastSyncBatchSize, lastSyncBatchOldest, lastSyncBatchNewest, nextAttemptAt = nextSync, inFlight = syncTask is not null },
                 gardenPickerDetails=gardenPickerCaptures.ToArray(),
                 organizerStorage=CaptureDiagnosticState("organizer state",GearStorageDiagnostics),

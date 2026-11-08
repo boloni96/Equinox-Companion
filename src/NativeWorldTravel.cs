@@ -167,7 +167,7 @@ public sealed partial class Plugin
         if(trip.Stage==NativeTravelStage.WorldConfirm){
             var dialog=(AddonSelectYesno*)SellerAddon("SelectYesno");if(dialog==null||dialog->PromptText==null)return;
             var prompt=TravelMenuText(dialog->PromptText->NodeText.StringPtr)??"";
-            if(!NativeTravelPolicy.WorldPrompt(prompt,WorldName(trip.Leg)??"")){nativeTravelStatus="Confirm the destination manually; this localized prompt is not yet recognized";return;}
+            if(!NativeTravelPolicy.WorldPrompt(prompt,WorldName(trip.Leg)??"")){nativeTravelStatus="Unrecognized World Visit confirmation: "+prompt+" · Review the destination and confirm manually";return;}
             if(NativeEventButton((AtkUnitBase*)dialog,dialog->YesButton)){trip.TransferCommitted=true;SetNativeTravelStage(trip,NativeTravelStage.WorldQueue,"Waiting for World Visit queue and arrival");}return;
         }
     }
@@ -187,7 +187,7 @@ public sealed partial class Plugin
                     if(NativeEventButton((AtkUnitBase*)dialog,dialog->NoButton))SetNativeTravelStage(trip,NativeTravelStage.WorldList,"Leaving party before World Visit");
                     return false;
                 }
-                nativeTravelStatus="Close the current confirmation so Companion can leave the party";return false;
+                nativeTravelStatus="Waiting to leave party; another confirmation is open: "+(string.IsNullOrWhiteSpace(prompt)?"[prompt text unavailable]":prompt)+" · Review and close it in game";return false;
             }
             var ui=UIModule.Instance();if(ui==null)return false;
             trip.PartyLeaveSent=true;trip.PartyLeaveAt=now;

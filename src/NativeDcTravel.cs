@@ -52,7 +52,7 @@ public sealed partial class Plugin
             }
             return; // Never touch queue dialogs after issuing login.
         }
-        if(lobby->TemporaryLocked)return;
+        if(lobby->TemporaryLocked){nativeTravelStatus="Waiting for the character-selection server to unlock · "+trip.Stage;return;}
         if(trip.Stage==NativeTravelStage.CharacterMenu){
             var menu=SellerAddon("_CharaSelectListMenu");if(menu==null)return;
             var index=NativeTravelCharacterIndex(trip,out var world);
@@ -117,7 +117,7 @@ public sealed partial class Plugin
                 if(text.Contains(WorldName(trip.Leg)??"\0",StringComparison.Ordinal)&&
                    (text.Contains("arrived safely",StringComparison.OrdinalIgnoreCase)||text.Contains("transfer successful",StringComparison.OrdinalIgnoreCase))){
                     if(NativeEventButton((AtkUnitBase*)ok,ok->OkButton)){CompleteNativeTransfer(trip);}
-                }else nativeTravelStatus="Game message needs attention; it has been recorded. Confirm it manually to continue.";
+                }else nativeTravelStatus="Waiting for game message (SelectOk): "+(string.IsNullOrWhiteSpace(text)?"[prompt text unavailable]":text)+" · Review and dismiss it in game to continue.";
                 return;
             }
             if(NativeTravelCharacterIndex(trip,out var at)>=0&&at==trip.Leg){CompleteNativeTransfer(trip);}

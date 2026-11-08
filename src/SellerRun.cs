@@ -60,7 +60,7 @@ public sealed class SellerRun(ISellerPort port)
             if(ItemIndex>=items.Length||!port.CancelEditor(retainers[RetainerIndex].Id,items[ItemIndex])){Stop("Stopped: the open listing changed while paused.");return;}
             Move(Phase.OpenEditor,now);
         }
-        Status=Paused?"Paused · no more prices will be submitted.":"Resuming…";
+        Status=Paused?"Paused by you · no more prices will be submitted.":"Resuming…";
     }
     public void Stop(string reason)
     {

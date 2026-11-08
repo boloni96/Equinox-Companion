@@ -47,6 +47,7 @@ public sealed partial class Plugin
             SettingsSection("Travel",DrawTravelSettings);
             SettingsSection("Windows",DrawFloatingLauncherSettings);
             SettingsSection("Loading icon",DrawWorkIndicatorSettings);
+            SettingsSection("Activity reasons",DrawRoutineStatusHistory);
             SettingsSection("Connection",DrawConnection);
             SettingsSection("Diagnostics",DrawCompactDiagnostics);
             ImGui.EndTabBar();
