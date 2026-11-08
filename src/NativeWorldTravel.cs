@@ -16,7 +16,7 @@ public sealed partial class Plugin
         public required ulong Character;public required string Name;public required uint Home,Source,Destination,Leg;
         public required int Service;public required DateTimeOffset Started;
         public NativeTravelStage Stage;public DateTimeOffset Next,StageAt;
-        public bool PartyLeaveSent,PartyLeaveConfirmed,LogoutCommandSent;public DateTimeOffset PartyLeaveAt;
+        public bool PartyLeaveSent,PartyLeaveConfirmed,LogoutCommandSent,HomeReturnAcknowledged;public DateTimeOffset PartyLeaveAt;
         public bool ReturnHome,DcSelected,ContextSent,LoginSent,LoginConfirmed,GatewaySent,TransferCommitted;
         public uint Gateway,PreferredGateway,RequestedLoginWorld;public bool ServiceSent,LogoutConfirmed,IntroSent;public int ApproachAttempt;public Vector3? ApproachGoal;
     }
@@ -73,7 +73,7 @@ public sealed partial class Plugin
     {
         trip.Source=trip.Leg;trip.Leg=trip.Destination;trip.ReturnHome=false;
         trip.DcSelected=trip.ContextSent=trip.LoginSent=trip.LoginConfirmed=trip.TransferCommitted=trip.IntroSent=trip.LogoutConfirmed=trip.ServiceSent=false;
-        trip.RequestedLoginWorld=0;trip.PartyLeaveSent=trip.PartyLeaveConfirmed=trip.LogoutCommandSent=false;
+        trip.RequestedLoginWorld=0;trip.HomeReturnAcknowledged=false;trip.PartyLeaveSent=trip.PartyLeaveConfirmed=trip.LogoutCommandSent=false;
     }
     private unsafe void BeginNativeTravelLogout(NativeWorldTrip trip)
     {

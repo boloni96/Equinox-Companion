@@ -22,6 +22,16 @@ public sealed partial class Plugin
         var failure=(AddonSelectOk*)SellerAddon("SelectOk");
         if(failure!=null&&failure->PromptText!=null){
             var message=TravelMenuText(failure->PromptText->NodeText.StringPtr)??"";
+            if(NativeTravelPolicy.HomeReturnSucceeded(trip.Stage,trip.ReturnHome,trip.TransferCommitted,trip.Leg,trip.Home,message)){
+                // Acknowledge before lobby lock / DC selection gates. The character
+                // list can retain the visiting world until this message is closed.
+                if(!trip.HomeReturnAcknowledged&&NativeEventButton((AtkUnitBase*)failure,failure->OkButton)){
+                    trip.HomeReturnAcknowledged=true;
+                    RecordTravelPrompt("Home return success acknowledged",new{trip.Character,trip.Home,trip.Leg,trip.Destination});
+                }
+                nativeTravelStatus="Home return succeeded; waiting for character world verification";
+                return;
+            }
             if(NativeTravelPolicy.HomeReturnRejected(trip.Stage,trip.ReturnHome,message)){
                 RecordTravelPrompt("Home return rejected",new{message,trip.Source,trip.Leg,stage=trip.Stage.ToString()});
                 trip.TransferCommitted=false;

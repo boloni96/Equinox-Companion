@@ -2,6 +2,9 @@ namespace EquinoxCompanion;
 public enum NativeTravelStage { Gateway, AetheryteMenu, WorldList, WorldConfirm, WorldQueue, Logout, CharacterMenu, VisitIntro, Destination, TransferConfirm, TransferWait, Login }
 public static class NativeTravelPolicy
 {
+    public static bool HomeReturnSucceeded(NativeTravelStage stage,bool returning,bool committed,uint leg,uint home,string prompt)=>
+        stage==NativeTravelStage.TransferWait&&returning&&committed&&home!=0&&leg==home&&
+        System.Text.RegularExpressions.Regex.Replace(prompt,@"\s+"," ").Trim()=="Successfully returned to Home World.";
     public static bool HomeReturnRejected(NativeTravelStage stage,bool returning,string prompt)=>
         returning && stage is NativeTravelStage.VisitIntro or NativeTravelStage.Destination or NativeTravelStage.TransferConfirm or NativeTravelStage.TransferWait &&
         System.Text.RegularExpressions.Regex.Replace(prompt,@"\s+"," ").Trim()=="Unable to return to Home World. [1000]";
