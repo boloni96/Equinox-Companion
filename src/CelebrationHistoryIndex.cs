@@ -13,25 +13,26 @@ public sealed class CelebrationHistoryIndex
     {
         var rewardIds=rewards.ToHashSet();
         var lookup=links.GroupBy(l=>(l.Category,l.EntryId)).ToDictionary(g=>g.Key,g=>g.Select(l=>l.ItemId).Distinct().ToArray());
+        var relevantCategories=links.Select(l=>l.Category).ToHashSet(StringComparer.Ordinal);
         var state=actors.ToDictionary(p=>p.Key,p=>(Quest:p.Value.QuestComplete,Items:p.Value.Items.ToHashSet()),StringComparer.OrdinalIgnoreCase);
         var aliases=new Dictionary<Actor,string[]>();
         foreach(var e in events){
             if(e.Kind is not ("collection.observed" or "storage.observed"))continue;
-            var found=new HashSet<uint>();var quest=false;
-            if(e.Collection is {} collection){
+            HashSet<uint>? found=null;var quest=false;
+            if(e.Collection is {} collection&&(collection.Category=="quest"||relevantCategories.Contains(collection.Category))){
                 foreach(var id in collection.Unlocked){
                     if(collection.Category=="quest"&&QuestToolsPolicy.ShortId(id)==QuestToolsPolicy.KeywardBound)quest=true;
-                    if(lookup.TryGetValue((collection.Category,id),out var items))found.UnionWith(items);
+                    if(lookup.TryGetValue((collection.Category,id),out var items))(found??=[]).UnionWith(items);
                 }
-                foreach(var id in collection.Obtained)if(lookup.TryGetValue((collection.Category,id),out var items))found.UnionWith(items);
+                foreach(var id in collection.Obtained)if(lookup.TryGetValue((collection.Category,id),out var items))(found??=[]).UnionWith(items);
             }
             if(e.Storage is {} storage&&(storage.Key.StartsWith("bag:")||storage.Key.StartsWith("retainer:")||storage.Key is "armoire" or "dresser"))
-                foreach(var item in storage.Items)if(rewardIds.Contains(item))found.Add(item);
-            if(!quest&&found.Count==0)continue;
+                foreach(var item in storage.Items)if(rewardIds.Contains(item))(found??=[]).Add(item);
+            if(!quest&&found is null)continue;
             if(!aliases.TryGetValue(e.Actor,out var keys))aliases[e.Actor]=keys=["id:"+e.Actor.ContentId,NameKey(e.Actor.Name,e.Actor.HomeWorldName)];
             foreach(var key in keys){
                 if(!state.TryGetValue(key,out var old))old=(false,[]);
-                old.Items.UnionWith(found);state[key]=(old.Quest||quest,old.Items);
+                if(found is not null)old.Items.UnionWith(found);state[key]=(old.Quest||quest,old.Items);
             }
         }
         return new(state.ToDictionary(p=>p.Key,p=>new AccountEventEvidence(p.Value.Quest,p.Value.Items.Order().ToArray()),StringComparer.OrdinalIgnoreCase),IndexedRecords+events.Length);

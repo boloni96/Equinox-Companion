@@ -30,7 +30,7 @@ public sealed partial class Plugin
         ImGui.PushStyleColor(ImGuiCol.HeaderHovered,colour*new Vector4(.8f,.8f,.8f,1));
         ImGui.PushStyleColor(ImGuiCol.HeaderActive,colour);
     }
-    private readonly UiProjectionCache<(SharedPerson[] People,GardenOverviewHouse[] Houses)> gardenOverviewDisplayCache=new();
+    private readonly UiProjectionCache<(SharedPerson[] People,GardenOverviewHouse[] Houses)> gardenOverviewDisplayCache=new(1000);
     private readonly UiProjectionCache<(Dictionary<string,string> Attention,string Summary)> gardenOverviewStatusCache=new(0);
     private void DrawPlantingOverview()
     {
@@ -41,7 +41,7 @@ public sealed partial class Plugin
         ImGui.InputTextWithHint("##GardenOverviewSearch","Find person / character / house",ref plantingOverviewSearch,120);
         var now=DateTimeOffset.UtcNow;
         var display=gardenOverviewDisplayCache.Get(roster,
-            $"{Player.ContentId}:{config.HouseCharactersFirst}:{config.Planting.Count}:{config.Planting.LastOrDefault()?.EventId}:{config.Tending.Count}:{config.Tending.LastOrDefault()?.EventId}:{config.Discoveries.Count}:{config.Discoveries.LastOrDefault()?.Id}:{gardenBedSync?.Mappings.Count()}:{gardenBedSync?.Mappings.LastOrDefault()?.Id}",Environment.TickCount64,()=>{
+            $"{Player.ContentId}:{config.HouseCharactersFirst}:{config.Planting.Count}:{config.Planting.LastOrDefault()?.EventId}:{config.Tending.Count}:{config.Tending.LastOrDefault()?.EventId}:{DiscoveryReads().GardenRevision}:{gardenBedSync?.Mappings.Count()}:{gardenBedSync?.Mappings.LastOrDefault()?.Id}",Environment.TickCount64,()=>{
                 var ordered=roster.People.Select(p=>p with {Characters=OrderedSharedCharacters(p)}).ToArray();
                 return (ordered,MeasureWork("Garden: overview houses",()=>GardenOverview.Houses(ordered,GardenPlanSources().Select(EffectiveGardenPlan))));
             });

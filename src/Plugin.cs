@@ -196,6 +196,7 @@ public sealed partial class Plugin : IDalamudPlugin
         catch (Exception ex) { errorJournal.Record("plugin", "Garden integer callback observer unavailable", exceptionType:ex.GetType().Name); Log.Error(ex, "Garden integer callback observer unavailable"); }
         config = Pi.GetPluginConfig() as Configuration ?? new();
         configurationWriter = new(snapshot => Pi.SavePluginConfig(snapshot));
+        BeginConfigurationWarmup();
         if (OptionalToolAvailability.InitializeCamera(config)) SaveConfiguration();
         config.FollowThem ??= new();
         config.PairingKey = config.PairingKey.Trim().ToLowerInvariant();
@@ -331,7 +332,7 @@ public sealed partial class Plugin : IDalamudPlugin
     {
         var now = DateTimeOffset.UtcNow;
         if(UpdateLoginBackupReminder(now))return;
-        UpdateQuestTools(now);
+        MeasureWork("Quest tools: update",()=>UpdateQuestTools(now));
         UpdateTravelPromptRecorder(now);
         CaptureRoutineStatus(now);
         UpdateNativeWorldTravel(now);
@@ -341,12 +342,12 @@ public sealed partial class Plugin : IDalamudPlugin
         UpdateAssignedLogin(now);
         UpdateEstateTravel(now);
         var gardenStarted=System.Diagnostics.Stopwatch.GetTimestamp();UpdateGardenCare(now);RecordPerformanceElapsed("garden automation",gardenStarted);
-        UpdateItemDelivery(now);
+        MeasureWork("Delivery: update",()=>UpdateItemDelivery(now));
         // The login cancellation/deadline runs before account observations and
         // all other optional work, including while logged out or windows closed.
         UpdateCancelledLoginReturn(now);
-        UpdateTitleLoginCheck(now);
-        UpdateLoginAccount(now);
+        MeasureWork("Login: title check",()=>UpdateTitleLoginCheck(now));
+        MeasureWork("Login: account observation",()=>UpdateLoginAccount(now));
         RunOptionalTool("Camera",now);
         UpdateMaintenanceNotices(now);
         UpdateSaddleTracking(now);
@@ -367,14 +368,14 @@ public sealed partial class Plugin : IDalamudPlugin
         UpdateSync(now);
         TrackPerformance("sync queue", perf);
         perf = System.Diagnostics.Stopwatch.GetTimestamp();
-        UpdateSharedRoster(now);
+        MeasureWork("Roster: refresh",()=>UpdateSharedRoster(now));
         RunOptionalTool("Equinox Market",now);
         RunOptionalTool("Gil Trader",now);
         RunOptionalTool("Equinox Organizer",now);
         RunOptionalTool("Trade item shortcut",now);
-        UpdateAdventure();
-        UpdateCelebrationChecks(now);
-        UpdateTesting(now);
+        MeasureWork("Adventure: update",()=>UpdateAdventure());
+        MeasureWork("Celebration: update",()=>UpdateCelebrationChecks(now));
+        MeasureWork("Testing: update",()=>UpdateTesting(now));
         UpdateShoppingTravel(now);
         UpdateBringCharacter(now);
         UpdateBidWorld(now);
@@ -384,7 +385,7 @@ public sealed partial class Plugin : IDalamudPlugin
         ObserveSafely("character registration",()=>UpdateCharacterRegistration(now));
         ObserveSafely("house entry reminders",()=>UpdateHouseNotices(now));
         ObserveSafely("garden care reminders",()=>UpdateGardenCareNotices(now));
-        MaintainRecords(now);
+        MeasureWork("History: maintenance",()=>MaintainRecords(now));
         TrackPerformance("roster and maintenance", perf);
         if (faulted) return;
         perf = System.Diagnostics.Stopwatch.GetTimestamp();

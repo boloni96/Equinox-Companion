@@ -46,7 +46,7 @@ public sealed partial class Plugin
             cofferAutoStatus=Brief(cofferAutoStatus),cofferStatus=Brief(cofferStatus),
             gardenCare=gardenCareRun?.Running==true,seller=sellerRun?.Running==true,organizer=organizeRunning,
             keyboundBuying,keyboundPlanDataPending,keyboundPlanWaiting,keyboundStartPending=keyboundStartRequest!=null,followArmed=followSession.Armed,
-            savePending=configurationDirty,saveWorkerBusy=configurationWriter?.Busy==true,
+            saveWarmupPending=configurationWarmup is {IsCompleted:false},savePending=configurationDirty,saveWorkerBusy=configurationWriter?.Busy==true,
             syncInFlight=syncTask!=null,syncStatus=Brief(syncStatus),pendingSyncRecords,
             managedBytes=GC.GetTotalMemory(false),allocatedBytes=GC.GetTotalAllocatedBytes(false),
             gc0=GC.CollectionCount(0),gc1=GC.CollectionCount(1),gc2=GC.CollectionCount(2)

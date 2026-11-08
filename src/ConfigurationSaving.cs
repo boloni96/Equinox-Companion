@@ -6,6 +6,9 @@ public sealed partial class Plugin
 {
     private LatestSnapshotWriter<Configuration> configurationWriter = null!;
     private bool configurationDirty;
+    // Pure managed defaults only: prepare serializer metadata away from the game thread.
+    private Task? configurationWarmup;
+    private void BeginConfigurationWarmup()=>configurationWarmup=Task.Run(()=>{_ = new Configuration().Snapshot();});
     private DateTimeOffset configurationDue;
     private double maxDrawMs,maxUpdateMs,maxSnapshotMs;
     private string configurationError="";
@@ -33,6 +36,8 @@ public sealed partial class Plugin
         }
         else configurationError="";
         // Keep edits dirty while serialization is busy; capture the newest state once free.
+        if(configurationWarmup is {IsCompleted:false})return;
+        if(configurationWarmup is {} warmup){_ = warmup.Exception;configurationWarmup=null;}
         if(!SaveSnapshotPolicy.Ready(configurationDirty,configurationWriter.Busy,DateTimeOffset.UtcNow,configurationDue))return;
         var started=Stopwatch.GetTimestamp();
         try{var snapshot=config.Snapshot();configurationWriter.Enqueue(snapshot);configurationDirty=false;}
