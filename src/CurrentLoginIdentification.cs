@@ -15,6 +15,19 @@ internal sealed class CurrentLoginIdentification
         key.Length == 64 && key.All(char.IsAsciiHexDigit)
             && indices.TryGetValue(key, out var index) && index is >= 0 and <= 15 ? index : -1;
 
+    // Persisted character evidence wins over account-wide inference. Display
+    // labels (MAIN/ALT) never identify a native service-account slot.
+    public static int RecordedServiceSlot(string scope,string contentId,string accountKey,IEnumerable<string> members,
+        IReadOnlyDictionary<string,int> characters,IReadOnlyDictionary<string,int> accounts)
+    {
+        if(scope.Length!=64||!scope.All(char.IsAsciiHexDigit))return -1;
+        int CharacterSlot(string id)=>ulong.TryParse(id,out var cid)&&cid!=0&&characters.TryGetValue(scope+":"+id,out var slot)&&slot is >=0 and <=15?slot:-1;
+        var exact=CharacterSlot(contentId);if(exact>=0)return exact;
+        var account=RecordedIndex(accountKey,accounts);if(account>=0)return account;
+        var slots=members.Select(CharacterSlot).Where(i=>i>=0).Distinct().Take(2).ToArray();
+        return slots.Length==1?slots[0]:-1;
+    }
+
     public static bool WorldSettled(TimeSpan elapsed,bool populatedReady)=>
         elapsed>=TimeSpan.FromMilliseconds(populatedReady?500:2000);
 

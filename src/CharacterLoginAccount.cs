@@ -89,6 +89,10 @@ public sealed partial class Plugin
         if(!config.ObservedServiceAccountIndices.TryGetValue(observedLoginFingerprint,out var savedIndex)||savedIndex!=index){
             config.ObservedServiceAccountIndices[observedLoginFingerprint]=index;SaveConfiguration();
         }
+        var characterKey=LoginPairingScope()+":"+native->ContentId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        if(config.ObservedCharacterAccountKeys.GetValueOrDefault(characterKey)!=observedLoginFingerprint){
+            config.ObservedCharacterAccountKeys[characterKey]=observedLoginFingerprint;SaveConfiguration();
+        }
         ObserveSquareEnixLogin(observedLoginFingerprint);
         return observedLoginFingerprint;
     }
@@ -101,19 +105,20 @@ public sealed partial class Plugin
         config.ObservedCharacterServiceAccounts[key]=index;SaveConfiguration();
     }
 
+    private string RecordedCharacterAccountKey(SharedCharacter target,string personId,string accountId)
+    {
+        var local=config.ObservedCharacterAccountKeys.GetValueOrDefault(LoginPairingScope()+":"+target.ContentId,"");
+        return local.Length==64&&local.All(char.IsAsciiHexDigit)?local:
+            SquareEnixLoginState.TargetAccountKey(config.SharedRoster,target,personId,accountId);
+    }
+
     private int RecordedCharacterServiceSlot(SharedCharacter target)
     {
         var scope=CharacterSwitchScope(target.Id);
-        var from=Player.IsLoaded?CharacterSwitchScope(CurrentSharedCharacter()?.Id??""):characterAccountScope;
-        var defaultSlot=CharacterLoginPolicy.DefaultServiceSlot(scope.AccountName,LoginRelationship(target,from,scope),
-            from.PersonId==scope.PersonId&&!string.IsNullOrEmpty(from.AccountId)&&from.AccountId!=scope.AccountId);
-        if(defaultSlot>=0)return defaultSlot;
-        var key=SquareEnixLoginState.TargetAccountKey(config.SharedRoster,target,scope.PersonId,scope.AccountId);
-        var index=CurrentLoginIdentification.RecordedIndex(key,config.ObservedServiceAccountIndices);
-        if(index>=0)return index;
-        var members=config.SharedRoster?.People.FirstOrDefault(p=>p.Id==scope.PersonId)?.Characters.Where(c=>c.AccountId==scope.AccountId).ToArray()??[];
-        var slots=members.Select(c=>config.ObservedCharacterServiceAccounts.GetValueOrDefault(LoginPairingScope()+":"+c.ContentId,-1)).Where(i=>i is >=0 and <=15).Distinct().Take(2).ToArray();
-        return slots.Length==1?slots[0]:-1;
+        var key=RecordedCharacterAccountKey(target,scope.PersonId,scope.AccountId);
+        var members=string.IsNullOrEmpty(scope.AccountId)?[]:config.SharedRoster?.People.FirstOrDefault(p=>p.Id==scope.PersonId)?.Characters.Where(c=>c.AccountId==scope.AccountId).Select(c=>c.ContentId).ToArray()??[];
+        return CurrentLoginIdentification.RecordedServiceSlot(LoginPairingScope(),target.ContentId,key,members,
+            config.ObservedCharacterServiceAccounts,config.ObservedServiceAccountIndices);
     }
 
     private unsafe int CurrentLoginServiceAccount()
@@ -135,7 +140,7 @@ public sealed partial class Plugin
         // fingerprint, without assuming that every login uses slot zero.
         if(current!=null&&native->AccountId!=0){
             var scope=CharacterSwitchScope(current.Id);
-            var accountKey=SquareEnixLoginState.TargetAccountKey(config.SharedRoster,current,scope.PersonId,scope.AccountId);
+            var accountKey=RecordedCharacterAccountKey(current,scope.PersonId,scope.AccountId);
             for(var candidate=0;candidate<16;candidate++){
                 var identity=$"equinox-account-v1:{native->AccountId}:{candidate}";
                 var fingerprint=Convert.ToHexString(System.Security.Cryptography.HMACSHA256.HashData(
@@ -163,7 +168,7 @@ public sealed partial class Plugin
         (string PersonId, string PersonName, string AccountId, string AccountName) from,
         (string PersonId, string PersonName, string AccountId, string AccountName) to)
     {
-        var relationship = squareEnixLogin.Relationship(LoginPairingScope(), SquareEnixLoginState.TargetAccountKey(config.SharedRoster, character, to.PersonId, to.AccountId), config.SquareEnixLoginGroups,
+        var relationship = squareEnixLogin.Relationship(LoginPairingScope(), RecordedCharacterAccountKey(character,to.PersonId,to.AccountId), config.SquareEnixLoginGroups,
             from.PersonId, from.AccountId, to.PersonId, to.AccountId);
         if (relationship != CharacterLoginRelationship.Unverified) return relationship;
         return loginAccountLinks.Recognizes(LoginPairingScope(), config.SharedRoster, character, to.PersonId, to.AccountId, config.LoginAccountGroups)
@@ -224,7 +229,7 @@ public sealed partial class Plugin
         {
             var ids = contentIds.Select(id => id.ToString(System.Globalization.CultureInfo.InvariantCulture)).ToHashSet();
             var keys = roster.People.SelectMany(p => p.Characters).Where(c => ids.Contains(c.ContentId))
-                .Select(c => c.GameAccountKey).Where(k => !string.IsNullOrEmpty(k)).Distinct().Take(2).ToArray();
+                .Select(c => RecordedCharacterAccountKey(c,known.Person,known.Account)).Where(k => !string.IsNullOrEmpty(k)).Distinct().Take(2).ToArray();
             if (keys.Length == 1) ObserveSquareEnixLogin(keys[0]);
             else if (keys.Length == 0) ObserveSquareEnixLogin(SquareEnixLoginState.AccountKey(roster, known.Person, known.Account));
         }
