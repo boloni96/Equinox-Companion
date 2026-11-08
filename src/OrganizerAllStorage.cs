@@ -20,7 +20,7 @@ public sealed partial class Plugin
             try{ObserveStorage(DateTimeOffset.UtcNow,housingOnly:true);}catch(Exception ex){housingStorageReadStatus="Housing read failed: "+ex.Message;}
         }
         var index=DiscoveryReads();
-        var homes=housingView?housingStorageHomesCache.Get(config.SharedRoster,$"{index.Revision}",Environment.TickCount64,()=>HousingStorageCatalog.Build(config.SharedRoster,index.AllStorage())):[];
+        var homes=housingView?housingStorageHomesCache.Get(config.SharedRoster,$"{Player.ContentId}:{index.Revision}",Environment.TickCount64,()=>HousingStorageCatalog.ForCharacter(config.SharedRoster,index.AllStorage(),Player.ContentId.ToString(System.Globalization.CultureInfo.InvariantCulture))):[];
         var locations=allStorageCache.Get(config.SharedRoster,$"{Player.ContentId}:{index.Revision}:{retrievalInventoryView}",Environment.TickCount64,()=>{
             var own=index.StorageFor(Player.ContentId.ToString()).Where(e=>e.Storage!=null&&!e.Storage.Key.StartsWith("house:")&&LocalStoragePolicy.View(e.Storage.Key,retrievalInventoryView))
                 .Select(e=>new SharedItemLocation(e.Actor.ContentId,e.Actor.Name,e.Storage!.Key,e.Storage.Name,e.At,e.Storage.Items,e.Storage.Stacks));
@@ -70,7 +70,7 @@ public sealed partial class Plugin
             }
             ImGui.TreePop();
         }
-        if(locations.Length==0&&homes.Length==0)ImGui.TextWrapped("No storage recorded yet. Open the saddlebag, housing furnishing/storeroom menu, or other storage to capture its contents.");
+        if(locations.Length==0&&homes.Length==0)ImGui.TextWrapped(retrievalInventoryView==4?"No housing storage known for this character. Open furnishings/storeroom at a house this character can use to record it.":"No storage recorded yet. Open the saddlebag, housing furnishing/storeroom menu, or other storage to capture its contents.");
         ImGui.EndChild();
     }
     private void DrawStorageGroup(SharedItemLocation e,StorageStack[] rows)

@@ -23,6 +23,17 @@ internal static class HousingStorage507Tests
   Check(HousingStorageCatalog.Inside(key)&&!HousingStorageCatalog.Inside("house:"+h.GameHouseId+":27000"),"inside and outside storerooms distinct");
   Check(HousingStorageCatalog.Inside("house:"+h.GameHouseId+":25003")&&!HousingStorageCatalog.Inside("house:"+h.GameHouseId+":25200"),"placed inventories classified separately by side");
   var index=new DiscoveryReadIndex();index.Refresh([newer,stale]);Check(index.AllStorage().Single().At==newer.At,"shared display uses latest indexed observations without full history scans");
+  var fc=h with{Id="fc",GameHouseId="0000000000000004",Type="Free Company house",FcId="guild"};
+  var mine=c with{ContentId="9",Houses=[h],FcId="guild"};
+  var stranger=c with{Id="stranger",ContentId="8",Houses=[other,fc]};
+  var scopedRoster=roster with{People=[new("p","Person",[mine,stranger])],GardenHouses=[apartment]};
+  var strangerRecord=stale with{Actor=new("8","Other",1,1),Storage=new("house:"+other.GameHouseId+":27001","Other house",[10],[new(10,7,false,"Furniture")])};
+  var eligible=HousingStorageCatalog.ForCharacter(scopedRoster,[newer,strangerRecord],"9");
+  Check(eligible.Select(x=>x.Id).ToHashSet().SetEquals([h.GameHouseId,fc.GameHouseId]),"current character and FC homes only; unrelated people and garden houses excluded");
+  var tenant=mine with{Houses=[other],FcId=""};
+  Check(HousingStorageCatalog.ForCharacter(scopedRoster with{People=[new("p","Person",[tenant])]},[],"9").Single().Id==other.GameHouseId,"explicit shared estate remains available without owner-only demolition rules");
+  Check(HousingStorageCatalog.ForCharacter(null,[newer,strangerRecord],"9").Single().Id==h.GameHouseId,"unsynced character uses only its own verified local house evidence");
+  Check(HousingStorageCatalog.ForCharacter(scopedRoster,[newer,strangerRecord],"999").Length==0,"unknown character never falls back to all houses");
   Console.WriteLine("507 shared housing deduplication, inside/outside, unrecorded homes and newest-empty snapshot tests passed.");
  }
 }
