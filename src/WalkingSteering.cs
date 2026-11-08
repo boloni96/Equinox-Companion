@@ -24,8 +24,9 @@ internal static class WalkingSteering
             var projection=Vector3.Lerp(start,path[i],t);var distance=Vector3.Distance(position,projection);
             if(distance>.9f||distance>bestDistance+.02f)continue;
             var candidate=t>=.95f&&i<path.Length-1?i+1:i;
-            var connector=BoundedTarget(position,path[candidate]);
-            if(!clear(position,connector))continue;
+            // Advancing discards intervening corners, so validate the entire
+            // join. A clear first step does not prove a distant waypoint reachable.
+            if(!clear(position,path[candidate]))continue;
             bestDistance=distance;best=candidate;
         }
         next=Math.Min(best,path.Length-1);
