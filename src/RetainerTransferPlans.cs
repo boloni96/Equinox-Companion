@@ -2,6 +2,11 @@ using Dalamud.Bindings.ImGui;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
+    private void DrawMissingEntrustAssignments(ulong destination)
+    {
+        if(destination==StorageAutoRouting.AllRetainers&&config.UseRetainerAssignments.Contains(Player.ContentId)&&!StorageAssignments.HasSelections(config.RetainerAssignments.GetValueOrDefault(Player.ContentId)??[],config.RetrievalPresets))
+            ImGui.TextWrapped("This character has no assignments. Choose a retainer, add assignments, or turn off Use assignments.");
+    }
     private bool DrawEntrustDestination(string label)
     {
         var names=retrievalKnownRetainers.GetValueOrDefault(Player.ContentId)??new Dictionary<ulong,string>();
@@ -18,6 +23,7 @@ public sealed partial class Plugin
             ImGui.EndCombo();
         }
         MarketHelp("Assignments uses this character's saved item, plan and category homes, leaving unassigned items in bags. Shared with Use assignments in Organise retainers. A named retainer is an explicit destination. Keep and protection rules still apply.");
+        DrawMissingEntrustAssignments(retrievalSendTo);
         if(changed){SaveConfiguration();InvalidateOrganizePreview();if(retrievalEditingPreset!=null)RetrievalTry(SaveRetrievalPreset);}
         return changed;
     }

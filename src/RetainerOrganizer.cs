@@ -21,7 +21,7 @@ public sealed partial class Plugin
     private int organizeCarry;
     private string organizeStatus="Preview or organise the selected plan. Assignments choose homes for eligible listed items.";
     private void OrganizeStage(int stage){organizeStage=stage;organizeStatus=$"{organizeTransferred} delivered · {organizeMoveIndex}/{organizeMoves.Length} transfers · "+(stage switch{0=>"Preparing",1 or 2 or 3=>$"Refreshing missing inventory {organizeSourceIndex+1}/{organizeSources.Length}",4 or 5=>"Opening retainer",6 or 7=>"Moving batch",9=>"Calculating batch space",10 or 11 or 12 or 13 or 14=>$"Sorting retainer {organizeSortIndex+1}/{organizeSortRetainers.Length}",_=>"Next retainer"});organizeDeadline=DateTimeOffset.UtcNow.AddSeconds(60);}
-    private void StopOrganize(string reason){ClearOrganizerSortMenu();organizeRunning=false;organizePort?.Release();organizePending=null;organizeStatus=reason+(organizerDeferred>0?$" · {organizerDeferred} item types deferred after unconfirmed moves.":"")+(organizeCarry>0?$" · {organizeCarry} transferred items remain in your bags.":"");SaveOrganizerInventories();InvalidateOrganizePreview();retrievalRefreshPending=true;Log.Information("Retainer organizer: {Status}",organizeStatus);}
+    private void StopOrganize(string reason){ClearOrganizerSortMenu();organizeRunning=false;organizePort?.Release();organizePending=null;organizeStatus=reason+(organizerUnassigned>0?$" · {organizerUnassigned} item types without assigned destinations.":"")+(organizerDeferred>0?$" · {organizerDeferred} item types deferred after unconfirmed moves.":"")+(organizeCarry>0?$" · {organizeCarry} transferred items remain in your bags.":"");SaveOrganizerInventories();InvalidateOrganizePreview();retrievalRefreshPending=true;Log.Information("Retainer organizer: {Status}",organizeStatus);}
     private uint OrganizeCategory(uint item)=>DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>().GetRowOrDefault(item) is {} row?GearCategorySelection.Category(row.ItemUICategory.RowId,row.LevelEquip,row.EquipSlotCategory.RowId>0):0;
     private void DrawRetainerOrganizer()
     {
@@ -85,6 +85,8 @@ public sealed partial class Plugin
             StartStorageRouting([new(StorageRouting.Bags,retrievalSendTo,[],amounts.Keys.ToArray(),Quality:retrievalQuality,Amounts:amounts)],true);
         });
     }
+    private bool organizerHasRun;
+    private int organizerUnassigned;
     private unsafe void StartStorageRouting(StorageRoute[] rules,bool bagsOnly,bool temporarySelection=false,int temporaryTradeFilter=0)
     {
         RetrievalTry(()=>{
@@ -92,7 +94,7 @@ public sealed partial class Plugin
             if(!Player.IsLoaded||!RetainerToolsContext())throw new InvalidOperationException("Open the summoning bell's retainer list first.");
             var owned=ReadSellerRetainers().Select(x=>x.Id).ToArray();
             if(rules.Any(r=>r.To==0||r.To!=StorageAutoRouting.AllRetainers&&!owned.Contains(r.To)||r.From!=0&&r.From!=StorageRouting.AllSources&&!owned.Contains(r.From)))throw new InvalidOperationException("Choose this character's retainers for every movement.");
-            if(config.UseRetainerAssignments.Contains(Player.ContentId)&&rules.Any(r=>r.To==StorageAutoRouting.AllRetainers)&&!StorageAssignments.HasSelections(config.RetainerAssignments.GetValueOrDefault(Player.ContentId)??[],config.RetrievalPresets))throw new InvalidOperationException("Choose retainer assignments, or turn off Use assignments for regular duplicate organisation.");
+            if(config.UseRetainerAssignments.Contains(Player.ContentId)&&rules.Any(r=>r.To==StorageAutoRouting.AllRetainers)&&!StorageAssignments.HasSelections(config.RetainerAssignments.GetValueOrDefault(Player.ContentId)??[],config.RetrievalPresets))throw new InvalidOperationException("This character has no retainer assignments. Choose a destination retainer, create assignments, or turn off Use assignments.");
             EnsureChestMove();if(temporarySelection&&!bagsOnly)throw new InvalidOperationException("Temporary selection is only valid for Entrust.");organizeNoPlan=!bagsOnly&&NoOrganizerPlan;rules=temporarySelection?PlanItemScope.Restrict(rules,rules.SelectMany(r=>r.Items),OrganizeCategory):organizeNoPlan?rules:ScopeOrganizeRules(rules);if(rules.Length==0)throw new InvalidOperationException(OrganizeScopeMessage());organizeActiveRules=rules;organizeBagsOnly=bagsOnly;organizeBagTradeFilter=temporarySelection?Math.Clamp(temporaryTradeFilter,0,2):0;
             organizeSources=owned.Where(id=>rules.Any(r=>r.To==StorageAutoRouting.AllRetainers||r.To==id||!bagsOnly&&(r.From==StorageRouting.AllSources||r.From==id))).ToArray();
             organizeSortEnabled=config.SortItemsAfterOrganizing&&!bagsOnly;organizeSortRetainers=owned.ToArray();organizeSortItem=null;organizeSortMenu=null;if(organizeSortEnabled)PrepareOrganizerSort();
@@ -101,7 +103,7 @@ public sealed partial class Plugin
             organizerTransferIssues.Clear();organizerDeferredItems.Clear();organizerDeferred=0;organizerSubmission=null;organizerLastTransfer=null;organizeCarry=0;organizeTransferred=0;organizeSourceIndex=0;organizePending=null;organizeMoveIndex=0;organizeMoves=[];organizeRoutingTask=null;organizeInventories.Clear();foreach(var row in recorded)organizeInventories[row.Key]=row.Value;
             organizeSources=organizeSources.Where(id=>!recorded.ContainsKey(id)).ToArray();
             organizerVisitCache.Clear();organizerReplans.Clear();organizerEntrusted.Clear();organizerProtectedBagSlots.Clear();foreach(var slot in OrganizerInventory(false,false).Concat(OrganizerInventory(false,true)).Where(x=>x.Item>0&&x.Quantity>0))organizerProtectedBagSlots.Add((slot.Container,slot.Slot));
-            organizeRunning=true;OrganizeStage(0);
+            organizerHasRun=true;organizerUnassigned=0;organizeRunning=true;OrganizeStage(0);
         });
     }
     private unsafe ChestStack[] OrganizerInventory(bool retainer,bool crystals)=>
@@ -129,7 +131,7 @@ public sealed partial class Plugin
                 case 9:
                     if(organizeRoutingTask?.IsCompleted!=true)break;var plan=organizeRoutingTask.GetAwaiter().GetResult();organizeRoutingTask=null;
                     organizeMoves=plan.Moves.Where(x=>!organizerDeferredItems.Contains((x.Move.Source.Item,x.Move.Source.Hq))).ToArray();organizeUnmoved=plan.Remaining;
-                    if(organizeMoves.Length==0){FinishOrganize(plan.Remaining==0?"Nothing needs moving.":$"No available route for {plan.Remaining} items. Check bag and retainer space.");return;}
+                    if(organizeMoves.Length==0){FinishOrganize(organizerUnassigned>0?$"No further eligible transfers; {organizerUnassigned} selected item types have no assigned retainer. Assign a home or choose an explicit destination.":plan.Remaining==0?"Nothing needs moving: check current stock, Keep amounts, quality and item protections.":$"No available route for {plan.Remaining} items. Check bag and retainer space.");return;}
                     organizeActiveRetainer=organizeMoves[0].Retainer;OrganizeStage(RetrieverActive(organizeActiveRetainer)?5:4);break;
                 case 4:if(organizePort.Select(organizeActiveRetainer))OrganizeStage(5);break;
                 case 5:if(organizePort.OpenInventory(organizeActiveRetainer)&&organizePort.Read(organizeActiveRetainer) is not null)BindOrganizerVisit();break;
@@ -174,7 +176,9 @@ public sealed partial class Plugin
                     var snapshot=organizeOwnerOrder.Where(organizeInventories.ContainsKey).Append(StorageRouting.Bags).ToDictionary(id=>id,id=>organizeInventories[id].ToArray());var categories=snapshot.Values.SelectMany(x=>x).Where(x=>x.Item>0).Select(x=>x.Item).Distinct().ToDictionary(x=>x,OrganizeCategory);
                     if(organizeNoPlan)organizeActiveRules=PlanItemScope.FromRetainers(organizeActiveRules,snapshot,OrganizeCategory);
                     var rules=organizeActiveRules.Select(r=>r.Amounts==null?r:r with{Amounts=r.Amounts.ToDictionary(x=>x.Key,x=>Math.Max(0,x.Value-organizerEntrusted.GetValueOrDefault(x.Key)))}).ToArray();
+                    var beforeAssignments=rules;
                     if(config.UseRetainerAssignments.Contains(Player.ContentId))rules=StorageAssignments.Apply(rules,(config.RetainerAssignments.GetValueOrDefault(Player.ContentId)??[]).ToArray(),snapshot,id=>categories.GetValueOrDefault(id),config.RetrievalPresets);
+                    organizerUnassigned=organizeBagsOnly?beforeAssignments.Where(r=>r.To==StorageAutoRouting.AllRetainers).SelectMany(r=>r.Items).Distinct().Count(id=>snapshot[StorageRouting.Bags].Any(s=>s.Item==id&&s.Quantity>0)&&!rules.Any(r=>r.Items.Contains(id))):0;
                     RefreshGearSetProtection();
                     rules=ProtectGearSetRoutes(rules,snapshot);
                     var routingPlan=new StorageRoutingPlan("Current movements",Player.ContentId,rules,organizeReserve);var bagsOnly=organizeBagsOnly;

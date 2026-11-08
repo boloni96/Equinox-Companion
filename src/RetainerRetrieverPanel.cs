@@ -6,6 +6,7 @@ namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
     private bool organizerTabWasVisible;
+    private bool organizerSelectInventory;
     private RetrievalEntry[]? retrievalNoRecipeSource;
     private RetrievalCatalog? retrievalNoRecipeCatalog;
     private string[] retrievalNoRecipeNames=[];
@@ -55,7 +56,7 @@ public sealed partial class Plugin
     private void InitializeRetriever(){gearSkipDyed=config.StorageGearSkipDyed;gearReserve=Math.Clamp(config.StorageGearReserve,1,10);chestKeep=Math.Clamp(config.StorageKeepInBags,0,RetainerRetrieval.MaxQuantity);Addons.RegisterListener(Dalamud.Game.Addon.Lifecycle.AddonEvent.PreReceiveEvent,"Bank",ObserveRetainerBankInput);retrievalPort=new(this);retrievalRun=new(retrievalPort);retrieverWindow=new(this);windows.AddWindow(retrieverWindow);chestToolsWindow=new(this);windows.AddWindow(chestToolsWindow);retainerToolsWindow=new(this);windows.AddWindow(retainerToolsWindow);organizerCommand=Commands.AddHandler("/eqorganizer",new CommandInfo((_,args)=>{if(args.Trim().Equals("stop",StringComparison.OrdinalIgnoreCase)){StopGearStorage("Stopped by command.");StopArmoireOrganizer("Stopped by command.");CancelCraftingWithdrawal("Stopped by command.");StopOrganize("Stopped by command.");StopRetainerGil("Stopped by command.");retrievalRun.Stop("Stopped by command.");StopChest("Stopped by command.");}else OpenRetriever();}){HelpMessage="Equinox Organizer · withdraw, entrust and organize retainer/FC chest storage."});retrieverCommand=Commands.AddHandler("/eqretrieve",new CommandInfo((_,args)=>{if(args.Trim().Equals("stop",StringComparison.OrdinalIgnoreCase)){CancelCraftingWithdrawal("Stopped by command.");retrievalRun.Stop("Stopped by command.");}else OpenRetriever();}){HelpMessage="Withdraw finished items or crafting materials from your retainers. /eqretrieve stop cancels."});}
     private void DisposeRetriever(){StopGearStorage("Companion unloaded.");StopArmoireOrganizer("Companion unloaded.");CancelCraftingWithdrawal("");Addons.UnregisterListener(ObserveRetainerBankInput);StopRetainerGil("Companion unloaded.");StopChest("Companion unloaded.");StopOrganize("Companion unloaded.");retrievalRun.Stop("Companion unloaded.");if(organizerCommand)Commands.RemoveHandler("/eqorganizer");if(retrieverCommand)Commands.RemoveHandler("/eqretrieve");}
     private void OpenRetriever(){if(!RequireOptionalTool("Equinox Organizer"))return;retrieverWindow.IsOpen=true;minimizedLaunchers.Remove("Equinox Organizer");retrievalRefreshPending=true;LoadRetrievalCatalog();if(retrievalCatalog!=null)LoadRetrievalArtisan();}
-    private void RetrievalTry(Action work){try{work();retrievalError="";}catch(RetrievalRecipeChoiceException e){retrievalRecipeChoice=e.ItemId;retrievalError=e.Message;}catch(Exception e){retrievalError=e.Message;}}
+    private void RetrievalTry(Action work){try{retrievalError="";work();}catch(RetrievalRecipeChoiceException e){retrievalRecipeChoice=e.ItemId;retrievalError=e.Message;}catch(Exception e){retrievalError=e.Message;}}
     private void AddRetrieval(RetrievalEntry[] items){CancelCraftingWithdrawal("");retrievalItems=RetainerRetrieval.Combine(retrievalItems.Concat(items));foreach(var e in items)retrievalSelected.Add(e.ItemId);retrievalPreview=[];retrievalPreviewDirty=true;InvalidateOrganizePreview();if(retrievalEditingPreset!=null)RetrievalTry(SaveRetrievalPreset);}
     private void PreviewRetrieval(bool selected=false,bool refreshStock=true,bool includeCategories=true)
     {
@@ -103,7 +104,9 @@ public sealed partial class Plugin
         DrawCraftingWithdrawalRestore();
         ImGui.BeginDisabled(gearRouting||armoireRunning||craftingWithdrawalPending||retrievalRun.Running||organizeRunning||chestRunning);
         DrawRetrievalPlanSelector(true);ImGui.SameLine();
-        if(ImGui.SmallButton($"Items · {retrievalItems.Length}"))retrievalShowList=true;
+        if(ImGui.SmallButton($"Plan items · {retrievalItems.Length}"))retrievalShowList=true;
+        EnsureMyInventoryCharacter();
+        ImGui.SameLine();if(ImGui.SmallButton($"Temporary · {myInventorySelected.Count}")){organizerSelectInventory=true;retrievalInventoryView=0;}
         ImGui.SameLine();if(ImGui.SmallButton("...##OrganizerOptions"))ImGui.OpenPopup("Organizer options");
         MarketHelp("Rename, save or clear the current list; inventory picking and chat messages.");
         if(ImGui.BeginPopup("Organizer options")){
@@ -115,9 +118,12 @@ public sealed partial class Plugin
             DrawRetrievalPicker();DrawStorageChatOption();ImGui.Separator();DrawInventoryReviewExport();ImGui.EndPopup();
         }
         ImGui.EndDisabled();
-        if(retrievalPickItems)TickRetrievalPicker();
+        TickRetrievalPicker();
+        if(retrievalError.Length>0)ImGui.TextWrapped(retrievalError);
+        else if(organizerHasRun&&!organizeRunning)ImGui.TextWrapped(organizeStatus);
         if(ImGui.BeginTabBar("RetrieverTabs")){
-            if(ImGui.BeginTabItem("Inventory")){
+            if(ImGui.BeginTabItem("Inventory",organizerSelectInventory?ImGuiTabItemFlags.SetSelected:ImGuiTabItemFlags.None)){
+                organizerSelectInventory=false;
                 ImGui.SetNextItemWidth(220);ImGui.Combo("##InventoryView",ref retrievalInventoryView,"My inventory\0Browse recorded storage\0");
                 if(retrievalInventoryView==0)DrawMyInventory();
                 else {ImGui.BeginDisabled(gearRouting||armoireRunning||craftingWithdrawalPending||retrievalRun.Running||organizeRunning||chestRunning);DrawRetrievalBrowse();ImGui.EndDisabled();}
