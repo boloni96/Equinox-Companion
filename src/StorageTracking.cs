@@ -6,6 +6,13 @@ namespace EquinoxCompanion;
 
 public sealed partial class Plugin
 {
+    private string housingStorageReadStatus="Open the furnishings/storeroom menu to read this house.";
+    private static unsafe bool HousingStorageUiActive()
+    {
+        var agents=AgentModule.Instance();if(agents==null)return false;
+        var list=agents->GetAgentByInternalId(AgentId.Housing);var container=agents->GetAgentByInternalId(AgentId.HousingEditContainer);
+        return list!=null&&list->IsAgentActive()||container!=null&&container->IsAgentActive();
+    }
     private ulong storageRetainer;
     private string storageEstate="";
     private DateTimeOffset storageEstateReady;
@@ -13,13 +20,13 @@ public sealed partial class Plugin
     private Dictionary<uint,uint>? cabinetItems;
     private bool collectingStorage, storageChanged;
     private readonly StorageCaptureGate storageCaptureGate=new();
-    private void ObserveStorage(DateTimeOffset now,bool saddlebagsOnly=false,bool retainersOnly=false)
+    private void ObserveStorage(DateTimeOffset now,bool saddlebagsOnly=false,bool retainersOnly=false,bool housingOnly=false)
     {
         collectingStorage=true;storageChanged=false;
-        try { ObserveStorageCore(now,saddlebagsOnly,retainersOnly); }
+        try { ObserveStorageCore(now,saddlebagsOnly,retainersOnly,housingOnly); }
         finally { collectingStorage=false;if(storageChanged)SaveConfiguration(); }
     }
-    private unsafe void ObserveStorageCore(DateTimeOffset now,bool saddlebagsOnly,bool retainersOnly)
+    private unsafe void ObserveStorageCore(DateTimeOffset now,bool saddlebagsOnly,bool retainersOnly,bool housingOnly)
     {
         if (!config.SyncCollections || !Player.IsLoaded || now < collectionReadyAt) return;
         var actor = ReadActor();
@@ -54,6 +61,7 @@ public sealed partial class Plugin
         }
         if(!retainersOnly)
         {
+        if(!housingOnly){
         Span<StorageSlotValue> slotValues=stackalloc StorageSlotValue[200];
         foreach (var type in Enum.GetValues<InventoryType>())
         {
@@ -70,20 +78,21 @@ public sealed partial class Plugin
             Save("bag:"+id, id<=3?$"Inventory {id+1}":id==1000?"Equipped":id==2001?"Crystals":id>=4000?$"{(id>=4100?"Premium chocobo saddlebag":"Chocobo saddlebag")} {id%100+1}":"Armoury Chest · "+type.ToString().Replace("Armory", "").Replace("Feets","Feet").Replace("OffHand","Off hand").Replace("MainHand","Main hand").Replace("SoulCrystal","Soul crystal"),items,ReadStacks(container));
             storageCaptureGate.Remember(actor,bagKey,slots,now);
         }
+        }
         if(saddlebagsOnly)return;
         var housing=HousingManager.Instance();
-        var agents=AgentModule.Instance();
-        var editor=agents==null?null:agents->GetAgentByInternalId(AgentId.HousingEditContainer);
+
         var loaded=housing!=null&&housing->CurrentTerritory!=null&&housing->CurrentTerritory->IsLoaded();
         var inside=loaded&&housing->IsInside();
         var address=loaded?AddressOf(inside?housing->GetCurrentIndoorHouseId():housing->GetCurrentHouseId()):null;
-        if(editor==null||!editor->IsAgentActive()||address is null||address.Workshop||!housing->HasHousePermissions())storageEstate="";
+        if(!HousingStorageUiActive()||address is null||address.Workshop||!housing->HasHousePermissions()){storageEstate="";housingStorageReadStatus="Open Indoor/Outdoor Furnishings or the storeroom at a house where you have permissions.";}
         else
         {
             var estateContext=actor.ContentId+":"+address.HouseId+":"+inside;
-            if(storageEstate!=estateContext){storageEstate=estateContext;storageEstateReady=now.AddSeconds(10);}
+            if(storageEstate!=estateContext){storageEstate=estateContext;storageEstateReady=now.AddSeconds(3);housingStorageReadStatus="Reading housing inventory · waiting for the opened estate data…";}
             else if(now>=storageEstateReady)
             {
+                var housingContainersRead=0;
                 var place=$"{address.WorldName} · {address.DistrictName} W{address.Ward} · "+(address.Apartment?$"Apartment {address.Room}":$"P{address.Plot}"+(address.Room>0?$" · Chamber {address.Room}":""));
                 foreach(var type in Enum.GetValues<InventoryType>())
                 {
@@ -92,14 +101,16 @@ public sealed partial class Plugin
                     if(!supported)continue;
                     var container=manager->GetInventoryContainer(type);
                     if(container==null||!container->IsLoaded||container->Items==null||container->Size is <=0 or >200)continue;
-                    var stacks=ReadStacks(container);
+                    var stacks=ReadStacks(container);housingContainersRead++;
                     var section=id is 25000 or 25002?"fixtures":id>=27000?"storeroom":"placed";
                     var page=inside?(id>=27000?id-27000:id-25002):(id is 25200 or 27200?2u:1u);
                     var label=$"{place} · {(inside?"Indoor":"Outdoor")} {section}"+(id is 25000 or 25002?"":$" {page}");
                     Save($"house:{address.HouseId}:{id}",label.Length>100?label[..100]:label,stacks.Select(s=>s.ItemId),stacks);
                 }
+                housingStorageReadStatus=housingContainersRead>0?$"Read {housingContainersRead} {(inside?"inside":"outside")} housing containers.":"Furnishings menu open, but housing containers are not loaded yet.";
             }
         }
+        if(housingOnly)return;
         var state=UIState.Instance();
         if(state!=null && state->Cabinet.IsCabinetLoaded())
         {

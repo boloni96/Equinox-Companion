@@ -22,7 +22,7 @@ public sealed partial class Plugin
             if(SellerAddon("InventoryBuddy")==null&&SellerAddon("InventoryBuddy2")==null)throw new InvalidOperationException("Open your chocobo saddlebag first.");
         }else if(LocalStoragePolicy.Storeroom(type)){
             var housing=HousingManager.Instance();var agents=AgentModule.Instance();var editor=agents==null?null:agents->GetAgentByInternalId(AgentId.HousingEditContainer);
-            if(housing==null||housing->CurrentTerritory==null||!housing->CurrentTerritory->IsLoaded()||!housing->HasHousePermissions()||editor==null||!editor->IsAgentActive())throw new InvalidOperationException("Open the housing furnishing/storeroom menu at this estate with storage permissions first.");
+            if(housing==null||housing->CurrentTerritory==null||!housing->CurrentTerritory->IsLoaded()||!housing->HasHousePermissions()||!HousingStorageUiActive())throw new InvalidOperationException("Open the housing furnishing/storeroom menu at this estate with storage permissions first.");
             var inside=housing->IsInside();var address=AddressOf(inside?housing->GetCurrentIndoorHouseId():housing->GetCurrentHouseId());
             if(address==null||address.Workshop||key!=$"house:{address.HouseId}:{type}"||inside!=(type is >=27001 and <=27011))throw new InvalidOperationException("This recorded storeroom is not the currently open estate and indoor/outdoor area.");
         }else throw new InvalidOperationException("This storage is display-only in this view.");

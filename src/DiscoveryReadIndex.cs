@@ -10,6 +10,7 @@ public sealed class DiscoveryReadIndex
     private readonly Dictionary<string,Dictionary<string,SyncEvent>> storage=[];
     public long GardenRevision {get;private set;}
     public IReadOnlyList<SyncEvent> GardenEvents=>garden;
+    public IEnumerable<SyncEvent> AllStorage()=>storage.Values.SelectMany(rows=>rows.Values);
     public IEnumerable<SyncEvent> StorageFor(string actor)=>storage.TryGetValue(actor,out var rows)?rows.Values:Array.Empty<SyncEvent>();
     private SyncEvent? tail;
     private readonly Dictionary<string,List<SyncEvent>> kinds=[];

@@ -6,26 +6,39 @@ public sealed partial class Plugin
     private int allStorageFilter;
     private ulong allStorageOwner;
     private readonly HashSet<uint> allStorageSelected=[];
-    private readonly UiProjectionCache<SyncEvent[]> allStorageCache=new(1000);
-    private readonly UiProjectionCache<(SyncEvent Event,StorageStack[] Rows)[]> allStorageRowsCache=new(1000);
+    private readonly UiProjectionCache<SharedItemLocation[]> allStorageCache=new(1000);
+    private readonly UiProjectionCache<(SharedItemLocation Event,StorageStack[] Rows)[]> allStorageRowsCache=new(1000);
+    private DateTimeOffset nextHousingStorageRead;
+    private readonly UiProjectionCache<HousingStorageHome[]> housingStorageHomesCache=new(1000);
     private void DrawAllStorage()
     {
         if(!Player.IsLoaded){ImGui.TextDisabled("Log in to browse this character's recorded storage.");return;}
         if(allStorageOwner!=Player.ContentId){allStorageOwner=Player.ContentId;allStorageKey="";allStorageSelected.Clear();}
+        var housingView=retrievalInventoryView is 2 or 4;
+        if(housingView&&DateTimeOffset.UtcNow>=nextHousingStorageRead){
+            nextHousingStorageRead=DateTimeOffset.UtcNow.AddSeconds(1);
+            try{ObserveStorage(DateTimeOffset.UtcNow,housingOnly:true);}catch(Exception ex){housingStorageReadStatus="Housing read failed: "+ex.Message;}
+        }
         var index=DiscoveryReads();
-        var locations=allStorageCache.Get(config,$"{Player.ContentId}:{index.Revision}:{retrievalInventoryView}",Environment.TickCount64,()=>index.StorageFor(Player.ContentId.ToString()).Where(e=>e.Storage!=null&&LocalStoragePolicy.View(e.Storage.Key,retrievalInventoryView)).OrderBy(e=>e.Storage!.Name).ToArray());
-        if(allStorageKey.Length>0&&!locations.Any(e=>e.Storage!.Key==allStorageKey)){allStorageKey="";allStorageSelected.Clear();}
+        var homes=housingView?housingStorageHomesCache.Get(config.SharedRoster,$"{index.Revision}",Environment.TickCount64,()=>HousingStorageCatalog.Build(config.SharedRoster,index.AllStorage())):[];
+        var locations=allStorageCache.Get(config.SharedRoster,$"{Player.ContentId}:{index.Revision}:{retrievalInventoryView}",Environment.TickCount64,()=>{
+            var own=index.StorageFor(Player.ContentId.ToString()).Where(e=>e.Storage!=null&&!e.Storage.Key.StartsWith("house:")&&LocalStoragePolicy.View(e.Storage.Key,retrievalInventoryView))
+                .Select(e=>new SharedItemLocation(e.Actor.ContentId,e.Actor.Name,e.Storage!.Key,e.Storage.Name,e.At,e.Storage.Items,e.Storage.Stacks));
+            return own.Concat(homes.SelectMany(h=>h.Locations)).OrderBy(e=>e.Name).ToArray();
+        });
+        if(allStorageKey.Length>0&&!locations.Any(e=>e.Key==allStorageKey)){allStorageKey="";allStorageSelected.Clear();}
+        if(housingView){ImGui.TextWrapped(config.SyncCollections?housingStorageReadStatus:"Storage recording is disabled in collection sync settings.");if(config.SharedRoster?.ItemLocationsTruncated==true)ImGui.TextWrapped("Shared storage results are partial; local records are also included.");}
         ImGui.SetNextItemWidth(-1);ImGui.InputTextWithHint("##AllStorageSearch","Search all recorded items…",ref allStorageSearch,100);
         ImGui.SetNextItemWidth(190);ImGui.Combo("##AllStorageFilter",ref allStorageFilter,"Any items\0Tradable only\0Untradable only\0Bound only\0Unbound only\0");
         MarketHelp("Bound means a non-collectible copy with spiritbond/binding data. Untradable includes bound copies and items that cannot be traded by design. Old observations with unknown copy state are excluded from these filters; reopen the storage to refresh.");
         ImGui.SameLine();if(ImGui.SmallButton("Refresh")){RetrievalTry(()=>ObserveStorage(DateTimeOffset.UtcNow));myInventoryRefresh=default;}
         ImGui.SetNextItemWidth(-1);
-        if(ImGui.BeginCombo("##StorageLocation",locations.FirstOrDefault(e=>e.Storage!.Key==allStorageKey)?.Storage?.Name??"All recorded locations")){
+        if(ImGui.BeginCombo("##StorageLocation",locations.FirstOrDefault(e=>e.Key==allStorageKey)?.Name??"All recorded locations")){
             if(ImGui.Selectable("All recorded locations",allStorageKey.Length==0)){allStorageKey="";allStorageSelected.Clear();}
-            foreach(var e in locations)if(ImGui.Selectable(e.Storage!.Name+"##"+e.Storage.Key,allStorageKey==e.Storage.Key)){allStorageKey=e.Storage.Key;allStorageSelected.Clear();}
+            foreach(var e in locations)if(ImGui.Selectable(e.Name+"##"+e.Key,allStorageKey==e.Key)){allStorageKey=e.Key;allStorageSelected.Clear();}
             ImGui.EndCombo();
         }
-        var chosen=locations.FirstOrDefault(e=>e.Storage!.Key==allStorageKey);
+        var chosen=locations.FirstOrDefault(e=>e.Key==allStorageKey);
         if(chosen!=null){
             ImGui.BeginDisabled(chestRunning||organizeRunning||retrievalRun.Running||gearRouting||armoireRunning||craftingWithdrawalPending);
             if(ImGui.SmallButton("Select all matching"))foreach(var s in VisibleStorageStacks(chosen))allStorageSelected.Add(s.ItemId);
@@ -43,23 +56,37 @@ public sealed partial class Plugin
         if(localStorageStatusShown)ImGui.TextWrapped(chestStatus);
         ImGui.BeginChild("AllStorageRows",new(0,Math.Max(80,ImGui.GetContentRegionAvail().Y-4)),false);
         var groups=allStorageRowsCache.Get(locations,$"{allStorageSearch}:{allStorageFilter}",Environment.TickCount64,()=>locations.Select(e=>(e,VisibleStorageStacks(e).ToArray())).ToArray());
-        foreach(var group in groups.Where(g=>allStorageKey.Length==0||g.Event.Storage!.Key==allStorageKey)){
-            var e=group.Event;var rows=group.Rows;
-            if(!ImGui.CollapsingHeader($"{e.Storage!.Name} · {rows.Length} item stacks##{e.Storage.Key}",allStorageKey.Length>0?ImGuiTreeNodeFlags.DefaultOpen:ImGuiTreeNodeFlags.None))continue;
+        var shown=groups.Where(g=>allStorageKey.Length==0||g.Event.Key==allStorageKey).ToArray();
+        foreach(var group in shown.Where(g=>!g.Event.Key.StartsWith("house:")))DrawStorageGroup(group.Event,group.Rows);
+        foreach(var home in homes){
+            if(allStorageKey.Length>0&&HousingStorageCatalog.HouseId(allStorageKey)!=home.Id)continue;
+            if(!ImGui.TreeNodeEx(home.Label+"##house-storage-"+home.Id,allStorageKey.Length>0?ImGuiTreeNodeFlags.DefaultOpen:ImGuiTreeNodeFlags.None))continue;
+            foreach(var inside in home.Outside?new[]{true,false}:new[]{true}){
+                if(!ImGui.TreeNodeEx((inside?"Inside":"Outside")+"##"+home.Id,ImGuiTreeNodeFlags.DefaultOpen))continue;
+                var section=shown.Where(g=>HousingStorageCatalog.HouseId(g.Event.Key)==home.Id&&HousingStorageCatalog.Inside(g.Event.Key)==inside).ToArray();
+                if(section.Length==0)ImGui.TextWrapped("Not recorded yet. Open this house's furnishings/storeroom menu with a character who can use it.");
+                foreach(var group in section)DrawStorageGroup(group.Event,group.Rows);
+                ImGui.TreePop();
+            }
+            ImGui.TreePop();
+        }
+        if(locations.Length==0&&homes.Length==0)ImGui.TextWrapped("No storage recorded yet. Open the saddlebag, housing furnishing/storeroom menu, or other storage to capture its contents.");
+        ImGui.EndChild();
+    }
+    private void DrawStorageGroup(SharedItemLocation e,StorageStack[] rows)
+    {
+            if(!ImGui.CollapsingHeader($"{e.Name} · {rows.Length} item stacks##{e.Key}",allStorageKey.Length>0?ImGuiTreeNodeFlags.DefaultOpen:ImGuiTreeNodeFlags.None))return;
             ImGui.TextDisabled($"Recorded {e.At.ToLocalTime():g}");
-            if(ImGui.SmallButton("Use this location##"+e.Storage.Key)){allStorageKey=e.Storage.Key;allStorageSelected.Clear();}
+            if(ImGui.SmallButton("Use this location##"+e.Key)){allStorageKey=e.Key;allStorageSelected.Clear();}
             var clip=ImGui.ImGuiListClipper();clip.Begin(rows.Length,Math.Max(ImGui.GetFrameHeight(),ImGui.GetTextLineHeight()+4)+ImGui.GetStyle().ItemSpacing.Y);
             while(clip.Step())for(var i=clip.DisplayStart;i<clip.DisplayEnd;i++){
-                var s=rows[i];ImGui.PushID(e.Storage.Key+":"+i);
-                ImGui.BeginDisabled(allStorageKey!=e.Storage.Key||chestRunning);
+                var s=rows[i];ImGui.PushID(e.Key+":"+i);
+                ImGui.BeginDisabled(allStorageKey!=e.Key||chestRunning);
                 var selected=allStorageSelected.Contains(s.ItemId);if(ImGui.Checkbox("##pick",ref selected)){if(selected)allStorageSelected.Add(s.ItemId);else allStorageSelected.Remove(s.ItemId);}ImGui.EndDisabled();ImGui.SameLine();
                 DrawRetrievalIcon(s.ItemId);
                 ImGui.TextUnformatted($"{SearchItemName(s.ItemId)}{(s.Hq?" HQ":"")} · {(s.Quantity>0?s.Quantity.ToString():"quantity unknown")} · {(s.Bound==true?"Bound":s.Tradable==true?"Tradable":s.Tradable==false?"Untradable":"copy state unknown")}");
                 ImGui.PopID();
             }clip.End();clip.Destroy();
-        }
-        if(locations.Length==0)ImGui.TextWrapped("No storage recorded yet. Open the saddlebag, housing furnishing/storeroom menu, or other storage to capture its contents.");
-        ImGui.EndChild();
     }
-    private IEnumerable<StorageStack> VisibleStorageStacks(SyncEvent e)=>(e.Storage!.Stacks??e.Storage.Items.Select(id=>new StorageStack(id,0,false,SearchItemName(id))).ToArray()).SelectMany(LocalStoragePolicy.Copies).Where(s=>LocalStoragePolicy.Filter(s,allStorageFilter)&&SearchItemName(s.ItemId).Contains(allStorageSearch,StringComparison.OrdinalIgnoreCase));
+    private IEnumerable<StorageStack> VisibleStorageStacks(SharedItemLocation e)=>(e.Stacks??e.Items.Select(id=>new StorageStack(id,0,false,SearchItemName(id))).ToArray()).SelectMany(LocalStoragePolicy.Copies).Where(s=>LocalStoragePolicy.Filter(s,allStorageFilter)&&SearchItemName(s.ItemId).Contains(allStorageSearch,StringComparison.OrdinalIgnoreCase));
 }
