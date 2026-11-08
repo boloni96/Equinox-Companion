@@ -24,11 +24,11 @@ public sealed partial class Plugin
         retrievalEditingPreset=null;retrievalTransferAll=browseTransferAll;
         if(entrust)SendRetrievalList(false);else StartRetrieval(false);
     }
-    private int RetrievalTradeFilter=>config.WithdrawUntradableOnly?2:config.WithdrawTradableOnly?1:0;
+    private int RetrievalTradeFilter=>config.OrganizerBindingFilter is 3 or 4?config.OrganizerBindingFilter:config.WithdrawUntradableOnly?2:config.WithdrawTradableOnly?1:0;
     private void DrawWithdrawTradableOption()
     {
         var value=RetrievalTradeFilter;ImGui.SetNextItemWidth(165);
-        if(ImGui.Combo("##WithdrawalTradeFilter",ref value,"Any items\0Tradable only\0Untradable only\0")){config.WithdrawTradableOnly=value==1;config.WithdrawUntradableOnly=value==2;retrievalPreviewDirty=true;SaveConfiguration();}
+        if(ImGui.Combo("##WithdrawalTradeFilter",ref value,"Any items\0Tradable only\0Untradable only\0Bound only\0Unbound only\0")){config.OrganizerBindingFilter=value is 3 or 4?value:0;config.WithdrawTradableOnly=value==1;config.WithdrawUntradableOnly=value==2;retrievalPreviewDirty=true;SaveConfiguration();}
         MarketHelp("Withdrawal filter: Any items, Tradable only, or Untradable only. Checks actual stacks, including bound gear and collectibles. Applies to retainer withdrawals and matching bag counts; does not change Entrust. Your choice is remembered.");
     }
     private void DrawRetrievalBrowse()

@@ -10,7 +10,7 @@ internal static class StorageObservationEquality
         for(var i = 0; i < a.Stacks.Length; i++)
         {
             var x = a.Stacks[i]; var y = b.Stacks[i];
-            if(x.ItemId != y.ItemId || x.Quantity != y.Quantity || x.Hq != y.Hq || x.Name != y.Name) return false;
+            if(x.ItemId != y.ItemId || x.Quantity != y.Quantity || x.Hq != y.Hq || x.Name != y.Name || x.Bound != y.Bound || x.Tradable != y.Tradable) return false;
             if(x.Positions is null || y.Positions is null)
             { if(x.Positions is not null || y.Positions is not null) return false; }
             else if(!x.Positions.AsSpan().SequenceEqual(y.Positions)) return false;

@@ -47,8 +47,8 @@ public sealed partial class Plugin
         ImGui.SameLine();if(ImGui.SmallButton(config.SortItemsAfterOrganizing?"Options · sort on":"Options…"))ImGui.OpenPopup("MovementOptions");
         if(ImGui.BeginPopup("MovementOptions")){
             var sortAfter=config.SortItemsAfterOrganizing;
-            if(ImGui.Checkbox("Sort items after organizing",ref sortAfter)){config.SortItemsAfterOrganizing=sortAfter;SaveConfiguration();}
-            MarketHelp("After organization finishes, visit all retainers and use the normal item-menu Sort action with your game settings. Stop cancels the sorting pass too.");
+            if(ImGui.Checkbox("Sort items after transfers",ref sortAfter)){config.SortItemsAfterOrganizing=sortAfter;SaveConfiguration();}
+            MarketHelp("After each retainer’s final confirmed transfer, use its normal item-menu Sort action with your game settings. Applies to Entrust and Withdraw too.");
             ImGui.SetNextItemWidth(100);if(ImGui.SliderInt("Leave bag slots free",ref organizeReserve,0,10))InvalidateOrganizePreview();
             MarketHelp("Reserve free bag slots for staging. One spare may temporarily unblock a full-retainer swap.");
             if(organizeSelectionMode){
@@ -91,15 +91,21 @@ public sealed partial class Plugin
     {
         RetrievalTry(()=>{
             if(gearRouting||armoireRunning||craftingWithdrawalPending||organizeRunning||retrievalRun.Running||chestRunning||sellerRun.Running||TraderRunning||retainerGilRunning)throw new InvalidOperationException("Finish the current inventory operation first.");
-            if(!Player.IsLoaded||!RetainerToolsContext())throw new InvalidOperationException("Open the summoning bell's retainer list first.");
+            if(!Player.IsLoaded)throw new InvalidOperationException("Log in before transferring items.");
+            if(!RetainerToolsContext()){
+                var saved=rules.Select(r=>r with{Items=r.Items.ToArray(),Categories=r.Categories.ToArray(),Amounts=r.Amounts==null?null:new(r.Amounts)}).ToArray();
+                QueueCraftingWithdrawal(false);craftingWithdrawalPrepared=true;
+                pendingStorageAtBell=()=>StartStorageRouting(saved,bagsOnly,temporarySelection,temporaryTradeFilter);
+                return;
+            }
             var owned=ReadSellerRetainers().Select(x=>x.Id).ToArray();
             if(rules.Any(r=>r.To==0||r.To!=StorageAutoRouting.AllRetainers&&!owned.Contains(r.To)||r.From!=0&&r.From!=StorageRouting.AllSources&&!owned.Contains(r.From)))throw new InvalidOperationException("Choose this character's retainers for every movement.");
             if(config.UseRetainerAssignments.Contains(Player.ContentId)&&rules.Any(r=>r.To==StorageAutoRouting.AllRetainers)&&!StorageAssignments.HasSelections(config.RetainerAssignments.GetValueOrDefault(Player.ContentId)??[],config.RetrievalPresets))throw new InvalidOperationException("This character has no retainer assignments. Choose a destination retainer, create assignments, or turn off Use assignments.");
-            EnsureChestMove();if(temporarySelection&&!bagsOnly)throw new InvalidOperationException("Temporary selection is only valid for Entrust.");organizeNoPlan=!bagsOnly&&NoOrganizerPlan;rules=temporarySelection?PlanItemScope.Restrict(rules,rules.SelectMany(r=>r.Items),OrganizeCategory):organizeNoPlan?rules:ScopeOrganizeRules(rules);if(rules.Length==0)throw new InvalidOperationException(OrganizeScopeMessage());organizeActiveRules=rules;organizeBagsOnly=bagsOnly;organizeBagTradeFilter=temporarySelection?Math.Clamp(temporaryTradeFilter,0,2):0;
+            EnsureChestMove();if(temporarySelection&&!bagsOnly)throw new InvalidOperationException("Temporary selection is only valid for Entrust.");organizeNoPlan=!bagsOnly&&NoOrganizerPlan;rules=temporarySelection?PlanItemScope.Restrict(rules,rules.SelectMany(r=>r.Items),OrganizeCategory):organizeNoPlan?rules:ScopeOrganizeRules(rules);if(rules.Length==0)throw new InvalidOperationException(OrganizeScopeMessage());organizeActiveRules=rules;organizeBagsOnly=bagsOnly;organizeBagTradeFilter=temporarySelection?Math.Clamp(temporaryTradeFilter,0,4):0;
             organizeSources=owned.Where(id=>rules.Any(r=>r.To==StorageAutoRouting.AllRetainers||r.To==id||!bagsOnly&&(r.From==StorageRouting.AllSources||r.From==id))).ToArray();
-            organizeSortEnabled=config.SortItemsAfterOrganizing&&!bagsOnly;organizeSortRetainers=owned.ToArray();organizeSortItem=null;organizeSortMenu=null;if(organizeSortEnabled)PrepareOrganizerSort();
+            organizeSortEnabled=false;organizeSortRetainers=owned.ToArray();organizeSortItem=null;organizeSortMenu=null;if(organizeSortEnabled)PrepareOrganizerSort();
             organizeOwnerOrder=organizeSources.ToArray();var recorded=RecordedOrganizerInventories(organizeSources);
-            organizePort=new(this){Character=Player.ContentId,World=Player.CurrentWorld.RowId,Quality=RetrievalQuality.Any};
+            organizePort=storageBellHandoff?retrievalPort:new(this);organizePort.Character=Player.ContentId;organizePort.World=Player.CurrentWorld.RowId;organizePort.Quality=RetrievalQuality.Any;
             organizerTransferIssues.Clear();organizerDeferredItems.Clear();organizerDeferred=0;organizerSubmission=null;organizerLastTransfer=null;organizeCarry=0;organizeTransferred=0;organizeSourceIndex=0;organizePending=null;organizeMoveIndex=0;organizeMoves=[];organizeRoutingTask=null;organizeInventories.Clear();foreach(var row in recorded)organizeInventories[row.Key]=row.Value;
             organizeSources=organizeSources.Where(id=>!recorded.ContainsKey(id)).ToArray();
             organizerVisitCache.Clear();organizerReplans.Clear();organizerEntrusted.Clear();organizerProtectedBagSlots.Clear();foreach(var slot in OrganizerInventory(false,false).Concat(OrganizerInventory(false,true)).Where(x=>x.Item>0&&x.Quantity>0))organizerProtectedBagSlots.Add((slot.Container,slot.Slot));
@@ -157,6 +163,7 @@ public sealed partial class Plugin
                     if(!RetrieverActive(organizeActiveRetainer)){StopOrganize("Stopped: selected retainer changed while a transfer was unconfirmed.");return;}
                     if(organizePort.Read(organizeActiveRetainer)==null)break;
                     if(!OrganizerConfirmed())break;
+                    organizePort.MarkForSort(organizeActiveRetainer);
                     var done=organizeMoves[organizeMoveIndex];if(done.Internal){}else if(done.Withdraw)organizeCarry+=done.Move.Quantity;else{if(!organizeBagsOnly)organizeCarry-=done.Move.Quantity;organizeTransferred+=done.Move.Quantity;}
                     RememberOrganizerInventory(organizeActiveRetainer,OrganizerInventory(true,false).Concat(OrganizerInventory(true,true)).ToArray());
                     if(organizeBagsOnly&&!done.Withdraw&&!done.Internal)organizerEntrusted[done.Move.Source.Item]=organizerEntrusted.GetValueOrDefault(done.Move.Source.Item)+done.Move.Quantity;
@@ -164,6 +171,7 @@ public sealed partial class Plugin
                     organizePending=null;organizeMoveIndex++;
                     if(organizeMoveIndex<organizeMoves.Length&&organizeMoves[organizeMoveIndex].Retainer==organizeActiveRetainer)OrganizeStage(6);else OrganizeStage(8);break;
                 case 8:
+                    organizePort.SortAllowed=!organizeMoves.Skip(organizeMoveIndex).Any(m=>m.Retainer==organizeActiveRetainer);
                     if(!organizePort.Close(organizeActiveRetainer))break;
                     if(organizeMoveIndex==organizeMoves.Length){FinishOrganize(organizeUnmoved==0?$"Complete: {organizeTransferred} items delivered.":$"Partial: {organizeTransferred} items delivered · {organizeUnmoved} remain because no space was available.");return;}
                     organizeActiveRetainer=organizeMoves[organizeMoveIndex].Retainer;OrganizeStage(4);break;

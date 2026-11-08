@@ -6,6 +6,8 @@ namespace EquinoxCompanion;
 
 public sealed partial class Plugin
 {
+    private Action? pendingStorageAtBell;
+    private bool storageBellHandoff;
     private RetrievalPreset? craftingWithdrawalPrevious;
     private string? craftingWithdrawalPreviousEditing;
     private bool craftingWithdrawalPending, craftingWithdrawalPrepared, craftingWithdrawalSelected, craftingWithdrawalRequireRecipe;
@@ -43,7 +45,7 @@ public sealed partial class Plugin
 
     private void QueueCraftingWithdrawal(bool selected, bool requireRecipe = false)
     {
-        craftingWithdrawalPending = true; craftingWithdrawalPrepared = false;
+        pendingStorageAtBell=null;craftingWithdrawalPending = true; craftingWithdrawalPrepared = false;
         craftingWithdrawalSelected = selected; craftingWithdrawalRequireRecipe = requireRecipe;
         craftingWithdrawalCharacter = Player.ContentId; craftingWithdrawalWorld = Player.CurrentWorld.RowId;
         craftingWithdrawalDeadline = DateTimeOffset.UtcNow.AddSeconds(30); craftingWithdrawalBellAt = default;
@@ -52,7 +54,7 @@ public sealed partial class Plugin
     private void CancelCraftingWithdrawal(string message)
     {
         if (!craftingWithdrawalPending) return;
-        craftingWithdrawalPending = false;
+        craftingWithdrawalPending = false;pendingStorageAtBell=null;
         retrievalPort.Release();
         if (message.Length > 0) { retrievalError = message; PrintEquinox(message); }
     }
@@ -63,8 +65,8 @@ public sealed partial class Plugin
         try
         {
             if (!config.EnableRetriever || !retrieverWindow.IsOpen || !Player.IsLoaded || Player.ContentId != craftingWithdrawalCharacter || Player.CurrentWorld.RowId != craftingWithdrawalWorld || Player.HomeWorld.RowId != craftingWithdrawalWorld || Conditions[ConditionFlag.InCombat] || Conditions[ConditionFlag.BetweenAreas] || Conditions[ConditionFlag.BetweenAreas51] || HelperInCutscene() || sellerRun.Running || TraderRunning || organizeRunning || chestRunning || retainerGilRunning)
-                throw new InvalidOperationException("Withdrawal cancelled: character, world or active operation changed. Use a bell on your home world.");
-            if (now >= craftingWithdrawalDeadline) throw new InvalidOperationException("Could not open the summoning bell in time. Move within reach and try Withdraw again.");
+                throw new InvalidOperationException("Transfer cancelled: character, world or active operation changed. Use a bell on your home world.");
+            if (now >= craftingWithdrawalDeadline) throw new InvalidOperationException("Could not open the summoning bell in time. Move within reach and try the transfer again.");
             if (retrievalCatalogTask?.IsCompleted == true) { retrievalCatalog = retrievalCatalogTask.GetAwaiter().GetResult(); retrievalCatalogTask = null; }
             if (retrievalCatalog == null) return;
             if (!craftingWithdrawalPrepared)
@@ -81,8 +83,10 @@ public sealed partial class Plugin
             {
                 if (ReadSellerRetainers().Length == 0) return;
                 craftingWithdrawalPending = false;
-                StartRetrieval(craftingWithdrawalSelected);
-                if (!retrievalRun.Running) retrievalPort.Release();
+                if(pendingStorageAtBell is {} storage){
+                    pendingStorageAtBell=null;storageBellHandoff=true;
+                    try{storage();}finally{storageBellHandoff=false;if(!organizeRunning)retrievalPort.Release();}
+                }else{StartRetrieval(craftingWithdrawalSelected);if(!retrievalRun.Running)retrievalPort.Release();}
                 return;
             }
             if (craftingWithdrawalBellAt != default) return; // Interact once; don't reopen after Cancel.
@@ -104,8 +108,8 @@ public sealed partial class Plugin
     {
         if (craftingWithdrawalPending)
         {
-            ImGui.TextUnformatted("Preparing withdrawal / opening bell…");
-            ImGui.SameLine(); if (ImGui.SmallButton("Cancel withdrawal")) CancelCraftingWithdrawal("Withdrawal cancelled.");
+            ImGui.TextUnformatted("Preparing transfer / opening nearby bell…");
+            ImGui.SameLine(); if (ImGui.SmallButton("Cancel transfer")) CancelCraftingWithdrawal("Transfer cancelled.");
             return;
         }
         if (craftingWithdrawalPrevious == null) return;

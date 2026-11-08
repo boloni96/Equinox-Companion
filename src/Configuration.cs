@@ -25,6 +25,7 @@ public sealed class Configuration : IPluginConfiguration
     public bool SortItemsAfterOrganizing { get; set; }
     public int StorageKeepInBags { get; set; }
     public bool WithdrawUntradableOnly { get; set; }
+    public int OrganizerBindingFilter { get; set; }
     public bool WithdrawTradableOnly { get; set; }
     public bool EnableRetriever { get; set; }
     public Dictionary<ulong,List<RetainerAssignment>> RetainerAssignments { get; set; } = [];

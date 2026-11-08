@@ -59,7 +59,7 @@ public sealed partial class Plugin
             }
             return count;
         }
-        public void Begin(IEnumerable<uint> items){captureAfterTransfer=false;
+        public void Begin(IEnumerable<uint> items){ClearTransferSort();captureAfterTransfer=false;
             // Only gear can be redirected here. Material/crystal withdrawals keep their existing bag semantics.
             var gear=items.Distinct().Where(id=>DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>().GetRowOrDefault(id) is {} row&&row.EquipSlotCategory.RowId>0);
             armouryReceipt.Begin(gear.ToDictionary(id=>id,ArmouryHeld));
@@ -118,7 +118,7 @@ public sealed partial class Plugin
             }
             return list.ToArray();
         }
-        public void Confirmed(ulong id,RetrievalSlot slot,int amount){captureAfterTransfer=true;p.retainerCaptureStability.ConfirmTransfer(Character,id);p.ReportStorageTransfer("Withdrew",slot.ItemId,slot.Hq,amount,p.StorageRetainerName(id));}
+        public void Confirmed(ulong id,RetrievalSlot slot,int amount){MarkForSort(id);captureAfterTransfer=true;p.retainerCaptureStability.ConfirmTransfer(Character,id);p.ReportStorageTransfer("Withdrew",slot.ItemId,slot.Hq,amount,p.StorageRetainerName(id));}
         public int Held(uint item)=>armouryReceipt.Held(item,p.RetrievalHeld(item,Quality,TradeFilter),armouryReceipt.Tracks(item)?ArmouryHeld(item):0);
         public bool Withdraw(ulong id,RetrievalSlot slot,int amount)
         {
@@ -152,8 +152,8 @@ public sealed partial class Plugin
             var numeric=SellerAddon("InputNumeric");if(numeric==null)return false;
             if(!numericSent){var value=new AtkValue{Type=AtkValueType.Int,Int=quantity};numeric->FireCallback(1,&value,true);numericSent=true;pending=null;return true;}return false;
         }
-        public bool Close(ulong id){pending=null;inventoryRetainer=0;if(AgentRetainer.Instance()!=null&&AgentRetainer.Instance()->IsAgentActive()&&InventoryOpen){if(captureAfterTransfer&&RetrieverActive(id)&&!p.CaptureRetainerBeforeClose())return false;captureAfterTransfer=false;AgentRetainer.Instance()->Hide();return false;}var menu=(AddonSelectString*)SellerAddon("SelectString");if(RetrieverActive(id)&&menu!=null){var quit=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Addon>().GetRow(2383).Text.ExtractText();for(var i=0;i<Math.Min(20,(int)menu->PopupMenu.PopupMenu.EntryCount);i++)if(RetainerMenuPolicy.Matches(TravelMenuText(menu->PopupMenu.PopupMenu.EntryNames[i].Value),quit)){if(DateTimeOffset.UtcNow>=inventoryMenuNext){SelectTravelChoice((AtkUnitBase*)menu,i);inventoryMenuNext=DateTimeOffset.UtcNow.AddSeconds(1);}return false;}}return navigation.CloseRetainer(id);}
-        public void Release(){p.RequestStorageRefresh();CancelCrystalTransfer();prepared=false;if(pending is {} s){var a=AgentInventoryContext.Instance();if(a!=null&&(int)a->TargetInventoryId==s.Container&&a->TargetInventorySlotId==s.Slot){CloseSellerAddon("ContextMenu");if(contextSent)CloseSellerAddon("InputNumeric");}}pending=null;Pause.Release(DateTimeOffset.UtcNow);}
+        public bool Close(ulong id){if(!SortAfterTransfers(id))return false;pending=null;inventoryRetainer=0;if(AgentRetainer.Instance()!=null&&AgentRetainer.Instance()->IsAgentActive()&&InventoryOpen){if(captureAfterTransfer&&RetrieverActive(id)&&!p.CaptureRetainerBeforeClose())return false;captureAfterTransfer=false;AgentRetainer.Instance()->Hide();return false;}var menu=(AddonSelectString*)SellerAddon("SelectString");if(RetrieverActive(id)&&menu!=null){var quit=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Addon>().GetRow(2383).Text.ExtractText();for(var i=0;i<Math.Min(20,(int)menu->PopupMenu.PopupMenu.EntryCount);i++)if(RetainerMenuPolicy.Matches(TravelMenuText(menu->PopupMenu.PopupMenu.EntryNames[i].Value),quit)){if(DateTimeOffset.UtcNow>=inventoryMenuNext){SelectTravelChoice((AtkUnitBase*)menu,i);inventoryMenuNext=DateTimeOffset.UtcNow.AddSeconds(1);}return false;}}return navigation.CloseRetainer(id);}
+        public void Release(){ClearTransferSort();p.RequestStorageRefresh();CancelCrystalTransfer();prepared=false;if(pending is {} s){var a=AgentInventoryContext.Instance();if(a!=null&&(int)a->TargetInventoryId==s.Container&&a->TargetInventorySlotId==s.Slot){CloseSellerAddon("ContextMenu");if(contextSent)CloseSellerAddon("InputNumeric");}}pending=null;Pause.Release(DateTimeOffset.UtcNow);}
     }
 }
 

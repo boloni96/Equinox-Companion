@@ -26,7 +26,7 @@ public sealed partial class Plugin
         Add("Organizer",organizeRunning,organizeStatus);
         Add("Preparing withdrawal",craftingWithdrawalPending,retrievalError);
         Add("Transfer",retrievalRun.Running,retrievalRun.Status);
-        Add("Company chest",chestRunning,chestStatus);
+        Add(localStorageRunning?"Storage transfer":"Company chest",chestRunning,chestStatus);
         Add("Retainer gil",retainerGilRunning,retainerGilStatus);
         Add("Item trade",itemTrade.Running,itemTrade.Status);
         Add("Gil trade",gilTrade.Running,gilTrade.Status);

@@ -1,0 +1,11 @@
+# Organizer storage and transfer workflow 0.5.1.505
+
+Inventory views include retainers, all recorded locations, saddlebags, housing storage, Armoury Chest, equipped gear, armoire/dresser and FC storage. Records are current-character observations with timestamps; unknown historic copy state is shown explicitly. Bound/unbound and tradable/untradable are distinct filters. Storage capture preserves per-position binding/trade data while maintaining the original one item/HQ key per snapshot contract. Display projections are cached.
+
+Saddlebag and housing storeroom transfers use the public native InventoryManager.MoveItemSlot entry point, only between loaded selected storage and bags. Every transfer rechecks character, world, territory, open UI, estate identity, permissions, live source, filters and protection. It waits for exact source/destination deltas and never retries an unconfirmed move. Whole stacks move to empty slots to preserve copy metadata. Partial-stack quantities are reported as unsupported in this path; protected/equipped/placed/fixture items are not moved. Housing deposit selects only the indoor/outdoor furnishing catalogue appropriate to the current storeroom. Remote recorded storage is never treated as live.
+
+Entrust can queue its exact selection, open a nearby summoning bell once using the existing bell workflow, and hand the prepared retainer port to the organizer. Closing the organizer or changing character/context cancels preparation. Missing/out-of-range bell and game menu timeout reasons remain visible.
+
+Sort items after transfers is always visible. Withdraw marks confirmed retainer moves; Entrust/Organize defer sort until no later movement uses that retainer. The localized native Sort menu entry and source slot are checked before dispatch, and sorter completion is verified before capture/closing. No redundant final all-retainer sorting pass.
+
+Automated validation covers routing container boundaries, unknown/mixed binding states, collective versus bound copies, snapshot equality and existing regression suites. Native saddlebag/housing transfer, bell opening and sort interaction require live in-game verification; passing builds do not establish those outcomes.

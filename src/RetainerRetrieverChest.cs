@@ -40,7 +40,7 @@ public sealed partial class Plugin
         if(container is >=20000 and <=20004)return (int)((*(uint*)((byte*)addon+0x4DC)>>(2*(int)(container-20000)))&3);
         return container==22001?(int)*(uint*)((byte*)addon+0x4E0):0;
     }
-    private void StopChest(string reason){RequestStorageRefresh();chestRunning=false;chestPending=null;chestStatus=reason;retrievalPreviewDirty=true;Log.Information("FC chest: {Status}",reason);}
+    private void StopChest(string reason){localStorageRunning=false;localStoragePending=null;RequestStorageRefresh();chestRunning=false;chestPending=null;chestStatus=reason;retrievalPreviewDirty=true;Log.Information("FC chest: {Status}",reason);}
     private unsafe ChestStack[] ReadChestContainer(uint type)
     {
         var manager=InventoryManager.Instance();if(manager==null)throw new InvalidOperationException("Inventory unavailable.");
@@ -90,6 +90,7 @@ public sealed partial class Plugin
     }
     private unsafe void TickChest(DateTimeOffset now)
     {
+        if(localStorageRunning){TickLocalStorage(now);return;}
         var open=config.EnableRetriever&&SellerAddon("FreeCompanyChest")!=null;
         if(open&&!chestWasOpen)chestToolsWindow.IsOpen=true;
         if(!open)chestToolsWindow.IsOpen=false;chestWasOpen=open;

@@ -44,9 +44,13 @@ public sealed partial class Plugin
                 var item=container->Items[i];var id=item.ItemId%1000000;
                 if(item.Quantity<=0||id==0)continue;
                 var name=SearchItemName(id);
-                stacks.Add(new(id,item.Quantity,(item.Flags&InventoryItem.ItemFlags.HighQuality)!=0,name,[new(i+1,item.Quantity)]));
+                var collectible=(item.Flags&InventoryItem.ItemFlags.Collectable)!=0;
+                var bound=!collectible&&item.SpiritbondOrCollectability>0;
+                var row=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>().GetRowOrDefault(id);
+                var tradable=row.HasValue?(bool?)(!row.Value.IsUntradable&&!bound&&!collectible):null;
+                stacks.Add(new(id,item.Quantity,(item.Flags&InventoryItem.ItemFlags.HighQuality)!=0,name,[new(i+1,item.Quantity,bound,tradable)],bound,tradable));
             }
-            return stacks.GroupBy(x=>(x.ItemId,x.Hq)).Select(g=>new StorageStack(g.Key.ItemId,g.Sum(x=>x.Quantity),g.Key.Hq,g.First().Name,g.SelectMany(x=>x.Positions??[]).OrderBy(x=>x.Slot).ToArray())).OrderBy(x=>x.ItemId).ThenBy(x=>x.Hq).ToArray();
+            return stacks.GroupBy(x=>(x.ItemId,x.Hq)).Select(g=>new StorageStack(g.Key.ItemId,g.Sum(x=>x.Quantity),g.Key.Hq,g.First().Name,g.SelectMany(x=>x.Positions??[]).OrderBy(x=>x.Slot).ToArray(),g.Select(x=>x.Bound).Distinct().Count()==1?g.First().Bound:null,g.Select(x=>x.Tradable).Distinct().Count()==1?g.First().Tradable:null)).OrderBy(x=>x.ItemId).ThenBy(x=>x.Hq).ToArray();
         }
         if(!retainersOnly)
         {
@@ -58,7 +62,7 @@ public sealed partial class Plugin
             if (!(id<=3 || id==1000 || id==2001 || id is >=3200 and <=3500 || id is >=4000 and <=4101)) continue;
             var container=manager->GetInventoryContainer(type);
             if (container==null || !container->IsLoaded || container->Items==null || container->Size is <=0 or >200) continue;
-            for(var i=0;i<container->Size;i++){var item=container->Items[i];slotValues[i]=new(item.ItemId,item.Quantity,(item.Flags&InventoryItem.ItemFlags.HighQuality)!=0);}
+            for(var i=0;i<container->Size;i++){var item=container->Items[i];slotValues[i]=new(item.ItemId,item.Quantity,(item.Flags&InventoryItem.ItemFlags.HighQuality)!=0,item.SpiritbondOrCollectability,(byte)item.Flags);}
             var slots=slotValues[..container->Size];var bagKey="bag:"+id;
             if(!storageCaptureGate.Needs(actor,bagKey,slots,now))continue;
             var items=new List<uint>();

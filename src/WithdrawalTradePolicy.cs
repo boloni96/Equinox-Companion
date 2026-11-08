@@ -8,6 +8,6 @@ internal static class WithdrawalTradePolicy
         if(filter==0)return true;
         if(!known)return false;
         var tradable=!untradable&&spiritbond==0&&!collectible;
-        return filter==1?tradable:filter==2&&!tradable;
+        return filter switch{1=>tradable,2=>!tradable,3=>spiritbond>0&&!collectible,4=>spiritbond==0||collectible,_=>false};
     }
 }

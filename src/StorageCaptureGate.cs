@@ -1,5 +1,5 @@
 namespace EquinoxCompanion;
-public readonly record struct StorageSlotValue(uint Item,int Quantity,bool Hq);
+public readonly record struct StorageSlotValue(uint Item,int Quantity,bool Hq,ushort Bond=0,byte Flags=0);
 public sealed class StorageCaptureGate
 {
     public static bool IsBag(string key)=>key is "bag:0" or "bag:1" or "bag:2" or "bag:3";

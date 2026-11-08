@@ -91,6 +91,9 @@ public sealed partial class Plugin
         if(!armoireRunning&&(gearRouting||organizerLastStorageRoute=="gear"&&organizerLastStorageCharacter==Player.ContentId)){ImGui.TextWrapped(gearStatus);if(gearRouting&&ImGui.SmallButton("Stop gear storage"))StopGearStorage("Stopped by you");}
         DrawGearSetProtectionOption();
         DrawGearStorageOptions();DrawGearStorageOptionsPopup();
+        var sortTransfers=config.SortItemsAfterOrganizing;
+        if(ImGui.Checkbox("Sort items after transfers",ref sortTransfers)){config.SortItemsAfterOrganizing=sortTransfers;SaveConfiguration();}
+        MarketHelp("Sort each retainer after its final confirmed Entrust, Withdraw or Organize transfer, before closing it.");
         if(!retrievalRun.Running&&retrievalPreviewOwner!=Player.ContentId){retrievalPreviewOwner=Player.ContentId;retrievalRefreshPending=true;retrievalStock=[];retrievalStockComplete=false;retrievalPreview=[];retrievalPlan=[];retrievalPreviewDirty=true;}
 
         if(retrievalCatalogTask?.IsCompleted==true){try{retrievalCatalog=retrievalCatalogTask.GetAwaiter().GetResult();}catch(Exception e){retrievalError="Item catalogue: "+e.Message;}retrievalCatalogTask=null;}
@@ -124,8 +127,9 @@ public sealed partial class Plugin
         if(ImGui.BeginTabBar("RetrieverTabs")){
             if(ImGui.BeginTabItem("Inventory",organizerSelectInventory?ImGuiTabItemFlags.SetSelected:ImGuiTabItemFlags.None)){
                 organizerSelectInventory=false;
-                ImGui.SetNextItemWidth(220);ImGui.Combo("##InventoryView",ref retrievalInventoryView,"My inventory\0Browse recorded storage\0");
+                ImGui.SetNextItemWidth(220);ImGui.Combo("##InventoryView",ref retrievalInventoryView,"My inventory\0Retainers\0All recorded storage\0Saddlebags\0Housing storage\0Armoury Chest\0Equipped\0Armoire / dresser\0FC storage\0");
                 if(retrievalInventoryView==0)DrawMyInventory();
+                else if(retrievalInventoryView>=2)DrawAllStorage();
                 else {ImGui.BeginDisabled(gearRouting||armoireRunning||craftingWithdrawalPending||retrievalRun.Running||organizeRunning||chestRunning);DrawRetrievalBrowse();ImGui.EndDisabled();}
                 ImGui.EndTabItem();
             }
