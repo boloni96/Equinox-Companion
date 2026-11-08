@@ -4,12 +4,14 @@ public sealed partial class Plugin
 {
     private string allStorageSearch="",allStorageKey="";
     private int allStorageFilter;
+    private ulong allStorageOwner;
     private readonly HashSet<uint> allStorageSelected=[];
     private readonly UiProjectionCache<SyncEvent[]> allStorageCache=new(1000);
     private readonly UiProjectionCache<(SyncEvent Event,StorageStack[] Rows)[]> allStorageRowsCache=new(1000);
     private void DrawAllStorage()
     {
         if(!Player.IsLoaded){ImGui.TextDisabled("Log in to browse this character's recorded storage.");return;}
+        if(allStorageOwner!=Player.ContentId){allStorageOwner=Player.ContentId;allStorageKey="";allStorageSelected.Clear();}
         var index=DiscoveryReads();
         var locations=allStorageCache.Get(config,$"{Player.ContentId}:{index.Revision}:{retrievalInventoryView}",Environment.TickCount64,()=>index.StorageFor(Player.ContentId.ToString()).Where(e=>e.Storage!=null&&LocalStoragePolicy.View(e.Storage.Key,retrievalInventoryView)).OrderBy(e=>e.Storage!.Name).ToArray());
         ImGui.SetNextItemWidth(-1);ImGui.InputTextWithHint("##AllStorageSearch","Search all recorded items…",ref allStorageSearch,100);
