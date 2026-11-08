@@ -16,6 +16,7 @@ public sealed partial class Plugin
         public required ulong Character;public required string Name;public required uint Home,Source,Destination,Leg;
         public required int Service;public required DateTimeOffset Started;
         public NativeTravelStage Stage;public DateTimeOffset Next,StageAt;
+        public bool PartyLeaveSent,PartyLeaveConfirmed,LogoutCommandSent;public DateTimeOffset PartyLeaveAt;
         public bool ReturnHome,DcSelected,ContextSent,LoginSent,LoginConfirmed,GatewaySent,TransferCommitted;
         public uint Gateway,PreferredGateway,RequestedLoginWorld;public bool ServiceSent,LogoutConfirmed,IntroSent;public int ApproachAttempt;public Vector3? ApproachGoal;
     }
@@ -72,12 +73,14 @@ public sealed partial class Plugin
     {
         trip.Source=trip.Leg;trip.Leg=trip.Destination;trip.ReturnHome=false;
         trip.DcSelected=trip.ContextSent=trip.LoginSent=trip.LoginConfirmed=trip.TransferCommitted=trip.IntroSent=trip.LogoutConfirmed=trip.ServiceSent=false;
-        trip.RequestedLoginWorld=0;
+        trip.RequestedLoginWorld=0;trip.PartyLeaveSent=trip.PartyLeaveConfirmed=trip.LogoutCommandSent=false;
     }
     private unsafe void BeginNativeTravelLogout(NativeWorldTrip trip)
     {
         var ui=UIModule.Instance();if(ui==null){StopNativeWorldTravel("Game menu unavailable.");return;}
-        SetNativeTravelStage(trip,NativeTravelStage.Logout,trip.ReturnHome?"Returning home before the next destination":"Logging out for data-center travel");
+        if(trip.Stage!=NativeTravelStage.Logout)SetNativeTravelStage(trip,NativeTravelStage.Logout,trip.ReturnHome?"Returning home before the next destination":"Logging out for data-center travel");
+        if(!NativeTravelPartyReady(trip,DateTimeOffset.UtcNow,true))return;
+        trip.LogoutCommandSent=true;
         using var command=new Utf8String();command.SetString("/logout");ui->ProcessChatBoxEntry(&command,0,false);
     }
     private unsafe void UpdateNativeWorldTravel(DateTimeOffset now)
@@ -98,6 +101,7 @@ public sealed partial class Plugin
             }
             if(trip.Stage is not (NativeTravelStage.WorldQueue or NativeTravelStage.TransferWait or NativeTravelStage.Login)&&now-trip.StageAt>TimeSpan.FromMinutes(3))throw new InvalidOperationException("Timed out during "+trip.Stage+". Export diagnostics to include the prompts and last action.");
             if(loading){StopIndependentWalk("Waiting for travel loading");return;}
+            if(trip.Stage==NativeTravelStage.Logout&&!trip.LogoutCommandSent&&Player.IsLoaded){BeginNativeTravelLogout(trip);return;}
             if(trip.Stage<=NativeTravelStage.WorldQueue){if(Player.IsLoaded)UpdateNativeSameDc(trip,now);return;}
             UpdateNativeDc(trip,now);
         }catch(Exception ex){StopNativeWorldTravel(ex.Message);}
@@ -106,6 +110,8 @@ public sealed partial class Plugin
     private unsafe void UpdateNativeSameDc(NativeWorldTrip trip,DateTimeOffset now)
     {
         if(Conditions[ConditionFlag.InCombat])throw new InvalidOperationException("Combat interrupted world travel.");
+        if(trip.Stage is NativeTravelStage.Gateway or NativeTravelStage.WorldList or NativeTravelStage.WorldConfirm)
+            if(!NativeTravelPartyReady(trip,now,false))return;
         if(trip.Stage==NativeTravelStage.Gateway){
             if(!NativeTravelMovementReady())return;
             if(Conditions[ConditionFlag.Casting])return;
@@ -164,6 +170,36 @@ public sealed partial class Plugin
             if(!NativeTravelPolicy.WorldPrompt(prompt,WorldName(trip.Leg)??"")){nativeTravelStatus="Confirm the destination manually; this localized prompt is not yet recognized";return;}
             if(NativeEventButton((AtkUnitBase*)dialog,dialog->YesButton)){trip.TransferCommitted=true;SetNativeTravelStage(trip,NativeTravelStage.WorldQueue,"Waiting for World Visit queue and arrival");}return;
         }
+    }
+    private unsafe bool NativeTravelPartyReady(NativeWorldTrip trip,DateTimeOffset now,bool changingDc)
+    {
+        var cross=Conditions[ConditionFlag.ParticipatingInCrossWorldPartyOrAlliance];
+        var blocked=NativeTravelPolicy.PartyBlocksTravel(FollowParty.Length,FollowParty.PartyId!=0,cross,changingDc);
+        if(!blocked)return true;
+        StopIndependentWalk("Leaving party for world travel");
+        if(Conditions[ConditionFlag.BoundByDuty]||Conditions[ConditionFlag.InCombat])throw new InvalidOperationException("Cannot leave the party for travel during combat or a duty.");
+        var dialog=(AddonSelectYesno*)SellerAddon("SelectYesno");
+        var prompt=dialog==null||dialog->PromptText==null?"":TravelMenuText(dialog->PromptText->NodeText.StringPtr)??"";
+        if(!trip.PartyLeaveSent){
+            if(dialog!=null){
+                // Only dismiss this trip's destination prompt, never an unrelated dialog.
+                if(trip.Stage==NativeTravelStage.WorldConfirm&&NativeTravelPolicy.WorldPrompt(prompt,WorldName(trip.Leg)??"")){
+                    if(NativeEventButton((AtkUnitBase*)dialog,dialog->NoButton))SetNativeTravelStage(trip,NativeTravelStage.WorldList,"Leaving party before World Visit");
+                    return false;
+                }
+                nativeTravelStatus="Close the current confirmation so Companion can leave the party";return false;
+            }
+            var ui=UIModule.Instance();if(ui==null)return false;
+            trip.PartyLeaveSent=true;trip.PartyLeaveAt=now;
+            RecordTravelPrompt("Travel party leave requested",new{changingDc,cross,members=FollowParty.Length,trip.Leg});
+            using var command=new Utf8String();command.SetString("/leave");ui->ProcessChatBoxEntry(&command,0,false);
+        }else{
+            if(now-trip.PartyLeaveAt>TimeSpan.FromSeconds(15))throw new InvalidOperationException("Party did not clear after the leave request; travel was not submitted.");
+            if(!trip.PartyLeaveConfirmed&&dialog!=null&&NativeTravelPolicy.LeavePartyPrompt(prompt)){
+                if(NativeEventButton((AtkUnitBase*)dialog,dialog->YesButton))trip.PartyLeaveConfirmed=true;
+            }
+        }
+        nativeTravelStatus="Leaving party · waiting for party membership to clear";return false;
     }
     private unsafe void NativeTravelCallback(AtkUnitBase* addon,params int[] args)
     {

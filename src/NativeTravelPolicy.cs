@@ -19,5 +19,14 @@ public static class NativeTravelPolicy
     public static bool Arrival(ulong expected,ulong actual,uint destination,uint world,bool loading)=>expected!=0&&expected==actual&&destination==world&&!loading;
     public static bool TransferPrompt(string prompt,string character,string destination,string dc)=>
         character.Length>0&&destination.Length>0&&dc.Length>0&&prompt.Contains(character,StringComparison.Ordinal)&&prompt.Contains(destination,StringComparison.Ordinal)&&prompt.Contains(dc,StringComparison.Ordinal);
-    public static bool WorldPrompt(string prompt,string destination)=>destination.Length>0&&prompt.Trim()=="Travel to "+destination+"?";
+    public static bool PartyBlocksTravel(int members,bool hasPartyId,bool crossWorld,bool changingDc)=>
+        crossWorld?changingDc:members>1||hasPartyId;
+    public static bool LeavePartyPrompt(string prompt)=>prompt.Trim() is "Leave party?" or "Leave the party?";
+    public static bool WorldPrompt(string prompt,string destination)
+    {
+        if(destination.Length==0)return false;
+        var text=System.Text.RegularExpressions.Regex.Replace(prompt,@"\s+"," ").Trim();
+        var question="Travel to "+destination+"?";
+        return text==question||text==question+" Please be advised you must be playing solo or in a cross-world party for your transfer to be processed.";
+    }
 }
