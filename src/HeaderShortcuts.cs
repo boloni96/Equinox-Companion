@@ -4,8 +4,8 @@ namespace EquinoxCompanion;
 
 public sealed partial class Plugin
 {
-    private bool CurrentFashionComplete() => Player.IsLoaded && FashionCompletion.IsComplete(ReadActor(),config.Discoveries,config.SharedRoster?.People??[],DateTimeOffset.UtcNow);
-    private string CurrentFashionTooltip() => FashionCompletion.Tooltip(Player.IsLoaded?ReadActor():null,config.Discoveries,config.SharedRoster?.People??[],DateTimeOffset.UtcNow);
+    private bool CurrentFashionComplete() => Player.IsLoaded && FashionCompletion.IsComplete(ReadActor(),DiscoveryReads().Kind("fashion.observed"),config.SharedRoster?.People??[],DateTimeOffset.UtcNow);
+    private string CurrentFashionTooltip() => FashionCompletion.Tooltip(Player.IsLoaded?ReadActor():null,DiscoveryReads().Kind("fashion.observed"),config.SharedRoster?.People??[],DateTimeOffset.UtcNow);
     private static void DrawFashionCheck(Vector2 at,float size,float opacity=1)
     {
         var scale=size/64;var draw=ImGui.GetWindowDrawList();

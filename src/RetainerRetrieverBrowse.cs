@@ -29,7 +29,7 @@ public sealed partial class Plugin
         if(!retrievalKnownRetainers.TryGetValue(owner,out var names))retrievalKnownRetainers[owner]=names=[];
         foreach(var r in marketLedger.Retainers.Where(r=>r.CharacterId==owner))RememberRetainerName(names,r.Id,r.Name);
         foreach(var r in live)names[r.Id]=r.Name;
-        var latest=config.Discoveries.Where(e=>e.Actor.ContentId==ownerText&&e.Storage?.Key.StartsWith("retainer:")==true).GroupBy(e=>e.Storage!.Key).ToDictionary(g=>g.Key,g=>g.MaxBy(e=>e.At)!);
+        var latest=DiscoveryReads().StorageFor(ownerText).Where(e=>e.Storage!.Key.StartsWith("retainer:")).ToDictionary(e=>e.Storage!.Key);
         foreach(var row in latest.Values.OrderByDescending(e=>e.At)){var parts=row.Storage!.Key.Split(':');if(parts.Length==3&&ulong.TryParse(parts[1],out var id)&&int.TryParse(parts[2],out var type)&&type is >=10000 and <=10006 or 12001){var label=row.Storage.Name.Split(" · ")[0];RememberRetainerName(names,id,label.StartsWith("Retainer ")?label[9..]:label);}}
         var allagan=false;var notice="";var rawById=new Dictionary<ulong,HashSet<ulong[]>>();
         try
@@ -78,7 +78,7 @@ public sealed partial class Plugin
                 if(rows.Length==0)stocks.AddRange(retrievalStock.Where(s=>s.Retainer==id&&retrievalPreviewOwner==owner));
             }
         }
-        retrievalStock=stocks.ToArray();retrievalBrowseBags=retrievalStock.Select(x=>x.Item).Distinct().ToDictionary(x=>x,x=>RetrievalHeld(x));retrievalStockComplete=complete;
+        retrievalStock=stocks.ToArray();retrievalBrowseBags=RetrievalBagTotals();retrievalStockComplete=complete;
         retrievalStockNotice=(allagan?"Allagan Tools + saved inventory":"Companion saved inventory")+" · "+names.Count+" known retainers · "+(complete?"recorded stock":"partial recorded stock")+notice;
         retrievalRefreshPending=false;retrievalPreviewDirty=true;
     }

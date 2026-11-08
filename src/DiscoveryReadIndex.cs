@@ -6,6 +6,11 @@ public sealed class DiscoveryReadIndex
 {
     private IReadOnlyList<SyncEvent>? source;
     private int count;
+    private readonly List<SyncEvent> garden=[];
+    private readonly Dictionary<string,Dictionary<string,SyncEvent>> storage=[];
+    public long GardenRevision {get;private set;}
+    public IReadOnlyList<SyncEvent> GardenEvents=>garden;
+    public IEnumerable<SyncEvent> StorageFor(string actor)=>storage.TryGetValue(actor,out var rows)?rows.Values:Array.Empty<SyncEvent>();
     private SyncEvent? tail;
     private readonly Dictionary<string,List<SyncEvent>> kinds=[];
     private readonly Dictionary<(string Kind,string Actor,string House,string Storage),SyncEvent> latest=[];
@@ -15,10 +20,15 @@ public sealed class DiscoveryReadIndex
     public void Refresh(IReadOnlyList<SyncEvent> rows)
     {
         if(!ReferenceEquals(source,rows)||rows.Count<count||(count>0&&!ReferenceEquals(rows[count-1],tail)))
-        {source=rows;count=0;tail=null;kinds.Clear();latest.Clear();empty.Clear();Revision++;}
+        {source=rows;count=0;tail=null;kinds.Clear();latest.Clear();empty.Clear();garden.Clear();storage.Clear();GardenRevision++;Revision++;}
         for(;count<rows.Count;count++)
         {
             var e=rows[count];IndexedRecords++;Revision++;
+            if(e.Kind.StartsWith("garden.",StringComparison.Ordinal)){garden.Add(e);GardenRevision++;}
+            if(e.Storage is {} box){
+                if(!storage.TryGetValue(e.Actor.ContentId,out var boxes))storage[e.Actor.ContentId]=boxes=[];
+                if(!boxes.TryGetValue(box.Key,out var previous)||e.At>previous.At)boxes[box.Key]=e;
+            }
             if(!kinds.TryGetValue(e.Kind,out var group))kinds[e.Kind]=group=[];
             group.Add(e);
             latest[(e.Kind,e.Actor.ContentId,e.Address?.HouseId??"",e.Storage?.Key??"")]=e;

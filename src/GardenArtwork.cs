@@ -137,27 +137,27 @@ public sealed partial class Plugin
     }
     private readonly UiProjectionCache<SyncEvent[]> gardenLocalActionsCache=new(maxAgeMs:0);
     private IEnumerable<SyncEvent> ResolveLocalGardenActions()=>gardenLocalActionsCache.Get(config.SharedRoster,
-        $"{config.Planting.Count}:{config.Planting.LastOrDefault()?.EventId}:{config.Tending.Count}:{config.Tending.LastOrDefault()?.EventId}:{config.Discoveries.Count}:{config.Discoveries.LastOrDefault()?.Id}:{gardenBedSync?.Mappings.Count()}:{gardenBedSync?.Mappings.LastOrDefault()?.Id}",
+        $"{config.Planting.Count}:{config.Planting.LastOrDefault()?.EventId}:{config.Tending.Count}:{config.Tending.LastOrDefault()?.EventId}:{DiscoveryReads().GardenRevision}:{gardenBedSync?.Mappings.Count()}:{gardenBedSync?.Mappings.LastOrDefault()?.Id}",
         Environment.TickCount64,()=>BuildLocalGardenActions().ToArray());
     private IEnumerable<SyncEvent> BuildLocalGardenActions()
     {
         var resolve=GardenResolver();
         return config.Planting.Select(p=>new SyncEvent(p.EventId,"garden.planted",p.ConfirmedAt,WithWorldNames(p.Actor),WithAddressNames(p.Address),p.Patch,p.Bed,p.Plant))
         .Concat(config.Tending.Select(t=>new SyncEvent(t.EventId,"garden.tended",t.ConfirmedAt,WithWorldNames(t.Actor),WithAddressNames(t.Address),t.Patch,t.Bed)))
-        .Concat(config.Discoveries.Where(e=>e.Kind is "garden.empty" or "garden.empty.unmapped" or "garden.unmapped" or "garden.dead" or "garden.ready" or "garden.observed" or "garden.fertilized" or "garden.status" or "garden.status.unmapped")).Select(resolve);
+        .Concat(DiscoveryReads().GardenEvents.Where(e=>e.Kind is "garden.empty" or "garden.empty.unmapped" or "garden.unmapped" or "garden.dead" or "garden.ready" or "garden.observed" or "garden.fertilized" or "garden.status" or "garden.status.unmapped")).Select(resolve);
     }
     private readonly UiProjectionCache<SharedGardenTarget[]> gardenMappingsCache=new(maxAgeMs:0);
     private readonly UiProjectionCache<Func<SyncEvent,SyncEvent>> gardenResolverCache=new(maxAgeMs:0);
-    private string GardenMappingVersion=>$"{config.Discoveries.Count}:{config.Discoveries.LastOrDefault()?.Id}:{gardenBedSync?.Mappings.Count()}:{gardenBedSync?.Mappings.LastOrDefault()?.Id}";
+    private string GardenMappingVersion=>$"{DiscoveryReads().GardenRevision}:{gardenBedSync?.Mappings.Count()}:{gardenBedSync?.Mappings.LastOrDefault()?.Id}";
     private SharedGardenTarget[] GardenMappings()=>gardenMappingsCache.Get(config.SharedRoster,GardenMappingVersion,Environment.TickCount64,()=>BuildGardenMappings().ToArray());
     private Func<SyncEvent,SyncEvent> GardenResolver(){var mappings=GardenMappings();return gardenResolverCache.Get(mappings,"",Environment.TickCount64,()=>GardenTargetMap.CreateResolver(mappings));}
     private IEnumerable<SharedGardenTarget> BuildGardenMappings() => (config.SharedRoster?.GardenTargets??[])
-        .Concat(config.Discoveries.Select(GardenTargetMap.FromNumbered).OfType<SharedGardenTarget>())
+        .Concat(DiscoveryReads().GardenEvents.Select(GardenTargetMap.FromNumbered).OfType<SharedGardenTarget>())
         .Concat((gardenBedSync?.Mappings??[]).Select(e=>GardenTargetMap.FromNumbered(e with {Address=WithAddressNames(e.Address!)})).OfType<SharedGardenTarget>());
     private void GardenActionRecorded()=>WakeObservationSync();
     private SharedGardenPlan EffectiveGardenPlan(SharedGardenPlan plan)
     {
-        var actions=$"{config.Planting.LastOrDefault()?.EventId}:{config.Tending.LastOrDefault()?.EventId}:{config.Discoveries.LastOrDefault()?.Id}:{gardenBedSync?.Mappings.LastOrDefault()?.Id}";
+        var actions=$"{config.Planting.LastOrDefault()?.EventId}:{config.Tending.LastOrDefault()?.EventId}:{DiscoveryReads().GardenRevision}:{gardenBedSync?.Mappings.LastOrDefault()?.Id}";
         if(projectedGardenRoster!=config.SharedRoster||projectedGardenActions!=actions){localGardenCache.Clear();projectedGardenRoster=config.SharedRoster;projectedGardenActions=actions;}
         var key=plan.HouseId+":"+plan.Batch+":"+plan.At.ToUnixTimeMilliseconds();
         if(localGardenCache.TryGetValue(key,out var cached))return cached;

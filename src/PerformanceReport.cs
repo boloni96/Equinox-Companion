@@ -4,6 +4,7 @@ public sealed partial class Plugin
 {
     private readonly PerformanceHitchHistory performanceHitches=new();
     private readonly RollingPerformance frameworkIntervals=new();
+    private readonly PerformanceHitchHistory frameworkHitches=new();
     private long performanceFrame,performanceContextFrame=-1;
     private double previousFrameworkClock;
     private object? performanceHitchContext;
@@ -13,7 +14,11 @@ public sealed partial class Plugin
     {
         performanceFrame++;
         var clock=PerformanceClock;
-        if(previousFrameworkClock>0)frameworkIntervals.Record("Whole-game framework interval",(clock-previousFrameworkClock)*1000,clock);
+        if(previousFrameworkClock>0){
+            var elapsed=(clock-previousFrameworkClock)*1000;
+            frameworkIntervals.Record("Whole-game framework interval",elapsed,clock);
+            frameworkHitches.Record(performanceFrame,"Whole-game framework interval",elapsed,clock,DateTimeOffset.UtcNow,null);
+        }
         previousFrameworkClock=clock;
     }
     private void RecordPerformanceSample(string stage,double milliseconds)
@@ -64,6 +69,7 @@ public sealed partial class Plugin
             notes="Stage timings overlap: do not add nested stages. Frame IDs correlate samples from the same framework update/draw. Whole-game intervals include game work, other plugins, loading and frame limiting; they do not attribute blame to Companion. GC/memory counters are process-wide. Histories are bounded; exports contain no pairing key.",
             maxDrawMs,maxUpdateMs,maxSnapshotMs,configurationError,
             stages=performanceStages.ToDictionary(x=>x.Key,x=>x.Value),recent,
+            worstStageHistory=performanceHitches.WorstSnapshot(clock),worstWholeGameIntervals=frameworkHitches.WorstSnapshot(clock),
             slowStageHistory=performanceHitches.Snapshot(clock),totalSlowStageSamples=performanceHitches.TotalRecorded,
             wholeGameFrameIntervals=frameworkIntervals.Snapshot(clock),current=CapturePerformanceContext(),
             dataSizes=new {discoveries=config.Discoveries.Count,houses=config.Houses.Count,planting=config.Planting.Count,tending=config.Tending.Count,
@@ -79,7 +85,7 @@ public sealed partial class Plugin
     }
     private void ResetPerformanceReport()
     {
-        rollingPerformance.Clear();frameworkIntervals.Clear();performanceHitches.Clear();performanceStages.Clear();
+        rollingPerformance.Clear();frameworkIntervals.Clear();frameworkHitches.Clear();performanceHitches.Clear();performanceStages.Clear();
         performancePanelRows=[];nextPerformancePanelRead=0;maxDrawMs=maxUpdateMs=maxSnapshotMs=0;
         previousFrameworkClock=0;performanceContextFrame=-1;performanceHitchContext=null;performanceResetAt=DateTimeOffset.UtcNow;
     }
