@@ -48,11 +48,12 @@ public sealed partial class Plugin
             if(!ImGui.CollapsingHeader($"{e.Storage!.Name} · {rows.Length} item stacks##{e.Storage.Key}",allStorageKey.Length>0?ImGuiTreeNodeFlags.DefaultOpen:ImGuiTreeNodeFlags.None))continue;
             ImGui.TextDisabled($"Recorded {e.At.ToLocalTime():g}");
             if(ImGui.SmallButton("Use this location##"+e.Storage.Key)){allStorageKey=e.Storage.Key;allStorageSelected.Clear();}
-            var clip=ImGui.ImGuiListClipper();clip.Begin(rows.Length,ImGui.GetFrameHeightWithSpacing());
+            var clip=ImGui.ImGuiListClipper();clip.Begin(rows.Length,Math.Max(ImGui.GetFrameHeight(),ImGui.GetTextLineHeight()+4)+ImGui.GetStyle().ItemSpacing.Y);
             while(clip.Step())for(var i=clip.DisplayStart;i<clip.DisplayEnd;i++){
                 var s=rows[i];ImGui.PushID(e.Storage.Key+":"+i);
                 ImGui.BeginDisabled(allStorageKey!=e.Storage.Key||chestRunning);
                 var selected=allStorageSelected.Contains(s.ItemId);if(ImGui.Checkbox("##pick",ref selected)){if(selected)allStorageSelected.Add(s.ItemId);else allStorageSelected.Remove(s.ItemId);}ImGui.EndDisabled();ImGui.SameLine();
+                DrawRetrievalIcon(s.ItemId);
                 ImGui.TextUnformatted($"{SearchItemName(s.ItemId)}{(s.Hq?" HQ":"")} · {(s.Quantity>0?s.Quantity.ToString():"quantity unknown")} · {(s.Bound==true?"Bound":s.Tradable==true?"Tradable":s.Tradable==false?"Untradable":"copy state unknown")}");
                 ImGui.PopID();
             }clip.End();clip.Destroy();
