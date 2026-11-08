@@ -62,7 +62,7 @@ public sealed partial class Plugin
             if (!(id<=3 || id==1000 || id==2001 || id is >=3200 and <=3500 || id is >=4000 and <=4101)) continue;
             var container=manager->GetInventoryContainer(type);
             if (container==null || !container->IsLoaded || container->Items==null || container->Size is <=0 or >200) continue;
-            for(var i=0;i<container->Size;i++){var item=container->Items[i];slotValues[i]=new(item.ItemId,item.Quantity,(item.Flags&InventoryItem.ItemFlags.HighQuality)!=0,item.SpiritbondOrCollectability,(byte)item.Flags);}
+            for(var i=0;i<container->Size;i++){var item=container->Items[i];slotValues[i]=new(item.ItemId,item.Quantity,(item.Flags&InventoryItem.ItemFlags.HighQuality)!=0,(ushort)(item.SpiritbondOrCollectability>0?1:0),(byte)item.Flags);}
             var slots=slotValues[..container->Size];var bagKey="bag:"+id;
             if(!storageCaptureGate.Needs(actor,bagKey,slots,now))continue;
             var items=new List<uint>();

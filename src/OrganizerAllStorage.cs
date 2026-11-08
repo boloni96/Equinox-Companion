@@ -14,6 +14,7 @@ public sealed partial class Plugin
         if(allStorageOwner!=Player.ContentId){allStorageOwner=Player.ContentId;allStorageKey="";allStorageSelected.Clear();}
         var index=DiscoveryReads();
         var locations=allStorageCache.Get(config,$"{Player.ContentId}:{index.Revision}:{retrievalInventoryView}",Environment.TickCount64,()=>index.StorageFor(Player.ContentId.ToString()).Where(e=>e.Storage!=null&&LocalStoragePolicy.View(e.Storage.Key,retrievalInventoryView)).OrderBy(e=>e.Storage!.Name).ToArray());
+        if(allStorageKey.Length>0&&!locations.Any(e=>e.Storage!.Key==allStorageKey)){allStorageKey="";allStorageSelected.Clear();}
         ImGui.SetNextItemWidth(-1);ImGui.InputTextWithHint("##AllStorageSearch","Search all recorded items…",ref allStorageSearch,100);
         ImGui.SetNextItemWidth(190);ImGui.Combo("##AllStorageFilter",ref allStorageFilter,"Any items\0Tradable only\0Untradable only\0Bound only\0Unbound only\0");
         MarketHelp("Bound means a non-collectible copy with spiritbond/binding data. Untradable includes bound copies and items that cannot be traded by design. Old observations with unknown copy state are excluded from these filters; reopen the storage to refresh.");
