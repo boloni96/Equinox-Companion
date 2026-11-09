@@ -208,6 +208,7 @@ public sealed partial class Plugin
     {
         if(assignedLogin==null)return;assignedLogin=null;assignedLoginError=reason;characterSwitchTarget=null;characterSwitchUntil=default;
         characterTravelStatus=reason;
+        if(bringTrip is not null)EndBring("Bring character stopped: "+reason);
     }
     private unsafe bool RedirectAssignedVisitingCharacter(AssignedLogin run,AgentLobby* lobby)
     {
@@ -290,6 +291,7 @@ public sealed partial class Plugin
             }
             if(lobby->TemporaryLocked||SellerAddon("_CharaSelectListMenu")==null||now<loginWorldNext)return;
             if(WorldName(lobby->WorldId)==run.World&&TryReadReadyLoginList(out var entries)&&entries.FirstOrDefault(e=>!e.Locked&&e.ContentId==run.Target.ContentId&&e.World==run.Target.World) is {} verified){
+                if(TryPrepareBringBeforeLogin(run))return;
                 assignedLoginSent=BeginNativeCharacterLogin(run.Target,run.ServiceAccount);return;
             }
             if(!SelectNextKnownLoginWorld(run.Target.ContentId,run.World,now))throw new InvalidOperationException("No matching character found on the selected account and data center. No alternate account was tried.");

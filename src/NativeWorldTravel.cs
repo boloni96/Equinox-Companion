@@ -49,6 +49,7 @@ public sealed partial class Plugin
         RecordTravelPrompt("Travel stopped",new{reason,trip.TransferCommitted});nativeWorldTrip=null;
         StopIndependentWalk("Travel: "+reason);nativeTravelStatus=reason+(trip.TransferCommitted&&!arrived?" An accepted game transfer may still finish.":"");
         FollowChatNotice("TRAVEL — "+nativeTravelStatus);
+        if(!arrived&&trip.Owner=="bring"&&bringTrip!=null)EndBring(nativeTravelStatus);
     }
     private unsafe bool StartNativeWorldTravel(uint destination,string owner="command")
     {

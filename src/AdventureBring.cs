@@ -1,5 +1,6 @@
 using Dalamud.Bindings.ImGui;
 using Dalamud.Game.ClientState.Conditions;
+using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
@@ -55,6 +56,9 @@ public sealed partial class Plugin
   if(world==0||destination.Territory!=0&&house is null&&aetheryte==0){bringMessage="No supported teleport destination for this location. Close this picker and try from an area with an aetheryte or an identified paired estate.";return false;}
   try{if(nativeHousingTrip!=null||nativeWorldTrip!=null||nativeAethernetTrip!=null||LifestreamBusy()||shoppingTravel is not null||goSeeHomeTrip is not null||goSeeFriendTrip is not null||DateTimeOffset.UtcNow<characterSwitchUntil||DateTimeOffset.UtcNow<goSeeNativeUntil){bringMessage="Wait for the current trip to finish first.";return false;}}
   catch{bringMessage="Travel state is unavailable. Wait for the game to settle.";return false;}
+  var home=DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().FirstOrDefault(w=>w.Name.ToString()==chosen.World);
+  var targetWorld=DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().GetRowOrDefault(world);
+  if(home.RowId==0||targetWorld==null||!targetWorld.Value.IsPublic||!NativeTravelPolicy.RegionReachable(home.DataCenter.Value.Region.RowId,targetWorld.Value.DataCenter.Value.Region.RowId)){bringMessage="This character cannot travel to the selected world under the supported regional travel rules.";return false;}
   var source=Player.ContentId;
   if(source!=content){
    var from=CharacterSwitchScope(CurrentSharedCharacter()?.Id??"");var to=CharacterSwitchScope(chosen.Id);
@@ -62,10 +66,43 @@ public sealed partial class Plugin
    SwitchSharedCharacter(chosen,confirmed);characterSwitchConfirmTarget="";
    if(DateTimeOffset.UtcNow>=characterSwitchUntil){bringMessage=characterTravelStatus;return false;}
   }
-  bringTrip=new(source,content,world,destination.Territory,aetheryte,house,config.PairingKey,DateTimeOffset.UtcNow.AddMinutes(10));
+  bringTrip=new(source,content,world,destination.Territory,aetheryte,house,config.PairingKey,DateTimeOffset.UtcNow.AddMinutes(30));
   bringMessage="Waiting for "+chosen.Name+", then travelling to "+destination.Area+" · "+destination.World+".";PrintEquinox("[Equinox] "+bringMessage);return true;
  }
- private void EndBring(string text){bringTrip=null;bringMessage=text;PrintEquinox("[Equinox] "+text);}
+ private void EndBring(string text){
+  var trip=bringTrip;bringTrip=null;bringMessage=text;
+  if(nativeWorldTrip?.Owner=="bring")StopNativeWorldTravel(text);
+  if(trip!=null&&assignedLogin?.Target.ContentId==trip.Character.ToString())CancelAssignedLogin(text);
+  characterSwitchUntil=default;characterSwitchTarget=null;
+  PrintEquinox("[Equinox] "+text);
+ }
+ // Only hand over after AssignedLogin has selected and verified the exact account
+ // and character. Never use cached presence as the source of a DC transfer.
+ private unsafe bool TryPrepareBringBeforeLogin(AssignedLogin run)
+ {
+  if(bringTrip is not {} bring||bring.Stage!=0||run.Target.ContentId!=bring.Character.ToString())return false;
+  if(bring.Pairing!=config.PairingKey||DateTimeOffset.UtcNow>=bring.Deadline)throw new InvalidOperationException("Bring destination expired or pairing changed.");
+  var lobby=AgentLobby.Instance();
+  if(lobby==null||lobby->TemporaryLocked||lobby->ServiceAccountIndex!=run.ServiceAccount||SellerAddon("SelectYesno")!=null||SellerAddon("SelectOk")!=null||SellerAddon("ContextMenu")!=null)return true;
+  var home=DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().FirstOrDefault(w=>w.Name.ToString()==run.Target.World).RowId;
+  var trip=new NativeWorldTrip{Owner="bring",Character=bring.Character,Name=run.Target.Name,Home=home,Source=0,Destination=bring.World,Leg=bring.World,Service=run.ServiceAccount,Started=DateTimeOffset.UtcNow,
+   PreferredGateway=TravelCityPolicy.Preferred(config.TravelCity,config.ShoppingCity,false)};
+  if(NativeTravelCharacterIndex(trip,out var source)<0)return true;
+  var sourceDc=TravelDc(source);var destinationDc=TravelDc(bring.World);
+  if(home==0||sourceDc==0||destinationDc==0||sourceDc!=TravelDc(lobby->WorldId))throw new InvalidOperationException("Character world could not be verified before travel.");
+  if(!NativeTravelPolicy.TransferBeforeLogin(source,bring.World,sourceDc,destinationDc))return false;
+  if(nativeWorldTrip!=null||nativeHousingTrip!=null||nativeAethernetTrip!=null)throw new InvalidOperationException("Another trip started before character travel.");
+  trip.Source=source;trip.ReturnHome=NativeTravelPolicy.ReturnFirst(source,home,sourceDc,destinationDc);trip.Leg=trip.ReturnHome?home:bring.World;
+  assignedLogin=null;characterSwitchUntil=default;characterSwitchTarget=null;
+  nativeWorldTrip=trip;
+  // Stage 1 prevents an interrupted native transfer from being silently retried.
+  bringTrip=bring with{Stage=1};
+  bringMessage="Preparing "+run.Target.Name+" for "+WorldName(bring.World)+" before login.";
+  characterTravelStatus=bringMessage;
+  SetNativeTravelStage(trip,NativeTravelStage.CharacterMenu,trip.ReturnHome?"Returning the selected character home before login":"Preparing destination before login");
+  RecordTravelPrompt("Bring handed to DC travel before login",new{trip.Character,trip.Service,trip.Source,trip.Home,trip.Destination});
+  return true;
+ }
  private void UpdateBringCharacter(DateTimeOffset now)
  {
   if(bringTrip is not {} trip||now<bringTick)return;bringTick=now.AddMilliseconds(500);

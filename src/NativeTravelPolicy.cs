@@ -2,6 +2,8 @@ namespace EquinoxCompanion;
 public enum NativeTravelStage { Gateway, AetheryteMenu, WorldList, WorldConfirm, WorldQueue, Logout, CharacterMenu, VisitIntro, Destination, TransferConfirm, TransferWait, Login }
 public static class NativeTravelPolicy
 {
+    public static bool TransferBeforeLogin(uint source,uint destination,uint sourceDc,uint destinationDc)=>
+        source!=0&&destination!=0&&source!=destination&&sourceDc!=0&&destinationDc!=0&&sourceDc!=destinationDc;
     public static bool AdoptAetheryteMenu(NativeTravelStage stage,bool aetheryte,uint id,float distance,int matchingChoices)=>
         stage==NativeTravelStage.Gateway&&aetheryte&&id is 2 or 8 or 9&&float.IsFinite(distance)&&distance is >=0 and <=20&&matchingChoices==1;
     public static bool HomeReturnSucceeded(NativeTravelStage stage,bool returning,bool committed,uint leg,uint home,string prompt)=>
