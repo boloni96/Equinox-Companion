@@ -41,7 +41,8 @@ public sealed partial class Plugin
     }
     private unsafe void TickRetainerTools(DateTimeOffset now)
     {
-        var open=config.EnableRetriever&&Player.IsLoaded&&Conditions[ConditionFlag.OccupiedSummoningBell];
+        // The game also uses this occupied flag for FC chest interaction.
+        var open=config.EnableRetriever&&Player.IsLoaded&&Conditions[ConditionFlag.OccupiedSummoningBell]&&SellerAddon("FreeCompanyChest")==null;
         if(open&&retrievalPreviewOwner!=Player.ContentId){retrievalPreviewOwner=Player.ContentId;retrievalStock=[];retrievalStockComplete=false;retrievalPreview=[];retrievalPlan=[];retrievalPreviewDirty=true;retrievalRefreshPending=true;}
         if(open&&!retainerToolsWasOpen){retainerToolsWindow.IsOpen=true;retrievalRefreshPending=true;LoadRetrievalCatalog();}
         if(!open){retainerToolsWindow.IsOpen=false;if(!retrieverWindow.IsOpen)retrievalPickItems=false;}
