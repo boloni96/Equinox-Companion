@@ -32,7 +32,7 @@ public sealed partial class Plugin
         MarketHelp(chestCrystals?$"No plan needed. Withdraw {chestCrystalAmount:N0} more of each selected crystal type; Entrust all above Keep {chestKeep}. Choose types in Options.":"Current list: "+retrievalName);
         ImGui.SameLine();if(ImGui.Button("Withdraw"))StartChest(0);MarketHelp(chestCrystals?"Withdraw selected crystals directly, limited by carrying capacity.":"Withdraw the current plan from the selected chest tabs into your bags.");
         ImGui.SameLine();if(ImGui.Button("Entrust"))StartChest(4);MarketHelp(chestCrystals?"Entrust selected crystals, leaving Keep in bags.":"Entrust the current plan from your bags into the selected chest tabs.");
-        ImGui.SameLine();if(ImGui.Button("Duplicates"))StartChest(1);MarketHelp($"Deposit items already stored in the selected tabs. Keep {chestKeep} of each item/quality in bags. Crystals use their own storage.");
+        ImGui.SameLine();if(ImGui.Button("Duplicates"))StartChest(1);MarketHelp($"Deposit items already stored in the selected tabs. Keep {chestKeep} of each item/quality in bags. {(config.ChestDuplicatesIncludeCrystals?"Includes crystals.":"Excludes shards, crystals and clusters.")}");
         ImGui.EndDisabled();ImGui.SameLine();
         if(chestRunning){if(ImGui.Button("Stop"))StopChest("Stopped by you. An already-sent transfer may still complete.");ImGui.SameLine();}
         if(ImGui.Button("...##ChestOptions"))ImGui.OpenPopup("Chest options");MarketHelp("Chest tabs, stack merging, move between tabs, and Organizer.");
@@ -41,6 +41,7 @@ public sealed partial class Plugin
         ImGui.SetNextWindowSize(new(420,0),ImGuiCond.Always);
         if(ImGui.BeginPopup("Chest options")){
             ImGui.TextUnformatted("FC chest");ImGui.Separator();ImGui.BeginDisabled(busy);
+            DrawChestDuplicateOptions();
             if(chestCrystals)DrawChestCrystalOptions();
             ImGui.BeginDisabled(chestCrystals);
             ImGui.SetNextItemWidth(180);ImGui.Combo("Source / target",ref chestTab,"All accessible tabs\0Tab 1\0Tab 2\0Tab 3\0Tab 4\0Tab 5\0Crystals\0");

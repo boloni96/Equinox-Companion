@@ -135,13 +135,19 @@ public sealed partial class Plugin
         {
             var member=false;
             for(var i=0;i<(int)membership->EntryCount;i++)if(membership->CharData[i].ContentId==Player.ContentId && membership->CharData[i].HomeWorld==actor.HomeWorldId)member=true;
+            Span<StorageSlotValue> chestSlots=stackalloc StorageSlotValue[200];
             if(member)foreach(var type in Enum.GetValues<InventoryType>().Where(t=>(uint)t is >=20000 and <=20004 or 22001))
             {
                 var container=manager->GetInventoryContainer(type);
                 if(container==null || !container->IsLoaded || container->Items==null || container->Size is <=0 or >200)continue;
+                var key=$"fc:{proxy->Id}:{(uint)type}";
+                for(var i=0;i<container->Size;i++){var item=container->Items[i];chestSlots[i]=new(item.ItemId,item.Quantity,(item.Flags&InventoryItem.ItemFlags.HighQuality)!=0,(ushort)(item.SpiritbondOrCollectability>0?1:0),(byte)item.Flags);}
+                var slots=chestSlots[..container->Size];
+                if(!storageCaptureGate.Needs(actor,key,slots,now))continue;
                 var items=new List<uint>();
                 for(var i=0;i<container->Size;i++)if(container->Items[i].Quantity>0)items.Add(container->Items[i].ItemId % 1000000);
-                Save($"fc:{proxy->Id}:{(uint)type}",$"Available in FC Chest · {((uint)type==22001?"Crystals":$"Inventory {(uint)type-19999}")} · {proxy->NameString}",items,ReadStacks(container));
+                Save(key,$"Available in FC Chest · {((uint)type==22001?"Crystals":$"Inventory {(uint)type-19999}")} · {proxy->NameString}",items,ReadStacks(container));
+                storageCaptureGate.Remember(actor,key,slots,now);
             }
         }
         }

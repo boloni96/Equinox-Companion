@@ -24,6 +24,7 @@ public sealed class Configuration : IPluginConfiguration
     public Dictionary<ulong,HashSet<uint>> ArmoireExcludedItems { get; set; } = [];
     public bool SortItemsAfterOrganizing { get; set; }
     public int StorageKeepInBags { get; set; }
+    public bool ChestDuplicatesIncludeCrystals { get; set; }
     public bool WithdrawUntradableOnly { get; set; }
     public int OrganizerBindingFilter { get; set; }
     public bool WithdrawTradableOnly { get; set; }

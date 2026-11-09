@@ -20,9 +20,9 @@ public static class ChestTransferPlanner
         }
         return null;
     }
-    public static ChestMove? Duplicates(IReadOnlyList<ChestStack> chest,IReadOnlyList<ChestStack> bags,int keep)
+    public static ChestMove? Duplicates(IReadOnlyList<ChestStack> chest,IReadOnlyList<ChestStack> bags,int keep,bool includeCrystals=true)
     {
-        foreach(var s in bags.Where(x=>x.Item>0&&x.CanDeposit&&chest.Any(c=>Same(c,x)&&c.Quantity>0))){
+        foreach(var s in bags.Where(x=>x.Item>0&&(includeCrystals||!CrystalStorage.IsItem(x.Item))&&x.CanDeposit&&chest.Any(c=>Same(c,x)&&c.Quantity>0))){
             var spare=bags.Where(x=>Same(x,s)).Sum(x=>x.Quantity)-Math.Max(0,keep);
             if(spare>0&&Move(s,Destination(s,chest),spare) is {} move)return move;
         }

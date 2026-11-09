@@ -60,7 +60,7 @@ public static class EstateTravelCommand
         "priv" or "private" => (1,0,"private plot"),
         "efc" => (2,2,"inside the FC house"),
         "epriv" or "eprivate" => (1,2,"inside the private house"),
-        "workshop" => (2,3,"inside the FC workshop"),
+        "workshop" or "ws" => (2,3,"inside the FC workshop"),
         _ => null
     };
 }

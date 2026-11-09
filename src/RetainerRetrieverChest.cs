@@ -13,6 +13,8 @@ public sealed partial class Plugin
     private int chestTab,chestDestination=1,chestKeep,chestMode,chestMoves,chestUnmoved;
     private bool chestRunning,chestWasOpen,chestDock=true,chestAllAvailable;
     private ulong chestOwner,chestCompany;private uint chestWorld;
+    private bool chestDestinationRequested,chestPageReady;
+    private ChestStack[]? chestPageSample;
     private uint[] chestPages=[];private int chestPageIndex;
     private DateTimeOffset chestNext,chestDeadline;private ChestMove? chestPending;
     private Dictionary<uint,int> chestGoals=[];private RetrievalQuality chestQuality;
@@ -54,8 +56,9 @@ public sealed partial class Plugin
     {
         var page=chestPages[chestPageIndex];var addon=SellerAddon("FreeCompanyChest");if(addon==null)throw new InvalidOperationException("Chest closed.");
         var values=stackalloc AtkValue[2];values[0].Type=AtkValueType.Int;values[0].Int=0;values[1].Type=AtkValueType.Int;values[1].Int=page==22001?5:(int)page-20000;
-        addon->FireCallback(2,values);GameMain.ExecuteCommand(404,(int)page);
-        if(chestMode==3)GameMain.ExecuteCommand(404,19999+chestDestination);
+        // Selecting the native tab already requests its contents. Do not send a duplicate request.
+        addon->FireCallback(2,values);
+        chestDestinationRequested=chestMode!=3;chestPageReady=false;chestPageSample=null;
         chestNext=now.AddSeconds(2);chestDeadline=now.AddSeconds(15);
         chestStatus=$"Reading {(page==22001?"crystals":"chest tab "+(page-19999))}…";
     }
@@ -81,7 +84,7 @@ public sealed partial class Plugin
             else if(mode==0||mode==3){if(retrievalEntrust!=null)retrievalEntrustWithdrawal=true;PreviewRetrieval(selected,false,mode!=4);if(retrievalPlan.Length==0&&(mode!=4||retrievalSendCategories.Count==0))throw new InvalidOperationException("Choose items in Organizer first.");chestGoals=retrievalPlan.ToDictionary(x=>x.ItemId,x=>chestAllAvailable?int.MaxValue:checked(x.Quantity+(mode!=0||retrievalSubtract?0:RetrievalHeld(x.ItemId,chestQuality))));}
             if(chestCrystals&&mode==3)throw new InvalidOperationException("Crystals stay in dedicated storage.");
             var candidates=chestCrystals?new uint[]{22001}:chestTab==0?new uint[]{20000,20001,20002,20003,20004,22001}:new[]{chestTab==6?22001u:19999u+(uint)chestTab};
-            chestPages=candidates.Where(p=>(ChestAccess(p)==3||(mode==1||mode==4)&&ChestAccess(p)==2)&&(mode!=3||p!=22001&&p!=19999+chestDestination)).ToArray();
+            chestPages=candidates.Where(p=>(mode!=1||config.ChestDuplicatesIncludeCrystals||p!=22001)&&(ChestAccess(p)==3||(mode==1||mode==4)&&ChestAccess(p)==2)&&(mode!=3||p!=22001&&p!=19999+chestDestination)).ToArray();
             if(mode==3&&ChestAccess((uint)(19999+chestDestination))<2)throw new InvalidOperationException("Destination tab does not allow deposits.");
             if(chestPages.Length==0)throw new InvalidOperationException("No selected chest tabs permit this action.");
             chestOwner=Player.ContentId;chestWorld=Player.CurrentWorld.RowId;chestCompany=fc->Id;chestPageIndex=0;chestMoves=0;chestUnmoved=0;chestPending=null;
@@ -104,17 +107,37 @@ public sealed partial class Plugin
             if(access!=3&&!((chestMode==1||chestMode==4)&&access==2)){StopChest("Stopped: chest permissions changed.");return;}
             var manager=InventoryManager.Instance();if(manager==null)throw new InvalidOperationException("Inventory unavailable.");
             foreach(var op in manager->PendingOperations)if(!op.IsEmpty){if(now>chestDeadline)StopChest("Stopped: inventory transaction timed out. Check the chest before retrying.");return;}
+            if(!chestDestinationRequested){
+                GameMain.ExecuteCommand(404,19999+chestDestination);chestDestinationRequested=true;
+                chestNext=now.AddSeconds(2);chestStatus="Waiting for the destination chest tab…";return;
+            }
+            var needed=new[]{page}.Concat(chestMode==3?new[]{(uint)(19999+chestDestination)}:Array.Empty<uint>());
+            foreach(var type in needed){var container=manager->GetInventoryContainer((InventoryType)type);
+                if(container==null||!container->IsLoaded||container->Items==null||container->Size is <=0 or >200){
+                    if(now>chestDeadline)StopChest("Stopped: chest tab data did not load. No transfer sent.");
+                    else chestStatus="Waiting for chest tab data…";return;
+                }
+            }
             var destination=chestMode==3?ReadChestContainer((uint)(19999+chestDestination)):Array.Empty<ChestStack>();
             var chest=ReadChestContainer(page);var bags=(page==22001?new uint[]{2001}:new uint[]{0,1,2,3}).SelectMany(ReadChestContainer).ToArray();
+            if(!chestPageReady){
+                var sample=chest.Concat(destination).ToArray();
+                if(chestPageSample is null||!sample.SequenceEqual(chestPageSample)){
+                    if(now>chestDeadline){StopChest("Stopped: chest data did not settle. No transfer sent.");return;}
+                    chestPageSample=sample;chestNext=now.AddMilliseconds(750);chestStatus="Waiting for chest contents to settle…";return;
+                }
+                chestPageReady=true;chestPageSample=null;
+            }
             if(chestPending is {} pending){
                 var all=chest.Concat(bags).Concat(destination).ToArray();var src=all.FirstOrDefault(s=>s.Container==pending.Source.Container&&s.Slot==pending.Source.Slot);var dst=all.FirstOrDefault(s=>s.Container==pending.Destination.Container&&s.Slot==pending.Destination.Slot);
                 if(src==null||dst==null||!ChestTransferPlanner.Confirmed(pending,src,dst)){if(now>chestDeadline)StopChest("Stopped: transfer was not confirmed. No automatic retry.");return;}
                 ReportStorageTransfer(pending.Source.Container<10000?"Entrusted":pending.Destination.Container<10000?"Withdrew":"Moved within chest",pending.Source.Item,pending.Source.Hq,pending.Quantity,"FC chest");
-                if(chestMode==4)chestGoals[pending.Source.Item]-=pending.Quantity;chestPending=null;chestMoves++;chestStatus=$"{chestMoves} transfers confirmed";
+                if(chestMode==4)chestGoals[pending.Source.Item]-=pending.Quantity;chestPending=null;chestMoves++;chestStatus=$"{chestMoves} transfers confirmed · waiting for the chest to settle";
+                chestNext=now.AddMilliseconds(1000);return;
             }
             RefreshGearSetProtection();
             var depositBags=bags.Where(s=>!OrganizerGearProtected(s.Item)).ToArray();
-            var next=chestMode switch{0=>ChestTransferPlanner.Withdraw(chest,bags,chestGoals,chestQuality),1=>ChestTransferPlanner.Duplicates(chest,depositBags,chestKeep),3=>ChestTransferPlanner.Transfer(chest,destination,chestGoals.Keys.ToHashSet(),chestQuality),4=>ChestTransferPlanner.Send(depositBags,chest,chestGoals,chestQuality),_=>ChestTransferPlanner.Merge(chest)};
+            var next=chestMode switch{0=>ChestTransferPlanner.Withdraw(chest,bags,chestGoals,chestQuality),1=>ChestTransferPlanner.Duplicates(chest,depositBags,chestKeep,config.ChestDuplicatesIncludeCrystals),3=>ChestTransferPlanner.Transfer(chest,destination,chestGoals.Keys.ToHashSet(),chestQuality),4=>ChestTransferPlanner.Send(depositBags,chest,chestGoals,chestQuality),_=>ChestTransferPlanner.Merge(chest)};
             if(next==null){
                 if(chestMode==3)chestUnmoved+=chest.Where(x=>chestGoals.ContainsKey(x.Item)&&RetainerRetrieval.AllowsQuality(x.Hq,chestQuality)).Sum(x=>x.Quantity);
                 if(++chestPageIndex<chestPages.Length){BeginChestPage(now);return;}
@@ -122,8 +145,15 @@ public sealed partial class Plugin
                 StopChest($"{chestMoves} transfers confirmed"+(missing>0?$" · {missing} items remain (stock or destination capacity unavailable).":" · Finished."));return;
             }
             chestPending=next;chestDeadline=now.AddSeconds(12);
+            chestNext=now.AddMilliseconds(500);
             chestMove!(manager,(InventoryType)next.Source.Container,(ushort)next.Source.Slot,(InventoryType)next.Destination.Container,(ushort)next.Destination.Slot,next.Quantity);
         }catch(Exception e){StopChest("Stopped: "+e.Message);}
+    }
+    private void DrawChestDuplicateOptions()
+    {
+        var include=config.ChestDuplicatesIncludeCrystals;
+        if(ImGui.Checkbox("Include crystals in Duplicates",ref include)){config.ChestDuplicatesIncludeCrystals=include;SaveConfiguration();}
+        MarketHelp("When disabled, Duplicates skips shards, crystals and clusters, including the crystals tab. Separate crystal Withdraw and Entrust actions are unchanged.");
     }
     private void DrawRetrievalChest()
     {
@@ -136,6 +166,7 @@ public sealed partial class Plugin
         if(ImGui.Button("Withdraw"))StartChest(0);ImGui.SameLine();if(ImGui.Button("Entrust"))StartChest(4);ImGui.SameLine();
         if(ImGui.SmallButton("Options…"))ImGui.OpenPopup("ChestPanelOptions");
         if(ImGui.BeginPopup("ChestPanelOptions")){
+            DrawChestDuplicateOptions();
             if(!chestCrystals&&ImGui.Button("Withdraw selected list items"))StartChest(0,true);
             if(ImGui.Button("Deposit duplicates"))StartChest(1);MarketHelp("Deposit matching bag items already stored in the selected tabs, leaving Keep in bags.");
             if(!chestCrystals){ImGui.TextUnformatted("Keep in bags");DrawChestKeepControl();if(ImGui.Button("Merge stacks"))StartChest(2);
