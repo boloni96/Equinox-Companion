@@ -197,6 +197,7 @@ public sealed partial class Plugin
         ? "FC: "+(string.IsNullOrWhiteSpace(house.House.FcName)?"Name not recorded":house.House.FcName)
         : "Owner: "+(string.IsNullOrWhiteSpace(house.House?.OwnerName)?"Not recorded":house.House.OwnerName);
 
+    private string overviewTravelHouse="",overviewTravelStatus="";
     private void DrawOverviewHouse(GardenOverviewHouse house,DateTimeOffset now)
     {
         var first=house.Batches[0];var estate=house.House;
@@ -207,6 +208,18 @@ public sealed partial class Plugin
         var houseOpen=ImGui.TreeNode($"{owner.Replace("##","")}###house");
         ImGui.PopStyleColor();
         DrawOverviewIndicators(house.Batches,now);
+        SameLineIfFits(ButtonWidth("GO SEE"));
+        var valid=NativeHousingPolicy.Address(first.Ward,first.Plot)&&NativeHousingPolicy.District(first.District)!=null&&!string.IsNullOrWhiteSpace(first.World);
+        ImGui.BeginDisabled(!Player.IsLoaded||!valid);
+        if(ImGui.SmallButton("GO SEE")){
+            EnsureBidWorlds();var world=bidWorlds!.FirstOrDefault(w=>string.Equals(w.Name,first.World,StringComparison.OrdinalIgnoreCase)).Id;
+            if(world==0)overviewTravelStatus="This garden's world could not be identified.";
+            else{GoSeeBid(world,first.District,first.Ward,first.Plot);overviewTravelStatus=bidTravelMessage;}
+            overviewTravelHouse=first.HouseId;
+        }
+        var goSeeHovered=ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled);ImGui.EndDisabled();
+        if(goSeeHovered)ImGui.SetTooltip(!Player.IsLoaded?"Log in first, then GO SEE travels with your current character.":!valid?"Sync this house's world, district, ward and plot first.":$"Visit {first.World} · {first.District} W{first.Ward} P{first.Plot}. Stop at the plot entrance; no house entry or garden care.");
+        if(overviewTravelHouse==first.HouseId&&overviewTravelStatus.Length>0)ImGui.TextWrapped(overviewTravelStatus);
         if(houseOpen)
         {
             ImGui.TextWrapped($"{first.World} · {first.District} · W{first.Ward} P{first.Plot}");

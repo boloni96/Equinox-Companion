@@ -72,6 +72,7 @@ public sealed partial class Plugin
     }
     private void OnItemSearchMenu(IMenuOpenedArgs args)
     {
+        AddLoginTravelMenu(args);
         var id = ContextSearchItem(args);
         if(id == 0 || DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>().GetRowOrDefault(id) is not {} row || row.Name.IsEmpty) return;
         args.AddMenuItem(new MenuItem{PrefixChar='E',Name=new SeStringBuilder().AddText("Where is it cheapest?").Build(),OnClicked=_=>OpenMarketItem(id)});

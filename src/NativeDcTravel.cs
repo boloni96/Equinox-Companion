@@ -42,6 +42,17 @@ public sealed partial class Plugin
         if(SellerAddon("SelectString")!=null){if(!trip.ServiceSent&&SelectVerifiedServiceAccount(trip.Service)){trip.ServiceSent=true;RecordTravelPrompt("Service account selected",new{slot=trip.Service});}return;}
         trip.ServiceSent=false;
         var loginWorld=trip.TransferCommitted||trip.Stage==NativeTravelStage.Login?trip.Leg:trip.Source;
+        if(trip.ReconnectLoginList){
+            var currentLobby=AgentLobby.Instance();
+            if(currentLobby!=null&&SellerAddon("_CharaSelectListMenu")!=null){
+                if(currentLobby->TemporaryLocked)return;
+                if(TravelDc(currentLobby->WorldId)!=TravelDc(trip.Source)){
+                    if(SellerAddon("ContextMenu")!=null||SellerAddon("SelectYesno")!=null||SellerAddon("SelectOk")!=null)return;
+                    ClickLoginMenuButton("_CharaSelectReturn",4);trip.DcSelected=false;return;
+                }
+                trip.ReconnectLoginList=false;
+            }
+        }
         if(SelectLoginDataCenter(WorldName(loginWorld)??"",ref trip.DcSelected))return;
         if(SellerAddon("_TitleMenu")!=null){trip.DcSelected=false;ClickLoginMenuButton("_TitleMenu",5);return;}
         var lobby=AgentLobby.Instance();if(lobby==null)return;
@@ -134,6 +145,9 @@ public sealed partial class Plugin
     private void CompleteNativeTransfer(NativeWorldTrip trip)
     {
         trip.DcSelected=false;
+        if(trip.NoLogin&&trip.Leg==trip.Destination){
+            StopNativeWorldTravel("Transfer complete at "+WorldName(trip.Destination)+" · remaining logged out.",arrived:true);return;
+        }
         if(NativeTravelPolicy.ContinueDcFromHome(trip.ReturnHome,trip.Leg,trip.Home,trip.Destination,TravelDc(trip.Home),TravelDc(trip.Destination))){
             PrepareNativeFinalLeg(trip);
             SetNativeTravelStage(trip,NativeTravelStage.CharacterMenu,"Home return complete; continuing DC travel without logging in");

@@ -1131,6 +1131,7 @@ public sealed partial class Plugin : IDalamudPlugin
         using (new EquinoxAppearance(GoddessAppearance))
         {
             windows.Draw();
+            DrawLoginTravelPicker();
             MeasureWork("Overlay: seller toolbar",DrawSellerToolbar);
             MeasureWork("Overlay: market item hover",DrawMarketNativeHover);
             MeasureWork("Overlay: item popup",DrawPluginItemPopup);
