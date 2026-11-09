@@ -83,6 +83,7 @@ public sealed partial class CompanionSync : IDisposable
                 return new(null, "Invalid garden care response; showing saved copy.");
             if(roster.SubmarineSupplies is {Length:>500} || roster.SubmarineSupplies?.Any(s=>s is null||string.IsNullOrWhiteSpace(s.CharacterId)||s.ObservedAt.Year<2020||s.ObservedAt>DateTimeOffset.UtcNow.AddMinutes(5)||!SubmarineSupplyStatus.Valid(s.Data))==true)
                 return new(null,"Invalid submarine supply response; showing saved copy.");
+            if(roster.ItemStoragePaging>=1)roster=await ReadInventoryPages(key,roster);
             rosterETag = response.Headers.ETag?.ToString();
             rosterETagKey = key;
             return WithRosterReceipt(new(roster, "Shared profiles updated."),response);
