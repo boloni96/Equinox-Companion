@@ -11,7 +11,8 @@ public sealed partial class Plugin
     {
         var agents=AgentModule.Instance();if(agents==null)return false;
         var list=agents->GetAgentByInternalId(AgentId.Housing);var container=agents->GetAgentByInternalId(AgentId.HousingEditContainer);
-        return list!=null&&list->IsAgentActive()||container!=null&&container->IsAgentActive();
+        var storage=agents->GetAgentByInternalId(AgentId.HousingWithdrawStorage);
+        return list!=null&&list->IsAgentActive()||container!=null&&container->IsAgentActive()||storage!=null&&storage->IsAgentActive();
     }
     private ulong storageRetainer;
     private string storageEstate="";
@@ -85,10 +86,16 @@ public sealed partial class Plugin
         var loaded=housing!=null&&housing->CurrentTerritory!=null&&housing->CurrentTerritory->IsLoaded();
         var inside=loaded&&housing->IsInside();
         var address=loaded?AddressOf(inside?housing->GetCurrentIndoorHouseId():housing->GetCurrentHouseId()):null;
-        if(!HousingStorageUiActive()||address is null||address.Workshop||!housing->HasHousePermissions()){storageEstate="";housingStorageReadStatus="Open Indoor/Outdoor Furnishings or the storeroom at a house where you have permissions.";}
+        var housingUi=HousingStorageUiActive();
+        var housingBlocked=!housingUi?"Open Indoor/Outdoor Furnishings or the storeroom to record this house.":
+            !loaded?"Housing menu detected · waiting for estate territory data.":
+            address is null?"Housing menu detected · the current estate address is not available yet.":
+            address.Workshop?"Workshop inventory is not a furnishing storeroom.":
+            !housing->HasHousePermissions()?"Housing menu detected · the game has not confirmed furnishing permissions for this estate.":null;
+        if(housingBlocked!=null){storageEstate="";housingStorageReadStatus=housingBlocked;}
         else
         {
-            var estateContext=actor.ContentId+":"+address.HouseId+":"+inside;
+            var estateContext=actor.ContentId+":"+address!.HouseId+":"+inside;
             if(storageEstate!=estateContext){storageEstate=estateContext;storageEstateReady=now.AddSeconds(3);housingStorageReadStatus="Reading housing inventory · waiting for the opened estate data…";}
             else if(now>=storageEstateReady)
             {

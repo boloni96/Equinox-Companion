@@ -30,6 +30,7 @@ public static class FollowWorldReplayPolicy
 
 public static class EstateTravelCommand
 {
+    public static bool OutdoorTeleportArrived(int mode,bool loadingObserved)=>mode==0&&loadingObserved;
     public static bool CanResume(ulong expectedCharacter,ulong character,uint homeWorld,uint currentWorld) =>
         expectedCharacter!=0&&expectedCharacter==character&&homeWorld!=0&&homeWorld==currentWorld;
     public static bool InteriorArrived(int mode,bool sameEstate,bool workshop,int room) =>

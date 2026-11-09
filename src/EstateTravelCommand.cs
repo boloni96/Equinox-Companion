@@ -18,6 +18,7 @@ public sealed partial class Plugin
         public required string Label;
         public required DateTimeOffset Started;
         public int Stage,EntrySteps,DoorRevealSteps,DoorAttempt;
+        public bool TeleportLoading;
         public Vector3? EntryDirection;public OutdoorPlotEntry? Entry;
         public DateTimeOffset ActionAt,DoorMissingSince;
         public Vector3? Forward,DoorApproach;
@@ -100,9 +101,9 @@ public sealed partial class Plugin
         try{
             if(followSession.Armed||independentQuestId!=0||eventAccountActive||gardenTendRoute!=null||assignedLogin!=null)throw new InvalidOperationException("Another routine started; estate travel stopped.");
             if(now-trip.Started>TimeSpan.FromMinutes(5))throw new InvalidOperationException("Estate travel timed out.");
+            if(Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]){trip.TeleportLoading=true;trip.Arrival.Reset();StopIndependentWalk("Loading estate");return;}
             if(!Player.IsLoaded)return;
             if(Player.ContentId!=trip.Character||Player.CurrentWorld.RowId!=trip.Destination.WorldId)throw new InvalidOperationException("Character or world changed; estate travel stopped.");
-            if(Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]){trip.Arrival.Reset();StopIndependentWalk("Loading estate");return;}
             if(Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.BoundByDuty])throw new InvalidOperationException("Estate travel stopped for combat or duty.");
             if(Conditions[ConditionFlag.Casting]||HelperInCutscene())return;
             if(Objects.LocalPlayer is not {} self)return;
@@ -128,6 +129,11 @@ public sealed partial class Plugin
             }
             if(trip.Stage==0){
                 if(now-trip.ActionAt<TimeSpan.FromSeconds(3)||!trip.Arrival.Ready(false,self.Position,now))return;
+                if(trip.Mode==0){
+                    if(outside!=null&&!SameEstate(outside,trip.Destination))throw new InvalidOperationException("Teleport arrived on a different plot.");
+                    if(EstateTravelCommand.OutdoorTeleportArrived(trip.Mode,trip.TeleportLoading))StopEstateTravel("Arrived at the "+trip.Label+" teleport point.");
+                    return;
+                }
                 if(SameEstate(outside,trip.Destination)){trip.Stage=2;}
                 else{
                     if(outside!=null)throw new InvalidOperationException("Teleport arrived on a different plot.");
