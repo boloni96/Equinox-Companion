@@ -9,6 +9,8 @@ public sealed partial class Plugin
     private string housingStorageReadStatus="Open the furnishings/storeroom menu to read this house.";
     private static unsafe bool HousingStorageUiActive()
     {
+        // The furnishings list stays visible in layout mode even when its menu agents are inactive.
+        if(SellerAddon("HousingGoods")!=null)return true;
         var agents=AgentModule.Instance();if(agents==null)return false;
         var list=agents->GetAgentByInternalId(AgentId.Housing);var container=agents->GetAgentByInternalId(AgentId.HousingEditContainer);
         var storage=agents->GetAgentByInternalId(AgentId.HousingWithdrawStorage);
