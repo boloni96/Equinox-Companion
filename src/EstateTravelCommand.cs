@@ -60,11 +60,13 @@ public sealed partial class Plugin
         try{
             var shared=destination.Property>=3;
             var sharedSlot=EstateTravelCommand.SharedSlot(destination.Property);
-            if(shared&&sharedSlot<0)throw new InvalidOperationException("Shared estate "+(destination.Property-2)+" is unavailable: the game currently exposes shared slots 1 and 2. No travel started.");
+            if(shared&&sharedSlot<0)throw new InvalidOperationException("Shared estate "+(destination.Property-2)+" is not available for this character. No tenant estate can be selected in this slot. No travel started.");
             if(Player.CurrentWorld.RowId!=Player.HomeWorld.RowId){BeginEstateHomeReturn(destination);return;}
             var owned=shared?HousingManager.GetOwnedHouseId(EstateType.SharedEstate,sharedSlot):HousingManager.GetOwnedHouseId(destination.Property==1?EstateType.PersonalEstate:EstateType.FreeCompanyEstate);
             var address=AddressOf(owned);
-            if(address==null||address.WorldId!=Player.HomeWorld.RowId||address.Apartment)throw new InvalidOperationException("This character has no verified "+(shared?"shared estate "+(sharedSlot+1):destination.Property==1?"private":"FC")+" plot.");
+            if(address==null||address.WorldId!=Player.HomeWorld.RowId||address.Apartment)throw new InvalidOperationException(shared
+                ?"Shared estate "+(sharedSlot+1)+" is not available for this character. Check that you're a tenant there. No travel started."
+                :"This character has no verified "+(destination.Property==1?"private":"FC")+" plot.");
             var manager=HousingManager.Instance();var inside=ReadEstateInterior(manager);
             var trip=new EstateTrip{Destination=address,Character=Player.ContentId,Mode=destination.Mode,Label=destination.Label,Started=DateTimeOffset.UtcNow};
             if(SameEstate(inside,address)&&destination.Mode!=0){
@@ -85,7 +87,9 @@ public sealed partial class Plugin
                 if(!telepo->Teleport(entry.AetheryteId,entry.SubIndex))throw new InvalidOperationException("The game refused the estate teleport.");
                 trip.ActionAt=trip.Started;estateTrip=trip;FollowChatNotice("TRAVEL — Teleporting to "+destination.Label+". /et stop cancels the remaining route.");return;
             }
-            throw new InvalidOperationException("The exact estate teleport is not available on this character.");
+            throw new InvalidOperationException(shared
+                ?"Shared estate "+(sharedSlot+1)+" teleport is not available. Check your tenant access and the estate teleport settings."
+                :"The exact estate teleport is not available on this character.");
         }catch(Exception ex){FollowChatNotice("TRAVEL — "+ex.Message);}
     }
 
