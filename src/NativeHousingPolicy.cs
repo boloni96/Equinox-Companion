@@ -7,6 +7,12 @@ public static class NativeHousingPolicy
     public static NativeHousingDistrict? District(string name)=>name.Trim().ToLowerInvariant() switch {
         "mist"=>new(339,0,8,"Mist"),"lavender beds" or "the lavender beds"=>new(340,1,2,"The Lavender Beds"),
         "goblet" or "the goblet"=>new(341,2,9,"The Goblet"),"shirogane"=>new(641,3,111,"Shirogane"),"empyreum"=>new(979,4,70,"Empyreum"),_=>null};
+    // A verified teleport can land on the street side without a plot identity.
+    // Ordinary walking keeps the tighter visible placard approach; neither needs
+    // the three-metre inward segment required by gardening.
+    public static bool GoSeeArrival(bool correctWard,bool matchingPlot,Vector3 position,Vector3 placard,bool estateTeleport,bool visible)=>
+        correctWard&&Position(position)&&Position(placard)&&(matchingPlot||
+        MathF.Abs(position.Y-placard.Y)<=3&&Vector3.Distance(position,placard)<=(estateTeleport?12f:4.5f)&&(estateTeleport||visible));
     public static bool Address(int ward,int plot)=>ward is >=1 and <=30 && plot is >=1 and <=60;
     public static bool WardPrompt(string text,int ward,string district)
     {
