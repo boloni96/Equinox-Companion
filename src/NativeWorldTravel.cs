@@ -113,6 +113,19 @@ public sealed partial class Plugin
         if(trip.Stage is NativeTravelStage.Gateway or NativeTravelStage.WorldList or NativeTravelStage.WorldConfirm)
             if(!NativeTravelPartyReady(trip,now,false))return;
         if(trip.Stage==NativeTravelStage.Gateway){
+            // A menu may already be open (manual interaction or a delayed game
+            // response). Adopt it before movement's conversation pause gate.
+            var openMenu=(AddonSelectString*)SellerAddon("SelectString");
+            var selected=Targets.Target;var player=Objects.LocalPlayer;
+            if(openMenu!=null&&selected!=null&&player!=null&&!Conditions[ConditionFlag.Casting]){
+                var visitLabel=DataManager.GetExcelSheet<NativeEventQuestText>(name:"transport/Aetheryte").GetRowOrDefault(3)?.Text??"";
+                var matches=TransportChoices((AtkUnitBase*)openMenu).Count(x=>NativeEventPolicy.Prompt(visitLabel,x));
+                if(NativeTravelPolicy.AdoptAetheryteMenu(trip.Stage,selected.ObjectKind==ObjectKind.Aetheryte,selected.BaseId,
+                    Vector3.Distance(player.Position,selected.Position),matches)){
+                    StopIndependentWalk("World Visit aetheryte menu is open");
+                    SetNativeTravelStage(trip,NativeTravelStage.AetheryteMenu,"Aetheryte menu recognized · opening World Visit");return;
+                }
+            }
             if(!NativeTravelMovementReady())return;
             if(Conditions[ConditionFlag.Casting])return;
             var self=Objects.LocalPlayer;if(self==null)return;
