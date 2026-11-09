@@ -89,11 +89,17 @@ public sealed partial class Plugin
     {
         PollInventoryReviewExport();
         if(!armoireRunning&&(gearRouting||organizerLastStorageRoute=="gear"&&organizerLastStorageCharacter==Player.ContentId)){ImGui.TextWrapped(gearStatus);if(gearRouting&&ImGui.SmallButton("Stop gear storage"))StopGearStorage("Stopped by you");}
-        DrawGearSetProtectionOption();
-        DrawGearStorageOptions();DrawGearStorageOptionsPopup();
-        var sortTransfers=config.SortItemsAfterOrganizing;
-        if(ImGui.Checkbox("Sort items after transfers",ref sortTransfers)){config.SortItemsAfterOrganizing=sortTransfers;SaveConfiguration();}
-        MarketHelp("Sort each retainer after its final confirmed Entrust, Withdraw or Organize transfer, before closing it.");
+        MaintainGearSetProtectionSelection();
+        if(ImGui.SmallButton("Options…##OrganizerSettings"))ImGui.OpenPopup("OrganizerSettings");
+        MarketHelp($"Gear-set protection: {(config.ProtectOrganizerGearSets?"on":"off")} · Sort after transfers: {(config.SortItemsAfterOrganizing?"on":"off")}");
+        ImGui.SameLine();DrawGearStorageOptions();DrawGearStorageOptionsPopup();
+        if(ImGui.BeginPopup("OrganizerSettings")){
+            DrawGearSetProtectionOption();
+            var sortTransfers=config.SortItemsAfterOrganizing;
+            if(ImGui.Checkbox("Sort items after transfers",ref sortTransfers)){config.SortItemsAfterOrganizing=sortTransfers;SaveConfiguration();}
+            MarketHelp("Sort each retainer after its final confirmed Entrust, Withdraw or Organize transfer, before closing it.");
+            ImGui.EndPopup();
+        }
         if(!retrievalRun.Running&&retrievalPreviewOwner!=Player.ContentId){retrievalPreviewOwner=Player.ContentId;retrievalRefreshPending=true;retrievalStock=[];retrievalStockComplete=false;retrievalPreview=[];retrievalPlan=[];retrievalPreviewDirty=true;}
 
         if(retrievalCatalogTask?.IsCompleted==true){try{retrievalCatalog=retrievalCatalogTask.GetAwaiter().GetResult();}catch(Exception e){retrievalError="Item catalogue: "+e.Message;}retrievalCatalogTask=null;}

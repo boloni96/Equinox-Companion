@@ -8,6 +8,13 @@ public sealed partial class Plugin
     private readonly HashSet<uint> allStorageSelected=[];
     private readonly UiProjectionCache<SharedItemLocation[]> allStorageCache=new(1000);
     private readonly UiProjectionCache<(SharedItemLocation Event,StorageStack[] Rows)[]> allStorageRowsCache=new(1000);
+    private readonly UiProjectionCache<(SharedItemLocation Location,StorageStack Stack)[]> allStorageFlatCache=new(1000);
+    private void DrawShowAllStorageOption()
+    {
+        var show=config.OrganizerShowAllStorage;
+        if(ImGui.Checkbox("Show all",ref show)){config.OrganizerShowAllStorage=show;SaveConfiguration();}
+        MarketHelp("Show matching items in one list with their storage location. Turn off to group by location. Search and filters still apply.");
+    }
     private DateTimeOffset nextHousingStorageRead;
     private readonly UiProjectionCache<HousingStorageHome[]> housingStorageHomesCache=new(1000);
     private void DrawAllStorage()
@@ -32,6 +39,7 @@ public sealed partial class Plugin
         ImGui.SetNextItemWidth(190);ImGui.Combo("##AllStorageFilter",ref allStorageFilter,"Any items\0Tradable only\0Untradable only\0Bound only\0Unbound only\0");
         MarketHelp("Bound means a non-collectible copy with spiritbond/binding data. Untradable includes bound copies and items that cannot be traded by design. Old observations with unknown copy state are excluded from these filters; reopen the storage to refresh.");
         ImGui.SameLine();if(ImGui.SmallButton("Refresh")){RetrievalTry(()=>ObserveStorage(DateTimeOffset.UtcNow));myInventoryRefresh=default;}
+        ImGui.SameLine();DrawShowAllStorageOption();
         ImGui.SetNextItemWidth(-1);
         if(ImGui.BeginCombo("##StorageLocation",locations.FirstOrDefault(e=>e.Key==allStorageKey)?.Name??"All recorded locations")){
             if(ImGui.Selectable("All recorded locations",allStorageKey.Length==0)){allStorageKey="";allStorageSelected.Clear();}
@@ -41,13 +49,13 @@ public sealed partial class Plugin
         var chosen=locations.FirstOrDefault(e=>e.Key==allStorageKey);
         if(chosen!=null){
             ImGui.BeginDisabled(chestRunning||organizeRunning||retrievalRun.Running||gearRouting||armoireRunning||craftingWithdrawalPending);
-            if(ImGui.SmallButton("Select all matching"))foreach(var s in VisibleStorageStacks(chosen))allStorageSelected.Add(s.ItemId);
+            if(ImGui.SmallButton("Select all matching"))foreach(var s in VisibleStorageStacks(chosen).Where(s=>!OrganizerGearProtected(s.ItemId)))allStorageSelected.Add(s.ItemId);
             ImGui.SameLine();if(ImGui.SmallButton("Clear"))allStorageSelected.Clear();
-            var supported=TryLocalStorageKey(allStorageKey,out var type)&& (LocalStoragePolicy.Saddle(type)||LocalStoragePolicy.Storeroom(type));
+            var supported=TryLocalStorageKey(allStorageKey,out var type)&& (LocalStoragePolicy.Saddle(type)||LocalStoragePolicy.Storeroom(type)||LocalStoragePolicy.Armoury(type));
             if(supported){
                 ImGui.BeginDisabled(allStorageSelected.Count==0);if(ImGui.Button("Withdraw selected to bags"))RetrievalTry(()=>StartLocalStorage(allStorageKey,false));ImGui.EndDisabled();
-                EnsureMyInventoryCharacter();ImGui.BeginDisabled(myInventorySelected.Count==0);if(ImGui.Button("Entrust temporary bag selection here"))RetrievalTry(()=>StartLocalStorage(allStorageKey,true));ImGui.EndDisabled();
-                ImGui.TextDisabled("Transfers whole selected stacks; open this storage in game first.");
+                EnsureMyInventoryCharacter();ImGui.BeginDisabled(myInventorySelected.Count==0||LocalStoragePolicy.Armoury(type));if(ImGui.Button("Entrust temporary bag selection here"))RetrievalTry(()=>StartLocalStorage(allStorageKey,true));ImGui.EndDisabled();
+                ImGui.TextDisabled(LocalStoragePolicy.Armoury(type)?"Withdraw unequipped gear to bags; gear-set protection applies. Use the game to equip or store gear here.":"Transfers whole selected stacks; open this storage in game first.");
                 if(ImGui.SmallButton($"Choose bag items · {myInventorySelected.Count} selected")){retrievalInventoryView=0;}
             }else ImGui.TextWrapped("Recorded view. Use Retainers, FC chest, or Armoire for their transfer tools. Equipped and placed furnishings are display-only here.");
             ImGui.EndDisabled();
@@ -57,6 +65,10 @@ public sealed partial class Plugin
         ImGui.BeginChild("AllStorageRows",new(0,Math.Max(80,ImGui.GetContentRegionAvail().Y-4)),false);
         var groups=allStorageRowsCache.Get(locations,$"{allStorageSearch}:{allStorageFilter}",Environment.TickCount64,()=>locations.Select(e=>(e,VisibleStorageStacks(e).ToArray())).ToArray());
         var shown=groups.Where(g=>allStorageKey.Length==0||g.Event.Key==allStorageKey).ToArray();
+        if(config.OrganizerShowAllStorage){
+            var flat=allStorageFlatCache.Get(groups,allStorageKey,Environment.TickCount64,()=>shown.SelectMany(g=>g.Rows.Select(row=>(Location:g.Event,Stack:row))).OrderBy(x=>SearchItemName(x.Stack.ItemId)).ThenBy(x=>x.Location.Name).ToArray());
+            DrawFlatStorageRows(flat);
+        }else{
         foreach(var group in shown.Where(g=>!g.Event.Key.StartsWith("house:")))DrawStorageGroup(group.Event,group.Rows);
         foreach(var home in homes){
             if(allStorageKey.Length>0&&HousingStorageCatalog.HouseId(allStorageKey)!=home.Id)continue;
@@ -70,8 +82,31 @@ public sealed partial class Plugin
             }
             ImGui.TreePop();
         }
+        }
         if(locations.Length==0&&homes.Length==0)ImGui.TextWrapped(retrievalInventoryView==4?"No housing storage known for this character. Open furnishings/storeroom at a house this character can use to record it.":"No storage recorded yet. Open the saddlebag, housing furnishing/storeroom menu, or other storage to capture its contents.");
         ImGui.EndChild();
+    }
+    private void DrawFlatStorageRows((SharedItemLocation Location,StorageStack Stack)[] rows)
+    {
+        if(rows.Length==0){ImGui.TextDisabled("No recorded items match these filters.");return;}
+        if(!ImGui.BeginTable("FlatStorage",3,ImGuiTableFlags.RowBg|ImGuiTableFlags.Resizable))return;
+        ImGui.TableSetupColumn("Item");ImGui.TableSetupColumn("Quantity");ImGui.TableSetupColumn("Location · choose to transfer");ImGui.TableHeadersRow();
+        var height=Math.Max(ImGui.GetFrameHeight(),ImGui.GetTextLineHeight()+4)+ImGui.GetStyle().CellPadding.Y*2;
+        var clip=ImGui.ImGuiListClipper();clip.Begin(rows.Length,height);
+        while(clip.Step())for(var i=clip.DisplayStart;i<clip.DisplayEnd;i++){
+            var (location,stack)=rows[i];ImGui.PushID(i);ImGui.TableNextRow(ImGuiTableRowFlags.None,height);ImGui.TableNextColumn();
+            var protectedItem=OrganizerGearProtected(stack.ItemId);
+            ImGui.BeginDisabled(chestRunning||protectedItem);
+            var selected=allStorageSelected.Contains(stack.ItemId)&&allStorageKey==location.Key;
+            if(ImGui.Checkbox("##pick",ref selected)){if(allStorageKey!=location.Key){allStorageKey=location.Key;allStorageSelected.Clear();}if(selected)allStorageSelected.Add(stack.ItemId);else allStorageSelected.Remove(stack.ItemId);}
+            ImGui.EndDisabled();ImGui.SameLine();DrawRetrievalIcon(stack.ItemId);ImGui.TextUnformatted(SearchItemName(stack.ItemId)+(stack.Hq?" HQ":""));
+            MarketHelp(protectedItem?OrganizerGearProtectionLabel(stack.ItemId):$"Recorded {location.At.ToLocalTime():g} · "+(stack.Bound==true?"Bound":stack.Tradable==true?"Tradable":stack.Tradable==false?"Untradable":"copy state unknown"));
+            ImGui.TableNextColumn();ImGui.TextUnformatted(stack.Quantity>0?stack.Quantity.ToString():"Unknown");
+            ImGui.TableNextColumn();ImGui.BeginDisabled(chestRunning);
+            if(ImGui.Selectable(location.Name+"##location",allStorageKey==location.Key)){allStorageKey=location.Key;allStorageSelected.Clear();}
+            ImGui.EndDisabled();ImGui.PopID();
+        }
+        clip.End();clip.Destroy();ImGui.EndTable();
     }
     private void DrawStorageGroup(SharedItemLocation e,StorageStack[] rows)
     {

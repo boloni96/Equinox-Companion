@@ -52,6 +52,7 @@ public sealed partial class Plugin
             var filtered=retrievalStock.Where(r=>InventoryBrowseSelection.Matches(r.Name,browseItemCategories.GetValueOrDefault(r.Item),retrievalBrowseSearch,browseCategories,browseAllCategories)).ToArray();
             browseMatchedRows=BrowseRows(filtered);browseHolders=filtered.GroupBy(x=>x.Retainer).Select(g=>(g.Key,g.First().Holder,BrowseRows(g))).ToArray();browseDirty=false;
         }
+        DrawShowAllStorageOption();
         ImGui.Checkbox("All available",ref browseTransferAll);ImGui.SameLine();ImGui.BeginDisabled(browseTransferAll);
         ImGui.SetNextItemWidth(70);ImGui.InputInt("##BrowseQuantity",ref retrievalQuantity,0,0);retrievalQuantity=Math.Clamp(retrievalQuantity,1,RetainerRetrieval.MaxQuantity);
         ImGui.EndDisabled();MarketHelp("Withdraw Quantity each, or All available selected items. Entrust moves matching bag quantities and respects Keep amounts.");ImGui.SameLine();
@@ -60,7 +61,6 @@ public sealed partial class Plugin
         if(ImGui.SmallButton("Options…"))ImGui.OpenPopup("BrowseOptions");
         if(ImGui.BeginPopup("BrowseOptions")){
             if(ImGui.SmallButton("Refresh inventory"))RetrievalTry(RefreshRetrievalStock);
-            ImGui.Checkbox("Group by retainer",ref retrievalBrowseGroups);
             if(ImGui.SmallButton("Reset filters")){retrievalBrowseSearch="";browseCategories.Clear();browseAllCategories=true;browseDirty=true;}
             ImGui.TextWrapped(retrievalStockNotice);ImGui.EndPopup();
         }
@@ -89,7 +89,7 @@ public sealed partial class Plugin
         ImGui.SameLine();ImGui.TextDisabled($"{browseSelected.Count} / {browseMatchedRows.Length}");
         ImGui.BeginChild("InventoryBrowserRows",new(0,Math.Max(80,ImGui.GetContentRegionAvail().Y-8)),false);
         if(browseMatchedRows.Length==0)ImGui.TextDisabled("No inventory items match these filters.");
-        if(retrievalBrowseGroups){foreach(var holder in browseHolders)if(ImGui.CollapsingHeader(holder.Name+"##"+holder.Id))DrawInventoryBrowseRows(holder.Rows,holder.Id.ToString());}
+        if(!config.OrganizerShowAllStorage){foreach(var holder in browseHolders)if(ImGui.CollapsingHeader(holder.Name+"##"+holder.Id))DrawInventoryBrowseRows(holder.Rows,holder.Id.ToString());}
         else DrawInventoryBrowseRows(browseMatchedRows,"all");
         ImGui.EndChild();
     }

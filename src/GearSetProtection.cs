@@ -45,6 +45,12 @@ public sealed partial class Plugin
         if(ImGui.Checkbox("Protect gear used in gear sets",ref enabled)){
             config.ProtectOrganizerGearSets=enabled;SaveConfiguration();InvalidateOrganizePreview();
         }
+        MaintainGearSetProtectionSelection();
+        MarketHelp("Protects items referenced by any saved Gear Set List entry, not only your current set. Protected items cannot be selected or Shift-hovered and are skipped before storage transfers. Matching item IDs are protected across NQ/HQ and duplicate copies. Glamour appearances alone do not count as gear-set equipment.");
+    }
+    private void MaintainGearSetProtectionSelection()
+    {
+        var enabled=config.ProtectOrganizerGearSets;
         var owner=Player.IsLoaded?Player.ContentId:0;
         var now=Environment.TickCount64;
         if(owner!=gearProtectionDisplayOwner||enabled!=gearProtectionDisplayEnabled||now>=gearProtectionDisplayUntil){
@@ -55,6 +61,6 @@ public sealed partial class Plugin
         }
         foreach(var id in myInventorySelected.Keys.Where(OrganizerGearProtected).ToArray())myInventorySelected.Remove(id);
         browseSelected.RemoveWhere(OrganizerGearProtected);
-        MarketHelp("Protects items referenced by any saved Gear Set List entry, not only your current set. Protected items cannot be selected or Shift-hovered and are skipped before storage transfers. Matching item IDs are protected across NQ/HQ and duplicate copies. Glamour appearances alone do not count as gear-set equipment.");
     }
+
 }

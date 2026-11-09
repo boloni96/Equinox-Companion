@@ -1,9 +1,10 @@
 namespace EquinoxCompanion;
 internal static class LocalStoragePolicy
 {
+    internal static bool Armoury(uint type)=>type is 3200 or 3201 or 3202 or 3203 or 3205 or 3206 or 3207 or 3208 or 3209 or 3300 or 3400 or 3500;
     internal static bool Saddle(uint type)=>type is 4000 or 4001 or 4100 or 4101;
     internal static bool Storeroom(uint type)=>type is 27000 or 27200 or >=27001 and <=27011;
-    internal static bool CanMove(uint source,uint destination)=>source<=3&&(Saddle(destination)||Storeroom(destination))||destination<=3&&(Saddle(source)||Storeroom(source));
+    internal static bool CanMove(uint source,uint destination)=>source<=3&&(Saddle(destination)||Storeroom(destination))||destination<=3&&(Saddle(source)||Storeroom(source)||Armoury(source));
     internal static IEnumerable<StorageStack> Copies(StorageStack stack)=>stack.Positions?.Any(p=>p.Bound.HasValue||p.Tradable.HasValue)==true
         ?stack.Positions.GroupBy(p=>(p.Bound,p.Tradable)).Select(g=>stack with{Quantity=g.Sum(p=>p.Quantity),Positions=g.ToArray(),Bound=g.Key.Bound,Tradable=g.Key.Tradable})
         :[stack];

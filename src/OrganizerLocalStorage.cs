@@ -25,7 +25,7 @@ public sealed partial class Plugin
             if(housing==null||housing->CurrentTerritory==null||!housing->CurrentTerritory->IsLoaded()||!housing->HasHousePermissions()||!HousingStorageUiActive())throw new InvalidOperationException("Open the housing furnishing/storeroom menu at this estate with storage permissions first.");
             var inside=housing->IsInside();var address=AddressOf(inside?housing->GetCurrentIndoorHouseId():housing->GetCurrentHouseId());
             if(address==null||address.Workshop||key!=$"house:{address.HouseId}:{type}"||inside!=(type is >=27001 and <=27011))throw new InvalidOperationException("This recorded storeroom is not the currently open estate and indoor/outdoor area.");
-        }else throw new InvalidOperationException("This storage is display-only in this view.");
+        }else if(!LocalStoragePolicy.Armoury(type))throw new InvalidOperationException("This storage is display-only in this view.");
         var inv=InventoryManager.Instance();var c=inv==null?null:inv->GetInventoryContainer((InventoryType)type);
         if(c==null||!c->IsLoaded||c->Items==null||c->Size is <=0 or >200)throw new InvalidOperationException("Storage data is not loaded. Open the selected storage page first.");
     }
@@ -33,6 +33,7 @@ public sealed partial class Plugin
     {
         if(chestRunning||organizeRunning||retrievalRun.Running||gearRouting||armoireRunning||craftingWithdrawalPending||sellerRun.Running||TraderRunning||retainerGilRunning)throw new InvalidOperationException("Finish the current inventory operation first.");
         if(!TryLocalStorageKey(key,out var type))throw new InvalidOperationException("Choose a storage location first.");
+        if(entrust&&LocalStoragePolicy.Armoury(type))throw new InvalidOperationException("Use the game to store gear in the Armoury Chest. This action withdraws unequipped gear to bags.");
         RequireLocalStorage(key,type);RefreshGearSetProtection();
         localStorageEntrust=entrust;localStorageFilter=entrust?myInventoryTradeFilter:allStorageFilter;localStorageQuality=entrust?myInventoryQuality:RetrievalQuality.Any;
         localStorageRemaining=entrust?MyInventoryAmounts(ReadMyInventory()):allStorageSelected.ToDictionary(id=>id,_=>int.MaxValue);
