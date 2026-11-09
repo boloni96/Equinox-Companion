@@ -56,7 +56,7 @@ public sealed partial class Plugin
             var actor=new Actor(c.ContentId,c.Name,0,0,c.World,c.World);
             if(!FashionCompletion.IsComplete(actor,observations,[person],now))return;
         }
-        QueueAccountCelebration(identity,person.Name+" / "+current.Account,$"Fashion Report (week of {FashionCompletion.Cycle(now):yyyy-MM-dd})");
+        QueueAccountCelebration(identity,person.Name+" / "+current.Account,$"Fashion Report (week {FashionCompletion.WeekNumber(now)})");
     }
     private void CelebrateEventAccount()=>RequestCelebrationCheck();
     private IEnumerable<bool> ObserveEventAccountCompletion(long evidenceRevision)

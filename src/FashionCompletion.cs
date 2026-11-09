@@ -8,6 +8,10 @@ public static class FashionCompletion
         return anchor.AddDays(7*Math.Floor((at-anchor).TotalDays/7));
     }
 
+    // Same week-452 anchor as Journal fashionGuideCycle; Tuesday 08:00 UTC reset.
+    public static int WeekNumber(DateTimeOffset at) => 452 + (int)Math.Floor(
+        (Cycle(at)-new DateTimeOffset(2026,9,22,8,0,0,TimeSpan.Zero)).TotalDays/7);
+
     public static (DateTimeOffset Start,DateTimeOffset End) Window(DateTimeOffset now) => (Cycle(now).AddDays(3),Cycle(now).AddDays(7));
     public static bool IsOpen(DateTimeOffset now) { var w=Window(now);return now>=w.Start&&now<w.End; }
 
