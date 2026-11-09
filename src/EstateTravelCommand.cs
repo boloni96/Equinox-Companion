@@ -58,10 +58,13 @@ public sealed partial class Plugin
             FollowChatNotice("TRAVEL — Stop the active follower, routine or journey first.");return;
         }
         try{
+            var shared=destination.Property>=3;
+            var sharedSlot=EstateTravelCommand.SharedSlot(destination.Property);
+            if(shared&&sharedSlot<0)throw new InvalidOperationException("Shared estate "+(destination.Property-2)+" is unavailable: the game currently exposes shared slots 1 and 2. No travel started.");
             if(Player.CurrentWorld.RowId!=Player.HomeWorld.RowId){BeginEstateHomeReturn(destination);return;}
-            var owned=HousingManager.GetOwnedHouseId(destination.Property==1?EstateType.PersonalEstate:EstateType.FreeCompanyEstate);
+            var owned=shared?HousingManager.GetOwnedHouseId(EstateType.SharedEstate,sharedSlot):HousingManager.GetOwnedHouseId(destination.Property==1?EstateType.PersonalEstate:EstateType.FreeCompanyEstate);
             var address=AddressOf(owned);
-            if(address==null||address.WorldId!=Player.HomeWorld.RowId||address.Apartment)throw new InvalidOperationException("This character has no verified "+(destination.Property==1?"private":"FC")+" plot.");
+            if(address==null||address.WorldId!=Player.HomeWorld.RowId||address.Apartment)throw new InvalidOperationException("This character has no verified "+(shared?"shared estate "+(sharedSlot+1):destination.Property==1?"private":"FC")+" plot.");
             var manager=HousingManager.Instance();var inside=ReadEstateInterior(manager);
             var trip=new EstateTrip{Destination=address,Character=Player.ContentId,Mode=destination.Mode,Label=destination.Label,Started=DateTimeOffset.UtcNow};
             if(SameEstate(inside,address)&&destination.Mode!=0){

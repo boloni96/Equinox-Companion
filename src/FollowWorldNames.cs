@@ -53,7 +53,9 @@ public static class EstateTravelCommand
         return (start==0||!char.IsLetterOrDigit(prompt[start-1]))&&
             (end==prompt.Length||!char.IsLetterOrDigit(prompt[end]));
     }
-    // Explicit destinations: private=1, FC=2; plot=0, house interior=2, workshop=3.
+    // Native shared-estate indexes are currently 0 and 1. Never query an unsupported index.
+    public static int SharedSlot(int property)=>property is 3 or 4?property-3:-1;
+    // Explicit destinations: private=1, FC=2, shared slots=3+; plot=0, interior=2, workshop=3.
     public static (int Property,int Mode,string Label)? Parse(string input) => input.Trim().ToLowerInvariant() switch
     {
         "fc" => (2,0,"FC plot"),
@@ -61,6 +63,12 @@ public static class EstateTravelCommand
         "efc" => (2,2,"inside the FC house"),
         "epriv" or "eprivate" => (1,2,"inside the private house"),
         "workshop" or "ws" => (2,3,"inside the FC workshop"),
+        "shared" or "sha" or "shared1" or "sha1" => (3,0,"shared estate 1 plot"),
+        "shared2" or "sha2" => (4,0,"shared estate 2 plot"),
+        "shared3" or "sha3" => (5,0,"shared estate 3 plot"),
+        "eshared" or "esha" or "eshared1" or "esha1" => (3,2,"inside shared estate 1"),
+        "eshared2" or "esha2" => (4,2,"inside shared estate 2"),
+        "eshared3" or "esha3" => (5,2,"inside shared estate 3"),
         _ => null
     };
 }
