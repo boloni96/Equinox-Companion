@@ -60,6 +60,7 @@ public sealed partial class Plugin
             var manager=InventoryManager.Instance();if(manager==null)throw new InvalidOperationException("Inventory unavailable.");
             foreach(var operation in manager->PendingOperations)if(!operation.IsEmpty){if(now>chestDeadline)throw new InvalidOperationException("Inventory transaction timed out; no retry sent.");return;}
             var store=localStorageDuplicates?localStorageDuplicatePages.SelectMany(ReadChestContainer).ToArray():ReadChestContainer(localStorageType);var bags=new uint[]{0,1,2,3}.SelectMany(ReadChestContainer).ToArray();
+            if(localStorageDuplicates){TickSaddlebagDuplicateDeposit(store,bags,now,manager);return;}
             if(localStoragePending is {} sent){
                 var all=store.Concat(bags).ToArray();var src=all.Single(s=>s.Container==sent.Source.Container&&s.Slot==sent.Source.Slot);var dst=all.Single(s=>s.Container==sent.Destination.Container&&s.Slot==sent.Destination.Slot);
                 if(!ChestTransferPlanner.Confirmed(sent,src,dst)){if(now>chestDeadline)throw new InvalidOperationException("Transfer was not confirmed. Check permissions, furnishing restrictions and any game prompt; no retry sent.");chestStatus="Waiting for the game to confirm the storage transfer";return;}
@@ -67,16 +68,6 @@ public sealed partial class Plugin
                 ObserveStorage(now);myInventoryRefresh=default;RequestStorageRefresh();
             }
             RefreshGearSetProtection();
-            if(localStorageDuplicates){
-                var deposit=bags.Where(s=>!OrganizerGearProtected(s.Item)).Select(s=>s with{CanDeposit=true}).ToArray();
-                var next=ChestTransferPlanner.Duplicates(store,deposit,0);
-                if(next==null){StopChest($"Complete · {chestMoves} duplicate transfers confirmed; no further matching items fit in the saddlebag.");return;}
-                if(!LocalStoragePolicy.CanMove(next.Source.Container,next.Destination.Container))throw new InvalidOperationException("Invalid saddlebag destination.");
-                localStoragePending=next;chestDeadline=now.AddSeconds(12);
-                chestStatus=$"{chestMoves} confirmed · Adding {next.Quantity} × {SearchItemName(next.Source.Item)}";
-                manager->MoveItemSlot((InventoryType)next.Source.Container,(ushort)next.Source.Slot,(InventoryType)next.Destination.Container,(ushort)next.Destination.Slot);
-                return;
-            }
             var sources=localStorageEntrust?bags:store;var destinations=localStorageEntrust?store:bags;
             var candidates=sources.Where(s=>s.Item>0&&s.Quantity>0&&localStorageRemaining.GetValueOrDefault(s.Item)>0&&!localStorageVisited.Contains((s.Container,s.Slot))&&!OrganizerGearProtected(s.Item)&&RetainerRetrieval.AllowsQuality(s.Hq,localStorageQuality)&&InventoryTradeFilterAllows(s,localStorageFilter)).ToArray();
             foreach(var source in candidates){

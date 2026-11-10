@@ -19,6 +19,7 @@ public sealed partial class Plugin
         localStorageDuplicates=true;localStorageDuplicatePages=pages.ToArray();
         localStorageKey="bag:"+pages[0];localStorageType=pages[0];localStorageTerritory=Client.TerritoryType;
         chestOwner=Player.ContentId;chestWorld=Player.CurrentWorld.RowId;
+        saddleDepositReceipt=null;saddleDepositSelected=false;saddleDepositHistory.Clear();
         localStoragePending=null;localStorageVisited.Clear();chestMoves=0;chestNext=default;chestDeadline=DateTimeOffset.UtcNow.AddSeconds(15);
         localStorageRunning=chestRunning=localStorageStatusShown=true;chestStatus="Finding saddlebag duplicates…";
     }
