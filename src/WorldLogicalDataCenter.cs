@@ -19,7 +19,7 @@ internal static class WorldLogicalDataCenter
             var id=Convert.ToUInt32(raw.ReadColumn(column));
             var dc=Plugin.DataManager.GetExcelSheet<WorldDCGroupType>().GetRow(id);
             if(world.IsPublic&&(id==0||dc.Region.RowId is <1 or >4||string.IsNullOrWhiteSpace(dc.Name.ToString())))
-                throw new InvalidOperationException("Logical data center is unavailable for "+world.Name);
+                throw new InvalidOperationException("Logical data center is unavailable for "+world.Name.ToString());
             return cache[world.RowId]=dc;
         }
     }

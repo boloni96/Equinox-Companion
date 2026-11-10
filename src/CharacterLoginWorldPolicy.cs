@@ -1,8 +1,11 @@
 namespace EquinoxCompanion;
 public static class CharacterLoginWorldPolicy
 {
-    // World Visit keeps the character on the home-world selection list.
-    // Data Center Travel places it on the visiting-world selection list.
-    public static string Resolve(string home,string current,uint homeDc,uint currentDc)=>
-        homeDc!=0&&currentDc!=0&&homeDc!=currentDc&&!string.IsNullOrWhiteSpace(current)?current:home;
+    // Regional World Visit retains the home-world list; cross-region lobby
+    // transfers retain the visiting-world list. Unknown regions do not broaden it.
+    public static uint ListDc(uint homeDc,uint currentDc,uint homeRegion=0,uint currentRegion=0)=>
+        homeDc!=0&&currentDc!=0&&homeDc!=currentDc&&
+        !(homeRegion is >=1 and <=4&&homeRegion==currentRegion)?currentDc:homeDc;
+    public static string Resolve(string home,string current,uint homeDc,uint currentDc,uint homeRegion=0,uint currentRegion=0)=>
+        ListDc(homeDc,currentDc,homeRegion,currentRegion)!=homeDc&&!string.IsNullOrWhiteSpace(current)?current:home;
 }

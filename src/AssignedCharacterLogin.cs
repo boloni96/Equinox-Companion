@@ -27,7 +27,9 @@ public sealed partial class Plugin
         var worlds=DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>();
         var homeDc=worlds.Where(w=>w.Name.ToString()==home).Select(w=>w.LogicalDc().RowId).FirstOrDefault();
         var currentDc=worlds.Where(w=>w.Name.ToString()==current).Select(w=>w.LogicalDc().RowId).FirstOrDefault();
-        return CharacterLoginWorldPolicy.Resolve(home,current,homeDc,currentDc);
+        var homeRegion=worlds.Where(w=>w.Name.ToString()==home).Select(w=>w.LogicalDc().Region.RowId).FirstOrDefault();
+        var currentRegion=worlds.Where(w=>w.Name.ToString()==current).Select(w=>w.LogicalDc().Region.RowId).FirstOrDefault();
+        return CharacterLoginWorldPolicy.Resolve(home,current,homeDc,currentDc,homeRegion,currentRegion);
     }
     private int GardenServiceAccount(SharedCharacter target)
     {
@@ -75,7 +77,8 @@ public sealed partial class Plugin
             var entry=item.Value;
             if(entry!=null&&entry->ContentId.ToString()==target.ContentId&&entry->NameString==target.Name&&WorldName(entry->HomeWorldId)==target.World&&
                 (entry->LoginFlags&CharaSelectCharacterEntryLoginFlags.Locked)==0){
-                if(TravelDc(entry->CurrentWorldId)==0||TravelDc(entry->CurrentWorldId)!=TravelDc(lobby->WorldId))return false;
+                var listDc=CharacterLoginWorldPolicy.ListDc(TravelDc(entry->HomeWorldId),TravelDc(entry->CurrentWorldId),TravelRegion(entry->HomeWorldId),TravelRegion(entry->CurrentWorldId));
+                if(listDc==0||listDc!=TravelDc(lobby->WorldId))return false;
                 index=current;matches++;
             }
             current++;
@@ -254,9 +257,10 @@ public sealed partial class Plugin
         }
         if(count!=1||match==null)return false;
         var visiting=WorldName(match->CurrentWorldId);var visitingDc=TravelDc(match->CurrentWorldId);
-        var listWorld=CharacterLoginWorldPolicy.Resolve(run.Target.World,visiting,TravelDc(match->HomeWorldId),visitingDc);
+        var listWorld=CharacterLoginWorldPolicy.Resolve(run.Target.World,visiting,TravelDc(match->HomeWorldId),visitingDc,TravelRegion(match->HomeWorldId),TravelRegion(match->CurrentWorldId));
+        var listDc=CharacterLoginWorldPolicy.ListDc(TravelDc(match->HomeWorldId),visitingDc,TravelRegion(match->HomeWorldId),TravelRegion(match->CurrentWorldId));
         if(visitingDc==0||displayedDc==0||string.IsNullOrEmpty(visiting))throw new InvalidOperationException("This character is visiting another data center, but its current world could not be verified. Export diagnostics or select its visiting data center manually.");
-        if(visitingDc==displayedDc){
+        if(listDc==displayedDc){
             if((match->LoginFlags&CharaSelectCharacterEntryLoginFlags.DCTraveling)!=0&&visitingDc==TravelDc(match->HomeWorldId))
                 throw new InvalidOperationException("The game marks this character as visiting another data center, but has not supplied its visiting world. Select its visiting data center manually and retry; no home-world login was attempted.");
             if(run.World!=listWorld){assignedLogin=run with{World=listWorld};loginWorldChecked.Clear();loginWorldPending=loginWorldSample=0;loginWorldNext=default;return true;}
