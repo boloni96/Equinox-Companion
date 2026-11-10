@@ -179,10 +179,12 @@ public sealed partial class Plugin
                 SetNativeTravelStage(trip,NativeTravelStage.WorldConfirm,"Confirming destination "+WorldName(trip.Leg));return;
             }
             var menu=SellerAddon("WorldTravelSelect");if(menu==null)return;
-            if(!SelectWorldVisitDc(menu,trip,now))return;
+            // The visible destination row is stronger evidence than a stale dropdown selection index.
+            // It also handles the native return-home row while visiting another data center.
             if(TrySelectWorldVisitWorld(menu,WorldName(trip.Leg)??"")){
                 SetNativeTravelStage(trip,NativeTravelStage.WorldConfirm,"Confirming destination "+WorldName(trip.Leg));return;
             }
+            if(!SelectWorldVisitDc(menu,trip,now))return;
             nativeTravelStatus="Waiting for an enabled "+WorldName(trip.Leg)+" row in "+TravelDcName(trip.Leg)+" · you can select it manually";return;
         }
         if(trip.Stage==NativeTravelStage.WorldConfirm){

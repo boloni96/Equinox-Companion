@@ -13,6 +13,11 @@ public static class NativeHousingPolicy
     public static bool GoSeeArrival(bool correctWard,bool matchingPlot,Vector3 position,Vector3 placard,bool estateTeleport,bool visible)=>
         correctWard&&Position(position)&&Position(placard)&&(matchingPlot||
         MathF.Abs(position.Y-placard.Y)<=3&&Vector3.Distance(position,placard)<=(estateTeleport?12f:4.5f)&&(estateTeleport||visible));
+    public static bool WardChoice(string expected,string actual){
+        static string Clean(string text)=>Regex.Replace(text,@"\s*\([^)]*\)","").Trim().TrimEnd('.').Trim();
+        return !string.IsNullOrWhiteSpace(expected)&&string.Equals(Clean(expected),Clean(actual),StringComparison.OrdinalIgnoreCase)||
+            string.Equals(Clean(actual),"Go to specified ward",StringComparison.OrdinalIgnoreCase);
+    }
     public static bool Address(int ward,int plot)=>ward is >=1 and <=30 && plot is >=1 and <=60;
     public static bool WardPrompt(string text,int ward,string district)
     {

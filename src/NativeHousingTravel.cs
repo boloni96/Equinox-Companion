@@ -14,7 +14,7 @@ public sealed partial class Plugin
         public required uint World;public required ulong Character;public required int Ward,Plot;
         public required NativeHousingDistrict District;public required Task<HousingGeometry> Geometry;
         public required DateTimeOffset Started;public DateTimeOffset Next,StageAt;
-        public bool WardOnly;
+        public bool WardOnly;public ulong SourceObject;
         public int Stage,Attempt,Selections;public bool WorldSent,TeleportSent,WardSelected,MenuOpened;
         public readonly GardenArrivalGate EntryArrival=new();public bool NearApproachSelected;public Vector3? Approach;public HousingShard? Shard;public Vector3 Source;
     }
@@ -33,7 +33,7 @@ public sealed partial class Plugin
         StopIndependentWalk(reason);nativeHousingStatus=bidTravelMessage=characterTravelStatus=reason;
         RecordTravelPrompt("Housing travel stopped",new{reason});FollowChatNotice("TRAVEL — "+reason);
     }
-    private void StartNativeHousing(uint world,string district,int ward,int plot,bool wardOnly=false)
+    private void StartNativeHousing(uint world,string district,int ward,int plot,bool wardOnly=false,ulong sourceObject=0)
     {
         if(!CanRequestWorldTravel(world,out var reason)){bidTravelMessage=characterTravelStatus=reason;return;}
         var area=NativeHousingPolicy.District(district);
@@ -42,7 +42,7 @@ public sealed partial class Plugin
             bidTravelMessage="Another journey is active. Stop it before starting GO SEE.";return;
         }
         var now=DateTimeOffset.UtcNow;
-        var trip=new NativeHousingTrip{World=world,Character=Player.ContentId,Ward=ward,Plot=plot,District=area,Geometry=wardOnly?Task.FromResult(new HousingGeometry([],[],[])):LoadHousingGeometry(area),Started=now,WardOnly=wardOnly};
+        var trip=new NativeHousingTrip{World=world,Character=Player.ContentId,Ward=ward,Plot=plot,District=area,Geometry=wardOnly?Task.FromResult(new HousingGeometry([],[],[])):LoadHousingGeometry(area),Started=now,WardOnly=wardOnly,SourceObject=sourceObject};
         nativeHousingTrip=trip;HousingStage(trip,0,"Reading game housing destinations");
     }
     private void BeginNativeEstateLanding(uint world,string district,int ward,int plot){
@@ -135,6 +135,15 @@ public sealed partial class Plugin
             if(Player.CurrentWorld.RowId!=trip.World)throw new InvalidOperationException("Housing world changed unexpectedly.");
             if(trip.Stage==2){
                 if(HousingAtWard(trip)){HousingStage(trip,7,"Choosing a residential shard");return;}
+                if(trip.WardOnly&&trip.SourceObject!=0){
+                    var source=Objects.FirstOrDefault(o=>o.GameObjectId==trip.SourceObject);
+                    if(source==null||!source.IsTargetable)throw new InvalidOperationException("The selected housing transport is no longer available.");
+                    if(SellerAddon("HousingSelectBlock")!=null){HousingStage(trip,4,"Selecting ward "+trip.Ward);return;}
+                    if(Targets.Target?.GameObjectId==trip.SourceObject&&SellerAddon("SelectString")!=null){HousingStage(trip,3,"Reading housing transport options");return;}
+                    if(!NativeTravelMovementReady())return;
+                    if(!HousingApproach(trip,source,now))return;
+                    if(HousingInteract(source))HousingStage(trip,3,"Opening housing transport");return;
+                }
                 if(!NativeTravelMovementReady())return;
                 var main=Objects.FirstOrDefault(x=>x.IsTargetable&&x.ObjectKind==ObjectKind.Aetheryte&&x.BaseId==trip.District.Gateway);
                 if(main==null||Vector3.Distance(self.Position,main.Position)>100){
@@ -166,8 +175,9 @@ public sealed partial class Plugin
                 trip.MenuOpened=true;
                 var choices=TransportChoices(menu);var residential=DataManager.GetExcelSheet<NativeEventQuestText>(name:"transport/Aetheryte").GetRowOrDefault(2)?.Text??"";
                 var go=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Addon>().GetRow(6349).Text.ToString().Trim();
-                var match=choices.Select((text,index)=>(text,index)).Where(x=>NativeEventPolicy.Prompt(residential,x.text)||NativeEventPolicy.Prompt(go,x.text)).ToArray();
+                var match=choices.Select((text,index)=>(text,index)).Where(x=>NativeEventPolicy.Prompt(residential,x.text)||NativeHousingPolicy.WardChoice(go,x.text)).ToArray();
                 if(match.Length!=1)throw new InvalidOperationException("Residential district travel is unavailable in this menu. The district may not be unlocked.");
+                if(!NearbyTransportChoiceEnabled(menu,match[0].index))throw new InvalidOperationException("Ward selection is currently unavailable from this transport.");
                 usingSharedTravel=true;try{SelectTravelChoice(menu,match[0].index);}finally{usingSharedTravel=false;}return;
             }
             if(trip.Stage==4){

@@ -5,11 +5,16 @@ using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Game.ClientState.Objects.Types;
 using FFXIVClientStructs.FFXIV.Client.Game.Control;
 using FFXIVClientStructs.FFXIV.Component.GUI;
+using FFXIVClientStructs.FFXIV.Client.UI;
 using Lumina.Excel;
 using Lumina.Excel.Sheets;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
+    private string nearbyHoverMenu="";
+    private DateTimeOffset nearbyHoverUntil;
+    private Vector2 nearbyHoverAnchor;
+    private ulong nearbyHoverSource;
     private ulong nearbyTravelObject;
     private DateTimeOffset nearbyTravelScan;
     private readonly Dictionary<uint,bool> nearbyTransportKinds=[];
@@ -48,7 +53,7 @@ public sealed partial class Plugin
     }
     private unsafe void DrawNearbyTravelMenu()
     {
-        if(!config.NearbyTravelMenu||NearbyTravelBusy())return;
+        if(!config.NearbyTravelMenu||NearbyTravelBusy()){nearbyHoverMenu="";return;}
         var now=DateTimeOffset.UtcNow;
         if(now>=nearbyTravelScan){
             nearbyTravelScan=now.AddMilliseconds(500);
@@ -57,22 +62,47 @@ public sealed partial class Plugin
                 .OrderBy(o=>Vector3.DistanceSquared(o.Position,self.Position)).FirstOrDefault(o=>NearbyTransport(o)&&TargetWithinInteractionRange(o))?.GameObjectId??0;
         }
         var source=Objects.FirstOrDefault(o=>o.GameObjectId==nearbyTravelObject);
-        if(source==null||!source.IsTargetable)return;
+        if(source==null||!source.IsTargetable){nearbyHoverMenu="";return;}
         // Resolve before opening ImGui scopes. Unavailable worlds must not leave a half-open UI stack.
         EnsureBidWorlds();
         var housingDistrict=source.BaseId switch {2=>"The Lavender Beds",8=>"Mist",9=>"The Goblet",70=>"Empyreum",111=>"Shirogane",_=>""};
+        if(housingDistrict.Length==0&&source.ObjectKind!=ObjectKind.Aetheryte)
+            housingDistrict=Client.TerritoryType switch{339=>"Mist",340=>"The Lavender Beds",341=>"The Goblet",641=>"Shirogane",979=>"Empyreum",_=>""};
+        if(nearbyHoverSource!=source.GameObjectId){nearbyHoverSource=source.GameObjectId;nearbyHoverMenu="";}
+        var headings=new List<string>();
+        if(source.ObjectKind==ObjectKind.Aetheryte){if(source.BaseId is 2 or 8 or 9)headings.Add("World");headings.Add("Aethernet");}
+        if(housingDistrict.Length>0)headings.Add("Housing");
+        if(headings.Count==0)headings.Add("Transport");
         var vp=ImGui.GetMainViewport();var pos=config.NearbyTravelMenuPosition;
         if(pos!=4){
             var pivot=pos switch{1=>new Vector2(.5f,1),2=>new Vector2(0,.5f),3=>new Vector2(1,.5f),_=>new Vector2(.5f,0)};
-            ImGui.SetNextWindowPos(vp.WorkPos+vp.WorkSize*pivot+new Vector2(pos==2?12:pos==3?-12:0,pos==1?-70:pos==0?36:0),ImGuiCond.Always,pivot);
+            ImGui.SetNextWindowPos(vp.WorkPos+vp.WorkSize*pivot+new Vector2(pos==2?12:pos==3?-12:0,pos==1?-70:pos==0?8:0),ImGuiCond.Always,pivot);
         }
-        ImGui.SetNextWindowSizeConstraints(new Vector2(250,0),new Vector2(Math.Min(800,vp.WorkSize.X-24),Math.Max(150,vp.WorkSize.Y-120)));
-        var flags=ImGuiWindowFlags.AlwaysAutoResize|ImGuiWindowFlags.NoFocusOnAppearing;
+        var flags=ImGuiWindowFlags.AlwaysAutoResize|ImGuiWindowFlags.NoFocusOnAppearing|ImGuiWindowFlags.NoDecoration|ImGuiWindowFlags.NoNav;
         if(pos!=4)flags|=ImGuiWindowFlags.NoMove;
-        if(ImGui.Begin("Equinox Travel##nearby",flags)){
-            ImGui.TextDisabled(source.Name.ToString());
-            if(ImGui.BeginTabBar("NearbyTravelTabs")){
-                if(source.ObjectKind==ObjectKind.Aetheryte&&source.BaseId is 2 or 8 or 9&&ImGui.BeginTabItem("Worlds")){
+        ImGui.PushStyleColor(ImGuiCol.WindowBg,new Vector4(0,0,0,.35f));
+        ImGui.PushStyleColor(ImGuiCol.Button,new Vector4(0,0,0,0));
+        var barOpen=ImGui.Begin("##EquinoxTravelHoverBar",flags);
+        if(barOpen){
+            foreach(var heading in headings){
+                if(heading!=headings[0])ImGui.SameLine();
+                ImGui.Button(heading,new Vector2(150,ImGui.GetFrameHeight()*1.3f));
+                if(ImGui.IsItemHovered()){
+                    nearbyHoverMenu=heading;nearbyHoverUntil=now.AddMilliseconds(300);
+                    var min=ImGui.GetItemRectMin();var max=ImGui.GetItemRectMax();
+                    nearbyHoverAnchor=pos==1?new Vector2(min.X,min.Y-2):pos==3?new Vector2(min.X-2,min.Y):new Vector2(min.X,max.Y+2);
+                }
+            }
+        }
+        ImGui.End();ImGui.PopStyleColor(2);
+        if(nearbyHoverMenu.Length==0||!headings.Contains(nearbyHoverMenu))return;
+        // Separate panel keeps the headings stationary when destinations open.
+        var panelPivot=pos==1?new Vector2(0,1):pos==3?new Vector2(1,0):Vector2.Zero;
+        ImGui.SetNextWindowPos(nearbyHoverAnchor,ImGuiCond.Always,panelPivot);
+        ImGui.SetNextWindowSizeConstraints(new Vector2(260,0),new Vector2(Math.Min(800,vp.WorkSize.X-24),Math.Max(150,vp.WorkSize.Y-120)));
+        if(ImGui.Begin("##EquinoxTravelHoverDestinations",ImGuiWindowFlags.AlwaysAutoResize|ImGuiWindowFlags.NoDecoration|ImGuiWindowFlags.NoMove|ImGuiWindowFlags.NoSavedSettings|ImGuiWindowFlags.NoFocusOnAppearing)){
+            if(ImGui.IsWindowHovered(ImGuiHoveredFlags.ChildWindows))nearbyHoverUntil=now.AddMilliseconds(300);
+            if(nearbyHoverMenu=="World"){
                     EnsureBidWorlds();var region=TravelRegion(Player.CurrentWorld.RowId);
                     var groups=bidWorlds!.Where(w=>w.Region==region).GroupBy(w=>w.Dc).OrderBy(g=>g.Key).ToArray();
                     if(groups.Length>0&&ImGui.BeginTable("NearbyWorlds",groups.Length,ImGuiTableFlags.BordersInnerV)){
@@ -82,9 +112,9 @@ public sealed partial class Plugin
                                 ImGui.EndDisabled();}}
                         ImGui.EndTable();
                     }
-                    ImGui.EndTabItem();
+
                 }
-                if(source.ObjectKind==ObjectKind.Aetheryte&&ImGui.BeginTabItem("Aethernet")){
+                if(nearbyHoverMenu=="Aethernet"){
                     if(nearbyShardSource!=source.BaseId||nearbyShardCharacter!=Player.ContentId||now>=nearbyShardRefresh){
                         nearbyShardSource=source.BaseId;nearbyShardCharacter=Player.ContentId;nearbyShardRefresh=now.AddSeconds(5);
                         var sheet=DataManager.GetExcelSheet<Aetheryte>();var group=sheet.GetRowOrDefault(source.BaseId)?.AethernetGroup??0;
@@ -95,29 +125,34 @@ public sealed partial class Plugin
                         if(!RequestUnlockedAethernet(shard.Id,out var reason))FollowChatNotice("TRAVEL — "+reason);
                     }
                     if(nearbyShards.Length==0)ImGui.TextDisabled("Use the transport menu for this location.");
-                    ImGui.EndTabItem();
+
                 }
-                if(source.ObjectKind==ObjectKind.Aetheryte&&housingDistrict.Length>0&&ImGui.BeginTabItem("Housing wards")){
+                if(nearbyHoverMenu=="Housing"){
                     ImGui.TextUnformatted(housingDistrict);
                     if(ImGui.BeginTable("NearbyWards",5)){
                         for(var ward=1;ward<=30;ward++){
                             ImGui.TableNextColumn();
                             if(ImGui.Selectable("Ward "+ward)&&TargetWithinInteractionRange(source))
-                                StartNativeHousing(Player.CurrentWorld.RowId,housingDistrict,ward,1,wardOnly:true);
+                                StartNativeHousing(Player.CurrentWorld.RowId,housingDistrict,ward,1,wardOnly:true,sourceObject:source.GameObjectId);
                         }
                         ImGui.EndTable();
                     }
                     ImGui.TextDisabled("Stops on arrival in the ward.");
-                    ImGui.EndTabItem();
+
                 }
-                if(ImGui.BeginTabItem("Transport")){
+                if(nearbyHoverMenu=="Transport"||nearbyHoverMenu=="Housing"&&source.ObjectKind!=ObjectKind.Aetheryte){
                     var menu=(AtkUnitBase*)GardenGui.GetAddonByName("SelectString").Address;
                     // Only mirror choices from this exact source's currently visible menu.
                     List<string> choices=Targets.Target?.GameObjectId==source.GameObjectId?TransportChoices(menu):[];
                     if(choices.Count>0){
-                        for(var i=0;i<choices.Count;i++)if(ImGui.Selectable(choices[i]+"##transport"+i)){
+                        for(var i=0;i<choices.Count;i++){
+                            var enabled=NearbyTransportChoiceEnabled(menu,i);
+                            ImGui.BeginDisabled(!enabled);
+                            var clicked=ImGui.Selectable(choices[i]+"##transport"+i);
+                            ImGui.EndDisabled();
+                            if(!clicked)continue;
                             var current=TransportChoices(menu);
-                            if(Targets.Target?.GameObjectId==source.GameObjectId&&i<current.Count&&current[i]==choices[i]){
+                            if(Targets.Target?.GameObjectId==source.GameObjectId&&i<current.Count&&current[i]==choices[i]&&NearbyTransportChoiceEnabled(menu,i)){
                                 RecordTravelPrompt("Nearby transport choice",new{source=source.BaseId,index=i,text=choices[i]});SelectTravelChoice(menu,i);
                             }
                             break;
@@ -126,11 +161,16 @@ public sealed partial class Plugin
                         var system=TargetSystem.Instance();if(system!=null){Targets.Target=source;RecordTravelPrompt("Nearby transport opened",new{source=source.BaseId});system->InteractWithObject((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)source.Address,false);}
                     }
                     ImGui.TextDisabled("Fees and confirmations remain in the game's menu.");
-                    ImGui.EndTabItem();
+
                 }
-                ImGui.EndTabBar();
-            }
         }
         ImGui.End();
+        if(now>nearbyHoverUntil)nearbyHoverMenu="";
+    }
+    private static unsafe bool NearbyTransportChoiceEnabled(AtkUnitBase* menu,int index)
+    {
+        if(menu==null||!menu->IsVisible)return false;
+        var list=((AddonSelectString*)menu)->PopupMenu.PopupMenu.List;
+        return list!=null&&list->IsItemInteractionEnabled&&index>=0&&index<list->ListLength&&!list->GetItemDisabledState(index);
     }
 }
