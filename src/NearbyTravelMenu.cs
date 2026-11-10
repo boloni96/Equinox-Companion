@@ -108,7 +108,22 @@ public sealed partial class Plugin
                     var groups=bidWorlds!.Where(w=>w.Region==region).GroupBy(w=>w.Dc).OrderBy(g=>g.Key).ToArray();
                     if(groups.Length>0&&ImGui.BeginTable("NearbyWorlds",groups.Length,ImGuiTableFlags.BordersInnerV)){
                         foreach(var group in groups){ImGui.TableNextColumn();ImGui.TextDisabled(group.Key);
-                            foreach(var world in group){ImGui.BeginDisabled(world.Id==Player.CurrentWorld.RowId);
+                            foreach(var world in group){
+                                if(world.Id==Player.HomeWorld.RowId){
+                                    // Draw a small house independently of font glyph availability.
+                                    // Home identity stays marked while visiting another world.
+                                    var height=ImGui.GetTextLineHeight();var size=height*.8f;
+                                    var point=ImGui.GetCursorScreenPos()+new Vector2(0,(height-size)*.5f);
+                                    var draw=ImGui.GetWindowDrawList();var color=ImGui.GetColorU32(new Vector4(.55f,.82f,1,1));
+                                    draw.AddLine(point+new Vector2(0,size*.45f),point+new Vector2(size*.5f,0),color,1.5f);
+                                    draw.AddLine(point+new Vector2(size*.5f,0),point+new Vector2(size,size*.45f),color,1.5f);
+                                    draw.AddRect(point+new Vector2(size*.18f,size*.4f),point+new Vector2(size*.82f,size),color,0,ImDrawFlags.None,1.5f);
+                                    draw.AddRectFilled(point+new Vector2(size*.42f,size*.65f),point+new Vector2(size*.58f,size),color);
+                                    ImGui.Dummy(new Vector2(size,height));
+                                    if(ImGui.IsItemHovered())ImGui.SetTooltip("Home world · "+world.Name);
+                                    ImGui.SameLine(0,4);
+                                }
+                                ImGui.BeginDisabled(world.Id==Player.CurrentWorld.RowId);
                                 if(ImGui.Selectable(world.Name)&&TargetWithinInteractionRange(source))StartSharedWorldTravel("w "+world.Name);
                                 ImGui.EndDisabled();}}
                         ImGui.EndTable();
