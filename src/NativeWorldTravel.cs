@@ -24,10 +24,10 @@ public sealed partial class Plugin
     }
     private NativeWorldTrip? nativeWorldTrip;
     private string nativeTravelStatus="Choose a map, aetheryte or world.";
-    private uint TravelDc(uint world)=>DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().GetRowOrDefault(world)?.LogicalDataCenter.RowId??0;
-    private uint TravelRegion(uint world)=>DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().GetRowOrDefault(world)?.LogicalDataCenter.Value.Region.RowId??0;
+    private uint TravelDc(uint world)=>DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().GetRowOrDefault(world)?.LogicalDc().RowId??0;
+    private uint TravelRegion(uint world)=>DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().GetRowOrDefault(world)?.LogicalDc().Region.RowId??0;
     private bool UsesWorldVisit(uint source,uint destination)=>NativeTravelPolicy.UsesWorldVisit(TravelDc(source),TravelDc(destination),TravelRegion(source),TravelRegion(destination));
-    private string TravelDcName(uint world)=>DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().GetRowOrDefault(world)?.LogicalDataCenter.Value.Name.ToString()??"";
+    private string TravelDcName(uint world)=>DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().GetRowOrDefault(world)?.LogicalDc().Name.ToString()??"";
     private bool CanRequestWorldTravel(uint destination,out string reason)
     {
         reason="";
@@ -35,8 +35,8 @@ public sealed partial class Plugin
         var target=worlds.GetRowOrDefault(destination);
         var home=worlds.GetRowOrDefault(Player.HomeWorld.RowId);
         if(!Player.IsLoaded||home==null||target==null||!target.Value.IsPublic){reason="Wait for your character to load and choose a public world.";return false;}
-        var homeRegion=home.Value.LogicalDataCenter.Value.Region.RowId;
-        var targetRegion=target.Value.LogicalDataCenter.Value.Region.RowId;
+        var homeRegion=home.Value.LogicalDc().Region.RowId;
+        var targetRegion=target.Value.LogicalDc().Region.RowId;
         if(NativeTravelPolicy.RegionReachable(homeRegion,targetRegion))return true;
         reason=$"Travel unavailable: a character from {home.Value.Name} cannot visit {target.Value.Name} under the supported regional travel rules. No journey started.";
         RecordTravelPrompt("Travel request rejected",new{home=Player.HomeWorld.RowId,current=Player.CurrentWorld.RowId,destination,homeRegion,targetRegion,reason});

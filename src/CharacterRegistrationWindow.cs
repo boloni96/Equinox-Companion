@@ -59,7 +59,7 @@ public sealed partial class Plugin
         var snapshot=registrationSnapshot;
         if(snapshot is null||!Player.IsLoaded||snapshot.Actor.ContentId!=Player.ContentId.ToString()||registrationSession!=config.PairingKey+":"+Player.ContentId)return;
         var world=DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().GetRowOrDefault(snapshot.Actor.HomeWorldId);
-        var dc=world?.LogicalDataCenter.Value;
+        var dc=world?.LogicalDc();
         var region=dc?.Region.RowId switch {1=>"Japan",2=>"North America",3=>"Europe",4=>"Oceania",_=>""};
         var registration=new CharacterRegistration(personId,accountId,personName.Trim(),accountName.Trim(),snapshot.Character?.AccountKey??"",dc?.Name.ToString()??"",region,RegistrationScope);
         if(!CharacterRegistrationPolicy.Valid(registration))return;

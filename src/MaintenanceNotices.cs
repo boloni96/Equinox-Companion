@@ -25,7 +25,7 @@ public sealed partial class Plugin
    if(task.IsCompletedSuccessfully)
    {
     maintenanceNextCheck=now.AddMinutes(15);maintenanceFailureShown=false;
-    var world=Player.HomeWorld.Value.Name.ToString();var dc=Player.HomeWorld.Value.LogicalDataCenter.Value.Name.ToString();
+    var world=Player.HomeWorld.Value.Name.ToString();var dc=Player.HomeWorld.Value.LogicalDc().Name.ToString();
     foreach(var notice in task.Result.Where(n=>n.Relevant(world,dc)&&n.Scheduled(now)).Take(3))
      if(maintenanceSession.New(notice))PrintMaintenance(notice.Message(now,TimeZoneInfo.Local),notice.Url);
    }

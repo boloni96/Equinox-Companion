@@ -77,7 +77,7 @@ public sealed partial class Plugin
         var sheet=DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>();
         var destination=sheet.GetRowOrDefault(s.DestinationWorld);var current=sheet.GetRowOrDefault(Player.CurrentWorld.RowId);
         if(destination is not {} target||current is not {} from)return;
-        var cross=target.LogicalDataCenter.RowId!=from.LogicalDataCenter.RowId;
+        var cross=target.LogicalDc().RowId!=from.LogicalDc().RowId;
         if(cross&&!config.FollowThem.FollowDataCenters){TravelDiagnostic("Data Center travel received; the separate Data Center option is off.");return;}
         try{
             if(nativeWorldTrip!=null||LifestreamBusy()){TravelDiagnostic("Travel is already busy; waiting.");return;}

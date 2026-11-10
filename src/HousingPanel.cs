@@ -15,7 +15,7 @@ public sealed partial class Plugin
     {
         var world = DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().GetRowOrDefault(actor.HomeWorldId);
         if (world is null) return actor.HomeWorldName ?? $"World {actor.HomeWorldId}";
-        var dc = world.Value.LogicalDataCenter.Value;
+        var dc = world.Value.LogicalDc();
         var region = dc.Region.RowId switch { 1 => "Japan", 2 => "North America", 3 => "Europe", 4 => "Oceania", _ => "Region unknown" };
         return $"{world.Value.Name} · {dc.Name} · {region}";
     }

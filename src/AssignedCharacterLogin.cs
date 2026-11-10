@@ -25,8 +25,8 @@ public sealed partial class Plugin
     private string CharacterSelectionWorld(string home,string current)
     {
         var worlds=DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>();
-        var homeDc=worlds.Where(w=>w.Name.ToString()==home).Select(w=>w.LogicalDataCenter.RowId).FirstOrDefault();
-        var currentDc=worlds.Where(w=>w.Name.ToString()==current).Select(w=>w.LogicalDataCenter.RowId).FirstOrDefault();
+        var homeDc=worlds.Where(w=>w.Name.ToString()==home).Select(w=>w.LogicalDc().RowId).FirstOrDefault();
+        var currentDc=worlds.Where(w=>w.Name.ToString()==current).Select(w=>w.LogicalDc().RowId).FirstOrDefault();
         return CharacterLoginWorldPolicy.Resolve(home,current,homeDc,currentDc);
     }
     private int GardenServiceAccount(SharedCharacter target)
@@ -165,10 +165,10 @@ public sealed partial class Plugin
         var map=SellerAddon("TitleDCWorldMap");if(map==null)return false;
         if(sent)return true;
         var row=DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().FirstOrDefault(w=>w.Name.ToString()==world);
-        if(row.RowId==0||row.LogicalDataCenter.RowId==0)throw new InvalidOperationException("The target data center could not be identified.");
-        RecordTravelPrompt("Login data center requested",new{world,worldId=row.RowId,logicalDc=row.LogicalDataCenter.RowId,dcName=row.LogicalDataCenter.Value.Name.ToString()});
+        if(row.RowId==0||row.LogicalDc().RowId==0)throw new InvalidOperationException("The target data center could not be identified.");
+        RecordTravelPrompt("Login data center requested",new{world,worldId=row.RowId,logicalDc=row.LogicalDc().RowId,dcName=row.LogicalDc().Name.ToString()});
         usingSharedTravel=true;
-        try{LoginCallback(map,17,(int)row.LogicalDataCenter.RowId);}finally{usingSharedTravel=false;}
+        try{LoginCallback(map,17,(int)row.LogicalDc().RowId);}finally{usingSharedTravel=false;}
         sent=true;return true;
     }
     private unsafe int[] AvailableLoginServiceSlots()
