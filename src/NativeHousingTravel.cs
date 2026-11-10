@@ -14,7 +14,7 @@ public sealed partial class Plugin
         public required uint World;public required ulong Character;public required int Ward,Plot;
         public required NativeHousingDistrict District;public required Task<HousingGeometry> Geometry;
         public required DateTimeOffset Started;public DateTimeOffset Next,StageAt;
-        public bool WardOnly;public ulong SourceObject;public uint ShardOnly;
+        public bool WardOnly;public ulong SourceObject;public uint ShardOnly;public int GreetingClicks;
         public int Stage,Attempt,Selections;public bool WorldSent,TeleportSent,WardSelected,MenuOpened;
         public readonly GardenArrivalGate EntryArrival=new();public bool NearApproachSelected;public Vector3? Approach;public HousingShard? Shard;public Vector3 Source;
     }
@@ -90,6 +90,26 @@ public sealed partial class Plugin
             var self=Objects.LocalPlayer;if(self==null)return;
             if(trip.WardOnly&&Player.CurrentWorld.RowId==trip.World&&HousingAtWard(trip)){
                 StopNativeHousing($"Arrived at {trip.District.Name} · Ward {trip.Ward}.");return;
+            }
+            // NPC greetings precede SelectString and lock ordinary movement.
+            // Advance only the explicitly selected ferry's visible dialogue.
+            if(trip.WardOnly&&trip.SourceObject!=0&&(trip.Stage is 2 or 3)&&SellerAddon("Talk")!=null){
+                var source=Objects.FirstOrDefault(o=>o.GameObjectId==trip.SourceObject);
+                var talk=SellerAddon("Talk");
+                var speaker=talk->AtkValues!=null&&talk->AtkValuesCount>=2&&((int)talk->AtkValues[1].Type&15) is 8 or 10
+                    ?TravelMenuText(talk->AtkValues[1].String.Value)??"":"";
+                var matching=source!=null&&source.ObjectKind==ObjectKind.EventNpc&&Targets.Target?.GameObjectId==source.GameObjectId&&
+                    string.Equals(speaker.Trim(),source.Name.TextValue.Trim(),StringComparison.Ordinal);
+                if(!matching){nativeHousingStatus="Waiting for the selected housing transport's dialogue";return;}
+                if(trip.GreetingClicks>=6)throw new InvalidOperationException("Housing transport dialogue did not finish. Continue it manually, then retry ward travel.");
+                var greeting=HelperTalk().Text;
+                usingSharedTravel=true;
+                try{if(ClickVisibleTalk()){
+                    trip.GreetingClicks++;trip.MenuOpened=true;trip.Next=now.AddMilliseconds(750);
+                    RecordTravelPrompt("Housing transport greeting advanced",new{source=source!.BaseId,speaker,trip.GreetingClicks,trip.Stage,line=greeting});
+                    nativeHousingStatus="Opening housing ward choices";
+                }}finally{usingSharedTravel=false;}
+                return;
             }
             // GO SEE owns arrival only. Garden care and house entry own their
             // inward movement; an estate teleport must not start a yard route.
