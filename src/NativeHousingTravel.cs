@@ -14,7 +14,7 @@ public sealed partial class Plugin
         public required uint World;public required ulong Character;public required int Ward,Plot;
         public required NativeHousingDistrict District;public required Task<HousingGeometry> Geometry;
         public required DateTimeOffset Started;public DateTimeOffset Next,StageAt;
-        public bool WardOnly;public ulong SourceObject;
+        public bool WardOnly;public ulong SourceObject;public uint ShardOnly;
         public int Stage,Attempt,Selections;public bool WorldSent,TeleportSent,WardSelected,MenuOpened;
         public readonly GardenArrivalGate EntryArrival=new();public bool NearApproachSelected;public Vector3? Approach;public HousingShard? Shard;public Vector3 Source;
     }
@@ -33,7 +33,7 @@ public sealed partial class Plugin
         StopIndependentWalk(reason);nativeHousingStatus=bidTravelMessage=characterTravelStatus=reason;
         RecordTravelPrompt("Housing travel stopped",new{reason});FollowChatNotice("TRAVEL — "+reason);
     }
-    private void StartNativeHousing(uint world,string district,int ward,int plot,bool wardOnly=false,ulong sourceObject=0)
+    private void StartNativeHousing(uint world,string district,int ward,int plot,bool wardOnly=false,ulong sourceObject=0,uint shardOnly=0)
     {
         if(!CanRequestWorldTravel(world,out var reason)){bidTravelMessage=characterTravelStatus=reason;return;}
         var area=NativeHousingPolicy.District(district);
@@ -42,7 +42,7 @@ public sealed partial class Plugin
             bidTravelMessage="Another journey is active. Stop it before starting GO SEE.";return;
         }
         var now=DateTimeOffset.UtcNow;
-        var trip=new NativeHousingTrip{World=world,Character=Player.ContentId,Ward=ward,Plot=plot,District=area,Geometry=wardOnly?Task.FromResult(new HousingGeometry([],[],[])):LoadHousingGeometry(area),Started=now,WardOnly=wardOnly,SourceObject=sourceObject};
+        var trip=new NativeHousingTrip{World=world,Character=Player.ContentId,Ward=ward,Plot=plot,District=area,Geometry=wardOnly?Task.FromResult(new HousingGeometry([],[],[])):LoadHousingGeometry(area),Started=now,WardOnly=wardOnly,SourceObject=sourceObject,ShardOnly=shardOnly};
         nativeHousingTrip=trip;HousingStage(trip,0,"Reading game housing destinations");
     }
     private void BeginNativeEstateLanding(uint world,string district,int ward,int plot){
@@ -117,7 +117,12 @@ public sealed partial class Plugin
                 if(trip.WardOnly){HousingStage(trip,1,"Reaching the housing ward");return;}
                 if(!trip.Geometry.IsCompleted)return;
                 if(!trip.Geometry.IsCompletedSuccessfully)throw new InvalidOperationException(trip.Geometry.Exception?.GetBaseException().Message??"Housing layout unavailable.");
-                var data=trip.Geometry.Result;var placard=data.Placards[trip.Plot-1];
+                var data=trip.Geometry.Result;
+                if(trip.ShardOnly!=0){
+                    trip.Shard=data.Shards.SingleOrDefault(s=>s.Id==trip.ShardOnly)??throw new InvalidOperationException("The requested residential shard is unavailable.");
+                    HousingStage(trip,1,"Reaching the residential aethernet");return;
+                }
+                var placard=data.Placards[trip.Plot-1];
                 var ordered=data.Shards.OrderBy(s=>s.Order).ToArray();var half=ordered.Length/2;
                 trip.Shard=ordered.Where((s,i)=>(i>=half)==(trip.Plot>30)).MinBy(s=>Vector3.DistanceSquared(s.Position,placard));
                 if(trip.Shard==null)throw new InvalidOperationException("No verified shard for the plot's division.");
@@ -195,12 +200,13 @@ public sealed partial class Plugin
             }
             if(trip.Stage==6){if(HousingAtWard(trip))HousingStage(trip,7,"Choosing a residential shard");return;}
             if(!HousingAtWard(trip))throw new InvalidOperationException("The current residential district or ward differs from the requested address.");
-            var shard=trip.Shard!;var targetPlot=trip.Geometry.Result.Placards[trip.Plot-1];
+            var shard=trip.Shard!;var targetPlot=trip.ShardOnly!=0?shard.Position:trip.Geometry.Result.Placards[trip.Plot-1];
             if(trip.Stage==7){
                 // Using the same shard cannot shorten this trip. Walk directly from
                 // the current street/plot instead of approaching it and cancelling.
                 var nearest=trip.Geometry.Result.Shards.MinBy(s=>Vector3.DistanceSquared(self.Position,s.Position));
-                if(nearest?.Id==shard.Id||nearest!=null&&AethernetTravelPolicy.PreferWalking(self.Position,targetPlot,nearest.Position,shard.Position)||Vector3.Distance(self.Position,shard.Position)<12){HousingStage(trip,10,"Walking to plot "+trip.Plot);return;}
+                if(trip.ShardOnly!=0&&nearest?.Id==shard.Id&&Vector3.Distance(self.Position,shard.Position)<12){StopNativeHousing("Already at "+shard.Name+".");return;}
+                if(trip.ShardOnly==0&&(nearest?.Id==shard.Id||nearest!=null&&AethernetTravelPolicy.PreferWalking(self.Position,targetPlot,nearest.Position,shard.Position)||Vector3.Distance(self.Position,shard.Position)<12)){HousingStage(trip,10,"Walking to plot "+trip.Plot);return;}
                 var source=Objects.Where(x=>x.IsTargetable&&x.ObjectKind is ObjectKind.Aetheryte or ObjectKind.EventObj&&
                     trip.Geometry.Result.Shards.Any(s=>Vector3.DistanceSquared(s.Position,x.Position)<16)).MinBy(x=>Vector3.DistanceSquared(self.Position,x.Position));
                 if(source==null){
@@ -212,7 +218,10 @@ public sealed partial class Plugin
                 if(!HousingApproach(trip,source,now))return;
                 if(HousingInteract(source)){trip.Source=self.Position;HousingStage(trip,8,"Selecting "+shard.Name);}return;
             }
-            if(trip.Stage is 8 or 9&&Vector3.Distance(self.Position,shard.Position)<12&&Vector3.Distance(self.Position,trip.Source)>8){HousingStage(trip,10,"Walking to plot "+trip.Plot);return;}
+            if(trip.Stage is 8 or 9&&Vector3.Distance(self.Position,shard.Position)<12&&Vector3.Distance(self.Position,trip.Source)>8){
+                if(trip.ShardOnly!=0){StopNativeHousing("Arrived at "+shard.Name+".");return;}
+                HousingStage(trip,10,"Walking to plot "+trip.Plot);return;
+            }
             if(trip.Stage==8){
                 var town=SellerAddon("TelepotTown");
                 if(town==null){if(now-trip.StageAt>TimeSpan.FromSeconds(10))throw new InvalidOperationException("Residential aethernet menu did not open.");return;}
@@ -220,6 +229,13 @@ public sealed partial class Plugin
                 if(choices.Length!=1){
                     if(now-trip.StageAt<TimeSpan.FromSeconds(10)){nativeHousingStatus="Waiting for residential shard destinations to load";return;}
                     throw new InvalidOperationException("The requested residential shard was not uniquely available after waiting for the menu to load.");
+                }
+                if(trip.ShardOnly!=0){
+                    var agent=FFXIVClientStructs.FFXIV.Client.UI.Agent.AgentTelepotTown.Instance();
+                    var callback=choices[0].Callback;
+                    if(agent==null||agent->Data==null||agent->Data->AetheryteCount>64||callback>=agent->Data->AetheryteCount)throw new InvalidOperationException("Residential shard availability is not ready.");
+                    var entry=agent->Data->Entries[(int)callback];
+                    if(entry.IsLocked||entry.IsUnusable)throw new InvalidOperationException("This residential shard is currently unavailable.");
                 }
                 NativeTravelCallback(town,11,(int)choices[0].Callback);trip.Selections++;
                 if(trip.Selections>=2)HousingStage(trip,9,"Waiting for residential shard arrival");return;

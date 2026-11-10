@@ -1,3 +1,4 @@
+using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
@@ -71,8 +72,18 @@ public sealed partial class Plugin
             }
         }
         if(matches!=1||selected==null)return false;
-        RecordTravelPrompt("World Visit world requested",new{world=expected,row=selectedIndex});
-        usingSharedTravel=true;try{selected->DispatchItemEvent(selectedIndex,AtkEventType.ListItemClick);}finally{usingSharedTravel=false;}
+        // The renderer row is not the addon callback index. Native world choices
+        // are offsets 3..10 of WorldTranslate; their callback values start at 2.
+        var module=RaptureAtkModule.Instance();var arrayIndex=(int)StringArrayType.WorldTranslate;
+        if(module==null||module->AtkArrayDataHolder.StringArrayCount<=arrayIndex||module->AtkArrayDataHolder.StringArrays==null)return false;
+        var strings=module->AtkArrayDataHolder.StringArrays[arrayIndex];
+        if(strings==null||strings->Size<11||strings->StringArray==null)return false;
+        var worlds=new string[8];
+        for(var i=0;i<worlds.Length;i++)worlds[i]=(TravelMenuText(strings->StringArray[i+3].Value)??"").Trim();
+        var callback=WorldVisitSelectionPolicy.Callback(worlds,expected);
+        if(callback<0)return false;
+        RecordTravelPrompt("World Visit world requested",new{world=expected,row=selectedIndex,callback,worlds});
+        NativeTravelCallback(menu,0,callback);
         return true;
     }
 }

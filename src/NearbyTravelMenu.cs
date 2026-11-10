@@ -6,6 +6,7 @@ using Dalamud.Game.ClientState.Objects.Types;
 using FFXIVClientStructs.FFXIV.Client.Game.Control;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using FFXIVClientStructs.FFXIV.Client.UI;
+using FFXIVClientStructs.FFXIV.Client.Game;
 using Lumina.Excel;
 using Lumina.Excel.Sheets;
 namespace EquinoxCompanion;
@@ -100,7 +101,7 @@ public sealed partial class Plugin
         var panelPivot=pos==1?new Vector2(0,1):pos==3?new Vector2(1,0):Vector2.Zero;
         ImGui.SetNextWindowPos(nearbyHoverAnchor,ImGuiCond.Always,panelPivot);
         ImGui.SetNextWindowSizeConstraints(new Vector2(260,0),new Vector2(Math.Min(800,vp.WorkSize.X-24),Math.Max(150,vp.WorkSize.Y-120)));
-        if(ImGui.Begin("##EquinoxTravelHoverDestinations",ImGuiWindowFlags.AlwaysAutoResize|ImGuiWindowFlags.NoDecoration|ImGuiWindowFlags.NoMove|ImGuiWindowFlags.NoSavedSettings|ImGuiWindowFlags.NoFocusOnAppearing)){
+        if(ImGui.Begin("##EquinoxTravelHoverDestinations",ImGuiWindowFlags.AlwaysAutoResize|ImGuiWindowFlags.NoTitleBar|ImGuiWindowFlags.NoResize|ImGuiWindowFlags.NoCollapse|ImGuiWindowFlags.NoMove|ImGuiWindowFlags.NoSavedSettings|ImGuiWindowFlags.NoFocusOnAppearing)){
             if(ImGui.IsWindowHovered(ImGuiHoveredFlags.ChildWindows))nearbyHoverUntil=now.AddMilliseconds(300);
             if(nearbyHoverMenu=="World"){
                     EnsureBidWorlds();var region=TravelRegion(Player.CurrentWorld.RowId);
@@ -115,6 +116,21 @@ public sealed partial class Plugin
 
                 }
                 if(nearbyHoverMenu=="Aethernet"){
+                    var residentialName=Client.TerritoryType switch{339=>"Mist",340=>"The Lavender Beds",341=>"The Goblet",641=>"Shirogane",979=>"Empyreum",_=>""};
+                    if(residentialName.Length>0){
+                        var district=NativeHousingPolicy.District(residentialName)!;
+                        var geometry=LoadHousingGeometry(district);
+                        if(!geometry.IsCompleted)ImGui.TextDisabled("Loading residential destinations…");
+                        else if(!geometry.IsCompletedSuccessfully)ImGui.TextDisabled("Residential destination data is unavailable.");
+                        else foreach(var shard in geometry.Result.Shards.OrderBy(x=>x.Order)){
+                            ImGui.BeginDisabled(Objects.LocalPlayer is {} self&&Vector3.Distance(self.Position,shard.Position)<12);
+                            var chosen=ImGui.Selectable(shard.Name+"##residential"+shard.Id);ImGui.EndDisabled();
+                            if(chosen&&TargetWithinInteractionRange(source)){
+                                var housing=HousingManager.Instance();if(housing!=null)
+                                    StartNativeHousing(Player.CurrentWorld.RowId,residentialName,housing->GetCurrentWard()+1,1,sourceObject:source.GameObjectId,shardOnly:shard.Id);
+                            }
+                        }
+                    }else{
                     if(nearbyShardSource!=source.BaseId||nearbyShardCharacter!=Player.ContentId||now>=nearbyShardRefresh){
                         nearbyShardSource=source.BaseId;nearbyShardCharacter=Player.ContentId;nearbyShardRefresh=now.AddSeconds(5);
                         var sheet=DataManager.GetExcelSheet<Aetheryte>();var group=sheet.GetRowOrDefault(source.BaseId)?.AethernetGroup??0;
@@ -124,7 +140,8 @@ public sealed partial class Plugin
                     foreach(var shard in nearbyShards)if(ImGui.Selectable(shard.Name)&&TargetWithinInteractionRange(source)){
                         if(!RequestUnlockedAethernet(shard.Id,out var reason))FollowChatNotice("TRAVEL — "+reason);
                     }
-                    if(nearbyShards.Length==0)ImGui.TextDisabled("Use the transport menu for this location.");
+                    if(nearbyShards.Length==0)ImGui.TextDisabled("No unlocked aethernet destinations at this location.");
+                    }
 
                 }
                 if(nearbyHoverMenu=="Housing"){
