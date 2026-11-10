@@ -28,9 +28,22 @@ public sealed partial class Plugin
         var addon=SellerAddon("InventoryBuddy");if(addon==null)addon=SellerAddon("InventoryBuddy2");
         if(addon==null||addon->RootNode==null)return;
         var scale=addon->Scale;var width=addon->RootNode->Width*scale;var height=addon->RootNode->Height*scale;
-        ImGui.SetNextWindowPos(new Vector2(addon->X+width-12*scale,addon->Y+height-10*scale),ImGuiCond.Always,new Vector2(1,1));
-        PushRetainerToolbarStyle();
-        if(ImGui.Begin("##EquinoxSaddlebagDuplicates",ImGuiWindowFlags.AlwaysAutoResize|ImGuiWindowFlags.NoDecoration|ImGuiWindowFlags.NoMove|ImGuiWindowFlags.NoSavedSettings|ImGuiWindowFlags.NoFocusOnAppearing)){
+        ImGui.SetNextWindowPos(new Vector2(addon->X+width-26*scale,addon->Y+height-26*scale),ImGuiCond.Always,new Vector2(1,1));
+        // Keep the control inside the native footer, with no floating toolbar box.
+        MarketGameConfig.TryGet(Dalamud.Game.Config.SystemConfigOption.ColorThemeType,out uint theme);
+        var light=theme==1;
+        ImGui.PushStyleColor(ImGuiCol.Text,light?new Vector4(.14f,.16f,.17f,1):new Vector4(.90f,.90f,.87f,1));
+        ImGui.PushStyleColor(ImGuiCol.Button,light?new Vector4(.70f,.73f,.74f,1):new Vector4(.17f,.22f,.25f,1));
+        ImGui.PushStyleColor(ImGuiCol.ButtonHovered,light?new Vector4(.81f,.84f,.85f,1):new Vector4(.25f,.32f,.36f,1));
+        ImGui.PushStyleColor(ImGuiCol.ButtonActive,light?new Vector4(.60f,.65f,.67f,1):new Vector4(.12f,.18f,.21f,1));
+        ImGui.PushStyleColor(ImGuiCol.Border,new Vector4(.43f,.49f,.51f,1));
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding,Vector2.Zero);
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize,0f);
+        ImGui.PushStyleVar(ImGuiStyleVar.FramePadding,new Vector2(8,3)*scale);
+        ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding,3f*scale);
+        ImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize,1f);
+
+        if(ImGui.Begin("##EquinoxSaddlebagDuplicates",ImGuiWindowFlags.NoBackground|ImGuiWindowFlags.AlwaysAutoResize|ImGuiWindowFlags.NoDecoration|ImGuiWindowFlags.NoMove|ImGuiWindowFlags.NoSavedSettings|ImGuiWindowFlags.NoFocusOnAppearing)){
             if(localStorageRunning&&localStorageDuplicates){
                 if(ImGui.Button("Stop##SaddleDuplicates"))StopChest("Stopped by you. An already-sent transfer may still complete.");
                 MarketHelp(chestStatus);
@@ -43,6 +56,6 @@ public sealed partial class Plugin
             var status=retrievalError.Length>0?retrievalError:localStorageDuplicates?chestStatus:"";
             if(status.Length>0){ImGui.SameLine();ImGui.TextDisabled("i");MarketHelp(status);}
         }
-        ImGui.End();ImGui.PopStyleVar(2);ImGui.PopStyleColor(7);
+        ImGui.End();ImGui.PopStyleVar(5);ImGui.PopStyleColor(5);
     }
 }
