@@ -29,9 +29,9 @@ public sealed partial class Plugin
     private void RecordTravelPrompt(string kind,object detail)
     {
         while(travelPromptHistory.Count>=600){travelPromptHistory.Dequeue();travelPromptDropped++;}
-        travelPromptHistory.Enqueue(new {sequence=++travelPromptSequence,at=DateTimeOffset.UtcNow,kind,trip=nativeWorldTrip?.Id,stage=nativeWorldTrip?.Stage.ToString(),detail});
+        travelPromptHistory.Enqueue(new {sequence=++travelPromptSequence,at=DateTimeOffset.UtcNow,kind,trip=nativeWorldTrip?.Id,stage=nativeWorldTrip?.Stage.ToString(),status=nativeTravelStatus,detail});
     }
-    private object TravelPromptExport()=>new {schema=1,capacity=600,dropped=travelPromptDropped,coverage="Known travel and login menus; text/buttons on changes, callbacks when hooked. Not every game UI event.",records=travelPromptHistory.ToArray()};
+    private object TravelPromptExport()=>new {schema=2,capacity=600,dropped=travelPromptDropped,coverage="Known travel/login menus and World Visit controls, DC/world rows, input parameters, callbacks and wait reasons. Bounded snapshots on changes; not every game UI event.",records=travelPromptHistory.ToArray()};
     private unsafe void UpdateTravelPromptRecorder(DateTimeOffset now)
     {
         if(now<travelPromptNext)return;
@@ -49,7 +49,7 @@ public sealed partial class Plugin
                         buttons.Add(new{id,enabled=button->IsEnabled,texts=TravelNodeText(&button->AtkComponentBase.UldManager)});
                     }
                     var options=name=="SelectString"?TransportChoices(addon):null;
-                    var state=new {addon=name,menu=snapshot,buttons,options,trees=name=="LobbyDKTWorldList"?ReadNativeTravelTrees(addon):null};var fingerprint=JsonSerializer.Serialize(state);
+                    var state=new {addon=name,menu=snapshot,buttons,options,trees=name=="LobbyDKTWorldList"?ReadNativeTravelTrees(addon):null,worldVisit=name=="WorldTravelSelect"?ReadWorldVisitControls(addon):null};var fingerprint=JsonSerializer.Serialize(state);
                     if(!travelPromptLast.TryGetValue(name,out var old)||old!=fingerprint){travelPromptLast[name]=fingerprint;RecordTravelPrompt(old==null?"Menu opened":"Menu changed",state);}
                 }
                 if(Stopwatch.GetElapsedTime(started).TotalMilliseconds>=1){travelPromptCursor++;break;}
@@ -57,7 +57,7 @@ public sealed partial class Plugin
             if(travelPromptCursor>=RecordedTravelMenus.Length){
                 travelPromptCursor=0;travelPromptNext=now.AddMilliseconds(250);
                 var lobby=AgentLobby.Instance();
-                var state=new {loaded=Player.IsLoaded,character=Player.ContentId,world=Player.CurrentWorld.RowId,home=Player.HomeWorld.RowId,serviceAccount=lobby==null?-1:(int)lobby->ServiceAccountIndex,locked=lobby!=null&&lobby->TemporaryLocked,loginStatus=characterTravelStatus};
+                var state=new {loaded=Player.IsLoaded,character=Player.ContentId,world=Player.CurrentWorld.RowId,home=Player.HomeWorld.RowId,serviceAccount=lobby==null?-1:(int)lobby->ServiceAccountIndex,locked=lobby!=null&&lobby->TemporaryLocked,loginStatus=characterTravelStatus,travelStatus=nativeTravelStatus,travelStage=nativeWorldTrip?.Stage.ToString(),destination=nativeWorldTrip?.Leg};
                 var fingerprint=JsonSerializer.Serialize(state);
                 if(fingerprint!=travelLoginFingerprint){travelLoginFingerprint=fingerprint;RecordTravelPrompt("Travel identity changed",state);}
             }
