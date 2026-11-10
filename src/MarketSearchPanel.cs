@@ -223,7 +223,7 @@ public sealed partial class Plugin
         var changed = ImGui.Combo("##MarketRegion", ref marketRegion, "All regions\0North America\0Europe\0Japan\0Oceania\0");
         if(ImGui.IsItemHovered()) ImGui.SetTooltip("Region");
         if(changed) marketWorld = 0;
-        marketWorlds ??= DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().Where(w => w.IsPublic)
+        marketWorlds ??= DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().Where(w => w.IsTravelWorld())
             .Select(w => (Id:w.RowId, Name:w.Name.ToString(), Region:(int)w.LogicalDc().Region.RowId switch { 1 => 3, 2 => 1, 3 => 2, 4 => 4, _ => 0 }))
             .Where(w => w.Region != 0).OrderBy(w => w.Name).ToArray();
         ImGui.TableNextColumn(); ImGui.TextDisabled("World"); ImGui.SetNextItemWidth(-1);

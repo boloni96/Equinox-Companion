@@ -47,7 +47,7 @@ public sealed partial class Plugin
         {
             var roster=config.SyncEnabled&&config.Seller.SyncToJournal&&config.PairingKey.Length==64?config.SharedRoster:null;
             if(ReferenceEquals(pairedMarketLocal,marketLedger.Retainers)&&ReferenceEquals(pairedMarketRoster,roster))return pairedMarketRows;
-            pairedMarketWorlds??=DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().Where(w=>w.IsPublic)
+            pairedMarketWorlds??=DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().Where(w=>w.IsTravelWorld())
                 .ToDictionary(w=>w.Name.ToString(),w=>w.RowId,StringComparer.OrdinalIgnoreCase);
             var rows=PairedMarketView.Build(marketLedger.Retainers,roster,name=>pairedMarketWorlds.GetValueOrDefault(name),DateTimeOffset.UtcNow);
             pairedMarketLocal=marketLedger.Retainers;pairedMarketRoster=roster;

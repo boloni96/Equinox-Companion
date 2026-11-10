@@ -58,6 +58,9 @@ public sealed partial class Plugin
         }
         var source=Objects.FirstOrDefault(o=>o.GameObjectId==nearbyTravelObject);
         if(source==null||!source.IsTargetable)return;
+        // Resolve before opening ImGui scopes. Unavailable worlds must not leave a half-open UI stack.
+        EnsureBidWorlds();
+        var housingDistrict=source.BaseId switch {2=>"The Lavender Beds",8=>"Mist",9=>"The Goblet",70=>"Empyreum",111=>"Shirogane",_=>""};
         var vp=ImGui.GetMainViewport();var pos=config.NearbyTravelMenuPosition;
         if(pos!=4){
             var pivot=pos switch{1=>new Vector2(.5f,1),2=>new Vector2(0,.5f),3=>new Vector2(1,.5f),_=>new Vector2(.5f,0)};
@@ -69,7 +72,7 @@ public sealed partial class Plugin
         if(ImGui.Begin("Equinox Travel##nearby",flags)){
             ImGui.TextDisabled(source.Name.ToString());
             if(ImGui.BeginTabBar("NearbyTravelTabs")){
-                if(source.ObjectKind==ObjectKind.Aetheryte&&source.BaseId is 2 or 8 or 9&&ImGui.BeginTabItem("World")){
+                if(source.ObjectKind==ObjectKind.Aetheryte&&source.BaseId is 2 or 8 or 9&&ImGui.BeginTabItem("Worlds")){
                     EnsureBidWorlds();var region=TravelRegion(Player.CurrentWorld.RowId);
                     var groups=bidWorlds!.Where(w=>w.Region==region).GroupBy(w=>w.Dc).OrderBy(g=>g.Key).ToArray();
                     if(groups.Length>0&&ImGui.BeginTable("NearbyWorlds",groups.Length,ImGuiTableFlags.BordersInnerV)){
@@ -94,9 +97,17 @@ public sealed partial class Plugin
                     if(nearbyShards.Length==0)ImGui.TextDisabled("Use the transport menu for this location.");
                     ImGui.EndTabItem();
                 }
-                if(source.ObjectKind==ObjectKind.Aetheryte&&ImGui.BeginTabItem("Housing")){
-                    foreach(var command in new[]{"priv","fc","shared","shared2","epriv","efc","workshop"})
-                        if(ImGui.Selectable("/et "+command))StartSharedWorldTravel(command);
+                if(source.ObjectKind==ObjectKind.Aetheryte&&housingDistrict.Length>0&&ImGui.BeginTabItem("Housing wards")){
+                    ImGui.TextUnformatted(housingDistrict);
+                    if(ImGui.BeginTable("NearbyWards",5)){
+                        for(var ward=1;ward<=30;ward++){
+                            ImGui.TableNextColumn();
+                            if(ImGui.Selectable("Ward "+ward)&&TargetWithinInteractionRange(source))
+                                StartNativeHousing(Player.CurrentWorld.RowId,housingDistrict,ward,1,wardOnly:true);
+                        }
+                        ImGui.EndTable();
+                    }
+                    ImGui.TextDisabled("Stops on arrival in the ward.");
                     ImGui.EndTabItem();
                 }
                 if(ImGui.BeginTabItem("Transport")){

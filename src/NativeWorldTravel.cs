@@ -34,7 +34,7 @@ public sealed partial class Plugin
         var worlds=DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>();
         var target=worlds.GetRowOrDefault(destination);
         var home=worlds.GetRowOrDefault(Player.HomeWorld.RowId);
-        if(!Player.IsLoaded||home==null||target==null||!target.Value.IsPublic){reason="Wait for your character to load and choose a public world.";return false;}
+        if(!Player.IsLoaded||home==null||target==null||!target.Value.IsTravelWorld()||!home.Value.TryLogicalDc(out _)){reason="Wait for your character to load and choose a public world.";return false;}
         var homeRegion=home.Value.LogicalDc().Region.RowId;
         var targetRegion=target.Value.LogicalDc().Region.RowId;
         if(NativeTravelPolicy.RegionReachable(homeRegion,targetRegion))return true;

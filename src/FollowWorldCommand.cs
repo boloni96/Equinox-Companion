@@ -31,7 +31,7 @@ public sealed partial class Plugin
     }
     private uint ResolveFollowWorld(string name)
     {
-        var matches=FollowWorldNames.Matches(DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().Where(x=>x.IsPublic).Select(x=>(x.RowId,x.Name.ToString())),name);
+        var matches=FollowWorldNames.Matches(DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().Where(x=>x.IsTravelWorld()).Select(x=>(x.RowId,x.Name.ToString())),name);
         return matches.Length==1?matches[0].Id:0;
     }
     private void ShareFollowWorldIntent(uint world)
@@ -69,11 +69,11 @@ public sealed partial class Plugin
         if(worldOnly||teleportOnly)worldName=parts.Length>1?TeleportNameSearch.Query(parts[1]):"";
         if(worldOnly&&worldName.Length==0){FollowChatNotice("TRAVEL — /et world <name> or /et w <name>. Example: /et w sophia");return;}
         if(worldName.Length==0){FollowChatNotice("TRAVEL — /et <aetheryte, map or world name>. Examples: /et saucer, /et golden, /et sau. Estates: fc, priv, efc, epriv, workshop (or ws), shared/sha, shared2/sha2; prefix e to enter a shared house.");return;}
-        var exactWorld=DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().Any(x=>x.IsPublic&&string.Equals(x.Name.ToString(),worldName,StringComparison.OrdinalIgnoreCase));
+        var exactWorld=DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().Any(x=>x.IsTravelWorld()&&string.Equals(x.Name.ToString(),worldName,StringComparison.OrdinalIgnoreCase));
         if(!worldOnly&&(teleportOnly||!exactWorld)&&TryNamedTeleport(worldName,teleportOnly||worldName.StartsWith('#')))return;
         var world=ResolveFollowWorld(worldName);
         if(world==0){
-            var matches=FollowWorldNames.Matches(DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().Where(x=>x.IsPublic).Select(x=>(x.RowId,x.Name.ToString())),worldName);
+            var matches=FollowWorldNames.Matches(DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().Where(x=>x.IsTravelWorld()).Select(x=>(x.RowId,x.Name.ToString())),worldName);
             FollowChatNotice(matches.Length>1?"TRAVEL — Ambiguous World: "+string.Join(", ",matches.Select(x=>x.Name)):"TRAVEL — No unlocked teleport or world matches. Use an aetheryte/map name, /et world <name> (or /et w <name>), fc, priv, efc, epriv, workshop (ws), shared (sha), shared2 (sha2), or eshared (esha).");return;
         }
         if(StartNativeWorldTravel(world))ShareFollowWorldIntent(world);

@@ -14,6 +14,7 @@ public sealed partial class Plugin
         public required uint World;public required ulong Character;public required int Ward,Plot;
         public required NativeHousingDistrict District;public required Task<HousingGeometry> Geometry;
         public required DateTimeOffset Started;public DateTimeOffset Next,StageAt;
+        public bool WardOnly;
         public int Stage,Attempt,Selections;public bool WorldSent,TeleportSent,WardSelected,MenuOpened;
         public readonly GardenArrivalGate EntryArrival=new();public bool NearApproachSelected;public Vector3? Approach;public HousingShard? Shard;public Vector3 Source;
     }
@@ -32,7 +33,7 @@ public sealed partial class Plugin
         StopIndependentWalk(reason);nativeHousingStatus=bidTravelMessage=characterTravelStatus=reason;
         RecordTravelPrompt("Housing travel stopped",new{reason});FollowChatNotice("TRAVEL — "+reason);
     }
-    private void StartNativeHousing(uint world,string district,int ward,int plot)
+    private void StartNativeHousing(uint world,string district,int ward,int plot,bool wardOnly=false)
     {
         if(!CanRequestWorldTravel(world,out var reason)){bidTravelMessage=characterTravelStatus=reason;return;}
         var area=NativeHousingPolicy.District(district);
@@ -41,7 +42,7 @@ public sealed partial class Plugin
             bidTravelMessage="Another journey is active. Stop it before starting GO SEE.";return;
         }
         var now=DateTimeOffset.UtcNow;
-        var trip=new NativeHousingTrip{World=world,Character=Player.ContentId,Ward=ward,Plot=plot,District=area,Geometry=LoadHousingGeometry(area),Started=now};
+        var trip=new NativeHousingTrip{World=world,Character=Player.ContentId,Ward=ward,Plot=plot,District=area,Geometry=wardOnly?Task.FromResult(new HousingGeometry([],[],[])):LoadHousingGeometry(area),Started=now,WardOnly=wardOnly};
         nativeHousingTrip=trip;HousingStage(trip,0,"Reading game housing destinations");
     }
     private void BeginNativeEstateLanding(uint world,string district,int ward,int plot){
@@ -87,6 +88,9 @@ public sealed partial class Plugin
             if(Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.BoundByDuty])throw new InvalidOperationException("Housing travel interrupted by combat or duty.");
             if(Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]||Conditions[ConditionFlag.Casting])return;
             var self=Objects.LocalPlayer;if(self==null)return;
+            if(trip.WardOnly&&Player.CurrentWorld.RowId==trip.World&&HousingAtWard(trip)){
+                StopNativeHousing($"Arrived at {trip.District.Name} · Ward {trip.Ward}.");return;
+            }
             // GO SEE owns arrival only. Garden care and house entry own their
             // inward movement; an estate teleport must not start a yard route.
             if(trip.Stage==12){
@@ -110,6 +114,7 @@ public sealed partial class Plugin
                 nativeHousingStatus="Waiting for housing collision geometry";return;
             }
             if(trip.Stage==0){
+                if(trip.WardOnly){HousingStage(trip,1,"Reaching the housing ward");return;}
                 if(!trip.Geometry.IsCompleted)return;
                 if(!trip.Geometry.IsCompletedSuccessfully)throw new InvalidOperationException(trip.Geometry.Exception?.GetBaseException().Message??"Housing layout unavailable.");
                 var data=trip.Geometry.Result;var placard=data.Placards[trip.Plot-1];
