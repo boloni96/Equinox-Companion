@@ -17,20 +17,34 @@ public sealed partial class Plugin
     private uint nearbyShardSource;
     private ulong nearbyShardCharacter;
     private DateTimeOffset nearbyShardRefresh;
-    private bool NearbyTravelBusy()=>!Player.IsLoaded||Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]||Conditions[ConditionFlag.BoundByDuty]||Conditions[ConditionFlag.Casting]||HelperInCutscene()||NativeGardenWalking||nativeWorldTrip!=null||nativeHousingTrip!=null||nativeAethernetTrip!=null||estateTrip!=null||assignedLogin!=null||gardenTendRoute!=null||shoppingTravel!=null||independentMoving;
+    private bool NearbyTravelBusy()=>!Player.IsLoaded||Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]||Conditions[ConditionFlag.BoundByDuty]||Conditions[ConditionFlag.Casting]||HelperInCutscene()||NativeGardenWalking||nativeWorldTrip!=null||nativeHousingTrip!=null||nativeAethernetTrip!=null||estateTrip!=null||assignedLogin!=null||gardenTendRoute!=null||shoppingTravel!=null||independentMoving||independentSearch!=null||followSession.Armed||estateHomeReturn!=null||eventAccountActive||goSeeHomeTrip!=null||goSeeFriendTrip!=null;
     private bool NearbyTransport(IGameObject obj)
     {
         if(obj.ObjectKind==ObjectKind.Aetheryte)return true;
+        if(obj.ObjectKind==ObjectKind.EventObj){
+            var objRow=DataManager.GetExcelSheet<RawRow>(name:"EObj").GetRowOrDefault(obj.BaseId);
+            return objRow is {} dataRow&&dataRow.Columns.Count>0&&(Convert.ToUInt32(dataRow.ReadColumn(0))>>16)==2;
+        }
         if(obj.ObjectKind!=ObjectKind.EventNpc)return false;
         if(nearbyTransportKinds.TryGetValue(obj.BaseId,out var known))return known;
         // ENpcData is the first 32 event links. Warp and ChocoboTaxiStand are native handler types.
         var row=DataManager.GetExcelSheet<RawRow>(name:"ENpcBase").GetRowOrDefault(obj.BaseId);
         var transport=false;
         if(row is {} data)for(var i=0;i<Math.Min(32,data.Columns.Count);i++){
-            var kind=Convert.ToUInt32(data.ReadColumn(i))>>16;
-            if(kind is 2 or 0x12){transport=true;break;}
+            var link=Convert.ToUInt32(data.ReadColumn(i));var kind=link>>16;
+            if(kind is 2 or 0x12||kind==0xB&&NearbyTransportScript(link)){transport=true;break;}
         }
         return nearbyTransportKinds[obj.BaseId]=transport;
+    }
+    private bool NearbyTransportScript(uint id)
+    {
+        var row=DataManager.GetExcelSheet<RawRow>(name:"CustomTalk").GetRowOrDefault(id);
+        if(row is not {} talk)return false;
+        for(var i=0;i+1<Math.Min(60,talk.Columns.Count);i+=2){
+            var instruction=talk.ReadColumn(i).ToString()??"";
+            if(instruction.Contains("WARP",StringComparison.OrdinalIgnoreCase)&&Convert.ToUInt32(talk.ReadColumn(i+1))!=0)return true;
+        }
+        return false;
     }
     private unsafe void DrawNearbyTravelMenu()
     {
@@ -39,7 +53,7 @@ public sealed partial class Plugin
         if(now>=nearbyTravelScan){
             nearbyTravelScan=now.AddMilliseconds(500);
             var self=Objects.LocalPlayer;if(self==null)return;
-            nearbyTravelObject=Objects.Where(o=>o.IsTargetable&&(o.ObjectKind==ObjectKind.Aetheryte||o.ObjectKind==ObjectKind.EventNpc)&&Vector3.DistanceSquared(o.Position,self.Position)<225)
+            nearbyTravelObject=Objects.Where(o=>o.IsTargetable&&(o.ObjectKind==ObjectKind.Aetheryte||o.ObjectKind==ObjectKind.EventNpc||o.ObjectKind==ObjectKind.EventObj)&&Vector3.DistanceSquared(o.Position,self.Position)<225)
                 .OrderBy(o=>Vector3.DistanceSquared(o.Position,self.Position)).FirstOrDefault(o=>NearbyTransport(o)&&TargetWithinInteractionRange(o))?.GameObjectId??0;
         }
         var source=Objects.FirstOrDefault(o=>o.GameObjectId==nearbyTravelObject);
@@ -80,7 +94,7 @@ public sealed partial class Plugin
                     if(nearbyShards.Length==0)ImGui.TextDisabled("Use the transport menu for this location.");
                     ImGui.EndTabItem();
                 }
-                if(ImGui.BeginTabItem("Housing")){
+                if(source.ObjectKind==ObjectKind.Aetheryte&&ImGui.BeginTabItem("Housing")){
                     foreach(var command in new[]{"priv","fc","shared","shared2","epriv","efc","workshop"})
                         if(ImGui.Selectable("/et "+command))StartSharedWorldTravel(command);
                     ImGui.EndTabItem();

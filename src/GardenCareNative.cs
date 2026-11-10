@@ -200,6 +200,7 @@ public sealed partial class Plugin
         private readonly bool postPlantTend,tendAll,visitorTend,mappedInspection;private readonly Plugin p;private readonly SharedGardenPlan original;private readonly ulong owner;private readonly uint world;private Vector3 origin;private bool walking;private int walkedBed;
         private readonly GardenWalkProgress walkProgress=new();
         private readonly GardenWalkRecovery walkRecovery=new();
+        private bool externalTendConfirmed;private DateTimeOffset externalTendCheck;
         private ulong targetId;private int openedBed;private DateTimeOffset opened,actionAt,next;private bool menuSent,itemOpened,itemSent;private InventoryType fertilizerBag;private int fertilizerSlot;private uint fertilizerId;private bool closing;private bool confirmationSent;private uint plantSeed,plantSoil;private GardenCareAction? issuedAction;
         public GardenCarePort(Plugin plugin,SharedGardenPlan plan,bool postPlantTend=false,bool tendAll=false,bool visitorTend=false,bool mappedInspection=false){this.mappedInspection=mappedInspection;this.visitorTend=visitorTend;this.postPlantTend=postPlantTend;this.tendAll=tendAll;p=plugin;original=plan;owner=Player.ContentId;world=Player.CurrentWorld.RowId;origin=Objects.LocalPlayer?.Position??default;}
         private SharedGardenPlan Current(){var source=p.GardenPlanSources().FirstOrDefault(x=>x.HouseId==original.HouseId&&x.Batch==original.Batch)??throw new InvalidOperationException("Garden plan is no longer available.");if(source.At!=original.At)throw new InvalidOperationException("Garden plan changed during the run.");return p.EffectiveGardenPlan(source);}
@@ -208,7 +209,9 @@ public sealed partial class Plugin
         {
             if(!Player.IsLoaded||owner==0||Player.ContentId!=owner||Player.CurrentWorld.RowId!=world||!p.ObservingGardens||!p.atOutdoorEstate||SharedGardenLocation.Match(p.currentAddress,[original])!=original.HouseId||Objects.LocalPlayer is not {} player||(!walking&&Vector3.Distance(player.Position,origin)>1.5f)||Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]||Conditions[ConditionFlag.Unconscious]||Conditions[ConditionFlag.TradeOpen]||p.HelperInCutscene()||p.sellerRun.Running||p.TraderRunning||p.retrievalRun.Running||p.organizeRunning||p.chestRunning)
                 throw new InvalidOperationException("Character, location, movement or active operation changed.");
-            if(!GardenCarePolicy.TargetAllowed(targetId,Targets.Target?.GameObjectId??0,menuSent&&(issuedAction switch { GardenCareAction.Plant=>confirmationSent, GardenCareAction.Fertilize=>itemSent, _=>true }),issuedAction,closing))throw new InvalidOperationException($"Selected garden target changed (bed {openedBed}, expected {targetId:X}, current {Targets.Target?.GameObjectId??0:X}, action {issuedAction}, closing {closing}).");
+            var clearedDuringOpen=targetId!=0&&(Targets.Target?.GameObjectId??0)==0&&!menuSent&&p.gardenCareRun?.Action==GardenCareAction.Tend&&
+                (ExternalTendReceipt(openedBed)||DateTimeOffset.UtcNow-opened<TimeSpan.FromSeconds(2));
+            if(!clearedDuringOpen&&!GardenCarePolicy.TargetAllowed(targetId,Targets.Target?.GameObjectId??0,menuSent&&(issuedAction switch { GardenCareAction.Plant=>confirmationSent, GardenCareAction.Fertilize=>itemSent, _=>true }),issuedAction,closing))throw new InvalidOperationException($"Selected garden target changed (bed {openedBed}, expected {targetId:X}, current {Targets.Target?.GameObjectId??0:X}, action {issuedAction}, closing {closing}).");
         }
         public bool Open(int bed)
         {
@@ -235,11 +238,26 @@ public sealed partial class Plugin
                     var destination=found[0].Position+Vector3.Normalize(offset)*2.2f;
                     p.StartNativeGardenMove([destination],"bed",found[0]);walking=true;walkRecovery.Reset(Objects.LocalPlayer.Position,destination);walkProgress.Reset(Objects.LocalPlayer.Position,now);walkedBed=bed;return false;
                 }
-                openedBed=bed;targetId=found[0].GameObjectId;opened=now;menuSent=itemOpened=itemSent=confirmationSent=false;issuedAction=null;closing=false;actionAt=default;
-                Targets.Target=found[0];TargetSystem.Instance()->InteractWithObject((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)found[0].Address,false);return false;
+                externalTendConfirmed=false;externalTendCheck=default;openedBed=bed;targetId=found[0].GameObjectId;opened=now;menuSent=itemOpened=itemSent=confirmationSent=false;issuedAction=null;closing=false;actionAt=default;
+                Targets.Target=found[0];
+                // Preserve exact mapped identity before a synchronous menu/action can clear the target.
+                if(p.snapshot is {} context){
+                    var obj=found[0];var arg=((FFXIVClientStructs.FFXIV.Client.Game.Object.EventObject*)obj.Address)->Arg;
+                    var captured=context with {ObservedAt=now,Address=p.currentAddress,TargetId=obj.GameObjectId.ToString("X16"),TargetDetails=new(obj.BaseId,obj.EntityId,obj.ObjectKind.ToString(),obj.Position.X,obj.Position.Y,obj.Position.Z,arg)};
+                    Volatile.Write(ref p.capturedContext,GardenContext.Capture(Volatile.Read(ref p.capturedContext),captured));
+                }
+                TargetSystem.Instance()->InteractWithObject((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)found[0].Address,false);return false;
             }
             if(now>=next&&SellerAddon("Talk")!=null){p.ClickVisibleTalk();next=now.AddMilliseconds(800);}
-            return Menu(bed)!=null||mappedInspection&&InspectionObserved(bed);
+            return Menu(bed)!=null||mappedInspection&&InspectionObserved(bed)||ExternalTendReceipt(bed);
+        }
+        private bool ExternalTendReceipt(int bed)
+        {
+            if(menuSent||p.gardenCareRun?.Action!=GardenCareAction.Tend||openedBed!=bed||targetId==0)return false;
+            if(externalTendConfirmed)return true;
+            var now=DateTimeOffset.UtcNow;if(now<externalTendCheck)return false;externalTendCheck=now.AddMilliseconds(250);
+            var resolve=p.GardenResolver();var actor=owner.ToString();
+            return externalTendConfirmed=p.LocalGardenActions().Any(e=>e.At>=opened&&GardenTargetMap.ActionReceipt(e,resolve,original,bed,"garden.tended",actor,opened));
         }
         private bool InspectionObserved(int bed)=>p.LocalGardenActions().Select(p.GardenResolver()).Any(e=>e.At>=opened&&e.Patch==(original.PhysicalPatch>0?original.PhysicalPatch:original.Batch)&&e.Bed==bed&&SharedGardenLocation.Match(e.Address,[original])==original.HouseId&&e.Kind is "garden.empty" or "garden.status" or "garden.dead" or "garden.ready" or "garden.observed");
         private GardenMenu? Menu(int bed)
@@ -249,6 +267,7 @@ public sealed partial class Plugin
         }
         public string? SkipReason(int bed,GardenCareAction action)
         {
+            if(ExternalTendReceipt(bed))return null;
             if(menuSent||action is GardenCareAction.Inspect or GardenCareAction.Plant or GardenCareAction.RemoveStarter)return null;
             var menu=Menu(bed);if(menu==null)return null;
             // Opening the mapped bed records its live state before this check.
@@ -262,6 +281,10 @@ public sealed partial class Plugin
         }
         public bool Act(int bed,GardenCareAction action)
         {
+            if(action==GardenCareAction.Tend&&ExternalTendReceipt(bed)){
+                actionAt=opened;issuedAction=action;menuSent=true;
+                p.RecordTravelPrompt("Garden tend already confirmed",new{bed,target=targetId,reason="Exact bed receipt received while opening; no duplicate action sent"});return true;
+            }
             if(mappedInspection&&action!=GardenCareAction.Inspect)throw new InvalidOperationException("Inspection only permits reading bed state.");
             if(visitorTend&&action!=GardenCareAction.Tend)throw new InvalidOperationException("Visitor care only permits tending.");
             if(action==GardenCareAction.Inspect){actionAt=opened;issuedAction=action;menuSent=Menu(bed)!=null||mappedInspection&&InspectionObserved(bed);return menuSent;}

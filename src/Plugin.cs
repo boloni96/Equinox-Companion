@@ -391,7 +391,7 @@ public sealed partial class Plugin : IDalamudPlugin
         perf = System.Diagnostics.Stopwatch.GetTimestamp();
         UpdateAutoRetainer(now);
         TrackPerformance("submarine cache", perf);
-        
+
         if (!Player.IsLoaded || Player.ContentId == 0)
         {
             suppliesCharacter=0;suppliesReadyAt=default;
@@ -538,38 +538,7 @@ public sealed partial class Plugin : IDalamudPlugin
                 else if (type is AddonEvent.PostSetup or AddonEvent.PostRefresh)
                 {
                     Volatile.Write(ref activeGardenMenu, null);
-                    if (addon->AtkValues != null && addon->AtkValuesCount > 7 &&
-                        ((int)addon->AtkValues[5].Type & 15) == 3)
-                    {
-                        string? first = null, second = null;
-                        if (addon->AtkValuesCount > 8)
-                        {
-                            if (((int)addon->AtkValues[7].Type & 15) is 8 or 10) first = CopyMenuText(addon->AtkValues[7].String.Value);
-                            if (((int)addon->AtkValues[8].Type & 15) is 8 or 10) second = CopyMenuText(addon->AtkValues[8].String.Value);
-                        }
-                        var count = GardenMenu.VisibleOptionCount(addon->AtkValues[5].Int, addon->AtkValuesCount - 7, first, second);
-                        var titleType = (int)addon->AtkValues[2].Type & 15;
-                        if (count is > 0 and <= 16 && 7 + count <= addon->AtkValuesCount && titleType is 8 or 10)
-                        {
-                            var title = CopyMenuText(addon->AtkValues[2].String.Value) ?? "";
-                            var options = new string[count];
-                            var valid = true;
-                            for (var j = 0; j < count; j++)
-                            {
-                                var optionType = (int)addon->AtkValues[7 + j].Type & 15;
-                                if (optionType is 0 or 1) { options[j] = ""; continue; }
-                                if (optionType is not (8 or 10)) { valid = false; break; }
-                                options[j] = CopyMenuText(addon->AtkValues[7 + j].String.Value) ?? "";
-                            }
-                            if (valid)
-                            {
-                                var menu = new GardenMenu((nint)addon, now, candidate, title, options);
-                                Volatile.Write(ref activeGardenMenu, menu);
-                                RememberGuidanceBed(menu);
-                                if (menu.Options.Any(x=>x is "Plant Seeds" or "Tend Crop" or "Harvest Crop" or "Remove Crop") && readyMenus.Count < 128) readyMenus.Enqueue(menu);
-                            }
-                        }
-                    }
+                    CaptureGardenMenuBeforeSelection(addon,now,candidate);
                 }
             }
             int? index = null;
@@ -606,6 +575,45 @@ public sealed partial class Plugin : IDalamudPlugin
         return System.Text.Encoding.UTF8.GetString(new ReadOnlySpan<byte>(value, length));
     }
 
+    // Some automation selects inside PostSetup before our listener runs. Capture the
+    // exact live menu before forwarding that callback, with the same identity checks.
+    private unsafe void CaptureGardenMenuBeforeSelection(AtkUnitBase* addon,DateTimeOffset now,GardenSnapshot? candidate)
+    {
+        if(!ObservingGardens||!Player.IsLoaded||candidate?.TargetDetails?.DataId!=2003757||candidate.Actor.ContentId!=Player.ContentId.ToString(CultureInfo.InvariantCulture)||
+            addon==null||addon!=(AtkUnitBase*)GardenGui.GetAddonByName("SelectString").Address)return;
+                    if (addon->AtkValues != null && addon->AtkValuesCount > 7 &&
+                        ((int)addon->AtkValues[5].Type & 15) == 3)
+                    {
+                        string? first = null, second = null;
+                        if (addon->AtkValuesCount > 8)
+                        {
+                            if (((int)addon->AtkValues[7].Type & 15) is 8 or 10) first = CopyMenuText(addon->AtkValues[7].String.Value);
+                            if (((int)addon->AtkValues[8].Type & 15) is 8 or 10) second = CopyMenuText(addon->AtkValues[8].String.Value);
+                        }
+                        var count = GardenMenu.VisibleOptionCount(addon->AtkValues[5].Int, addon->AtkValuesCount - 7, first, second);
+                        var titleType = (int)addon->AtkValues[2].Type & 15;
+                        if (count is > 0 and <= 16 && 7 + count <= addon->AtkValuesCount && titleType is 8 or 10)
+                        {
+                            var title = CopyMenuText(addon->AtkValues[2].String.Value) ?? "";
+                            var options = new string[count];
+                            var valid = true;
+                            for (var j = 0; j < count; j++)
+                            {
+                                var optionType = (int)addon->AtkValues[7 + j].Type & 15;
+                                if (optionType is 0 or 1) { options[j] = ""; continue; }
+                                if (optionType is not (8 or 10)) { valid = false; break; }
+                                options[j] = CopyMenuText(addon->AtkValues[7 + j].String.Value) ?? "";
+                            }
+                            if (valid)
+                            {
+                                var menu = new GardenMenu((nint)addon, now, candidate, title, options);
+                                Volatile.Write(ref activeGardenMenu, menu);
+                                RememberGuidanceBed(menu);
+                                if (menu.Options.Any(x=>x is "Plant Seeds" or "Tend Crop" or "Harvest Crop" or "Remove Crop") && readyMenus.Count < 128) readyMenus.Enqueue(menu);
+                            }
+                        }
+                    }
+    }
     private unsafe void ObserveGardenSelection(AtkUnitBase* addon, int?[] copied, bool close, string source)
     {
         var menu = Volatile.Read(ref activeGardenMenu);
@@ -631,8 +639,10 @@ public sealed partial class Plugin : IDalamudPlugin
         lastSubmittedOption=$"{menu.Title}: {option ?? "unresolved (see export)"}";
     }
 
+    private int gardenCallbackDepth;
     private unsafe byte ObserveCallback(AtkUnitBase* addon, uint count, AtkValue* values, byte close)
     {
+        gardenCallbackDepth++;try{
         // Forward each original exactly once with untouched arguments and return value.
         // No game action is initiated; only submitted garden selections are observed.
         try
@@ -647,6 +657,8 @@ public sealed partial class Plugin : IDalamudPlugin
             CaptureWardMenu(addon,count,values);
             CaptureFollowRoom(addon,count,values);
             ObserveFollowAethernetCallback(addon,count,values);
+            if(gardenCallbackDepth==1&&ObservingGardens&&Volatile.Read(ref activeGardenMenu)==null&&count is >0 and <=16)
+                CaptureGardenMenuBeforeSelection(addon,DateTimeOffset.UtcNow,Volatile.Read(ref capturedContext)?.CandidateAt(DateTimeOffset.UtcNow));
             if (ObservingGardens && Volatile.Read(ref activeGardenMenu)?.AddonAddress == (nint)addon && count is > 0 and <= 16 && values != null)
             {
                 var copied=new int?[(int)count];
@@ -661,21 +673,28 @@ public sealed partial class Plugin : IDalamudPlugin
         }
         catch (Exception ex) { errorJournal.Record("plugin", "Could not copy garden callback diagnostic", exceptionType:ex.GetType().Name); Log.Error(ex,"Could not copy garden callback diagnostic"); }
         return callbackHook!.Original(addon,count,values,close);
+
+        }finally{gardenCallbackDepth--;}
     }
 
     private unsafe byte ObserveCallbackInt(AtkUnitBase* addon, int value)
     {
+        gardenCallbackDepth++;try{
         try
         {
             var diagnosticValue=new AtkValue{Type=AtkValueType.Int,Int=value};RecordQuestCallback(addon,1,&diagnosticValue);CaptureHelperQuestCallback(addon,1,&diagnosticValue);RecordNativeTravelCallback(addon,1,&diagnosticValue);ObserveTravelCallbackDiagnostic(addon,1,&diagnosticValue);
             CaptureFollowInstanceChoice(addon,value);
             CaptureTransportChoice(addon,value);
             CaptureHelperChoice(addon,value);
+            if(gardenCallbackDepth==1&&ObservingGardens&&Volatile.Read(ref activeGardenMenu)==null)
+                CaptureGardenMenuBeforeSelection(addon,DateTimeOffset.UtcNow,Volatile.Read(ref capturedContext)?.CandidateAt(DateTimeOffset.UtcNow));
             if (ObservingGardens && Volatile.Read(ref activeGardenMenu)?.AddonAddress == (nint)addon)
                 ObserveGardenSelection(addon,[value],false,"FireCallbackInt");
         }
         catch (Exception ex) { errorJournal.Record("plugin", "Could not copy garden integer callback diagnostic", exceptionType:ex.GetType().Name); Log.Error(ex,"Could not copy garden integer callback diagnostic"); }
         return callbackIntHook!.Original(addon,value);
+
+        }finally{gardenCallbackDepth--;}
     }
 
     private unsafe void ObservePlantSelection(AgentHousingPlant* agent)
