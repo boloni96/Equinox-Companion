@@ -76,10 +76,12 @@ public sealed partial class Plugin
         pendingTradeItemShortcut?.BindMenu(args.Addon.Address);
         CaptureItemTradeMenu(args);
         CaptureOrganizerSortMenu(args);
+        CaptureSaddleDepositMenu(args);
     }
 
     private void OnTradeItemShortcutClosed(AddonEvent _, AddonArgs args)
     {
+        if(saddleDepositMenu?.Menu==args.Addon.Address)saddleDepositMenu=null;
         if(args.AddonName=="Trade"||itemTradeMenuSelection?.Menu==args.Addon.Address)itemTradeMenuSelection=null;
         if (pendingTradeItemShortcut is {} request &&
             (args.AddonName == "Trade" || request.MenuClosed(args.Addon.Address)))

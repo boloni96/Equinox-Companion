@@ -19,7 +19,7 @@ public sealed partial class Plugin
         localStorageDuplicates=true;localStorageDuplicatePages=pages.ToArray();
         localStorageKey="bag:"+pages[0];localStorageType=pages[0];localStorageTerritory=Client.TerritoryType;
         chestOwner=Player.ContentId;chestWorld=Player.CurrentWorld.RowId;
-        saddleDepositReceipt=null;saddleDepositSelected=false;saddleDepositHistory.Clear();
+        saddleDepositReceipt=null;saddleDepositSelected=false;saddleDepositHistory.Clear();saddleDepositMenu=null;
         localStoragePending=null;localStorageVisited.Clear();chestMoves=0;chestNext=default;chestDeadline=DateTimeOffset.UtcNow.AddSeconds(15);
         localStorageRunning=chestRunning=localStorageStatusShown=true;chestStatus="Finding saddlebag duplicates…";
     }
@@ -29,7 +29,7 @@ public sealed partial class Plugin
         var addon=SellerAddon("InventoryBuddy");if(addon==null)addon=SellerAddon("InventoryBuddy2");
         if(addon==null||addon->RootNode==null)return;
         var scale=addon->Scale;var width=addon->RootNode->Width*scale;var height=addon->RootNode->Height*scale;
-        ImGui.SetNextWindowPos(new Vector2(addon->X+width-26*scale,addon->Y+height-26*scale),ImGuiCond.Always,new Vector2(1,1));
+        ImGui.SetNextWindowPos(new Vector2(addon->X+width-16*scale,addon->Y+height-18*scale),ImGuiCond.Always,new Vector2(1,1));
         // Keep the control inside the native footer, with no floating toolbar box.
         MarketGameConfig.TryGet(Dalamud.Game.Config.SystemConfigOption.ColorThemeType,out uint theme);
         var light=theme==1;
@@ -45,6 +45,7 @@ public sealed partial class Plugin
         ImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize,1f);
 
         if(ImGui.Begin("##EquinoxSaddlebagDuplicates",ImGuiWindowFlags.NoBackground|ImGuiWindowFlags.AlwaysAutoResize|ImGuiWindowFlags.NoDecoration|ImGuiWindowFlags.NoMove|ImGuiWindowFlags.NoSavedSettings|ImGuiWindowFlags.NoFocusOnAppearing)){
+            var status=retrievalError.Length>0?retrievalError:localStorageDuplicates?chestStatus:"";
             if(localStorageRunning&&localStorageDuplicates){
                 if(ImGui.Button("Stop##SaddleDuplicates"))StopChest("Stopped by you. An already-sent transfer may still complete.");
                 MarketHelp(chestStatus);
@@ -52,10 +53,8 @@ public sealed partial class Plugin
                 ImGui.BeginDisabled(chestRunning||organizeRunning||retrievalRun.Running||gearRouting||armoireRunning||sellerRun.Running||TraderRunning||retainerGilRunning);
                 if(ImGui.Button("Add duplicates"))RetrievalTry(StartSaddlebagDuplicates);
                 ImGui.EndDisabled();
-                MarketHelp("Move inventory items already present in loaded normal/premium saddlebags. Fills matching stacks first; HQ and NQ stay separate. Respects gear-set protection. Keeps 0 in bags.");
+                MarketHelp((status.Length>0?status+"\n\n":"")+"Move inventory items already present in loaded normal/premium saddlebags. Fills matching stacks first; HQ and NQ stay separate. Respects gear-set protection. Keeps 0 in bags.");
             }
-            var status=retrievalError.Length>0?retrievalError:localStorageDuplicates?chestStatus:"";
-            if(status.Length>0){ImGui.SameLine();ImGui.TextDisabled("i");MarketHelp(status);}
         }
         ImGui.End();ImGui.PopStyleVar(5);ImGui.PopStyleColor(5);
     }
