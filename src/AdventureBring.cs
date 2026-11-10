@@ -90,7 +90,7 @@ public sealed partial class Plugin
   if(NativeTravelCharacterIndex(trip,out var source)<0)return true;
   var sourceDc=TravelDc(source);var destinationDc=TravelDc(bring.World);
   if(home==0||sourceDc==0||destinationDc==0||sourceDc!=TravelDc(lobby->WorldId))throw new InvalidOperationException("Character world could not be verified before travel.");
-  if(!NativeTravelPolicy.TransferBeforeLogin(source,bring.World,sourceDc,destinationDc))return false;
+  if(UsesWorldVisit(source,bring.World)||!NativeTravelPolicy.TransferBeforeLogin(source,bring.World,sourceDc,destinationDc))return false;
   if(nativeWorldTrip!=null||nativeHousingTrip!=null||nativeAethernetTrip!=null)throw new InvalidOperationException("Another trip started before character travel.");
   trip.Source=source;trip.ReturnHome=NativeTravelPolicy.ReturnFirst(source,home,sourceDc,destinationDc);trip.Leg=trip.ReturnHome?home:bring.World;
   assignedLogin=null;characterSwitchUntil=default;characterSwitchTarget=null;

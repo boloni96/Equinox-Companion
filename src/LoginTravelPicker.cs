@@ -83,8 +83,8 @@ public sealed partial class Plugin
             var homeRegion=bidWorlds!.FirstOrDefault(w=>w.Id==target.Home).Region;
             var destinationRegion=bidWorlds.FirstOrDefault(w=>w.Id==destination).Region;
             if(!NativeTravelPolicy.RegionReachable((uint)homeRegion,(uint)destinationRegion))throw new InvalidOperationException("This destination is unavailable for the character's home region.");
-            var route=NativeTravelPolicy.FromCharacterList(target.Current,target.Home,destination,TravelDc(target.Current),TravelDc(target.Home),TravelDc(destination),loginTravelNoLogin);
-            if(route==LoginTravelRoute.Unavailable)throw new InvalidOperationException("This destination cannot be reached with the selected login option.");
+            var route=NativeTravelPolicy.FromCharacterList(target.Current,target.Home,destination,TravelDc(target.Current),TravelDc(target.Home),TravelDc(destination),loginTravelNoLogin,TravelRegion(target.Current),TravelRegion(target.Home),TravelRegion(destination));
+            if(route==LoginTravelRoute.Unavailable)throw new InvalidOperationException("This route needs an in-game aetheryte. Turn off “Do not log in after transfer” to travel within the region.");
             var lobby=AgentLobby.Instance();if(lobby==null)return;
             var trip=new NativeWorldTrip{Owner="login-menu",Character=target.Character,Name=target.Name,Home=target.Home,Source=target.Current,Destination=destination,
                 Leg=route==LoginTravelRoute.ReturnHome?target.Home:route==LoginTravelRoute.LoginThenWorld?target.Current:destination,
@@ -92,7 +92,7 @@ public sealed partial class Plugin
                 ReconnectLoginList=TravelDc(lobby->WorldId)!=TravelDc(target.Current),PreferredGateway=TravelCityPolicy.Preferred(config.TravelCity,config.ShoppingCity,false)};
             nativeWorldTrip=trip;
             SetNativeTravelStage(trip,route==LoginTravelRoute.LoginThenWorld?NativeTravelStage.Login:NativeTravelStage.CharacterMenu,
-                route==LoginTravelRoute.LoginThenWorld?"Logging in for same-DC World Visit":trip.ReturnHome?"Returning the selected character home":"Preparing DC travel from character selection");
+                route==LoginTravelRoute.LoginThenWorld?"Logging in for regional World Visit":trip.ReturnHome?"Returning the selected character home":"Preparing DC travel from character selection");
             loginTravelMessage=nativeTravelStatus;
             RecordTravelPrompt("Character-menu travel requested",new{trip.Character,trip.Name,trip.Home,trip.Source,trip.Destination,trip.Service,trip.NoLogin,route});
         }catch(Exception ex){loginTravelMessage=ex.Message;}

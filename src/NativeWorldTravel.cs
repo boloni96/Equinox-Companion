@@ -19,11 +19,14 @@ public sealed partial class Plugin
         public bool NoLogin,ReconnectLoginList;
         public bool PartyLeaveSent,PartyLeaveConfirmed,LogoutCommandSent,HomeReturnAcknowledged;public DateTimeOffset PartyLeaveAt;
         public bool ReturnHome,DcSelected,ContextSent,LoginSent,LoginConfirmed,GatewaySent,TransferCommitted;
+        public bool WorldDcRequested;public DateTimeOffset WorldDcRequestedAt;
         public uint Gateway,PreferredGateway,RequestedLoginWorld;public bool ServiceSent,LogoutConfirmed,IntroSent;public int ApproachAttempt;public Vector3? ApproachGoal;
     }
     private NativeWorldTrip? nativeWorldTrip;
     private string nativeTravelStatus="Choose a map, aetheryte or world.";
     private uint TravelDc(uint world)=>DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().GetRowOrDefault(world)?.DataCenter.RowId??0;
+    private uint TravelRegion(uint world)=>DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().GetRowOrDefault(world)?.DataCenter.Value.Region.RowId??0;
+    private bool UsesWorldVisit(uint source,uint destination)=>NativeTravelPolicy.UsesWorldVisit(TravelDc(source),TravelDc(destination),TravelRegion(source),TravelRegion(destination));
     private string TravelDcName(uint world)=>DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().GetRowOrDefault(world)?.DataCenter.Value.Name.ToString()??"";
     private bool CanRequestWorldTravel(uint destination,out string reason)
     {
@@ -63,9 +66,9 @@ public sealed partial class Plugin
             nativeTravelStatus="Finish combat, duty, casting, loading or the current conversation first.";return false;
         }
         if(LifestreamBusy()||estateTrip!=null||estateHomeReturn!=null||assignedLogin!=null||titleLoginProbe.Active||loginMenuReturn.Active||independentMoving||independentSearch!=null||owner=="command"&&(QuestToolsOtherOperation()||independentQuestId!=0||eventAccountActive||gardenTendRoute!=null||shoppingTravel!=null||goSeeHomeTrip!=null||goSeeFriendTrip!=null)){nativeTravelStatus="Stop the active routine or journey before starting world travel.";return false;}
-        var source=Player.CurrentWorld.RowId;var home=Player.HomeWorld.RowId;var cross=!NativeTravelPolicy.SameDataCenter(TravelDc(source),TravelDc(destination));var slot=CurrentLoginServiceAccount();
+        var source=Player.CurrentWorld.RowId;var home=Player.HomeWorld.RowId;var cross=!UsesWorldVisit(source,destination);var slot=CurrentLoginServiceAccount();
         if(cross&&slot is <0 or >15){nativeTravelStatus="Identify this client's service account before DC travel (log in once with Companion).";return false;}
-        var returning=NativeTravelPolicy.ReturnFirst(source,home,TravelDc(source),TravelDc(destination));
+        var returning=cross&&NativeTravelPolicy.ReturnFirst(source,home,TravelDc(source),TravelDc(destination));
         var trip=new NativeWorldTrip{PreferredGateway=TravelCityPolicy.Preferred(config.TravelCity,config.ShoppingCity,owner=="shopping"),Owner=owner,Character=Player.ContentId,Name=Player.CharacterName,Home=home,Source=source,Destination=destination,Leg=returning?home:destination,Service=slot,Started=DateTimeOffset.UtcNow,ReturnHome=returning};
         nativeWorldTrip=trip;StopIndependentWalk("Starting native travel",resetFailure:true);
         RecordTravelPrompt("Travel requested",new{trip.Character,trip.Name,trip.Home,trip.Source,trip.Destination,trip.Service,trip.Owner,trip.PreferredGateway});
@@ -98,7 +101,7 @@ public sealed partial class Plugin
             if(Player.IsLoaded&&NativeTravelPolicy.Arrival(trip.Character,Player.ContentId,trip.Leg,Player.CurrentWorld.RowId,loading)){
                 if(trip.Leg==trip.Destination){var following=trip.Owner=="follow";StopNativeWorldTravel("Arrived at "+WorldName(trip.Destination)+".",arrived:true);if(following)ResumeAfterConfirmedTravel();return;}
                 PrepareNativeFinalLeg(trip);
-                if(TravelDc(trip.Source)==TravelDc(trip.Destination))SetNativeTravelStage(trip,NativeTravelStage.Gateway,"Home return complete; continuing to the requested world");
+                if(UsesWorldVisit(trip.Source,trip.Destination))SetNativeTravelStage(trip,NativeTravelStage.Gateway,"Home return complete; continuing to the requested world");
                 else BeginNativeTravelLogout(trip);
                 return;
             }
@@ -171,14 +174,16 @@ public sealed partial class Plugin
             SetNativeTravelStage(trip,NativeTravelStage.WorldList,"Selecting "+WorldName(trip.Leg));list->DispatchItemEvent(index,AtkEventType.ListItemClick);return;
         }
         if(trip.Stage==NativeTravelStage.WorldList){
-            var menu=SellerAddon("WorldTravelSelect");if(menu==null)return;
-            var module=RaptureAtkModule.Instance();var arrayIndex=(int)StringArrayType.WorldTranslate;
-            if(module==null||module->AtkArrayDataHolder.StringArrayCount<=arrayIndex||module->AtkArrayDataHolder.StringArrays==null)return;
-            var names=module->AtkArrayDataHolder.StringArrays[arrayIndex];if(names==null||names->StringArray==null)return;
-            for(var i=3;i<=10&&i<names->Size;i++)if(TravelMenuText(names->StringArray[i].Value)==WorldName(trip.Leg)){
-                SetNativeTravelStage(trip,NativeTravelStage.WorldConfirm,"Confirming destination "+WorldName(trip.Leg));NativeTravelCallback(menu,0,i-1);return;
+            var dialog=(AddonSelectYesno*)SellerAddon("SelectYesno");
+            if(dialog!=null&&dialog->PromptText!=null&&NativeTravelPolicy.WorldPrompt(TravelMenuText(dialog->PromptText->NodeText.StringPtr)??"",WorldName(trip.Leg)??"")){
+                SetNativeTravelStage(trip,NativeTravelStage.WorldConfirm,"Confirming destination "+WorldName(trip.Leg));return;
             }
-            nativeTravelStatus="Waiting for "+WorldName(trip.Leg)+" in the available World Visit list";return;
+            var menu=SellerAddon("WorldTravelSelect");if(menu==null)return;
+            if(!SelectWorldVisitDc(menu,trip,now))return;
+            if(TrySelectWorldVisitWorld(menu,WorldName(trip.Leg)??"")){
+                SetNativeTravelStage(trip,NativeTravelStage.WorldConfirm,"Confirming destination "+WorldName(trip.Leg));return;
+            }
+            nativeTravelStatus="Waiting for an enabled "+WorldName(trip.Leg)+" row in "+TravelDcName(trip.Leg)+" · you can select it manually";return;
         }
         if(trip.Stage==NativeTravelStage.WorldConfirm){
             var dialog=(AddonSelectYesno*)SellerAddon("SelectYesno");if(dialog==null||dialog->PromptText==null)return;

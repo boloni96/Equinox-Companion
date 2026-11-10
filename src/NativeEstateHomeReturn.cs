@@ -22,7 +22,7 @@ public sealed partial class Plugin
     private EstateHomeReturn? estateHomeReturn;
     private unsafe void BeginEstateHomeReturn((int Property,int Mode,string Label) destination)
     {
-        if(NativeTravelPolicy.SameDataCenter(TravelDc(Player.CurrentWorld.RowId),TravelDc(Player.HomeWorld.RowId))){
+        if(UsesWorldVisit(Player.CurrentWorld.RowId,Player.HomeWorld.RowId)){
             var sameDc=new EstateHomeReturn{Character=Player.ContentId,HomeWorld=(ushort)Player.HomeWorld.RowId,VisitingWorld=(ushort)Player.CurrentWorld.RowId,
                 Name=Player.CharacterName,ServiceSlot=CurrentLoginServiceAccount(),Destination=destination,Started=DateTimeOffset.UtcNow,NativeWorldRoute=true};
             // Start before assigning the continuation: the native engine rejects

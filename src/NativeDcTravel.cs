@@ -148,7 +148,7 @@ public sealed partial class Plugin
         if(trip.NoLogin&&trip.Leg==trip.Destination){
             StopNativeWorldTravel("Transfer complete at "+WorldName(trip.Destination)+" · remaining logged out.",arrived:true);return;
         }
-        if(NativeTravelPolicy.ContinueDcFromHome(trip.ReturnHome,trip.Leg,trip.Home,trip.Destination,TravelDc(trip.Home),TravelDc(trip.Destination))){
+        if(!UsesWorldVisit(trip.Home,trip.Destination)&&NativeTravelPolicy.ContinueDcFromHome(trip.ReturnHome,trip.Leg,trip.Home,trip.Destination,TravelDc(trip.Home),TravelDc(trip.Destination))){
             PrepareNativeFinalLeg(trip);
             SetNativeTravelStage(trip,NativeTravelStage.CharacterMenu,"Home return complete; continuing DC travel without logging in");
         }else SetNativeTravelStage(trip,NativeTravelStage.Login,"Transfer complete; logging into "+WorldName(trip.Leg));

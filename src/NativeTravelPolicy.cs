@@ -3,8 +3,11 @@ public enum NativeTravelStage { Gateway, AetheryteMenu, WorldList, WorldConfirm,
 public enum LoginTravelRoute { Unavailable, LoginThenWorld, ReturnHome, TransferDc }
 public static class NativeTravelPolicy
 {
-    public static LoginTravelRoute FromCharacterList(uint source,uint home,uint destination,uint sourceDc,uint homeDc,uint destinationDc,bool noLogin){
+    public static LoginTravelRoute FromCharacterList(uint source,uint home,uint destination,uint sourceDc,uint homeDc,uint destinationDc,bool noLogin,uint sourceRegion=0,uint homeRegion=0,uint destinationRegion=0){
         if(source==0||home==0||destination==0||source==destination||sourceDc==0||homeDc==0||destinationDc==0)return LoginTravelRoute.Unavailable;
+        if(sourceRegion!=0&&destinationRegion!=0&&UsesWorldVisit(sourceDc,destinationDc,sourceRegion,destinationRegion))
+            return !noLogin?LoginTravelRoute.LoginThenWorld:destination==home?LoginTravelRoute.ReturnHome:LoginTravelRoute.Unavailable;
+        if(noLogin&&homeRegion!=0&&destination!=home&&UsesWorldVisit(homeDc,destinationDc,homeRegion,destinationRegion))return LoginTravelRoute.Unavailable;
         if(noLogin&&destinationDc==homeDc&&destination!=home)return LoginTravelRoute.Unavailable;
         if(source!=home&&(destination==home||sourceDc!=destinationDc||noLogin&&homeDc!=destinationDc))return LoginTravelRoute.ReturnHome;
         return sourceDc!=destinationDc?LoginTravelRoute.TransferDc:noLogin?LoginTravelRoute.Unavailable:LoginTravelRoute.LoginThenWorld;
@@ -27,6 +30,14 @@ public static class NativeTravelPolicy
     public static bool RegionReachable(uint homeRegion,uint destinationRegion)=>
         homeRegion is >=1 and <=4 && destinationRegion is >=1 and <=4 &&
         (homeRegion==destinationRegion || destinationRegion==4 && homeRegion is >=1 and <=3);
+    public static bool UsesWorldVisit(uint sourceDc,uint destinationDc,uint sourceRegion,uint destinationRegion)=>
+        SameDataCenter(sourceDc,destinationDc)||sourceDc!=0&&destinationDc!=0&&sourceRegion is >=1 and <=4&&sourceRegion==destinationRegion;
+    public static int ExactChoice(IReadOnlyList<string> labels,string expected){
+        if(string.IsNullOrWhiteSpace(expected))return -1;
+        var found=-1;
+        for(var i=0;i<labels.Count;i++)if(string.Equals(labels[i].Trim(),expected,StringComparison.OrdinalIgnoreCase)){if(found>=0)return -1;found=i;}
+        return found;
+    }
     public static bool SameDataCenter(uint sourceDc,uint destinationDc)=>sourceDc!=0&&sourceDc==destinationDc;
     public static bool ReturnFirst(uint current,uint home,uint currentDc,uint destinationDc)=>current!=home&&currentDc!=destinationDc;
     public static bool ContinueDcFromHome(bool returning,uint leg,uint home,uint destination,uint homeDc,uint destinationDc)=>returning&&leg==home&&destination!=home&&homeDc!=0&&destinationDc!=0&&homeDc!=destinationDc;
