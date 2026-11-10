@@ -1132,6 +1132,8 @@ public sealed partial class Plugin : IDalamudPlugin
         {
             windows.Draw();
             DrawLoginTravelPicker();
+            MeasureWork("Overlay: nearby travel",DrawNearbyTravelMenu);
+            MeasureWork("Overlay: travel suggestions",DrawTravelCommandSuggestions);
             MeasureWork("Overlay: seller toolbar",DrawSellerToolbar);
             MeasureWork("Overlay: market item hover",DrawMarketNativeHover);
             MeasureWork("Overlay: item popup",DrawPluginItemPopup);
