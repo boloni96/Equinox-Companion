@@ -25,8 +25,8 @@ public sealed partial class Plugin
     private string CharacterSelectionWorld(string home,string current)
     {
         var worlds=DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>();
-        var homeDc=worlds.Where(w=>w.Name.ToString()==home).Select(w=>w.DataCenter.RowId).FirstOrDefault();
-        var currentDc=worlds.Where(w=>w.Name.ToString()==current).Select(w=>w.DataCenter.RowId).FirstOrDefault();
+        var homeDc=worlds.Where(w=>w.Name.ToString()==home).Select(w=>w.LogicalDataCenter.RowId).FirstOrDefault();
+        var currentDc=worlds.Where(w=>w.Name.ToString()==current).Select(w=>w.LogicalDataCenter.RowId).FirstOrDefault();
         return CharacterLoginWorldPolicy.Resolve(home,current,homeDc,currentDc);
     }
     private int GardenServiceAccount(SharedCharacter target)
@@ -141,13 +141,35 @@ public sealed partial class Plugin
     {
         var values=stackalloc AtkValue[args.Length];for(var i=0;i<args.Length;i++)values[i]=new(){Type=AtkValueType.Int,Int=args[i]};addon->FireCallback((uint)args.Length,values,true);
     }
+    private unsafe object? ReadLoginListEvidence()
+    {
+        var lobby=AgentLobby.Instance();
+        if(lobby==null||lobby->TemporaryLocked||Player.IsLoaded)return null;
+        var entries=lobby->LobbyData.CharaSelectEntries;
+        if(entries.LongCount is <0 or >512)return null;
+        var characters=new List<object>();
+        foreach(var item in entries){
+            var entry=item.Value;if(entry==null||entry->ContentId==0)continue;
+            characters.Add(new{contentId=entry->ContentId.ToString(),name=entry->NameString,
+                homeWorld=entry->HomeWorldId,homeName=WorldName(entry->HomeWorldId),
+                currentWorld=entry->CurrentWorldId,currentName=WorldName(entry->CurrentWorldId),
+                flags=(int)entry->LoginFlags});
+            if(characters.Count>=64)break;
+        }
+        return new{displayedWorld=lobby->WorldId,displayedName=WorldName(lobby->WorldId),
+            logicalDc=TravelDc(lobby->WorldId),dcName=TravelDcName(lobby->WorldId),
+            serviceAccount=lobby->ServiceAccountIndex,characters,truncated=entries.LongCount>64};
+    }
     private unsafe bool SelectLoginDataCenter(string world,ref bool sent)
     {
         var map=SellerAddon("TitleDCWorldMap");if(map==null)return false;
         if(sent)return true;
         var row=DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().FirstOrDefault(w=>w.Name.ToString()==world);
-        if(row.RowId==0||row.DataCenter.RowId==0)throw new InvalidOperationException("The target data center could not be identified.");
-        LoginCallback(map,17,(int)row.DataCenter.RowId);sent=true;return true;
+        if(row.RowId==0||row.LogicalDataCenter.RowId==0)throw new InvalidOperationException("The target data center could not be identified.");
+        RecordTravelPrompt("Login data center requested",new{world,worldId=row.RowId,logicalDc=row.LogicalDataCenter.RowId,dcName=row.LogicalDataCenter.Value.Name.ToString()});
+        usingSharedTravel=true;
+        try{LoginCallback(map,17,(int)row.LogicalDataCenter.RowId);}finally{usingSharedTravel=false;}
+        sent=true;return true;
     }
     private unsafe int[] AvailableLoginServiceSlots()
     {
@@ -183,6 +205,12 @@ public sealed partial class Plugin
         // retain the longer settling window so loading is not mistaken for empty.
         var populated=TryReadReadyLoginList(out var worldEntries)&&worldEntries.Length>0;
         if(!CurrentLoginIdentification.WorldSettled(now-loginWorldStableAt,populated))return true;
+        var targetAvailable=false;
+        foreach(var candidate in available)if(candidate.NameString==targetWorld){targetAvailable=true;break;}
+        if(!targetAvailable){
+            RecordTravelPrompt("Login world search blocked",new{targetWorld,displayedWorld=lobby->WorldId,displayedDc=TravelDc(lobby->WorldId)});
+            throw new InvalidOperationException("The loaded data center does not contain "+targetWorld+". Select its data center and retry; no unrelated worlds were searched.");
+        }
         var module=FFXIVClientStructs.FFXIV.Client.UI.RaptureAtkModule.Instance();
         if(module==null||module->AtkArrayDataHolder.StringArrayCount<=1||module->AtkArrayDataHolder.StringArrays==null)return true;
         var menuStrings=module->AtkArrayDataHolder.StringArrays[1];

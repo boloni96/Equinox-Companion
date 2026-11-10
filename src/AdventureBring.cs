@@ -58,7 +58,7 @@ public sealed partial class Plugin
   catch{bringMessage="Travel state is unavailable. Wait for the game to settle.";return false;}
   var home=DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().FirstOrDefault(w=>w.Name.ToString()==chosen.World);
   var targetWorld=DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().GetRowOrDefault(world);
-  if(home.RowId==0||targetWorld==null||!targetWorld.Value.IsPublic||!NativeTravelPolicy.RegionReachable(home.DataCenter.Value.Region.RowId,targetWorld.Value.DataCenter.Value.Region.RowId)){bringMessage="This character cannot travel to the selected world under the supported regional travel rules.";return false;}
+  if(home.RowId==0||targetWorld==null||!targetWorld.Value.IsPublic||!NativeTravelPolicy.RegionReachable(home.LogicalDataCenter.Value.Region.RowId,targetWorld.Value.LogicalDataCenter.Value.Region.RowId)){bringMessage="This character cannot travel to the selected world under the supported regional travel rules.";return false;}
   var source=Player.ContentId;
   if(source!=content){
    var from=CharacterSwitchScope(CurrentSharedCharacter()?.Id??"");var to=CharacterSwitchScope(chosen.Id);

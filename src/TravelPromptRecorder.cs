@@ -49,7 +49,7 @@ public sealed partial class Plugin
                         buttons.Add(new{id,enabled=button->IsEnabled,texts=TravelNodeText(&button->AtkComponentBase.UldManager)});
                     }
                     var options=name=="SelectString"?TransportChoices(addon):null;
-                    var state=new {addon=name,menu=snapshot,buttons,options,trees=name=="LobbyDKTWorldList"?ReadNativeTravelTrees(addon):null,worldVisit=name=="WorldTravelSelect"?ReadWorldVisitControls(addon):null};var fingerprint=JsonSerializer.Serialize(state);
+                    var state=new {addon=name,menu=snapshot,buttons,options,trees=name=="LobbyDKTWorldList"?ReadNativeTravelTrees(addon):null,worldVisit=name=="WorldTravelSelect"?ReadWorldVisitControls(addon):null,loginList=name=="_CharaSelectListMenu"?ReadLoginListEvidence():null};var fingerprint=JsonSerializer.Serialize(state);
                     if(!travelPromptLast.TryGetValue(name,out var old)||old!=fingerprint){travelPromptLast[name]=fingerprint;RecordTravelPrompt(old==null?"Menu opened":"Menu changed",state);}
                 }
                 if(Stopwatch.GetElapsedTime(started).TotalMilliseconds>=1){travelPromptCursor++;break;}

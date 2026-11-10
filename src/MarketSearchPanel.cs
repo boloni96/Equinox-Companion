@@ -128,7 +128,7 @@ public sealed partial class Plugin
     private string MarketDataCenter(uint world)
     {
         if(!marketDataCenters.TryGetValue(world, out var name))
-            marketDataCenters[world] = name = DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().GetRowOrDefault(world)?.DataCenter.Value.Name.ToString() ?? "Unknown";
+            marketDataCenters[world] = name = DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().GetRowOrDefault(world)?.LogicalDataCenter.Value.Name.ToString() ?? "Unknown";
         return name;
     }
     private void DrawMarketSearch()
@@ -224,7 +224,7 @@ public sealed partial class Plugin
         if(ImGui.IsItemHovered()) ImGui.SetTooltip("Region");
         if(changed) marketWorld = 0;
         marketWorlds ??= DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().Where(w => w.IsPublic)
-            .Select(w => (Id:w.RowId, Name:w.Name.ToString(), Region:(int)w.DataCenter.Value.Region.RowId switch { 1 => 3, 2 => 1, 3 => 2, 4 => 4, _ => 0 }))
+            .Select(w => (Id:w.RowId, Name:w.Name.ToString(), Region:(int)w.LogicalDataCenter.Value.Region.RowId switch { 1 => 3, 2 => 1, 3 => 2, 4 => 4, _ => 0 }))
             .Where(w => w.Region != 0).OrderBy(w => w.Name).ToArray();
         ImGui.TableNextColumn(); ImGui.TextDisabled("World"); ImGui.SetNextItemWidth(-1);
         if(ImGui.BeginCombo("##MarketWorld", marketWorld == 0 ? "All worlds" : marketWorlds.FirstOrDefault(w => w.Id == marketWorld).Name))
