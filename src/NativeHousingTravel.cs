@@ -96,13 +96,11 @@ public sealed partial class Plugin
             if(trip.WardOnly&&trip.SourceObject!=0&&(trip.Stage is 2 or 3)&&SellerAddon("Talk")!=null){
                 var source=Objects.FirstOrDefault(o=>o.GameObjectId==trip.SourceObject);
                 var talk=SellerAddon("Talk");
-                var speaker=talk->AtkValues!=null&&talk->AtkValuesCount>=2&&((int)talk->AtkValues[1].Type&15) is 8 or 10
-                    ?TravelMenuText(talk->AtkValues[1].String.Value)??"":"";
-                var matching=source!=null&&source.ObjectKind==ObjectKind.EventNpc&&Targets.Target?.GameObjectId==source.GameObjectId&&
-                    string.Equals(speaker.Trim(),source.Name.TextValue.Trim(),StringComparison.Ordinal);
+                var speaker=source?.Name.TextValue??"";
+                var matching=source!=null&&NearbyGreetingMatches(source);
                 if(!matching){nativeHousingStatus="Waiting for the selected housing transport's dialogue";return;}
                 if(trip.GreetingClicks>=6)throw new InvalidOperationException("Housing transport dialogue did not finish. Continue it manually, then retry ward travel.");
-                var greeting=HelperTalk().Text;
+                var greeting=TravelNodeText(&talk->UldManager);
                 usingSharedTravel=true;
                 try{if(ClickVisibleTalk()){
                     trip.GreetingClicks++;trip.MenuOpened=true;trip.Next=now.AddMilliseconds(750);

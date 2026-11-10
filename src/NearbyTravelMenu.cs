@@ -12,6 +12,34 @@ using Lumina.Excel.Sheets;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
+    private ulong nearbyGreetingSource,nearbyGreetingCharacter;
+    private DateTimeOffset nearbyGreetingUntil,nearbyGreetingNext;
+    private int nearbyGreetingClicks;
+    private unsafe bool NearbyGreetingMatches(IGameObject source)
+    {
+        if(Targets.Target?.GameObjectId!=source.GameObjectId||source.ObjectKind!=ObjectKind.EventNpc)return false;
+        var talk=SellerAddon("Talk");
+        if(talk==null)return false;
+        // Verify the displayed speaker, without assuming an AtkValues slot.
+        var name=source.Name.TextValue.Trim();
+        return name.Length>0&&TravelNodeText(&talk->UldManager).Any(text=>string.Equals(text.Trim(),name,StringComparison.Ordinal));
+    }
+    private unsafe void UpdateNearbyTransportGreeting(DateTimeOffset now)
+    {
+        if(nearbyGreetingSource==0)return;
+        if(!config.NearbyTravelMenu||now>nearbyGreetingUntil||NearbyTravelBusy()||Player.ContentId!=nearbyGreetingCharacter){nearbyGreetingSource=0;return;}
+        var source=Objects.FirstOrDefault(o=>o.GameObjectId==nearbyGreetingSource);
+        if(source==null||Targets.Target?.GameObjectId!=source.GameObjectId){nearbyGreetingSource=0;return;}
+        if(SellerAddon("SelectString")!=null||SellerAddon("SelectYesno")!=null){nearbyGreetingSource=0;return;}
+        if(now<nearbyGreetingNext||!NearbyGreetingMatches(source))return;
+        if(nearbyGreetingClicks>=6){nearbyGreetingSource=0;return;}
+        var line=TravelNodeText(&SellerAddon("Talk")->UldManager);
+        usingSharedTravel=true;
+        try{if(ClickVisibleTalk()){
+            nearbyGreetingClicks++;nearbyGreetingNext=now.AddMilliseconds(750);
+            RecordTravelPrompt("Nearby transport greeting advanced",new{source=source.BaseId,line,clicks=nearbyGreetingClicks});
+        }}finally{usingSharedTravel=false;}
+    }
     private string nearbyHoverMenu="";
     private DateTimeOffset nearbyHoverUntil;
     private Vector2 nearbyHoverAnchor;
@@ -189,8 +217,16 @@ public sealed partial class Plugin
                             }
                             break;
                         }
-                    }else if(ImGui.Button("Open transport destinations")&&TargetWithinInteractionRange(source)&&!QuestConversationVisible()&&!VisibleFollowAddon("SelectYesno")){
-                        var system=TargetSystem.Instance();if(system!=null){Targets.Target=source;RecordTravelPrompt("Nearby transport opened",new{source=source.BaseId});system->InteractWithObject((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)source.Address,false);}
+                    }else if(ImGui.Button("Open transport destinations")&&TargetWithinInteractionRange(source)&&!VisibleFollowAddon("SelectYesno")){
+                        var greeting=NearbyGreetingMatches(source);
+                        if(greeting||!QuestConversationVisible()){
+                            if(!greeting){
+                                var system=TargetSystem.Instance();
+                                if(system!=null){Targets.Target=source;RecordTravelPrompt("Nearby transport opened",new{source=source.BaseId});system->InteractWithObject((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)source.Address,false);}
+                            }
+                            nearbyGreetingSource=source.GameObjectId;nearbyGreetingCharacter=Player.ContentId;
+                            nearbyGreetingUntil=now.AddSeconds(15);nearbyGreetingNext=now;nearbyGreetingClicks=0;
+                        }
                     }
                     ImGui.TextDisabled("Fees and confirmations remain in the game's menu.");
 

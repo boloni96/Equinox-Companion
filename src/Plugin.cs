@@ -338,6 +338,7 @@ public sealed partial class Plugin : IDalamudPlugin
         UpdateNativeWorldTravel(now);
         UpdateNativeAethernet(now);
         UpdateNativeHousing(now);
+        UpdateNearbyTransportGreeting(now);
         var gardenMovementStarted=System.Diagnostics.Stopwatch.GetTimestamp();UpdateNativeGardenMove(now);RecordPerformanceElapsed("Garden: native movement",gardenMovementStarted);
         UpdateAssignedLogin(now);
         UpdateEstateTravel(now);
