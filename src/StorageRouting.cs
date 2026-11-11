@@ -21,7 +21,7 @@ public static class StorageRouting
             if(blocked.Count>0&&progressed){
                 snapshot=ReplaySafePrefix(snapshot,result.Moves);blocked.Clear();progressed=false;continue;
             }
-            return new(completed.ToArray(),result.Remaining);
+            return new(bagsOnly?StorageAutoRouting.BatchEntrust(completed.ToArray(),inventories[Bags]):completed.ToArray(),result.Remaining);
         }
     }
     private static RoutingResult BuildCore(StorageRoutingPlan plan,IReadOnlyDictionary<ulong,ChestStack[]> inventories,Func<uint,uint> category,bool bagsOnly,bool includeExistingBags,HashSet<(ulong Owner,uint Item,bool Hq)> blocked,out Dictionary<ulong,ChestStack[]>? resume)

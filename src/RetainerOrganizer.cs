@@ -137,6 +137,7 @@ public sealed partial class Plugin
                 case 9:
                     if(organizeRoutingTask?.IsCompleted!=true)break;var plan=organizeRoutingTask.GetAwaiter().GetResult();organizeRoutingTask=null;
                     organizeMoves=plan.Moves.Where(x=>!organizerDeferredItems.Contains((x.Move.Source.Item,x.Move.Source.Hq))).ToArray();organizeUnmoved=plan.Remaining;
+                    if(organizeBagsOnly){var current=CurrentRetainerIdentity();organizeMoves=StorageAutoRouting.BatchEntrust(organizeMoves,organizeInventories[StorageRouting.Bags],RetrieverActive(current)?current:0);}
                     if(organizeMoves.Length==0){FinishOrganize(organizerUnassigned>0?$"No further eligible transfers; {organizerUnassigned} selected item types have no assigned retainer. Assign a home or choose an explicit destination.":plan.Remaining==0?"Nothing needs moving: check current stock, Keep amounts, quality and item protections.":$"No available route for {plan.Remaining} items. Check bag and retainer space.");return;}
                     organizeActiveRetainer=organizeMoves[0].Retainer;OrganizeStage(RetrieverActive(organizeActiveRetainer)?5:4);break;
                 case 4:if(organizePort.Select(organizeActiveRetainer))OrganizeStage(5);break;

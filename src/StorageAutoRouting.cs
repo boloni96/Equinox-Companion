@@ -2,6 +2,23 @@ namespace EquinoxCompanion;
 public static class StorageAutoRouting
 {
     public const ulong AllRetainers=ulong.MaxValue-1;
+    // Pure bag deposits are independent across retainers, but split bag stacks
+    // still need their source quantities rebased after changing visit order.
+    public static RoutedMove[] BatchEntrust(RoutedMove[] moves,ChestStack[] bags,ulong preferred=0)
+    {
+        if(moves.Any(m=>m.Withdraw||m.Internal))return moves;
+        var sources=bags.ToDictionary(s=>(s.Container,s.Slot));
+        var result=new List<RoutedMove>();
+        foreach(var group in moves.GroupBy(m=>m.Retainer).OrderByDescending(g=>g.Key==preferred))
+        foreach(var action in group){
+            var move=action.Move;var key=(move.Source.Container,move.Source.Slot);
+            if(!sources.TryGetValue(key,out var source)||source.Item!=move.Source.Item||source.Hq!=move.Source.Hq||move.Quantity<=0||source.Quantity<move.Quantity)
+                throw new InvalidOperationException("Entrust source changed while grouping retainer visits.");
+            result.Add(action with{Move=move with{Source=source}});
+            sources[key]=source with{Quantity=source.Quantity-move.Quantity};
+        }
+        return result.ToArray();
+    }
     public static StorageRoutingPlan Resolve(StorageRoutingPlan plan,IReadOnlyDictionary<ulong,ChestStack[]> inventory,Func<uint,uint> category)
     {
         // Dictionary order is the game's retainer order supplied by the caller.
