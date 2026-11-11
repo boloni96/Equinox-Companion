@@ -1,6 +1,7 @@
 namespace EquinoxCompanion;
 public static class CharacterLoginWorldPolicy
 {
+    public static bool DisplayedListReady(uint world,uint dc,bool locked,bool menu)=>world!=0&&dc!=0&&!locked&&menu;
     // Regional World Visit retains the home-world list; cross-region lobby
     // transfers retain the visiting-world list. Unknown regions do not broaden it.
     public static uint ListDc(uint homeDc,uint currentDc,uint homeRegion=0,uint currentRegion=0)=>

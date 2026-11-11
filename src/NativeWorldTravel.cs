@@ -24,10 +24,17 @@ public sealed partial class Plugin
     }
     private NativeWorldTrip? nativeWorldTrip;
     private string nativeTravelStatus="Choose a map, aetheryte or world.";
-    private uint TravelDc(uint world)=>DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().GetRowOrDefault(world)?.LogicalDc().RowId??0;
-    private uint TravelRegion(uint world)=>DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().GetRowOrDefault(world)?.LogicalDc().Region.RowId??0;
+    private Lumina.Excel.Sheets.WorldDCGroupType? TravelWorldDc(uint world)
+    {
+        // Lobby world zero is an unready list, not the World sheet's Dev row.
+        if(world==0)return null;
+        var row=DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().GetRowOrDefault(world);
+        return row is {} value&&value.IsPublic&&value.TryLogicalDc(out var dc)?dc:null;
+    }
+    private uint TravelDc(uint world)=>TravelWorldDc(world)?.RowId??0;
+    private uint TravelRegion(uint world)=>TravelWorldDc(world)?.Region.RowId??0;
     private bool UsesWorldVisit(uint source,uint destination)=>NativeTravelPolicy.UsesWorldVisit(TravelDc(source),TravelDc(destination),TravelRegion(source),TravelRegion(destination));
-    private string TravelDcName(uint world)=>DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().GetRowOrDefault(world)?.LogicalDc().Name.ToString()??"";
+    private string TravelDcName(uint world)=>TravelWorldDc(world)?.Name.ToString()??"";
     private bool CanRequestWorldTravel(uint destination,out string reason)
     {
         reason="";

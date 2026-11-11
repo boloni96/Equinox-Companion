@@ -244,6 +244,10 @@ public sealed partial class Plugin
     private unsafe bool RedirectAssignedVisitingCharacter(AssignedLogin run,AgentLobby* lobby)
     {
         var displayedDc=TravelDc(lobby->WorldId);
+        if(!CharacterLoginWorldPolicy.DisplayedListReady(lobby->WorldId,displayedDc,lobby->TemporaryLocked,SellerAddon("_CharaSelectListMenu")!=null)){
+            characterTravelStatus=$"Waiting for the character world list to load for {run.Target.Name} @ {run.World}.";
+            return true;
+        }
         if(assignedVisitingReturnFromDc!=0){
             if(displayedDc==assignedVisitingReturnFromDc)return true;
             assignedVisitingReturnFromDc=0;
@@ -312,7 +316,7 @@ public sealed partial class Plugin
                 }
                 return;
             }
-            if(RedirectAssignedVisitingCharacter(run,lobby))return;
+            if(!assignedLoginSent&&RedirectAssignedVisitingCharacter(run,lobby))return;
             if(assignedLoginSent){
                 var target=TitleLoginTarget(run.Target.Id);
                 if(target!=null&&ulong.TryParse(target.ContentId,out var cid)&&ConfirmNativeLogin(true,cid,target.World,run.ServiceAccount,target.Name))
