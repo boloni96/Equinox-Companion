@@ -60,7 +60,7 @@ public sealed partial class Plugin
             try{return myInventoryStock.Where(s=>RetainerRetrieval.AllowsQuality(s.Hq,myInventoryQuality)&&MyInventoryMatches(s.Item)).GroupBy(s=>s.Item).Select(g=>(Id:g.Key,Name:MyInventoryName(g.Key),Quantity:g.Sum(s=>s.Quantity))).OrderBy(x=>x.Name).ToArray();}
             finally{RecordPerformanceElapsed("Organizer: inventory display rows",started);}
         });
-        if(ImGui.SmallButton("Select all"))foreach(var row in rows.Where(r=>!OrganizerGearProtected(r.Id)))myInventorySelected.TryAdd(row.Id,row.Quantity);ImGui.SameLine();
+        if(ImGui.SmallButton("Select all matching"))foreach(var row in rows.Where(r=>!OrganizerGearProtected(r.Id)))myInventorySelected.TryAdd(row.Id,row.Quantity);ImGui.SameLine();
         if(ImGui.SmallButton("Clear selection"))myInventorySelected.Clear();ImGui.SameLine();if(ImGui.SmallButton("Refresh")){myInventoryRefresh=default;retrievalRefreshPending=true;RetrievalTry(RefreshRetrievalStock);}
         if(retrievalItems.Length>0&&ImGui.SmallButton("Select listed items in bags")){
             foreach(var item in retrievalItems)TemporaryInventorySelection.Pick(myInventorySelected,item.ItemId,1,myInventoryStock.Where(s=>!OrganizerGearProtected(s.Item)));
@@ -99,7 +99,7 @@ public sealed partial class Plugin
                     var protectedItem=OrganizerGearProtected(row.Id);ImGui.BeginDisabled(protectedItem);
                     ImGui.BeginGroup();var selected=myInventorySelected.ContainsKey(row.Id);if(ImGui.Checkbox("##Selected",ref selected)){if(selected)myInventorySelected[row.Id]=row.Quantity;else myInventorySelected.Remove(row.Id);}ImGui.SameLine();DrawRetrievalIcon(row.Id);ImGui.TextUnformatted(row.Name);ImGui.EndGroup();ImGui.EndDisabled();
                     if(protectedItem){ImGui.SameLine();ImGui.TextDisabled("[Gear set]");if(ImGui.IsItemHovered())ImGui.SetTooltip(OrganizerGearProtectionLabel(row.Id));}
-                    if(!protectedItem&&ImGui.IsItemHovered()&&!ImGui.GetIO().WantTextInput){if(ImGui.GetIO().KeyShift&&!ImGui.GetIO().KeyAlt)myInventorySelected.TryAdd(row.Id,row.Quantity);else if(ImGui.GetIO().KeyAlt&&!ImGui.GetIO().KeyShift)myInventorySelected.Remove(row.Id);}
+                    var pick=OrganizerHoverSelectionAction(protectedItem);if(pick>0)myInventorySelected.TryAdd(row.Id,row.Quantity);else if(pick<0)myInventorySelected.Remove(row.Id);
                     ImGui.TableNextColumn();ImGui.TextUnformatted(row.Quantity.ToString());ImGui.TableNextColumn();
                     if(myInventorySelected.TryGetValue(row.Id,out var quantity)){quantity=Math.Clamp(quantity,1,row.Quantity);ImGui.SetNextItemWidth(-1);ImGui.InputInt("##Amount",ref quantity,0,0);myInventorySelected[row.Id]=Math.Clamp(quantity,1,row.Quantity);}else ImGui.TextDisabled("—");ImGui.PopID();
                 }

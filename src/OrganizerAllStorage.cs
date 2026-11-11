@@ -7,7 +7,7 @@ public sealed partial class Plugin
     private readonly HashSet<uint> allStorageCategories=[];
     private bool allStorageAllCategories=true;
     private ulong allStorageOwner;
-    private readonly HashSet<uint> allStorageSelected=[];
+    private readonly StorageInventorySelection allStorageSelected=new();
     private readonly UiProjectionCache<SharedItemLocation[]> allStorageCache=new(1000);
     private readonly UiProjectionCache<(SharedItemLocation Event,StorageStack[] Rows)[]> allStorageRowsCache=new(1000);
     private readonly UiProjectionCache<(SharedItemLocation Location,StorageStack Stack)[]> allStorageFlatCache=new(1000);
@@ -35,7 +35,7 @@ public sealed partial class Plugin
                 .Select(e=>new SharedItemLocation(e.Actor.ContentId,e.Actor.Name,e.Storage!.Key,e.Storage.Name,e.At,e.Storage.Items,e.Storage.Stacks));
             return own.Concat(homes.SelectMany(h=>h.Locations)).OrderBy(e=>e.Name).ToArray();
         });
-        if(allStorageKey.Length>0&&!locations.Any(e=>e.Key==allStorageKey)){allStorageKey="";allStorageSelected.Clear();}
+        if(allStorageKey.Length>0&&!locations.Any(e=>e.Key==allStorageKey)){allStorageKey="";}
         if(housingView){ImGui.TextWrapped(config.SyncCollections?housingStorageReadStatus:"Storage recording is disabled in collection sync settings.");if(config.SharedRoster?.ItemLocationsTruncated==true)ImGui.TextWrapped("Shared storage results are partial; local records are also included.");}
         ImGui.SetNextItemWidth(-1);ImGui.InputTextWithHint("##AllStorageSearch","Search all recorded items…",ref allStorageSearch,100);
         ImGui.SetNextItemWidth(Math.Max(120,ImGui.GetContentRegionAvail().X-105));
@@ -47,18 +47,24 @@ public sealed partial class Plugin
         ImGui.SameLine();DrawShowAllStorageOption();
         ImGui.SetNextItemWidth(-1);
         if(ImGui.BeginCombo("##StorageLocation",locations.FirstOrDefault(e=>e.Key==allStorageKey)?.Name??"All recorded locations")){
-            if(ImGui.Selectable("All recorded locations",allStorageKey.Length==0)){allStorageKey="";allStorageSelected.Clear();}
-            foreach(var e in locations)if(ImGui.Selectable(e.Name+"##"+e.Key,allStorageKey==e.Key)){allStorageKey=e.Key;allStorageSelected.Clear();}
+            if(ImGui.Selectable("All recorded locations",allStorageKey.Length==0)){allStorageKey="";}
+            foreach(var e in locations)if(ImGui.Selectable(e.Name+"##"+e.Key,allStorageKey==e.Key)){allStorageKey=e.Key;}
             ImGui.EndCombo();
         }
         var chosen=locations.FirstOrDefault(e=>e.Key==allStorageKey);
+        ImGui.BeginDisabled(OrganizerSelectionBusy);
+        if(ImGui.SmallButton("Select all matching"))
+            foreach(var location in locations.Where(e=>allStorageKey.Length==0||e.Key==allStorageKey))
+                foreach(var stack in VisibleStorageStacks(location).Where(s=>!OrganizerGearProtected(s.ItemId)))allStorageSelected.Set(location.Key,stack.ItemId,true);
+        ImGui.SameLine();if(ImGui.SmallButton("Clear selection"))allStorageSelected.Clear(allStorageKey);
+        ImGui.EndDisabled();
+        ImGui.TextDisabled("Shift-hover selects · Alt-hover removes");
+        if(chosen==null)ImGui.TextWrapped("Select across locations below. Choose a location to transfer its selected items.");
         if(chosen!=null){
-            ImGui.BeginDisabled(chestRunning||organizeRunning||retrievalRun.Running||gearRouting||armoireRunning||craftingWithdrawalPending);
-            if(ImGui.SmallButton("Select all matching"))foreach(var s in VisibleStorageStacks(chosen).Where(s=>!OrganizerGearProtected(s.ItemId)))allStorageSelected.Add(s.ItemId);
-            ImGui.SameLine();if(ImGui.SmallButton("Clear"))allStorageSelected.Clear();
+            ImGui.BeginDisabled(OrganizerSelectionBusy);
             var supported=TryLocalStorageKey(allStorageKey,out var type)&& (LocalStoragePolicy.Saddle(type)||LocalStoragePolicy.Storeroom(type)||LocalStoragePolicy.Armoury(type));
             if(supported){
-                ImGui.BeginDisabled(allStorageSelected.Count==0);if(ImGui.Button("Withdraw selected to bags"))RetrievalTry(()=>StartLocalStorage(allStorageKey,false));ImGui.EndDisabled();
+                ImGui.BeginDisabled(!allStorageSelected.Items(allStorageKey).Any());if(ImGui.Button("Withdraw selected to bags"))RetrievalTry(()=>StartLocalStorage(allStorageKey,false));ImGui.EndDisabled();
                 EnsureMyInventoryCharacter();ImGui.BeginDisabled(myInventorySelected.Count==0||LocalStoragePolicy.Armoury(type));if(ImGui.Button("Entrust temporary bag selection here"))RetrievalTry(()=>StartLocalStorage(allStorageKey,true));ImGui.EndDisabled();
                 ImGui.TextDisabled(LocalStoragePolicy.Armoury(type)?"Withdraw unequipped gear to bags; gear-set protection applies. Use the game to equip or store gear here.":"Transfers whole selected stacks; open this storage in game first.");
                 if(ImGui.SmallButton($"Choose bag items · {myInventorySelected.Count} selected")){retrievalInventoryView=0;}
@@ -101,14 +107,16 @@ public sealed partial class Plugin
         while(clip.Step())for(var i=clip.DisplayStart;i<clip.DisplayEnd;i++){
             var (location,stack)=rows[i];ImGui.PushID(i);ImGui.TableNextRow(ImGuiTableRowFlags.None,height);ImGui.TableNextColumn();
             var protectedItem=OrganizerGearProtected(stack.ItemId);
-            ImGui.BeginDisabled(chestRunning||protectedItem);
-            var selected=allStorageSelected.Contains(stack.ItemId)&&allStorageKey==location.Key;
-            if(ImGui.Checkbox("##pick",ref selected)){if(allStorageKey!=location.Key){allStorageKey=location.Key;allStorageSelected.Clear();}if(selected)allStorageSelected.Add(stack.ItemId);else allStorageSelected.Remove(stack.ItemId);}
-            ImGui.EndDisabled();ImGui.SameLine();DrawRetrievalIcon(stack.ItemId);ImGui.TextUnformatted(SearchItemName(stack.ItemId)+(stack.Hq?" HQ":""));
+            ImGui.BeginDisabled(OrganizerSelectionBusy||protectedItem);ImGui.BeginGroup();
+            var selected=allStorageSelected.Contains(location.Key,stack.ItemId);
+            if(ImGui.Checkbox("##pick",ref selected))allStorageSelected.Set(location.Key,stack.ItemId,selected);
+            ImGui.SameLine();DrawRetrievalIcon(stack.ItemId);ImGui.TextUnformatted(SearchItemName(stack.ItemId)+(stack.Hq?" HQ":""));
+            ImGui.EndGroup();var pick=OrganizerHoverSelectionAction(protectedItem);ImGui.EndDisabled();
+            if(pick!=0)allStorageSelected.Set(location.Key,stack.ItemId,pick>0);
             MarketHelp(protectedItem?OrganizerGearProtectionLabel(stack.ItemId):$"Recorded {location.At.ToLocalTime():g} · "+(stack.Bound==true?"Bound":stack.Tradable==true?"Tradable":stack.Tradable==false?"Untradable":"copy state unknown"));
             ImGui.TableNextColumn();ImGui.TextUnformatted(stack.Quantity>0?stack.Quantity.ToString():"Unknown");
-            ImGui.TableNextColumn();ImGui.BeginDisabled(chestRunning);
-            if(ImGui.Selectable(location.Name+"##location",allStorageKey==location.Key)){allStorageKey=location.Key;allStorageSelected.Clear();}
+            ImGui.TableNextColumn();ImGui.BeginDisabled(OrganizerSelectionBusy);
+            if(ImGui.Selectable(location.Name+"##location",allStorageKey==location.Key)){allStorageKey=location.Key;}
             ImGui.EndDisabled();ImGui.PopID();
         }
         clip.End();clip.Destroy();ImGui.EndTable();
@@ -117,14 +125,17 @@ public sealed partial class Plugin
     {
             if(!ImGui.CollapsingHeader($"{e.Name} · {rows.Length} item stacks##{e.Key}",allStorageKey.Length>0?ImGuiTreeNodeFlags.DefaultOpen:ImGuiTreeNodeFlags.None))return;
             ImGui.TextDisabled($"Recorded {e.At.ToLocalTime():g}");
-            if(ImGui.SmallButton("Use this location##"+e.Key)){allStorageKey=e.Key;allStorageSelected.Clear();}
+            if(ImGui.SmallButton("Use this location##"+e.Key)){allStorageKey=e.Key;}
             var clip=ImGui.ImGuiListClipper();clip.Begin(rows.Length,Math.Max(ImGui.GetFrameHeight(),ImGui.GetTextLineHeight()+4)+ImGui.GetStyle().ItemSpacing.Y);
             while(clip.Step())for(var i=clip.DisplayStart;i<clip.DisplayEnd;i++){
                 var s=rows[i];ImGui.PushID(e.Key+":"+i);
-                ImGui.BeginDisabled(allStorageKey!=e.Key||chestRunning);
-                var selected=allStorageSelected.Contains(s.ItemId);if(ImGui.Checkbox("##pick",ref selected)){if(selected)allStorageSelected.Add(s.ItemId);else allStorageSelected.Remove(s.ItemId);}ImGui.EndDisabled();ImGui.SameLine();
+                var protectedItem=OrganizerGearProtected(s.ItemId);
+                ImGui.BeginDisabled(OrganizerSelectionBusy||protectedItem);ImGui.BeginGroup();
+                var selected=allStorageSelected.Contains(e.Key,s.ItemId);if(ImGui.Checkbox("##pick",ref selected))allStorageSelected.Set(e.Key,s.ItemId,selected);ImGui.SameLine();
                 DrawRetrievalIcon(s.ItemId);
                 ImGui.TextUnformatted($"{SearchItemName(s.ItemId)}{(s.Hq?" HQ":"")} · {(s.Quantity>0?s.Quantity.ToString():"quantity unknown")} · {(s.Bound==true?"Bound":s.Tradable==true?"Tradable":s.Tradable==false?"Untradable":"copy state unknown")}");
+                ImGui.EndGroup();var pick=OrganizerHoverSelectionAction(protectedItem);ImGui.EndDisabled();
+                if(pick!=0)allStorageSelected.Set(e.Key,s.ItemId,pick>0);
                 ImGui.PopID();
             }clip.End();clip.Destroy();
     }

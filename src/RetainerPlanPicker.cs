@@ -8,6 +8,12 @@ public sealed partial class Plugin
 {
     [PluginService] internal static INotificationManager RetrievalNotifications { get; private set; }=null!;
     private bool retrievalPickItems;private uint retrievalPickLast;private int retrievalPickAction;
+    private bool OrganizerSelectionBusy=>gearRouting||armoireRunning||craftingWithdrawalPending||retrievalRun.Running||organizeRunning||chestRunning||sellerRun.Running||TraderRunning||retainerGilRunning;
+    private int OrganizerHoverSelectionAction(bool protectedItem=false)
+    {
+        if(protectedItem||OrganizerSelectionBusy||duplicateExclusionsOpen||!ImGui.IsItemHovered()||ImGui.GetIO().WantTextInput||ImGui.IsAnyItemActive())return 0;
+        var io=ImGui.GetIO();return io.KeyCtrl?0:io.KeyShift&&!io.KeyAlt?1:io.KeyAlt&&!io.KeyShift?-1:0;
+    }
     private void PickOrganizerRow(uint item,string name,uint recipe=0)
     {
         if(!ImGui.IsItemHovered()||ImGui.GetIO().WantTextInput||craftingWithdrawalPending||retrievalRun.Running||organizeRunning||chestRunning)return;

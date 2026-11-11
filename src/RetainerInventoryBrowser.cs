@@ -56,8 +56,9 @@ public sealed partial class Plugin
         ImGui.Checkbox("All available",ref browseTransferAll);ImGui.SameLine();ImGui.BeginDisabled(browseTransferAll);
         ImGui.SetNextItemWidth(70);ImGui.InputInt("##BrowseQuantity",ref retrievalQuantity,0,0);retrievalQuantity=Math.Clamp(retrievalQuantity,1,RetainerRetrieval.MaxQuantity);
         ImGui.EndDisabled();MarketHelp("Withdraw Quantity each, or All available selected items. Entrust moves matching bag quantities and respects Keep amounts.");ImGui.SameLine();
-        if(ImGui.SmallButton("Select all"))browseSelected.UnionWith(browseMatchedRows.Where(r=>!OrganizerGearProtected(r.Item)).Select(x=>x.Item));ImGui.SameLine();
-        if(ImGui.SmallButton("Clear"))browseSelected.Clear();ImGui.SameLine();
+        ImGui.NewLine();ImGui.BeginDisabled(OrganizerSelectionBusy);
+        if(ImGui.SmallButton("Select all matching"))browseSelected.UnionWith(browseMatchedRows.Where(r=>!OrganizerGearProtected(r.Item)).Select(x=>x.Item));ImGui.SameLine();
+        if(ImGui.SmallButton("Clear selection"))browseSelected.Clear();ImGui.EndDisabled();ImGui.SameLine();
         if(ImGui.SmallButton("Options…"))ImGui.OpenPopup("BrowseOptions");
         if(ImGui.BeginPopup("BrowseOptions")){
             if(ImGui.SmallButton("Refresh inventory"))RetrievalTry(RefreshRetrievalStock);
@@ -101,12 +102,12 @@ public sealed partial class Plugin
         var clip=ImGui.ImGuiListClipper();clip.Begin(rows.Length,rowHeight);
         while(clip.Step())for(var i=clip.DisplayStart;i<clip.DisplayEnd;i++){
             var row=rows[i];ImGui.PushID((int)row.Item);ImGui.TableNextRow(ImGuiTableRowFlags.None,rowHeight);ImGui.TableNextColumn();
-            var protectedItem=OrganizerGearProtected(row.Item);ImGui.BeginDisabled(protectedItem);
+            var protectedItem=OrganizerGearProtected(row.Item);ImGui.BeginDisabled(protectedItem||OrganizerSelectionBusy);
             ImGui.BeginGroup();var selected=browseSelected.Contains(row.Item);if(ImGui.Checkbox("##Selected",ref selected)){if(selected)browseSelected.Add(row.Item);else browseSelected.Remove(row.Item);}ImGui.SameLine();DrawRetrievalIcon(row.Item);
             if(ImGui.Selectable(row.Name,selected)){if(selected)browseSelected.Remove(row.Item);else browseSelected.Add(row.Item);}
             ImGui.EndGroup();ImGui.EndDisabled();
             if(protectedItem){ImGui.SameLine();ImGui.TextDisabled("[Gear set]");if(ImGui.IsItemHovered())ImGui.SetTooltip(OrganizerGearProtectionLabel(row.Item));}
-            if(!protectedItem&&ImGui.IsItemHovered()&&!ImGui.GetIO().WantTextInput){var io=ImGui.GetIO();if(io.KeyShift&&!io.KeyAlt)browseSelected.Add(row.Item);else if(io.KeyAlt&&!io.KeyShift)browseSelected.Remove(row.Item);}
+            var pick=OrganizerHoverSelectionAction(protectedItem);if(pick>0)browseSelected.Add(row.Item);else if(pick<0)browseSelected.Remove(row.Item);
             MarketHelp($"Shift hover: select · Alt hover: remove\n{row.Quantity-row.Hq:N0} NQ · {row.Hq:N0} HQ · recorded inventory\nSelect once across all retainers. Plan quality settings control actual withdrawals.");
             ImGui.TableNextColumn();ImGui.TextUnformatted(row.Quantity.ToString());ImGui.TableNextColumn();ImGui.TextUnformatted(retrievalBrowseBags.GetValueOrDefault(row.Item).ToString());ImGui.TableNextColumn();ImGui.TextUnformatted(row.Holders);ImGui.PopID();
         }
