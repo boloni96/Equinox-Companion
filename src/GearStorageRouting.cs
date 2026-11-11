@@ -12,6 +12,7 @@ namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
     private const ulong GlamourStorageDestination=ulong.MaxValue-2;
+    private string gearReceiptStatus="";
     private bool gearRouting,gearFromRetainers,gearMoveOwned,gearLookupOwned,gearSkipDyed=true;
     private bool gearContextSent,gearConfirmationSent,gearPausePrepared,gearDresserTransitionObserved;
     private int gearPhase,gearStored,gearSkipped,gearRechecks,gearOpenRetries,gearReserve=2;
@@ -72,7 +73,7 @@ public sealed partial class Plugin
         gearSelection.Clear();gearSelection.UnionWith(ids);gearRemaining.Clear();foreach(var id in ids)gearRemaining.Enqueue(id);gearDeliveries.Clear();gearBatch=[];
         gearPause=new(new SellerAutoRetainerPort());gearPausePrepared=false;gearRouting=true;gearNext=default;gearMoveOwned=gearLookupOwned=false;GearPhase(0,"Opening dresser / checking destinations");
     }
-    private void GearPhase(int phase,string status){gearDresserTransitionObserved=false;gearDresserCategoriesChecked.Clear();gearDresserPreviousCategory=-1;gearDresserCategoryChangedAt=default;gearPhase=phase;gearRechecks=gearOpenRetries=0;gearDeadline=DateTimeOffset.UtcNow.AddSeconds(30);gearInteractAt=default;gearStatus=status+(gearCopy is {} copy?" · "+SearchItemName(copy.Item):"");StorageTrace("gear","step",gearCopy?.Item??0,gearStatus);}
+    private void GearPhase(int phase,string status){gearReceiptStatus="";gearDresserTransitionObserved=false;gearDresserCategoriesChecked.Clear();gearDresserPreviousCategory=-1;gearDresserCategoryChangedAt=default;gearPhase=phase;gearRechecks=gearOpenRetries=0;gearDeadline=DateTimeOffset.UtcNow.AddSeconds(30);gearInteractAt=default;gearStatus=status+(gearCopy is {} copy?" · "+SearchItemName(copy.Item):"");StorageTrace("gear","step",gearCopy?.Item??0,gearStatus);}
     private void GearSkip(uint item,string reason){gearSkipped++;gearStatus="Skipped "+SearchItemName(item)+" · "+reason;StorageTrace("gear","skipped",item,reason);}
     private unsafe void StopGearStorage(string reason)
     {
@@ -295,7 +296,10 @@ public sealed partial class Plugin
                     gearStatus="Waiting for storage data to confirm the submitted item";return;
                 }
                 var present=gearDestination==GearStorageDestination.Armoire?UIState.Instance()->Cabinet.IsItemInCabinet(armoireRows![gearItem]):GearInDresser(gearItem);
-                if(!GearStoragePolicy.DeliveryConfirmed(ArmoireInventory(gearItem).Held==0,present)){gearStatus="Waiting for "+gearDestination+" receipt · "+SearchItemName(gearItem)+" · recheck "+gearRechecks+"/2";return;}
+                var held=ArmoireInventory(gearItem).Held;
+                var receipt=$"item={gearItem}; held={held}; destinationPresent={present}; confirmationSent={gearConfirmationSent}";
+                if(gearReceiptStatus!=receipt){gearReceiptStatus=receipt;StorageTrace("gear","receipt observation",gearItem,receipt);}
+                if(!GearStoragePolicy.DeliveryConfirmed(held==0,present)){gearStatus="Waiting for "+gearDestination+" receipt · "+SearchItemName(gearItem)+" · recheck "+gearRechecks+"/2";return;}
                 StorageTrace("gear","confirmed",gearItem,gearDestination.ToString());gearKnownDresser.Add(gearItem);gearStored++;gearCopy=null;GearPhase(4,$"{gearStored} stored · delivering batch");
             }
         }catch(Exception e){StopGearStorage("Stopped: "+e.Message);Log.Warning(e,"Gear storage route stopped");}
@@ -399,8 +403,16 @@ public sealed partial class Plugin
         var name=SearchItemName(gearItem);var matches=false;
         for(var i=0;i<Math.Min(128,(int)confirm->AtkValuesCount);i++)if(confirm->AtkValues[i].Type==AtkValueType.String&&(TravelMenuText(confirm->AtkValues[i].String)??"").Contains(name,StringComparison.Ordinal))matches=true;
         if(!matches||GearLiveCopy(copy)==null)throw new InvalidOperationException("Dresser confirmation does not match the selected item.");
-        StorageTrace("gear","dresser confirmation",copy.Item,$"addon={confirm->NameString}; id={confirm->Id}; values={confirm->AtkValuesCount}; selected copy verified");
-        confirm->FireCallbackInt(0);gearConfirmationSent=true;GearPhase(6,"Waiting for individual dresser receipt");
+        // The observed SelectYesno has its own registered Yes event. A bare callback
+        // index is not evidence that the affirmative action was submitted.
+        if(confirm->NameString!="SelectYesno")throw new InvalidOperationException("Unsupported dresser confirmation: "+confirm->NameString+"; confirm the selected item manually.");
+        var yes=(AddonSelectYesno*)confirm;
+        if(!NativeEventButton(confirm,yes->YesButton)){
+            gearStatus="Waiting for dresser Yes button to become available · "+SearchItemName(copy.Item);return;
+        }
+        gearConfirmationSent=true;
+        StorageTrace("gear","dresser confirmation",copy.Item,"SelectYesno: dispatched registered Yes button event; selected copy verified");
+        GearPhase(6,"Waiting for individual dresser receipt");
     }
     private static unsafe bool GearDresserCategoryClick(AtkComponentButton* button)
     {
