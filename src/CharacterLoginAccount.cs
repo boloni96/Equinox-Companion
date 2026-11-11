@@ -108,8 +108,10 @@ public sealed partial class Plugin
     private string RecordedCharacterAccountKey(SharedCharacter target,string personId,string accountId)
     {
         var local=config.ObservedCharacterAccountKeys.GetValueOrDefault(LoginPairingScope()+":"+target.ContentId,"");
-        return local.Length==64&&local.All(char.IsAsciiHexDigit)?local:
-            SquareEnixLoginState.TargetAccountKey(config.SharedRoster,target,personId,accountId);
+        if(local.Length==64&&local.All(char.IsAsciiHexDigit))return local;
+        if(PendingCurrentLoginRegistration() is {} pending&&pending.Character.Id==target.Id&&pending.Person.Id==personId&&pending.Character.AccountId==accountId)
+            return pending.Character.GameAccountKey.Length==64?pending.Character.GameAccountKey:SquareEnixLoginState.AccountKey(config.SharedRoster,personId,accountId);
+        return SquareEnixLoginState.TargetAccountKey(config.SharedRoster,target,personId,accountId);
     }
 
     private int RecordedCharacterServiceSlot(SharedCharacter target)

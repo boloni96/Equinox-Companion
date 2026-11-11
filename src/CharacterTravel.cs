@@ -30,12 +30,19 @@ public sealed partial class Plugin
  }
  private (string PersonId,string PersonName,string AccountId,string AccountName) CharacterSwitchScope(string id){
   foreach(var p in config.SharedRoster?.People??[])if(p.Characters.FirstOrDefault(c=>c.Id==id) is {} c)return(p.Id,p.Name,c.AccountId,c.Account);
+  if(PendingCurrentLoginRegistration() is {} pending&&pending.Character.Id==id)return(pending.Person.Id,pending.Person.Name,pending.Character.AccountId,pending.Character.Account);
   return("","Unknown person","","Unknown account");
+ }
+ private (SharedPerson Person,SharedCharacter Character)? PendingCurrentLoginRegistration(){
+  if(!Player.IsLoaded||config.SharedRoster is not {} roster)return null;
+  var actor=ReadActor();
+  var pending=DiscoveryReads().Kind("character.registered").LastOrDefault(e=>e.Actor.ContentId==actor.ContentId&&e.Registration?.PairingScope==RegistrationScope);
+  return CharacterRegistrationPolicy.PendingLogin(roster,actor,pending?.Registration,RegistrationScope);
  }
  private SharedCharacter? CurrentSharedCharacter(){
   if(!Player.IsLoaded)return null;
   var matches=(config.SharedRoster?.People??[]).SelectMany(p=>p.Characters).Where(c=>c.ContentId==Player.ContentId.ToString()).Take(2).ToArray();
-  return matches.Length==1?matches[0]:null;
+  return matches.Length==1?matches[0]:matches.Length==0?PendingCurrentLoginRegistration()?.Character:null;
  }
  private static string SwitchScopeKey((string PersonId,string PersonName,string AccountId,string AccountName) scope)=>scope.PersonId+"|"+scope.AccountId;
  private bool CharacterSwitchConsentCurrent(SharedCharacter character,(string PersonId,string PersonName,string AccountId,string AccountName) from,(string PersonId,string PersonName,string AccountId,string AccountName) to)=>
