@@ -77,10 +77,14 @@ public sealed partial class Plugin
         CaptureItemTradeMenu(args);
         CaptureOrganizerSortMenu(args);
         CaptureSaddleDepositMenu(args);
+        retrievalPort?.CaptureTransferSortMenu(args);
+        if(!ReferenceEquals(organizePort,retrievalPort))organizePort?.CaptureTransferSortMenu(args);
     }
 
     private void OnTradeItemShortcutClosed(AddonEvent _, AddonArgs args)
     {
+        retrievalPort?.TransferSortMenuClosed(args.Addon.Address);
+        if(!ReferenceEquals(organizePort,retrievalPort))organizePort?.TransferSortMenuClosed(args.Addon.Address);
         if(saddleDepositMenu?.Menu==args.Addon.Address)saddleDepositMenu=null;
         if(args.AddonName=="Trade"||itemTradeMenuSelection?.Menu==args.Addon.Address)itemTradeMenuSelection=null;
         if (pendingTradeItemShortcut is {} request &&
