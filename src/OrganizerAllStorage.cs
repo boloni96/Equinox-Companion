@@ -4,6 +4,8 @@ public sealed partial class Plugin
 {
     private string allStorageSearch="",allStorageKey="";
     private int allStorageFilter;
+    private readonly HashSet<uint> allStorageCategories=[];
+    private bool allStorageAllCategories=true;
     private ulong allStorageOwner;
     private readonly HashSet<uint> allStorageSelected=[];
     private readonly UiProjectionCache<SharedItemLocation[]> allStorageCache=new(1000);
@@ -36,6 +38,9 @@ public sealed partial class Plugin
         if(allStorageKey.Length>0&&!locations.Any(e=>e.Key==allStorageKey)){allStorageKey="";allStorageSelected.Clear();}
         if(housingView){ImGui.TextWrapped(config.SyncCollections?housingStorageReadStatus:"Storage recording is disabled in collection sync settings.");if(config.SharedRoster?.ItemLocationsTruncated==true)ImGui.TextWrapped("Shared storage results are partial; local records are also included.");}
         ImGui.SetNextItemWidth(-1);ImGui.InputTextWithHint("##AllStorageSearch","Search all recorded items…",ref allStorageSearch,100);
+        ImGui.SetNextItemWidth(Math.Max(120,ImGui.GetContentRegionAvail().X-105));
+        if(DrawStorageCategoryPicker("##AllStorageCategories",allStorageCategories,allStorageAllCategories?"All categories":"None selected")){allStorageAllCategories=false;allStorageSelected.Clear();}
+        ImGui.SameLine();if(ImGui.SmallButton("Reset filters")){allStorageCategories.Clear();allStorageAllCategories=true;allStorageSearch="";allStorageFilter=0;allStorageSelected.Clear();}
         ImGui.SetNextItemWidth(190);ImGui.Combo("##AllStorageFilter",ref allStorageFilter,"Any items\0Tradable only\0Untradable only\0Bound only\0Unbound only\0");
         MarketHelp("Bound means a non-collectible copy with spiritbond/binding data. Untradable includes bound copies and items that cannot be traded by design. Old observations with unknown copy state are excluded from these filters; reopen the storage to refresh.");
         ImGui.SameLine();if(ImGui.SmallButton("Refresh")){RetrievalTry(()=>ObserveStorage(DateTimeOffset.UtcNow));myInventoryRefresh=default;}
@@ -63,7 +68,7 @@ public sealed partial class Plugin
         if(localStorageRunning&&ImGui.Button("Stop storage transfer"))StopChest("Stopped by you; an already-sent move may still complete.");
         if(localStorageStatusShown)ImGui.TextWrapped(chestStatus);
         ImGui.BeginChild("AllStorageRows",new(0,Math.Max(80,ImGui.GetContentRegionAvail().Y-4)),false);
-        var groups=allStorageRowsCache.Get(locations,$"{allStorageSearch}:{allStorageFilter}",Environment.TickCount64,()=>locations.Select(e=>(e,VisibleStorageStacks(e).ToArray())).ToArray());
+        var groups=allStorageRowsCache.Get(locations,$"{allStorageSearch}:{allStorageFilter}:{allStorageAllCategories}:{string.Join(',',allStorageCategories.Order())}",Environment.TickCount64,()=>locations.Select(e=>(e,VisibleStorageStacks(e).ToArray())).ToArray());
         var shown=groups.Where(g=>allStorageKey.Length==0||g.Event.Key==allStorageKey).ToArray();
         if(config.OrganizerShowAllStorage){
             var flat=allStorageFlatCache.Get(groups,allStorageKey,Environment.TickCount64,()=>shown.SelectMany(g=>g.Rows.Select(row=>(Location:g.Event,Stack:row))).OrderBy(x=>SearchItemName(x.Stack.ItemId)).ThenBy(x=>x.Location.Name).ToArray());
@@ -123,5 +128,6 @@ public sealed partial class Plugin
                 ImGui.PopID();
             }clip.End();clip.Destroy();
     }
-    private IEnumerable<StorageStack> VisibleStorageStacks(SharedItemLocation e)=>(e.Stacks??e.Items.Select(id=>new StorageStack(id,0,false,SearchItemName(id))).ToArray()).SelectMany(LocalStoragePolicy.Copies).Where(s=>LocalStoragePolicy.Filter(s,allStorageFilter)&&SearchItemName(s.ItemId).Contains(allStorageSearch,StringComparison.OrdinalIgnoreCase));
+    private bool AllStorageItemMatches(uint id)=>InventoryBrowseSelection.Matches(SearchItemName(id),OrganizeCategory(id),allStorageSearch,allStorageCategories,allStorageAllCategories);
+    private IEnumerable<StorageStack> VisibleStorageStacks(SharedItemLocation e)=>(e.Stacks??e.Items.Select(id=>new StorageStack(id,0,false,SearchItemName(id))).ToArray()).SelectMany(LocalStoragePolicy.Copies).Where(s=>LocalStoragePolicy.Filter(s,allStorageFilter)&&AllStorageItemMatches(s.ItemId));
 }

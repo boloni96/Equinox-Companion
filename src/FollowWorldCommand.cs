@@ -70,7 +70,7 @@ public sealed partial class Plugin
         if(worldOnly&&worldName.Length==0){FollowChatNotice("TRAVEL — /et world <name> or /et w <name>. Example: /et w sophia");return;}
         if(worldName.Length==0){FollowChatNotice("TRAVEL — /et <aetheryte, map or world name>. Examples: /et saucer, /et golden, /et sau. Estates: fc, priv, efc, epriv, workshop (or ws), shared/sha, shared2/sha2; prefix e to enter a shared house.");return;}
         var exactWorld=DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().Any(x=>x.IsTravelWorld()&&string.Equals(x.Name.ToString(),worldName,StringComparison.OrdinalIgnoreCase));
-        if(!worldOnly&&(teleportOnly||!exactWorld)&&TryNamedTeleport(worldName,teleportOnly||worldName.StartsWith('#')))return;
+        if(!worldOnly&&(teleportOnly||!exactWorld)&&TryNamedTeleport(worldName,teleportOnly||worldName.StartsWith('#')||TeleportNameSearch.CityAlias(worldName)!=0))return;
         var world=ResolveFollowWorld(worldName);
         if(world==0){
             var matches=FollowWorldNames.Matches(DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>().Where(x=>x.IsTravelWorld()).Select(x=>(x.RowId,x.Name.ToString())),worldName);

@@ -38,7 +38,7 @@ public sealed partial class Plugin
         RequireLocalStorage(key,type);RefreshGearSetProtection();
         localStorageDuplicates=false;localStorageDuplicatePages=[];
         localStorageEntrust=entrust;localStorageFilter=entrust?myInventoryTradeFilter:allStorageFilter;localStorageQuality=entrust?myInventoryQuality:RetrievalQuality.Any;
-        localStorageRemaining=entrust?MyInventoryAmounts(ReadMyInventory()):allStorageSelected.ToDictionary(id=>id,_=>int.MaxValue);
+        localStorageRemaining=entrust?MyInventoryAmounts(ReadMyInventory()):allStorageSelected.Where(AllStorageItemMatches).ToDictionary(id=>id,_=>int.MaxValue);
         if(localStorageRemaining.Count==0)throw new InvalidOperationException("No selected items match the current filters and protections.");
         if(entrust&&LocalStoragePolicy.Storeroom(type)){
             indoorFurniture??=DataManager.GetExcelSheet<Lumina.Excel.Sheets.HousingFurniture>().Select(x=>x.Item.RowId).ToHashSet();
