@@ -6,7 +6,6 @@ public sealed partial class Plugin
 {
     private readonly Queue<StorageWithdrawalPage> localStorageQueue=[];
     private int localStorageBatchMoves,localStorageBatchFilter;
-    private DateTimeOffset localStorageReceiptAt;
     private readonly Dictionary<uint,int> localStorageWithdrawn=[];
     private bool localStorageRunning,localStorageStatusShown,localStorageDuplicates;
     private uint[] localStorageDuplicatePages=[];
@@ -41,7 +40,6 @@ public sealed partial class Plugin
         if(entrust&&LocalStoragePolicy.Armoury(type))throw new InvalidOperationException("Use the game to store gear in the Armoury Chest. This action withdraws unequipped gear to bags.");
         RequireLocalStorage(key,type);RefreshGearSetProtection();
         if(!continuation){localStorageQueue.Clear();localStorageBatchMoves=0;localStorageWithdrawn.Clear();}
-        localStorageReceiptAt=default;
         localStorageDuplicates=false;localStorageDuplicatePages=[];
         localStorageEntrust=entrust;localStorageFilter=entrust?myInventoryTradeFilter:continuation?localStorageBatchFilter:allStorageFilter;localStorageQuality=entrust?myInventoryQuality:RetrievalQuality.Any;
         localStorageRemaining=entrust?MyInventoryAmounts(ReadMyInventory()):(selectedItems??allStorageSelected.Items(key).Where(AllStorageItemMatches).ToArray()).Where(id=>!OrganizerGearProtected(id)).ToDictionary(id=>id,_=>int.MaxValue);
@@ -67,13 +65,10 @@ public sealed partial class Plugin
             foreach(var operation in manager->PendingOperations)if(!operation.IsEmpty){if(now>chestDeadline)throw new InvalidOperationException("Inventory transaction timed out; no retry sent.");return;}
             var store=localStorageDuplicates?localStorageDuplicatePages.SelectMany(ReadChestContainer).ToArray():ReadChestContainer(localStorageType);var bags=new uint[]{0,1,2,3}.SelectMany(ReadChestContainer).ToArray();
             if(localStorageDuplicates){TickSaddlebagDuplicateDeposit(store,bags,now,manager);return;}
+            if(LocalStoragePolicy.Saddle(localStorageType)&&localStoragePending!=null){TickSaddlebagDuplicateDeposit(store,bags,now,manager);return;}
             if(localStoragePending is {} sent){
                 var all=store.Concat(bags).ToArray();var src=all.Single(s=>s.Container==sent.Source.Container&&s.Slot==sent.Source.Slot);var dst=all.Single(s=>s.Container==sent.Destination.Container&&s.Slot==sent.Destination.Slot);
-                if(!ChestTransferPlanner.Confirmed(sent,src,dst)){localStorageReceiptAt=default;if(now>chestDeadline)throw new InvalidOperationException("Transfer was not confirmed. Check permissions, furnishing restrictions and any game prompt; no retry sent.");chestStatus="Waiting for the game to confirm the storage transfer";return;}
-                // Native inventory changes may appear before the server settles them.
-                if(localStorageReceiptAt==default){localStorageReceiptAt=now;return;}
-                if(now-localStorageReceiptAt<TimeSpan.FromSeconds(2))return;
-                localStorageReceiptAt=default;
+                if(!ChestTransferPlanner.Confirmed(sent,src,dst)){if(now>chestDeadline)throw new InvalidOperationException("Transfer was not confirmed. Check permissions, furnishing restrictions and any game prompt; no retry sent.");chestStatus="Waiting for the game to confirm the storage transfer";return;}
                 if(!localStorageEntrust)localStorageWithdrawn[sent.Source.Item]=localStorageWithdrawn.GetValueOrDefault(sent.Source.Item)+sent.Quantity;
                 if(!localStorageDuplicates)localStorageRemaining[sent.Source.Item]-=sent.Quantity;localStorageVisited.Add((sent.Source.Container,sent.Source.Slot));localStoragePending=null;chestMoves++;
                 ObserveStorage(now);myInventoryRefresh=default;RequestStorageRefresh();
@@ -87,6 +82,7 @@ public sealed partial class Plugin
                 var destination=destinations.FirstOrDefault(s=>s.Item==0&&s.Quantity==0);
                 if(destination==null)throw new InvalidOperationException("No empty destination slot is available. Confirmed transfers are kept; free space and retry remaining items.");
                 if(!LocalStoragePolicy.CanMove(source.Container,destination.Container))throw new InvalidOperationException("Transfer is outside the selected storage and bags.");
+                if(LocalStoragePolicy.Saddle(localStorageType)){TickSaddlebagDuplicateDeposit(store,bags,now,manager,new(source,destination,source.Quantity));return;}
                 localStoragePending=new(source,destination,source.Quantity);chestDeadline=now.AddSeconds(12);
                 chestStatus=$"{chestMoves} confirmed · {(localStorageEntrust?"Storing":"Withdrawing")} {SearchItemName(source.Item)}";
                 manager->MoveItemSlot((InventoryType)source.Container,(ushort)source.Slot,(InventoryType)destination.Container,(ushort)destination.Slot);

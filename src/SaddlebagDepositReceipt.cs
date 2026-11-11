@@ -14,6 +14,6 @@ internal sealed class SaddlebagDepositReceipt(long bagsBefore,long saddleBefore,
         }
         if(seenQuantity>removed)return Result.Reverted;
         if(seenQuantity!=(int)removed){seenQuantity=(int)removed;stableAt=now;return Result.Waiting;}
-        return stableAt.HasValue&&now-stableAt.Value>=TimeSpan.FromSeconds(2)?Result.Settled:Result.Waiting;
+        return stableAt.HasValue&&now>stableAt.Value?Result.Settled:Result.Waiting;
     }
 }
