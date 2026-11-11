@@ -69,8 +69,8 @@ public sealed partial class Plugin
             var now=DateTimeOffset.UtcNow;p.PrepareOrganizerSort();
             if(transferSortStage==0){transferSortOwner=id;transferSortMenu=null;transferSortDeadline=now.AddSeconds(12);transferSortStage=1;}
             if(now>transferSortDeadline){
-                var order=ItemOrderModule.Instance();var sorter=order==null?null:order->GetActiveRetainerSorter();
-                p.TraceRetainerNavigation($"Sort timeout: stage {transferSortStage}, menu {SellerAddon("ContextMenu")!=null}, active owner {(order==null?0:order->ActiveRetainerId)}, function {(sorter==null?-999:sorter->SortFunctionIndex)}, percent {(sorter==null?-1:sorter->PercentComplete)}");
+                var order=ItemOrderModule.Instance();var timedSorter=order==null?null:order->GetActiveRetainerSorter();
+                p.TraceRetainerNavigation($"Sort timeout: stage {transferSortStage}, menu {SellerAddon("ContextMenu")!=null}, active owner {(order==null?0:order->ActiveRetainerId)}, function {(timedSorter==null?-999:timedSorter->SortFunctionIndex)}, percent {(timedSorter==null?-1:timedSorter->PercentComplete)}");
                 return SkipTransferSort(id,"Sort completion was not confirmed within 12 seconds");
             }
             InventoryStatus="Sorting after final transfer";
