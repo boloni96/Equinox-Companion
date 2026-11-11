@@ -55,6 +55,7 @@ public sealed partial class Plugin
                 ImGui.EndDisabled();
                 MarketHelp((status.Length>0?status+"\n\n":"")+"Move inventory items already present in loaded normal/premium saddlebags. Fills matching stacks first; HQ and NQ stay separate. Respects gear-set protection. Keeps 0 in bags.");
             }
+            ImGui.SameLine();DrawDuplicateExclusionsButton("Saddlebag");
         }
         ImGui.End();ImGui.PopStyleVar(5);ImGui.PopStyleColor(5);
     }

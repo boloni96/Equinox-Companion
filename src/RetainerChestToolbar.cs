@@ -33,6 +33,7 @@ public sealed partial class Plugin
         ImGui.SameLine();if(ImGui.Button("Withdraw"))StartChest(0);MarketHelp(chestCrystals?"Withdraw selected crystals directly, limited by carrying capacity.":"Withdraw the current plan from the selected chest tabs into your bags.");
         ImGui.SameLine();if(ImGui.Button("Entrust"))StartChest(4);MarketHelp(chestCrystals?"Entrust selected crystals, leaving Keep in bags.":"Entrust the current plan from your bags into the selected chest tabs.");
         ImGui.SameLine();if(ImGui.Button("Duplicates"))StartChest(1);MarketHelp($"Deposit items already stored in the selected tabs. Keep {chestKeep} of each item/quality in bags. {(config.ChestDuplicatesIncludeCrystals?"Includes crystals.":"Excludes shards, crystals and clusters.")}");
+        ImGui.SameLine();DrawDuplicateExclusionsButton("ChestToolbar");
         ImGui.EndDisabled();ImGui.SameLine();
         if(chestRunning){if(ImGui.Button("Stop"))StopChest("Stopped by you. An already-sent transfer may still complete.");ImGui.SameLine();}
         if(ImGui.Button("...##ChestOptions"))ImGui.OpenPopup("Chest options");MarketHelp("Chest tabs, stack merging, move between tabs, and Organizer.");

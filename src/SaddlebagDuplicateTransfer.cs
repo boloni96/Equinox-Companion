@@ -57,7 +57,7 @@ public sealed partial class Plugin
             if(SellerAddon("ContextMenu")!=null||SellerAddon("InputNumeric")!=null)throw new InvalidOperationException("Close the open item menu before adding duplicates.");
             RefreshGearSetProtection();
             var deposit=bags.Where(s=>!OrganizerGearProtected(s.Item)).Select(s=>s with{CanDeposit=true}).ToArray();
-            var next=ChestTransferPlanner.Duplicates(store,deposit,0);
+            var next=ChestTransferPlanner.Duplicates(store,deposit,0,exclusions:config.DuplicateDepositExclusions);
             if(next==null){StopChest($"Complete · {chestMoves} duplicate transfers confirmed; no further matching items fit in the saddlebag.");return;}
             var agent=AgentInventoryContext.Instance();var module=AgentModule.Instance();
             var inventory=module==null?null:module->GetAgentByInternalId(AgentId.Inventory);

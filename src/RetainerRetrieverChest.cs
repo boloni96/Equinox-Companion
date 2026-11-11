@@ -137,7 +137,7 @@ public sealed partial class Plugin
             }
             RefreshGearSetProtection();
             var depositBags=bags.Where(s=>!OrganizerGearProtected(s.Item)).ToArray();
-            var next=chestMode switch{0=>ChestTransferPlanner.Withdraw(chest,bags,chestGoals,chestQuality),1=>ChestTransferPlanner.Duplicates(chest,depositBags,chestKeep,config.ChestDuplicatesIncludeCrystals),3=>ChestTransferPlanner.Transfer(chest,destination,chestGoals.Keys.ToHashSet(),chestQuality),4=>ChestTransferPlanner.Send(depositBags,chest,chestGoals,chestQuality),_=>ChestTransferPlanner.Merge(chest)};
+            var next=chestMode switch{0=>ChestTransferPlanner.Withdraw(chest,bags,chestGoals,chestQuality),1=>ChestTransferPlanner.Duplicates(chest,depositBags,chestKeep,config.ChestDuplicatesIncludeCrystals,config.DuplicateDepositExclusions),3=>ChestTransferPlanner.Transfer(chest,destination,chestGoals.Keys.ToHashSet(),chestQuality),4=>ChestTransferPlanner.Send(depositBags,chest,chestGoals,chestQuality),_=>ChestTransferPlanner.Merge(chest)};
             if(next==null){
                 if(chestMode==3)chestUnmoved+=chest.Where(x=>chestGoals.ContainsKey(x.Item)&&RetainerRetrieval.AllowsQuality(x.Hq,chestQuality)).Sum(x=>x.Quantity);
                 if(++chestPageIndex<chestPages.Length){BeginChestPage(now);return;}
@@ -168,7 +168,7 @@ public sealed partial class Plugin
         if(ImGui.BeginPopup("ChestPanelOptions")){
             DrawChestDuplicateOptions();
             if(!chestCrystals&&ImGui.Button("Withdraw selected list items"))StartChest(0,true);
-            if(ImGui.Button("Deposit duplicates"))StartChest(1);MarketHelp("Deposit matching bag items already stored in the selected tabs, leaving Keep in bags.");
+            if(ImGui.Button("Deposit duplicates"))StartChest(1);MarketHelp("Deposit matching bag items already stored in the selected tabs, leaving Keep in bags.");ImGui.SameLine();DrawDuplicateExclusionsButton("ChestPanel");
             if(!chestCrystals){ImGui.TextUnformatted("Keep in bags");DrawChestKeepControl();if(ImGui.Button("Merge stacks"))StartChest(2);
                 ImGui.SetNextItemWidth(100);ImGui.SliderInt("Destination tab",ref chestDestination,1,5);if(ImGui.Button("Move list items to tab"))StartChest(3);}
             ImGui.Checkbox("Dock to chest",ref chestDock);ImGui.EndPopup();
