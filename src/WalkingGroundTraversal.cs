@@ -89,3 +89,18 @@ internal static class WalkingCollisionFilter
     public const int Movement=0x6000;
     public static bool Matches(ulong material,int mask)=>(material&(ulong)mask)!=0;
 }
+
+// Triangle normals encode surface area as well as direction. Small paving
+// triangles must obey the same slope limit as larger triangles.
+internal static class WalkingSupportNormal
+{
+    internal static bool Walkable(Vector3 normal)
+    {
+        if(!float.IsFinite(normal.X)||!float.IsFinite(normal.Y)||!float.IsFinite(normal.Z))return false;
+        var scale=MathF.Max(MathF.Abs(normal.X),MathF.Max(MathF.Abs(normal.Y),MathF.Abs(normal.Z)));
+        if(scale==0)return false;
+        // Scale first to avoid underflow/overflow when normalizing tiny/large triangles.
+        var direction=normal/scale;
+        return Vector3.Normalize(direction).Y>=.65f;
+    }
+}

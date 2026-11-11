@@ -95,7 +95,7 @@ internal sealed class GameWalkingCollision:IWalkingCollision
         if(!Hit(near+new Vector3(0,.7f,0),-Vector3.UnitY,1.5f,out var hit)){GroundFailure="No support ray hit";return false;}
         // Triangle cross product is available even when a collider omits its normal.
         var normal=hit.Normal;if(normal.LengthSquared()<.1f)normal=Vector3.Cross(hit.V2-hit.V1,hit.V3-hit.V1);
-        if(normal.LengthSquared()<.0001f||Vector3.Normalize(normal).Y<.65f){GroundFailure=$"Support normal rejected: {normal}";return false;}
+        if(!WalkingSupportNormal.Walkable(normal)){GroundFailure=$"Support normal rejected: {normal}";return false;}
         if(hit.Point.Y-near.Y>.65f||near.Y-hit.Point.Y>.7f){GroundFailure=$"Support height rejected: {hit.Point.Y-near.Y}";return false;}
         ground=hit.Point;
         if(Hit(ground+new Vector3(0,.12f,0),Vector3.UnitY,Height-.12f,out _,WalkingCollisionFilter.Movement)){GroundFailure="Headroom blocked";return false;}
