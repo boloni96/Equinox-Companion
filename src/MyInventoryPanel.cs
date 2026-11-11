@@ -85,7 +85,10 @@ public sealed partial class Plugin
         if(ImGui.SmallButton("Add selected to plan"))RetrievalTry(()=>AddRetrieval(amounts.Select(x=>new RetrievalEntry(x.Key,MyInventoryName(x.Key),x.Value)).ToArray()));ImGui.EndDisabled();
         ImGui.TextDisabled($"{amounts.Count} selected matching items · temporary selection");
         MarketHelp("Entrust selected uses only checked items matching these filters and their quantities. Assignments choose destinations only. Your loaded plan is unchanged. Open the summoning bell to entrust. Shift-hover selects; Alt-hover removes.");
+        DrawBagStorageActions(amounts);
         ImGui.EndDisabled();
+        if(localStorageRunning&&ImGui.Button("Stop storage transfer"))StopChest("Stopped by you; an already-sent move may still complete.");
+        if(localStorageStatusShown)ImGui.TextWrapped(chestStatus);
         if(organizeRunning&&ImGui.Button("Stop entrust"))StopOrganize("Stopped by you; an already-sent move may still complete.");
         if(organizeMoves.Length>0||organizeRunning)ImGui.TextWrapped(organizeStatus);
         ImGui.BeginDisabled(gearRouting||armoireRunning||craftingWithdrawalPending||retrievalRun.Running||organizeRunning||chestRunning);

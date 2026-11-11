@@ -4,6 +4,10 @@ using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
+    private readonly Queue<StorageWithdrawalPage> localStorageQueue=[];
+    private int localStorageBatchMoves,localStorageBatchFilter;
+    private DateTimeOffset localStorageReceiptAt;
+    private readonly Dictionary<uint,int> localStorageWithdrawn=[];
     private bool localStorageRunning,localStorageStatusShown,localStorageDuplicates;
     private uint[] localStorageDuplicatePages=[];
     private string localStorageKey="";
@@ -30,15 +34,17 @@ public sealed partial class Plugin
         var inv=InventoryManager.Instance();var c=inv==null?null:inv->GetInventoryContainer((InventoryType)type);
         if(c==null||!c->IsLoaded||c->Items==null||c->Size is <=0 or >200)throw new InvalidOperationException("Storage data is not loaded. Open the selected storage page first.");
     }
-    private unsafe void StartLocalStorage(string key,bool entrust)
+    private unsafe void StartLocalStorage(string key,bool entrust,uint[]? selectedItems=null,bool continuation=false)
     {
         if(chestRunning||organizeRunning||retrievalRun.Running||gearRouting||armoireRunning||craftingWithdrawalPending||sellerRun.Running||TraderRunning||retainerGilRunning)throw new InvalidOperationException("Finish the current inventory operation first.");
         if(!TryLocalStorageKey(key,out var type))throw new InvalidOperationException("Choose a storage location first.");
         if(entrust&&LocalStoragePolicy.Armoury(type))throw new InvalidOperationException("Use the game to store gear in the Armoury Chest. This action withdraws unequipped gear to bags.");
         RequireLocalStorage(key,type);RefreshGearSetProtection();
+        if(!continuation){localStorageQueue.Clear();localStorageBatchMoves=0;localStorageWithdrawn.Clear();}
+        localStorageReceiptAt=default;
         localStorageDuplicates=false;localStorageDuplicatePages=[];
-        localStorageEntrust=entrust;localStorageFilter=entrust?myInventoryTradeFilter:allStorageFilter;localStorageQuality=entrust?myInventoryQuality:RetrievalQuality.Any;
-        localStorageRemaining=entrust?MyInventoryAmounts(ReadMyInventory()):allStorageSelected.Items(key).Where(id=>AllStorageItemMatches(id)&&!OrganizerGearProtected(id)).ToDictionary(id=>id,_=>int.MaxValue);
+        localStorageEntrust=entrust;localStorageFilter=entrust?myInventoryTradeFilter:continuation?localStorageBatchFilter:allStorageFilter;localStorageQuality=entrust?myInventoryQuality:RetrievalQuality.Any;
+        localStorageRemaining=entrust?MyInventoryAmounts(ReadMyInventory()):(selectedItems??allStorageSelected.Items(key).Where(AllStorageItemMatches).ToArray()).Where(id=>!OrganizerGearProtected(id)).ToDictionary(id=>id,_=>int.MaxValue);
         if(localStorageRemaining.Count==0)throw new InvalidOperationException("No selected items match the current filters and protections.");
         if(entrust&&LocalStoragePolicy.Storeroom(type)){
             indoorFurniture??=DataManager.GetExcelSheet<Lumina.Excel.Sheets.HousingFurniture>().Select(x=>x.Item.RowId).ToHashSet();
@@ -48,7 +54,7 @@ public sealed partial class Plugin
             if(localStorageRemaining.Count==0)throw new InvalidOperationException("Select furnishings for this indoor/outdoor storeroom. Other item types cannot be stored in housing.");
         }
         localStorageKey=key;localStorageType=type;localStorageTerritory=Client.TerritoryType;chestOwner=Player.ContentId;chestWorld=Player.CurrentWorld.RowId;
-        localStoragePending=null;localStorageVisited.Clear();chestMoves=0;chestNext=default;chestDeadline=DateTimeOffset.UtcNow.AddSeconds(15);
+        localStoragePending=null;localStorageVisited.Clear();chestMoves=localStorageBatchMoves;chestNext=default;chestDeadline=DateTimeOffset.UtcNow.AddSeconds(15);
         localStorageRunning=chestRunning=localStorageStatusShown=true;chestStatus=entrust?"Preparing storage deposit":"Preparing storage withdrawal";
     }
     private unsafe void TickLocalStorage(DateTimeOffset now)
@@ -63,7 +69,12 @@ public sealed partial class Plugin
             if(localStorageDuplicates){TickSaddlebagDuplicateDeposit(store,bags,now,manager);return;}
             if(localStoragePending is {} sent){
                 var all=store.Concat(bags).ToArray();var src=all.Single(s=>s.Container==sent.Source.Container&&s.Slot==sent.Source.Slot);var dst=all.Single(s=>s.Container==sent.Destination.Container&&s.Slot==sent.Destination.Slot);
-                if(!ChestTransferPlanner.Confirmed(sent,src,dst)){if(now>chestDeadline)throw new InvalidOperationException("Transfer was not confirmed. Check permissions, furnishing restrictions and any game prompt; no retry sent.");chestStatus="Waiting for the game to confirm the storage transfer";return;}
+                if(!ChestTransferPlanner.Confirmed(sent,src,dst)){localStorageReceiptAt=default;if(now>chestDeadline)throw new InvalidOperationException("Transfer was not confirmed. Check permissions, furnishing restrictions and any game prompt; no retry sent.");chestStatus="Waiting for the game to confirm the storage transfer";return;}
+                // Native inventory changes may appear before the server settles them.
+                if(localStorageReceiptAt==default){localStorageReceiptAt=now;return;}
+                if(now-localStorageReceiptAt<TimeSpan.FromSeconds(2))return;
+                localStorageReceiptAt=default;
+                if(!localStorageEntrust)localStorageWithdrawn[sent.Source.Item]=localStorageWithdrawn.GetValueOrDefault(sent.Source.Item)+sent.Quantity;
                 if(!localStorageDuplicates)localStorageRemaining[sent.Source.Item]-=sent.Quantity;localStorageVisited.Add((sent.Source.Container,sent.Source.Slot));localStoragePending=null;chestMoves++;
                 ObserveStorage(now);myInventoryRefresh=default;RequestStorageRefresh();
             }
@@ -80,6 +91,12 @@ public sealed partial class Plugin
                 chestStatus=$"{chestMoves} confirmed · {(localStorageEntrust?"Storing":"Withdrawing")} {SearchItemName(source.Item)}";
                 manager->MoveItemSlot((InventoryType)source.Container,(ushort)source.Slot,(InventoryType)destination.Container,(ushort)destination.Slot);
                 return;
+            }
+            if(candidates.Length==0&&localStorageQueue.Count>0){
+                localStorageBatchMoves=chestMoves;var next=localStorageQueue.Dequeue();
+                // The preceding page has no pending move; only now start another page.
+                localStorageRunning=chestRunning=false;
+                StartLocalStorage(next.Key,false,next.Items,true);return;
             }
             StopChest(candidates.Length>0?$"{chestMoves} transfers confirmed. Remaining selections require a partial stack; select the full quantity to transfer here.":$"Complete · {chestMoves} storage transfers confirmed; no further selected copies match filters and protections.");
         }catch(Exception e){StopChest("Stopped: "+e.Message);}

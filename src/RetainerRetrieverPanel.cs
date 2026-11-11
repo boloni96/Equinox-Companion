@@ -147,8 +147,8 @@ public sealed partial class Plugin
             }
             if(ImGui.BeginTabItem("Transfer",retrievalShowList?ImGuiTabItemFlags.SetSelected:ImGuiTabItemFlags.None)){retrievalShowList=false;ImGui.BeginDisabled(gearRouting||armoireRunning||craftingWithdrawalPending||retrievalRun.Running||organizeRunning||chestRunning);if(ImGui.CollapsingHeader("Gear storage filters")){DrawGearCategoryPicker("Equipment slots",gearCategories,false);DrawGearSourcePicker();}DrawRetrievalList();ImGui.EndDisabled();ImGui.EndTabItem();}
             if(ImGui.BeginTabItem("Organize###Organize retainers")){if(!organizerTabWasVisible)InvalidateOrganizePreview();organizerTabWasVisible=true;DrawRetainerOrganizer();ImGui.EndTabItem();}else organizerTabWasVisible=false;
-            if(ImGui.BeginTabItem("Armoire")){DrawArmoireOrganizer();ImGui.EndTabItem();}
-            if(ImGui.BeginTabItem("FC chest")){DrawRetrievalChest();ImGui.EndTabItem();}
+            if(ImGui.BeginTabItem("Armoire",organizerOpenArmoire?ImGuiTabItemFlags.SetSelected:ImGuiTabItemFlags.None)){organizerOpenArmoire=false;DrawArmoireOrganizer();ImGui.EndTabItem();}
+            if(ImGui.BeginTabItem("FC chest",organizerOpenChest?ImGuiTabItemFlags.SetSelected:ImGuiTabItemFlags.None)){organizerOpenChest=false;DrawRetrievalChest();ImGui.EndTabItem();}
             ImGui.EndTabBar();}
         
         if(retrievalError.Length>0)ImGui.TextWrapped(retrievalError);

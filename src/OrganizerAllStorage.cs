@@ -59,18 +59,7 @@ public sealed partial class Plugin
         ImGui.SameLine();if(ImGui.SmallButton("Clear selection"))allStorageSelected.Clear(allStorageKey);
         ImGui.EndDisabled();
         ImGui.TextDisabled("Shift-hover selects · Alt-hover removes");
-        if(chosen==null)ImGui.TextWrapped("Select across locations below. Choose a location to transfer its selected items.");
-        if(chosen!=null){
-            ImGui.BeginDisabled(OrganizerSelectionBusy);
-            var supported=TryLocalStorageKey(allStorageKey,out var type)&& (LocalStoragePolicy.Saddle(type)||LocalStoragePolicy.Storeroom(type)||LocalStoragePolicy.Armoury(type));
-            if(supported){
-                ImGui.BeginDisabled(!allStorageSelected.Items(allStorageKey).Any());if(ImGui.Button("Withdraw selected to bags"))RetrievalTry(()=>StartLocalStorage(allStorageKey,false));ImGui.EndDisabled();
-                EnsureMyInventoryCharacter();ImGui.BeginDisabled(myInventorySelected.Count==0||LocalStoragePolicy.Armoury(type));if(ImGui.Button("Entrust temporary bag selection here"))RetrievalTry(()=>StartLocalStorage(allStorageKey,true));ImGui.EndDisabled();
-                ImGui.TextDisabled(LocalStoragePolicy.Armoury(type)?"Withdraw unequipped gear to bags; gear-set protection applies. Use the game to equip or store gear here.":"Transfers whole selected stacks; open this storage in game first.");
-                if(ImGui.SmallButton($"Choose bag items · {myInventorySelected.Count} selected")){retrievalInventoryView=0;}
-            }else ImGui.TextWrapped("Recorded view. Use Retainers, FC chest, or Armoire for their transfer tools. Equipped and placed furnishings are display-only here.");
-            ImGui.EndDisabled();
-        }
+        DrawRecordedStorageActions(locations,chosen);
         if(localStorageRunning&&ImGui.Button("Stop storage transfer"))StopChest("Stopped by you; an already-sent move may still complete.");
         if(localStorageStatusShown)ImGui.TextWrapped(chestStatus);
         ImGui.BeginChild("AllStorageRows",new(0,Math.Max(80,ImGui.GetContentRegionAvail().Y-4)),false);
