@@ -1156,6 +1156,7 @@ public sealed partial class Plugin : IDalamudPlugin
             MeasureWork("Overlay: travel suggestions",DrawTravelCommandSuggestions);
             MeasureWork("Overlay: seller toolbar",DrawSellerToolbar);
             MeasureWork("Overlay: saddlebag duplicates",DrawSaddlebagDuplicateButton);
+            DrawDuplicateExclusionsWindow();
             MeasureWork("Overlay: market item hover",DrawMarketNativeHover);
             MeasureWork("Overlay: item popup",DrawPluginItemPopup);
         }

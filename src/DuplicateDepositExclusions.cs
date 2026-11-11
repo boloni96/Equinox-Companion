@@ -2,20 +2,28 @@ using Dalamud.Bindings.ImGui;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
+    private bool duplicateExclusionsOpen;
     private string duplicateExclusionSearch="",duplicateExclusionLastSearch="";
     private KeyValuePair<uint,string>[] duplicateExclusionResults=[];
     private void DrawDuplicateExclusionsButton(string scope)
     {
         ImGui.PushID(scope);
-        if(ImGui.Button("...##DuplicateExclusions")){ImGui.OpenPopup("Duplicate exclusions");LoadRetrievalCatalog();duplicateExclusionLastSearch="\0";}
+        if(ImGui.Button("...##DuplicateExclusions")){duplicateExclusionsOpen=true;retrievalPickLast=0;retrievalPickAction=0;LoadRetrievalCatalog();duplicateExclusionLastSearch="\0";}
         MarketHelp($"Duplicate exclusions · {config.DuplicateDepositExclusions.Count} items. Shared by saddlebag and FC chest duplicate deposits.");
-        ImGui.SetNextWindowSize(new(410,420),ImGuiCond.Appearing);
+        ImGui.PopID();
+    }
+    private void DrawDuplicateExclusionsWindow()
+    {
+        if(!duplicateExclusionsOpen)return;
+        ImGui.SetNextWindowSize(new(410,420),ImGuiCond.FirstUseEver);
         ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding,new System.Numerics.Vector2(10,8));
-        if(ImGui.BeginPopup("Duplicate exclusions")){
+        if(ImGui.Begin("Duplicate exclusions",ref duplicateExclusionsOpen)){
             ImGui.TextUnformatted("Duplicate exclusions");
             ImGui.TextWrapped("Shared by all Add duplicates / Deposit duplicates buttons. Excludes both HQ and NQ copies. Manual Entrust and Withdraw are unchanged.");
+            ImGui.TextDisabled("Hover an item: Shift adds · Alt removes");
             ImGui.Separator();
             if(retrievalCatalogTask?.IsCompleted==true){try{retrievalCatalog=retrievalCatalogTask.GetAwaiter().GetResult();}catch(Exception e){retrievalError=e.Message;}retrievalCatalogTask=null;}
+            if(duplicateExclusionsOpen)TickRetrievalPicker();
             var busy=chestRunning||organizeRunning||retrievalRun.Running;
             if(busy)ImGui.TextDisabled("Stop the current transfer to edit exclusions.");
             ImGui.BeginDisabled(busy);
@@ -39,10 +47,9 @@ public sealed partial class Plugin
                 ImGui.EndChild();
             }
             ImGui.EndDisabled();
-            if(ImGui.SmallButton("Close"))ImGui.CloseCurrentPopup();
-            ImGui.EndPopup();
+            if(ImGui.SmallButton("Close"))duplicateExclusionsOpen=false;
         }
-        ImGui.PopStyleVar();ImGui.PopID();
+        ImGui.End();ImGui.PopStyleVar();
     }
     private void DrawDuplicateExclusionItem(uint id,string name)
     {

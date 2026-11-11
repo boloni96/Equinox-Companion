@@ -11,6 +11,7 @@ public sealed partial class Plugin
     private void PickOrganizerRow(uint item,string name,uint recipe=0)
     {
         if(!ImGui.IsItemHovered()||ImGui.GetIO().WantTextInput||craftingWithdrawalPending||retrievalRun.Running||organizeRunning||chestRunning)return;
+        if(duplicateExclusionsOpen)return;
         var io=ImGui.GetIO();var exists=retrievalItems.Any(x=>x.ItemId==item);string message;
         if(io.KeyShift&&!io.KeyAlt&&!exists){AddRetrieval([new(item,name,retrievalQuantity,recipe)]);message="Added "+name;}
         else if(io.KeyAlt&&!io.KeyShift&&exists){retrievalItems=retrievalItems.Where(x=>x.ItemId!=item).ToArray();retrievalSelected.Remove(item);retrievalPreview=[];retrievalPreviewDirty=true;if(retrievalEditingPreset!=null)RetrievalTry(SaveRetrievalPreset);message="Removed "+name;}
@@ -27,13 +28,21 @@ public sealed partial class Plugin
     {
         var focused=ShortcutKeyboard.OwnGameFocused();var ui=RaptureAtkModule.Instance();
         var shift=ShortcutKeyboard.Down(0x10,focused);var alt=ShortcutKeyboard.Down(0x12,focused);
-        var blocked=(!retrieverWindow.IsOpen&&!retrievalPickItems)||!Player.IsLoaded||!focused||gearRouting||armoireRunning||craftingWithdrawalPending||sellerRun.Running||TraderRunning||retrievalRun.Running||organizeRunning||chestRunning||retainerGilRunning||ImGui.GetIO().WantTextInput||ImGui.IsAnyItemActive()||ui==null||ui->IsTextInputActive()||ShortcutKeyboard.Down(0x11,focused);
+        var blocked=(!duplicateExclusionsOpen&&!retrieverWindow.IsOpen&&!retrievalPickItems)||!Player.IsLoaded||!focused||gearRouting||armoireRunning||craftingWithdrawalPending||sellerRun.Running||TraderRunning||retrievalRun.Running||organizeRunning||chestRunning||retainerGilRunning||ImGui.GetIO().WantTextInput||ImGui.IsAnyItemActive()||ui==null||ui->IsTextInputActive()||ShortcutKeyboard.Down(0x11,focused);
         var action=shift&&!alt?1:alt&&!shift?-1:0;
         var item=ItemContextPolicy.Normalize(GameGui.HoveredItem);
         if(blocked||action==0||item==0){retrievalPickLast=0;retrievalPickAction=0;return;}
         if(item==retrievalPickLast&&action==retrievalPickAction)return;
         retrievalPickLast=item;retrievalPickAction=action;
         if(retrievalCatalog==null||!retrievalCatalog.Names.TryGetValue(item,out var name))return;
+        if(duplicateExclusionsOpen){
+            var changed=action>0?config.DuplicateDepositExclusions.Add(item):config.DuplicateDepositExclusions.Remove(item);
+            if(changed){
+                SaveConfiguration();var notice=(action>0?"Excluded ":"Allowed duplicates for ")+name;
+                RetrievalNotifications.AddNotification(new Notification{Title="Duplicate exclusions",Content=notice,MinimizedText=notice,Type=NotificationType.Info,InitialDuration=TimeSpan.FromSeconds(1.5),HardExpiry=DateTime.UtcNow.AddSeconds(2)});
+            }
+            return;
+        }
         EnsureMyInventoryCharacter();
         RefreshGearSetProtection();
         if(action>0&&OrganizerGearProtected(item)){retrievalError=OrganizerGearProtectionLabel(item);return;}
