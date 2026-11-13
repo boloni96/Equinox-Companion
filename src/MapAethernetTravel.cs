@@ -42,7 +42,7 @@ public sealed partial class Plugin
             var selected=DataManager.GetExcelSheet<Map>().GetRowOrDefault(map->SelectedMapId);
             if(selected is not {} row||row.SizeFactor==0||!DataManager.GetSubrowExcelSheet<MapMarker>().TryGetRow(row.MapMarkerRange,out var markers))return;
             var candidates=DataManager.GetExcelSheet<Aetheryte>().Where(a=>a.AethernetGroup!=0&&a.Territory.RowId==map->SelectedTerritoryId&&labels.Contains(a.AethernetName.Value.Name.ToString().Trim())).ToArray();
-            var matches=candidates.Where(a=>markers.Any(m=>m.DataType==(a.IsAetheryte?3:4)&&m.DataKey.RowId==(a.IsAetheryte?a.RowId:a.AethernetName.RowId)&&MapTravelPolicy.Hit(m.X,m.Y,row.SizeFactor,addon->HoveredCoords.X,addon->HoveredCoords.Y))).ToArray();
+            var matches=candidates.Where(a=>markers.Any(m=>m.DataType==(a.IsAetheryte?3:4)&&m.DataKey.RowId==(a.IsAetheryte?a.RowId:a.AethernetName.RowId)&&MapTravelPolicy.Hit(m.X,m.Y,row.SizeFactor,addon->MouseCoords.X,addon->MouseCoords.Y))).ToArray();
             if(matches.Length!=1)return;
             var target=matches[0];
             // Ordinary long-distance aetheryte clicks retain the game's teleport prompt.
