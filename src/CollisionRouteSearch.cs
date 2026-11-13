@@ -55,7 +55,9 @@ public sealed class CollisionRouteSearch
     private readonly Func<Func<NavigationRoadRoute?>,Task<NavigationRoadRoute?>> roadWorker;
     private readonly List<Vector3> roadObstacles=[];
     private int roadDetours,priorExpanded;
-    private Vector3 reverseRoot;
+    private readonly List<Vector3> reverseRoots=[];
+    private bool seedInteractionReverse;
+    private int interactionSeedIndex;
     public int CompletedRoadDetours { get; private set; }
     public int RoadDetours=>roadDetours;
     // A completed, collision-verified guide section can be walked while this
@@ -90,7 +92,7 @@ public sealed class CollisionRouteSearch
         forward.Open.Enqueue(committedRoadEnd,0);testedJoins.Clear();
         if(backward!=null){
             backward.Open.Clear();backward.Closed.Clear();backward.Pending=null;
-            backward.Open.Enqueue(new(Address(reverseRoot),reverseRoot,0,null),0);
+            foreach(var root in reverseRoots)backward.Open.Enqueue(new(Address(root),root,0,null),heuristicWeight*RemainingDistance(root,reverseGoal,0));
         }
         active=forward;
     }
@@ -130,9 +132,9 @@ public sealed class CollisionRouteSearch
         // Start from the actual upper/lower destination floor too. Reverse edges
         // are validated in the direction the character will eventually walk.
         if(arrival==null&&bidirectional&&Vector3.Distance(origin,goal)>=12&&collision.Ground(goal,out var end)&&MathF.Abs(end.Y-goal.Y)<=1.2f){
-            reverseRoot=end;backward=new(true);backward.Open.Enqueue(new(Address(end),end,0,null),0);
+            reverseRoots.Add(end);backward=new(true);backward.Open.Enqueue(new(Address(end),end,0,null),0);
         }
-        if(arrival!=null)directApproach=new(collision,origin,goal,arrival);
+        if(arrival!=null){directApproach=new(collision,origin,goal,arrival);seedInteractionReverse=bidirectional;}
         if(arrival==null&&Vector3.Distance(origin,goal)>=12){
             if(streetGuide!=null)roadSeed=new(collision,origin,streetGuide);
             else if(roads!=null){
@@ -176,6 +178,10 @@ public sealed class CollisionRouteSearch
                             roadDetourTask=roadWorker(()=>map.Detour(from,goal,[]));
                         }
                     }
+                    continue;
+                }
+                if(seedInteractionReverse){
+                    SeedInteractionReverse();
                     continue;
                 }
                 if(roadDetourTask?.IsCompleted==true){
@@ -275,6 +281,23 @@ public sealed class CollisionRouteSearch
             }
         }catch(NavigationSliceExpiredException){BudgetYields++;}
         finally{collision.EndSlice();}
+    }
+    // Seed a second search from supported, visible interaction positions, never
+    // from the garden/crystal collider itself. Run within the same frame budget;
+    // an interrupted native query retries the same sample on the next slice.
+    private void SeedInteractionReverse()
+    {
+        const int directions=8;
+        if(interactionSeedIndex>=directions*2){seedInteractionReverse=false;return;}
+        var angle=(interactionSeedIndex%directions)*MathF.PI/4;
+        var point=goal+new Vector3(MathF.Cos(angle),0,MathF.Sin(angle))*(range*.9f);
+        if(interactionSeedIndex>=directions)point.Y=origin.Y;
+        if(collision.Ground(point,out var floor)&&arrival!(floor)&&
+            !reverseRoots.Any(p=>Address(p)==Address(floor))){
+            reverseRoots.Add(floor);backward??=new(true);
+            backward.Open.Enqueue(new(Address(floor),floor,0,null),heuristicWeight*RemainingDistance(floor,reverseGoal,0));
+        }
+        interactionSeedIndex++;
     }
     private bool TryJoin(Frontier side,Node current)
     {
