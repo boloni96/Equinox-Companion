@@ -56,7 +56,7 @@ internal static class WalkingGroundTraversal
                 }
                 floors.Add(floor);previous=floor;
             }
-            if(MathF.Abs(previous.Y-to.Y)>=.25f)return Reject("Destination support height mismatch",to);
+            if(!(MathF.Abs(previous.Y-to.Y)<.25f))return Reject("Destination support height mismatch",to);
             for(;room<floors.Count;room++){
                 var floor=floors[room];
                 if(!(bodyRoom?.Invoke(floor)??TerrainBodyRoom(collision,floor,blocked)))

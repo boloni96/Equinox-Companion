@@ -14,6 +14,9 @@ internal static class ResumableSweep554Tests
             p=>{rooms++;return true;}))throw new Exception("554 longitudinal wall bypassed");
         if(rooms!=0)throw new Exception("554 blocked edge performed unnecessary footprint sweeps");
 
+        var invalid=new Terrain { InvalidFloor=true };
+        if(invalid.Traverse(Vector3.Zero,new(2,0,0)))throw new Exception("554 non-finite support accepted");
+
         foreach(var slope in new[]{0f,.3f}){
             var direct=new Terrain { Slope=slope };
             var destination=new Vector3(2,2*slope,0);
@@ -55,10 +58,10 @@ internal static class ResumableSweep554Tests
     }
     private sealed class Terrain:IWalkingCollision
     {
-        public float Slope;public bool Wall,CrossWall;
+        public float Slope;public bool Wall,CrossWall,InvalidFloor;
         public int Remaining=int.MaxValue,Calls;
         private void Query(){if(Remaining--<=0)throw new NavigationSliceExpiredException();Calls++;}
-        public bool Ground(Vector3 p,out Vector3 ground){Query();ground=p with{Y=p.X*Slope};return true;}
+        public bool Ground(Vector3 p,out Vector3 ground){Query();ground=p with{Y=InvalidFloor&&p.X>.1f?float.NaN:p.X*Slope};return true;}
         public bool Blocked(Vector3 a,Vector3 b){
             Query();
             if(CrossWall&&MathF.Abs(b.Z-a.Z)>.5f)return true;
