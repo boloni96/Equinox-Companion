@@ -51,7 +51,17 @@ internal sealed class GameWalkingCollision:IWalkingCollision
     public bool ComfortableTraverse(Vector3 from,Vector3 to)=>Traverse(from,to)&&WalkingClearance.PreservesRoom(from,to,WallPenalty);
     internal Vector3? LastBlockedAt { get; private set; }
     public string? TraversalFailure { get; private set; }
-    private bool OneWayBlocked(Vector3 a,Vector3 b){var delta=b-a;var length=delta.Length();return length>.001f&&Hit(a,delta/length,length,out _,WalkingCollisionFilter.Movement);}
+    private string? sweepRayEvidence;
+    private bool OneWayBlocked(Vector3 a,Vector3 b){
+        var delta=b-a;var length=delta.Length();
+        if(length<=.001f||!Hit(a,delta/length,length,out var hit,WalkingCollisionFilter.Movement))return false;
+        // Record the exact rejecting probe, not an unrelated ray sampled later
+        // around the actor. This also identifies low furnishing/step collisions.
+        sweepRayEvidence=FormattableString.Invariant($"ray {a} -> {b}; hit {hit.Point}; material 0x{hit.Material:X}; normal {hit.Normal}");
+        return true;
+    }
+    private string DescribeSweepFailure(string reason)=>sweepRayEvidence is {} ray?reason+"; "+ray:
+        !string.IsNullOrEmpty(GroundFailure)?reason+"; "+GroundFailure:reason;
     private bool Blocked(Vector3 a,Vector3 b)=>WalkingClearance.SegmentBlocked(a,b,OneWayBlocked);
     internal static unsafe bool Available(){
         var f=GameFramework.Instance();var c=f==null?null:f->BGCollisionModule;
@@ -123,8 +133,8 @@ internal sealed class GameWalkingCollision:IWalkingCollision
         samplingLiveSweep=groundCache==null;if(!liveDecision)liveSweepGround.Clear();
         try{
             Vector3? blockedAt;
-            TraversalFailure=null;
-            var clear=groundCache!=null?traversalCache.Check(this,from,to,Blocked,out blockedAt):WalkingGroundTraversal.Check(this,from,to,Blocked,out blockedAt,rejected:reason=>TraversalFailure=reason);
+            TraversalFailure=null;sweepRayEvidence=null;GroundFailure="";
+            var clear=groundCache!=null?traversalCache.Check(this,from,to,Blocked,out blockedAt,DescribeSweepFailure):WalkingGroundTraversal.Check(this,from,to,Blocked,out blockedAt,rejected:reason=>TraversalFailure=DescribeSweepFailure(reason));
             if(groundCache!=null)TraversalFailure=traversalCache.Failure;
             LastBlockedAt=blockedAt;
             if(liveDecision)decisionSweeps[(from,to)]=(clear,blockedAt,TraversalFailure);
