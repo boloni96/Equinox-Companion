@@ -60,8 +60,7 @@ internal sealed class GameWalkingCollision:IWalkingCollision
         sweepRayEvidence=FormattableString.Invariant($"ray {a} -> {b}; hit {hit.Point}; material 0x{hit.Material:X}; normal {hit.Normal}");
         return true;
     }
-    private string DescribeSweepFailure(string reason)=>sweepRayEvidence is {} ray?reason+"; "+ray:
-        !string.IsNullOrEmpty(GroundFailure)?reason+"; "+GroundFailure:reason;
+    private string DescribeSweepFailure(string reason)=>sweepRayEvidence is {} ray?reason+"; "+ray:reason;
     private bool Blocked(Vector3 a,Vector3 b)=>WalkingClearance.SegmentBlocked(a,b,OneWayBlocked);
     internal static unsafe bool Available(){
         var f=GameFramework.Instance();var c=f==null?null:f->BGCollisionModule;
