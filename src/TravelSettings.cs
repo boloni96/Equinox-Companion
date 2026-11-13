@@ -4,6 +4,9 @@ public sealed partial class Plugin
 {
     private void DrawTravelSettings()
     {
+        var mapTravel=config.MapAethernetTravel;
+        if(ImGui.Checkbox("Click map shards to travel",ref mapTravel)){config.MapAethernetTravel=mapTravel;SaveConfiguration();}
+        ImGui.TextWrapped("Left-click an attuned city shard on the map to use its aethernet. Nearby main crystals also use the aethernet. Ordinary long-distance aetheryte clicks keep the game's teleport prompt. Disabled by default; enable this in only one travel plugin.");
         var nearby=config.NearbyTravelMenu;
         if(ImGui.Checkbox("Nearby travel menu",ref nearby)){config.NearbyTravelMenu=nearby;SaveConfiguration();}
         ImGui.TextWrapped("Optional shortcuts beside usable aetherytes, shards and transport NPCs. Disabled by default.");

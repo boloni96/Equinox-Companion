@@ -218,6 +218,7 @@ public sealed partial class Plugin : IDalamudPlugin
         Commands.AddHandler("/equinox", new CommandInfo(OnCommand) { HelpMessage = "Open Equinox Companion, shared profiles, housing and settings." });
         shortTravelCommandRegistered = Commands.AddHandler("/et", new CommandInfo((command,args)=>StartSharedWorldTravel(args)) { HelpMessage = "Travel: /et <partial aetheryte/map/world name> (e.g. saucer). /et tp <name>, world <name> or w <name> selects the type. Estates: fc, priv/private, efc, epriv/eprivate, workshop." });
         InitializeTravelPromptRecorder();
+        InitializeMapAethernetTravel();
         shortWorldTravelCommandRegistered=Commands.AddHandler("/etw",new CommandInfo((_,args)=>StartSharedWorldTravel(args.Trim().Equals("stop",StringComparison.OrdinalIgnoreCase)?"stop":"world "+args)){HelpMessage="Native world/DC travel: /etw <world>. /etw shows usage; /etw stop cancels remaining steps."});
         if(!shortTravelCommandRegistered)Log.Warning("/et is already registered; use /eqtravel or /equinox travel.");
         travelCommandRegistered = Commands.AddHandler("/eqtravel", new CommandInfo((command,args)=>StartSharedWorldTravel(args)) { HelpMessage = "Travel: World name/prefix, fc, priv/private, efc, epriv/eprivate, workshop." });
@@ -1401,7 +1402,7 @@ public sealed partial class Plugin : IDalamudPlugin
         if(travelCommandRegistered)Commands.RemoveHandler("/eqtravel");
         if(shortTravelCommandRegistered)Commands.RemoveHandler("/et");
         if(shortWorldTravelCommandRegistered)Commands.RemoveHandler("/etw");
-        nativeWorldTrip=null;nativeAethernetTrip=null;nativeHousingTrip=null;nativeGardenMove=null;Addons.UnregisterListener(RecordTravelUiEvent);
+        nativeWorldTrip=null;nativeAethernetTrip=null;nativeHousingTrip=null;nativeGardenMove=null;Addons.UnregisterListener(RecordTravelUiEvent);Addons.UnregisterListener(OnMapAethernetInput);
         if (fashionCommandRegistered) Commands.RemoveHandler("/fashionr");
         if (gardeningCommandRegistered) Commands.RemoveHandler("/gardening");
         if (plantingCommandRegistered) Commands.RemoveHandler("/planting");
