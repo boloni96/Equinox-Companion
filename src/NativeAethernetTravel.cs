@@ -44,7 +44,17 @@ public sealed partial class Plugin
                 }
                 if(!TargetWithinInteractionRange(crystal)){
                     var offset=self.Position-crystal.Position;offset.Y=0;if(offset.LengthSquared()<.01f)throw new InvalidOperationException("Aethernet crystal is on another floor.");
-                    IndependentWalk(crystal.Position,InteractionLimit(crystal),now,allowFlight:false,interactionTarget:crystal,useInteractionRegion:true);
+                    try{IndependentWalk(crystal.Position,InteractionLimit(crystal),now,allowFlight:false,interactionTarget:crystal,useInteractionRegion:true);}
+                    catch(InvalidOperationException ex) when(AethernetRecoveryPolicy.ReturnToMain(trip.Teleported,trip.Stage,ex.Message)){
+                        // Keep the selected destination; a failed nearby approach must not require another map click.
+                        var main=sheet.FirstOrDefault(x=>x.IsAetheryte&&x.AethernetGroup==destination.AethernetGroup).RowId;
+                        StopIndependentWalk("Nearby aethernet approach failed; trying main crystal",resetFailure:true);
+                        if(main==0||!RequestNativePublicTeleport(main))throw new InvalidOperationException("Nearby shard is unreachable and its main crystal teleport is unavailable.");
+                        trip.Teleported=true;trip.Next=now.AddSeconds(1);
+                        nativeAethernetStatus="Teleporting to main crystal after blocked shard approach";
+                        RecordTravelPrompt("Aethernet approach fallback",new{destination=trip.Destination,source=crystal.BaseId,main,reason=ex.Message});
+                        FollowChatNotice("TRAVEL — Cannot reach the nearby shard; teleporting to the main crystal and continuing to "+destination.AethernetName.Value.Name.ToString()+".");return;
+                    }
                     nativeAethernetStatus="Approaching aethernet · "+independentWalkStatus;return;
                 }
                 StopIndependentWalk("At aethernet");var system=TargetSystem.Instance();if(system==null)return;
