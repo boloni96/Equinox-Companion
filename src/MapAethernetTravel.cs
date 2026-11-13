@@ -25,7 +25,7 @@ public sealed partial class Plugin
     private void TraceMapClick(string reason,object? detail=null){mapTravelLastResult=reason;RecordTravelPrompt("Map click",new{reason,detail});}
     private unsafe HashSet<string> MapTravelLabels(){
         var tooltip=SellerAddon("Tooltip");
-        return tooltip==null?new(StringComparer.Ordinal):TravelNodeText(&tooltip->UldManager).Select(x=>x.Trim()).Where(x=>x.Length>0).ToHashSet(StringComparer.Ordinal);
+        return tooltip==null?new(StringComparer.Ordinal):TravelNodeText(&tooltip->UldManager).Select(MapTravelPolicy.TooltipName).Where(x=>x.Length>0).ToHashSet(StringComparer.Ordinal);
     }
     private unsafe void OnMapAethernetInput(AddonEvent type,AddonArgs args)
     {
@@ -57,12 +57,14 @@ public sealed partial class Plugin
             if(args.AddonName=="TelepotTown"){TryMapTownClick((AtkUnitBase*)args.Addon.Address,data,labels);return;}
             var addon=(AddonAreaMap*)args.Addon.Address;
             if(addon==null)return;
+            var cursorX=MapTravelPolicy.CursorCoordinate(addon->MouseXInteger,addon->MouseXDecimal);
+            var cursorY=MapTravelPolicy.CursorCoordinate(addon->MouseYInteger,addon->MouseYDecimal);
             var selected=DataManager.GetExcelSheet<Map>().GetRowOrDefault(map->SelectedMapId);
             if(selected is not {} row||row.SizeFactor==0||!DataManager.GetSubrowExcelSheet<MapMarker>().TryGetRow(row.MapMarkerRange,out var markers)){TraceMapClick("Map marker data unavailable",new{map=map->SelectedMapId});return;}
-            var candidates=DataManager.GetExcelSheet<Aetheryte>().Where(a=>a.AethernetGroup!=0&&a.Territory.RowId==map->SelectedTerritoryId&&labels.Contains(a.AethernetName.Value.Name.ToString().Trim())).ToArray();
-            var matches=candidates.Where(a=>markers.Any(m=>m.DataType==(a.IsAetheryte?3:4)&&m.DataKey.RowId==(a.IsAetheryte?a.RowId:a.AethernetName.RowId)&&MapTravelPolicy.Hit(m.X,m.Y,row.SizeFactor,addon->MouseCoords.X,addon->MouseCoords.Y))).ToArray();
-            if(matches.Length>1)matches=matches.Where(a=>labels.Contains(a.AethernetName.Value.Name.ToString().Trim())).ToArray();
-            if(matches.Length!=1){TraceMapClick("No unique destination marker",new{map=map->SelectedMapId,x=addon->MouseCoords.X,y=addon->MouseCoords.Y,labels=labels.ToArray(),matches=matches.Length});return;}
+            var candidates=DataManager.GetExcelSheet<Aetheryte>().Where(a=>a.AethernetGroup!=0&&a.Territory.RowId==map->SelectedTerritoryId&&(labels.Contains(a.AethernetName.Value.Name.ToString().Trim())||(a.IsAetheryte&&labels.Contains(a.PlaceName.Value.Name.ToString().Trim())))).ToArray();
+            var matches=candidates.Where(a=>markers.Any(m=>m.DataType==(a.IsAetheryte?3:4)&&m.DataKey.RowId==(a.IsAetheryte?a.RowId:a.AethernetName.RowId)&&MapTravelPolicy.Hit(m.X,m.Y,row.SizeFactor,cursorX,cursorY))).ToArray();
+            if(matches.Length>1)matches=matches.Where(a=>(labels.Contains(a.AethernetName.Value.Name.ToString().Trim())||(a.IsAetheryte&&labels.Contains(a.PlaceName.Value.Name.ToString().Trim())))).ToArray();
+            if(matches.Length!=1){TraceMapClick("No unique destination marker",new{map=map->SelectedMapId,x=cursorX,y=cursorY,labels=labels.ToArray(),matches=matches.Length});return;}
             var target=matches[0];
             // Ordinary long-distance aetheryte clicks retain the game's teleport prompt.
             if(target.IsAetheryte&&!Objects.Any(o=>o.ObjectKind==Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Aetheryte&&o.IsTargetable&&DataManager.GetExcelSheet<Aetheryte>().GetRowOrDefault(o.BaseId)?.AethernetGroup==target.AethernetGroup))return;
@@ -70,6 +72,7 @@ public sealed partial class Plugin
             if(!RequestUnlockedAethernet(target.RowId,out var reason)){RecordTravelPrompt("Map destination rejected",new{id=target.RowId,reason});FollowChatNotice("TRAVEL — "+reason);return;}
             // Consume only a validated, accepted left click so the native paid-teleport prompt does not also open.
             data->MouseData.ButtonId=50;
+            FollowChatNotice("TRAVEL — Heading to "+target.AethernetName.Value.Name.ToString()+" via aethernet.");
             mapTravelLastResult="Destination selected";RecordTravelPrompt("Map destination selected",new{id=target.RowId,name=target.AethernetName.Value.Name.ToString(),map=map->SelectedMapId});
         }catch(Exception ex){Log.Debug(ex,"Map aethernet click failed");RecordTravelPrompt("Map destination error",new{error=ex.GetType().Name});}
     }
