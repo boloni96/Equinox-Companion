@@ -31,7 +31,7 @@ public sealed partial class Plugin
         while(travelPromptHistory.Count>=600){travelPromptHistory.Dequeue();travelPromptDropped++;}
         travelPromptHistory.Enqueue(new {sequence=++travelPromptSequence,at=DateTimeOffset.UtcNow,kind,trip=nativeWorldTrip?.Id,stage=nativeWorldTrip?.Stage.ToString(),status=nativeTravelStatus,detail});
     }
-    private object TravelPromptExport()=>new {schema=2,capacity=600,dropped=travelPromptDropped,coverage="Known travel/login menus and World Visit controls, DC/world rows, input parameters, callbacks and wait reasons. Bounded snapshots on changes; not every game UI event.",records=travelPromptHistory.ToArray()};
+    private object TravelPromptExport()=>new {schema=3,mapClick=new{enabled=config.MapAethernetTravel,inputs=mapTravelInputCount,lastResult=mapTravelLastResult},capacity=600,dropped=travelPromptDropped,coverage="Known travel/login menus and World Visit controls, DC/world rows, input parameters, callbacks and wait reasons. Bounded snapshots on changes; not every game UI event.",records=travelPromptHistory.ToArray()};
     private unsafe void UpdateTravelPromptRecorder(DateTimeOffset now)
     {
         if(now<travelPromptNext)return;

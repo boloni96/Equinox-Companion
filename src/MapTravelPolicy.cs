@@ -1,6 +1,7 @@
 namespace EquinoxCompanion;
 public static class MapTravelPolicy
 {
+    public static bool CanSelectTown(string requested,string? actual,bool locked,bool unusable,bool current)=>!locked&&!unusable&&!current&&!string.IsNullOrWhiteSpace(actual)&&string.Equals(requested,actual,StringComparison.Ordinal);
     public static bool Hit(int markerX,int markerY,uint size,float hoverX,float hoverY)
     {
         if(size==0||!float.IsFinite(hoverX)||!float.IsFinite(hoverY))return false;
