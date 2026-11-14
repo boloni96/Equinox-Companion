@@ -25,3 +25,25 @@ public static class HousingStatus
             .Select(v => (DateTimeOffset?)v.ObservedAt).Max();
     }
 }
+
+// Only locally proven owner/FC-member entries may advance a shared timer.
+public static class SharedHouseLocalEntry
+{
+    public static SharedHouse Apply(SharedHouse house,IEnumerable<HousingEstateRow> rows,DateTimeOffset now)
+    {
+        var latest=house.LastEntry;
+        foreach(var row in rows){
+            var estate=row.Estate;
+            if(row.Entry is not {} at||at>now||latest is {} old&&at<=old||
+               estate.Kind!="house.discovered"||estate.House?.Evidence!="owned-estate-id"||
+               estate.House.Type!=house.Type||estate.Address is not {} address||
+               string.IsNullOrWhiteSpace(house.GameHouseId)||!string.Equals(address.HouseId,house.GameHouseId,StringComparison.OrdinalIgnoreCase))continue;
+            var eligible=house.Type=="Private house"
+                ? !string.IsNullOrWhiteSpace(house.OwnerName)&&string.Equals(estate.Actor.Name.Trim(),house.OwnerName.Trim(),StringComparison.OrdinalIgnoreCase)&&
+                  string.Equals(estate.Actor.HomeWorldName,house.World,StringComparison.OrdinalIgnoreCase)
+                : house.Type=="Free Company house"&&!string.IsNullOrWhiteSpace(house.FcId)&&estate.House.FreeCompany?.Id==house.FcId;
+            if(eligible)latest=at;
+        }
+        return latest==house.LastEntry?house:house with{LastEntry=latest};
+    }
+}

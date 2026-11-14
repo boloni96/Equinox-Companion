@@ -23,7 +23,9 @@ public sealed record VoyageDetails(string FcId, SubmarineDetails[] Submarines, i
 public sealed record SyncResult(string[] Accepted, string Status, bool Retry, long? UploadedCursor = null);
 public sealed partial class CompanionSync : IDisposable
 {
-    private readonly HttpClient client = new(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(20) };
+    private readonly HttpClient client;
+    public CompanionSync():this(new HttpClientHandler { AllowAutoRedirect=false }) { }
+    internal CompanionSync(HttpMessageHandler handler){client=new(handler){Timeout=TimeSpan.FromSeconds(20)};}
     private readonly CancellationTokenSource cancel = new();
     private static readonly JsonSerializerOptions Json = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, PropertyNameCaseInsensitive = true };
     public async Task<SyncResult> Send(string key, SyncEvent[] events)
@@ -65,8 +67,7 @@ public sealed partial class CompanionSync : IDisposable
             if (response.StatusCode == HttpStatusCode.Unauthorized) return new(null, "Shared profiles: pairing key invalid or revoked.", Unauthorized: true);
             if (response.StatusCode == HttpStatusCode.NotFound) return new(null, "Shared profiles are not available on this server yet. Check the Journal deployment.");
             if (!response.IsSuccessStatusCode) return new(null, $"Shared profiles unavailable (HTTP {(int)response.StatusCode}); showing saved copy.");
-            await response.Content.LoadIntoBufferAsync(8000000);
-            var roster = JsonSerializer.Deserialize<SharedRoster>(await response.Content.ReadAsStringAsync(cancel.Token), Json);
+            var roster = JsonSerializer.Deserialize<SharedRoster>(await ReadProfileBody(response,8000000,cancel.Token), Json);
             if (roster is null || roster.People is null || roster.People.Length > 100 || roster.People.Any(p => p is null || p.Characters is null || p.Accounts is {Length:>100} || p.Accounts?.Any(a=>a is null||string.IsNullOrWhiteSpace(a.Id)||string.IsNullOrWhiteSpace(a.Name))==true || p.Characters.Any(c => c is null || c.Houses is null)))
                 return new(null, "Invalid shared profile response; showing saved copy.");
             if(roster.People.SelectMany(p=>p.Characters).Any(c=>c.HousingBids is {Length:>40}||c.HousingBids?.Any(b=>b is null||b.WorldId is <1 or >65535||b.At.Year<2020||!HousingLottery.Valid(new(b.District,b.Ward,b.Plot,b.Entry,b.Buyer,b.FcId,b.Status=="claimed"?"entered":b.Status,b.CycleStart,b.Evidence)))==true))
@@ -83,14 +84,15 @@ public sealed partial class CompanionSync : IDisposable
                 return new(null, "Invalid garden care response; showing saved copy.");
             if(roster.SubmarineSupplies is {Length:>500} || roster.SubmarineSupplies?.Any(s=>s is null||string.IsNullOrWhiteSpace(s.CharacterId)||s.ObservedAt.Year<2020||s.ObservedAt>DateTimeOffset.UtcNow.AddMinutes(5)||!SubmarineSupplyStatus.Valid(s.Data))==true)
                 return new(null,"Invalid submarine supply response; showing saved copy.");
-            if(roster.ItemStoragePaging>=1)roster=await ReadInventoryPages(key,roster);
+            // Inventory pages refresh independently; never hold fresh house/profile data behind them.
             rosterETag = response.Headers.ETag?.ToString();
             rosterETagKey = key;
             return WithRosterReceipt(new(roster, "Shared profiles updated."),response);
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException or InvalidOperationException)
-        { return new(null, ex switch { TaskCanceledException => "Shared profiles request cancelled or timed out; showing saved copy.", JsonException => "Website returned invalid shared-profile JSON; showing saved copy.", HttpRequestException http => $"Shared profiles connection failed ({http.HttpRequestError}); showing saved copy.", _ => "Invalid shared-profile response; showing saved copy." }); }
+        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or JsonException or InvalidOperationException or ProfileReadException or IOException)
+        { return new(null, ProfileFailure("Shared profiles",ex)+"; showing saved copy."); }
     }
+
     public void Dispose() { cancel.Cancel(); client.Dispose(); cancel.Dispose(); }
 }
 

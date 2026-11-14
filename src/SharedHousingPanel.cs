@@ -15,6 +15,7 @@ public sealed partial class Plugin
     {
         sync.InstallationId=config.InstallationId;
         UpdateDeliveryStatus(now);
+        UpdateSharedInventory(now);
         if(rosterStatusKey!=config.PairingKey)
         {
             rosterStatusKey=config.PairingKey;rosterReceivedAt=null;rosterReadFailed=false;
@@ -29,7 +30,9 @@ public sealed partial class Plugin
                 if(r.Roster is not null||r.NotModified)rosterReceivedAt=now;
                 if(r.Roster is not null||r.NotModified)registrationFreshKey=rosterTaskKey;
                 if (r.Roster is null && !r.NotModified) { errorJournal.Record("shared-roster", r.Status); nextRosterRead=now.AddSeconds(30); }
-                if (r.Roster is not null) { if((config.SharedRoster?.ProtocolVersion??0)<13&&r.Roster.ProtocolVersion>=13){autoRetainerForceRead=true;autoRetainerCharacters.Clear();nextAutoRetainerRead=default;} config.SharedRoster = r.Roster; SaveConfiguration(); }
+                if (r.Roster is not null) { if((config.SharedRoster?.ProtocolVersion??0)<13&&r.Roster.ProtocolVersion>=13){autoRetainerForceRead=true;autoRetainerCharacters.Clear();nextAutoRetainerRead=default;} config.SharedRoster = r.Roster.ItemStoragePaging>=1
+                    ? r.Roster with{ItemLocations=config.SharedRoster?.ItemLocations,ItemLocationsTruncated=config.SharedRoster?.ItemLocationsTruncated??true}
+                    : r.Roster; SaveConfiguration(); }
                 if (r.Unauthorized) { config.SharedRoster = null; SaveConfiguration(); }
                 QueueRosterReceipt(r);
                 if(r.DeliveryError.Length>0)deliveryError=r.DeliveryError;
@@ -50,7 +53,7 @@ public sealed partial class Plugin
     private void DrawSharedStatus(bool showRefresh=true)
     {
         var incompatible=unsupportedSyncRecords>0;
-        var attention=rosterReadFailed||faulted||syncFailures>0||configurationError.Length>0||incompatible||SyncValidation.ActionableHeld(heldSyncRecords,historicalHeldSyncRecords)>0;
+        var attention=rosterReadFailed||sharedInventoryError.Length>0||faulted||syncFailures>0||configurationError.Length>0||incompatible||SyncValidation.ActionableHeld(heldSyncRecords,historicalHeldSyncRecords)>0;
         var label=!config.SyncEnabled?"Sync off":config.PairingKey.Length!=64?"Not paired":attention?"Needs attention":syncTask is not null||uploadPreparation is not null||readySyncRecords>0?"Saving…":rosterReceivedAt is null?"Checking shared data…":"Sync active";
         ImGui.TextColored(attention?Orange:Grey,label);
         if(ImGui.IsItemHovered()){
@@ -58,6 +61,7 @@ public sealed partial class Plugin
             ImGui.TextUnformatted(syncStatus);ImGui.TextUnformatted(SyncQueueStatus);
             if(incompatible)ImGui.TextUnformatted($"{unsupportedSyncRecords} action(s) require a newer Journal server; kept locally until you deploy the matching update.");
             ImGui.TextUnformatted(rosterStatus);
+            if(sharedInventoryStatus.Length>0)ImGui.TextUnformatted(sharedInventoryStatus);
             ImGui.TextUnformatted("Journal server: "+(string.IsNullOrEmpty(config.SharedRoster?.ServerVersion)?"version not reported":config.SharedRoster.ServerVersion));
             ImGui.TextUnformatted("Received by this plugin: "+(rosterReceivedAt is {} received?DisplayTime.Local(received):"not yet this session"));
             DrawDeliveryDetails();
@@ -67,7 +71,7 @@ public sealed partial class Plugin
         }
         if(showRefresh)
         {
-            ImGui.SameLine();if (ImGui.SmallButton("Refresh")) nextRosterRead = default;
+            ImGui.SameLine();if (ImGui.SmallButton("Refresh")) {nextRosterRead = default;nextInventoryRead=default;}
             if(ImGui.IsItemHovered())ImGui.SetTooltip("Check paired profiles now. Drag the tabs below to reorder them.");
         }
     }
@@ -122,6 +126,22 @@ public sealed partial class Plugin
         eligible=SharedHousingEligibility.CountsForCharacter(c,h,(config.SharedRoster?.People??[]).SelectMany(p=>p.Characters));
         housingEligibilityCache[key]=eligible;return eligible;
     }
+    private LocalHousingProjection? sharedEntryProjection;
+    private SharedRoster? sharedEntryRoster;
+    private readonly Dictionary<SharedHouse,SharedHouse> sharedEntryCache=[];
+    private SharedHouse WithLocalHouseEntry(SharedHouse house)
+    {
+        var projection=ReadLocalHousingProjection();
+        if(!ReferenceEquals(projection,sharedEntryProjection)||!ReferenceEquals(config.SharedRoster,sharedEntryRoster)){
+            sharedEntryProjection=projection;sharedEntryRoster=config.SharedRoster;sharedEntryCache.Clear();
+        }
+        if(projection==null)return house;
+        if(!sharedEntryCache.TryGetValue(house,out var result)){
+            result=SharedHouseLocalEntry.Apply(house,projection.Index.Characters.Values.SelectMany(c=>c.Estates),DateTimeOffset.UtcNow);
+            sharedEntryCache[house]=result;
+        }
+        return result;
+    }
     private void DrawSharedPerson(SharedPerson person)
     {
         ImGui.PushID("shared-"+person.Id);
@@ -135,7 +155,7 @@ public sealed partial class Plugin
         var visibleCharacters = characters.Where(c => !searching || (c.Name+" "+c.World+" "+c.Dc+" "+c.Region+" "+c.Account).Contains(sharedSearch,StringComparison.OrdinalIgnoreCase)).ToArray();
         config.SharedAccountExpanded ??= [];
         // Reuse one eligibility/status snapshot for both account and category bars.
-        var headerDetails=visibleCharacters.ToDictionary(c=>c.Id,c=>c.Houses
+        var headerDetails=visibleCharacters.ToDictionary(c=>c.Id,c=>c.Houses.Select(WithLocalHouseEntry)
             .Where(h=>CountsForCharacter(c,h))
             .Select(h=>(Type:h.Type,Detail:EntryHover(h.Type,h.Ward,h.Plot,h.LastEntry,now,h.Paused)))
             .ToArray());
@@ -177,7 +197,7 @@ public sealed partial class Plugin
                     {
             ImGui.PushID(c.Id);
             string HouseLabel(SharedHouse h) => SharedHousePresentation.Label(c, h, h.Type == "Private house" && CountsForCharacter(c, h));
-            var houses = c.Houses.OrderBy(h => SharedHousePresentation.Order(HouseLabel(h))).ToArray();
+            var houses = c.Houses.Select(WithLocalHouseEntry).OrderBy(h => SharedHousePresentation.Order(HouseLabel(h))).ToArray();
             var timerHouses = houses.Where(h => HouseLabel(h) != "Shared" && CountsForCharacter(c, h)).ToArray();
             HousingBand? Status(string type) => SummarizeBands(timerHouses.Where(h=>h.Type==type).Select(h=>h.Paused?HousingBand.Unknown:HousingStatus.Band(h.LastEntry,now)));
             if (DrawSplitHeader(c.Name+" · "+SharedLocation(c)+"###character",Status("Private house"),Status("Free Company house"),
@@ -205,7 +225,7 @@ public sealed partial class Plugin
                         if (label == "Shared") ImGui.TextUnformatted(h.Type == "Private house" ? "Shared access / ownership unconfirmed. Only the owner resets the timer." : "Shared access / FC membership unconfirmed. Only FC members reset the timer.");
                         if(!string.IsNullOrWhiteSpace(h.FcName))ImGui.TextUnformatted($"FC: {h.FcName} <{h.FcTag}>");
                         if(h.LastEntry is not null)ImGui.TextUnformatted($"45-day estimate: {DisplayTime.Local(h.LastEntry.Value.AddDays(45))}");
-                        ImGui.TextUnformatted("Based on shared recorded entries, not the game's live countdown.");
+                        ImGui.TextUnformatted("Based on locally confirmed and shared recorded entries, not the game's live countdown.");
                         ImGui.EndTooltip();
                     }
                     ImGui.PushID(h.Id);ImGui.BeginDisabled(!Player.IsLoaded);if(ImGui.SmallButton("GO SEE"))VisitSharedHouse(h);ImGui.EndDisabled();ImGui.PopID();
