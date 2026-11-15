@@ -305,10 +305,14 @@ public sealed class CollisionRouteSearch
         // Two valid frontiers need not land on an identical lattice point.
         // Nearby joins still use the complete directional swept-body check.
         var candidates=new List<Node>();
-        var cells=(int)MathF.Ceiling(1.5f/spacing);
+        // Use the same maximum horizontal span as an ordinary swept edge.
+        // Offset gate approaches can be connected even when no lattice node
+        // lies between them (the Haven report stopped with a 1.8-yalm gap).
+        const float joinRange=2.9f;
+        var cells=(int)MathF.Ceiling(joinRange/spacing);
         for(var dx=-cells;dx<=cells;dx++)for(var dz=-cells;dz<=cells;dz++)for(var dy=-4;dy<=4;dy++){
             var key=current.Key with{X=current.Key.X+dx,Y=current.Key.Y+dy,Z=current.Key.Z+dz};
-            if(other.Closed.TryGetValue(key,out var match)&&Horizontal(current.Point,match.Point)<=1.5f&&MathF.Abs(current.Point.Y-match.Point.Y)<=1f)candidates.Add(match);
+            if(other.Closed.TryGetValue(key,out var match)&&Horizontal(current.Point,match.Point)<=joinRange&&MathF.Abs(current.Point.Y-match.Point.Y)<=1f)candidates.Add(match);
         }
         foreach(var match in candidates.OrderBy(n=>Vector3.DistanceSquared(n.Point,current.Point)).Take(4)){
             var a=side.Reverse?match:current;var b=side.Reverse?current:match;
