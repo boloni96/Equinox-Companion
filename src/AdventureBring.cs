@@ -89,8 +89,13 @@ public sealed partial class Plugin
    PreferredGateway=TravelCityPolicy.Preferred(config.TravelCity,config.ShoppingCity,false)};
   if(NativeTravelCharacterIndex(trip,out var source)<0)return true;
   var sourceDc=TravelDc(source);var destinationDc=TravelDc(bring.World);
-  if(home==0||sourceDc==0||destinationDc==0||sourceDc!=TravelDc(lobby->WorldId))throw new InvalidOperationException("Character world could not be verified before travel.");
-  if(UsesWorldVisit(source,bring.World)||!NativeTravelPolicy.TransferBeforeLogin(source,bring.World,sourceDc,destinationDc))return false;
+  var homeDc=TravelDc(home);var homeRegion=TravelRegion(home);var sourceRegion=TravelRegion(source);
+  var listDc=CharacterLoginWorldPolicy.ListDc(homeDc,sourceDc,homeRegion,sourceRegion);
+  if(home==0||destinationDc==0||!CharacterLoginWorldPolicy.MatchesDisplayedDc(TravelDc(lobby->WorldId),homeDc,sourceDc,homeRegion,sourceRegion))throw new InvalidOperationException("Character login list could not be verified before travel.");
+  if(UsesWorldVisit(source,bring.World)||!NativeTravelPolicy.TransferBeforeLogin(source,bring.World,sourceDc,destinationDc)){
+   RecordTravelPrompt("Bring logging in before regional travel",new{trip.Character,trip.Service,home,visited=source,displayedWorld=lobby->WorldId,listDc,destination=bring.World});
+   return false;
+  }
   if(nativeWorldTrip!=null||nativeHousingTrip!=null||nativeAethernetTrip!=null)throw new InvalidOperationException("Another trip started before character travel.");
   trip.Source=source;trip.ReturnHome=NativeTravelPolicy.ReturnFirst(source,home,sourceDc,destinationDc);trip.Leg=trip.ReturnHome?home:bring.World;
   assignedLogin=null;characterSwitchUntil=default;characterSwitchTarget=null;

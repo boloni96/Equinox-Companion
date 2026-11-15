@@ -225,7 +225,7 @@ public sealed partial class Plugin
         }
         if(menuNames.Count==0)return true;
         var preferred=(ushort)0;
-        foreach(var c in lobby->LobbyData.LobbyUIClient.CurrentDataCenterCharacters)if(c.ContentId.ToString()==targetContent&&c.DeletedFlag==0&&(c.LoginFlags&CharaSelectCharacterEntryLoginFlags.Locked)==0)preferred=c.CurrentWorldId;
+        foreach(var c in lobby->LobbyData.LobbyUIClient.CurrentDataCenterCharacters)if(c.ContentId.ToString()==targetContent&&c.DeletedFlag==0&&(c.LoginFlags&CharaSelectCharacterEntryLoginFlags.Locked)==0)preferred=(ushort)CharacterLoginWorldPolicy.ListWorld(c.HomeWorldId,c.CurrentWorldId,TravelDc(c.HomeWorldId),TravelDc(c.CurrentWorldId),TravelRegion(c.HomeWorldId),TravelRegion(c.CurrentWorldId));
         var known=DeliveryCharacters().GroupBy(x=>x.Character.World).ToDictionary(g=>g.Key,g=>g.Select(x=>x.Person.Id+"/"+x.Character.AccountId).Distinct().Count());
         var worlds=new List<(ushort Id,int Index,string Name,int Priority)>();
         foreach(var w in available){var name=w.NameString;var menuIndex=CurrentLoginIdentification.WorldMenuIndex(menuNames,name);if(menuIndex>=0)worlds.Add((w.Id,menuIndex,name,name==targetWorld?1000:w.Id==preferred?500:known.GetValueOrDefault(name)*10));}
