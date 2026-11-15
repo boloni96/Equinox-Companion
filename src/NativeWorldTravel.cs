@@ -19,6 +19,7 @@ public sealed partial class Plugin
         public bool NoLogin,ReconnectLoginList;
         public bool PartyLeaveSent,PartyLeaveConfirmed,LogoutCommandSent,HomeReturnAcknowledged;public DateTimeOffset PartyLeaveAt;
         public bool ReturnHome,DcSelected,ContextSent,LoginSent,LoginConfirmed,GatewaySent,TransferCommitted;
+        public readonly TravelContextRecovery ContextRecovery=new();
         public bool WorldDcRequested;public DateTimeOffset WorldDcRequestedAt;
         public uint Gateway,PreferredGateway,RequestedLoginWorld;public bool ServiceSent,LogoutConfirmed,IntroSent;public int ApproachAttempt;public Vector3? ApproachGoal;
     }
@@ -85,6 +86,7 @@ public sealed partial class Plugin
     private static void PrepareNativeFinalLeg(NativeWorldTrip trip)
     {
         trip.Source=trip.Leg;trip.Leg=trip.Destination;trip.ReturnHome=false;
+        trip.ContextRecovery.Reset();
         trip.DcSelected=trip.ContextSent=trip.LoginSent=trip.LoginConfirmed=trip.TransferCommitted=trip.IntroSent=trip.LogoutConfirmed=trip.ServiceSent=false;
         trip.RequestedLoginWorld=0;trip.HomeReturnAcknowledged=false;trip.PartyLeaveSent=trip.PartyLeaveConfirmed=trip.LogoutCommandSent=false;
     }

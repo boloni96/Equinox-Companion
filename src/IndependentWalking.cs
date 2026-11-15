@@ -55,6 +55,9 @@ public sealed partial class Plugin
     private int independentCheckedWaypoint=-1,independentInputReads,independentInputOverrides;
     private string independentNavigationRun="";
     private readonly WalkingInputLease independentLease=new();
+    private readonly WalkingInputYield independentInputYield=new();
+    private bool independentInputPaused;
+    private Vector3 independentConflictingAxes;
     private int independentNativeGateRejects,independentNativeManualReads,independentNativeExceptions;
     private int independentForwardReads,independentExpiredReads,independentInactiveReads;
     private bool independentPositionChanged;
@@ -84,6 +87,7 @@ public sealed partial class Plugin
             if(!enabled){independentNativeGateRejects++;independentInputBlock="Game movement is temporarily disabled";return;}
             if(!WalkingInputLease.CanSupplyGround(*left,*forward,*turn)){
                 independentNativeManualReads++;independentInputBlock="Another movement input has priority";
+                independentConflictingAxes=new(*left,*forward,*turn);independentInputYield.Conflict(DateTimeOffset.UtcNow);
                 independentLease.Revoke();return;
             }
             // Apply direction relative to the current control mode; never rotate the camera.
@@ -108,6 +112,7 @@ public sealed partial class Plugin
                 independentFacingOnly=false;
                 independentAxes=WalkingSteering.HeadingAxes(heading,player.Rotation,independentSpeed);
             }
+            independentInputYield.Clear();
             *left=independentAxes.X;*forward=independentAxes.Y;independentInputOverrides++;independentInputBlock="";
         }catch(Exception e){independentNativeExceptions++;independentInputBlock=e.GetType().Name;independentLease.Revoke();}
     }
@@ -165,6 +170,7 @@ public sealed partial class Plugin
         if(!geometryOnly&&!PrepareNavigationMap(now,self.Position,destination))return false;
         independentGeometryOnly=geometryOnly;independentInteractionRegion=interactionRegion;
         independentLastSearchDiagnostic=null;independentNavigationRun=Guid.NewGuid().ToString("N");independentInputReads=independentInputOverrides=0;
+        independentInputYield.Clear();independentInputPaused=false;
         independentForwardReads=independentExpiredReads=independentInactiveReads=0;independentNativeGateRejects=independentNativeManualReads=independentNativeExceptions=0;
         independentInputBlock=independentLastWalkFailure="";independentPositionChanged=false;independentLastRoutePoints=independentLastExpanded=0;independentPlanningSeconds=0;independentLease.Revoke();
         TraceKeyboundRun(independentNavigationRun,"navigation-started",$"Destination {destination}; range {range}",independentQuestId!=0?"quest:"+independentQuestRun:"event",false);
@@ -209,27 +215,37 @@ public sealed partial class Plugin
             // Keep the previous short lease while preparing its replacement.
             // Every pause/early return revokes it in finally; a delayed update
             // still expires after 180 ms, as before.
+            if(independentNativeExceptions>0)throw new InvalidOperationException("Ground movement callback failed: "+independentInputBlock);
+            if(IndependentOtherTravelBusy())throw new InvalidOperationException("Another travel task took control; local walking stopped.");
+            if(!Player.IsLoaded||Player.ContentId!=independentCharacter||Client.TerritoryType!=independentTerritory)throw new InvalidOperationException("Navigation stopped: character or territory changed.");
+            if(Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]||Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.BoundByDuty]||Conditions[ConditionFlag.Mounted]||Conditions[ConditionFlag.InFlight])throw new InvalidOperationException("Navigation stopped for loading, combat, duty or mounted movement. Dismount for ground walking.");
+            // Chat consumes movement-bound letters: do not treat typing as a walk cancellation.
+            if(FollowStopTextEntryActive()){
+                independentWalkStatus="Paused · close chat or text input to resume";
+                independentInputBlock=independentWalkStatus;independentProgressAt=now;return;
+            }
             if(QuestOwnsMovement&&QuestManualMovementHeld(now)){
                 independentUserPaused=true;independentNativeManualReads=0;independentHeading=null;
                 independentProgressAt=independentSince=now;independentPhaseTimer.Begin(now);
                 independentWalkStatus="Paused for your movement · resumes when released";return;
             }
-            if(independentUserPaused){
-                independentUserPaused=false;independentNativeManualReads=0;
-                if(Objects.LocalPlayer is {} moved){
+            if(!QuestOwnsMovement&&FollowMovementKeysHeld())throw new InvalidOperationException("Navigation stopped by your movement.");
+            if(independentInputYield.Expired(now))throw new InvalidOperationException("Navigation paused for 30 seconds because another movement input kept taking priority.");
+            if(independentInputYield.Waiting(now)){
+                if(!independentInputPaused)RecordTravelPrompt("Navigation yielding to movement input",new{run=independentNavigationRun,left=independentConflictingAxes.X,forward=independentConflictingAxes.Y,turn=independentConflictingAxes.Z});
+                independentInputPaused=true;independentHeading=null;independentProgressAt=now;
+                independentWalkStatus="Paused for another movement input · checking again shortly";return;
+            }
+            if(independentUserPaused||independentInputPaused){
+                independentUserPaused=false;independentInputPaused=false;
+                if(Objects.LocalPlayer is {} moved&&Vector3.Distance(moved.Position,independentPrevious)>.5f){
                     independentBacktracking=false;independentSearch=CreateIndependentSearch(moved.Position,independentGoal,independentRange);
                     independentPath=independentPendingPath=null;independentWaypoint=0;independentCheckedWaypoint=-1;
                     independentLastProgress=independentPrevious=moved.Position;independentReplans=0;
                     independentProgressAt=independentPlanningSince=independentSince=now;independentPhaseTimer.Begin(now);
                     independentWalkStatus="Resuming from your position · checking route";
-                }
+                }else independentWalkStatus="Resuming checked route after input pause";
             }
-            if(independentNativeManualReads>0)throw new InvalidOperationException("Navigation stopped: another movement input took priority.");
-            if(independentNativeExceptions>0)throw new InvalidOperationException("Ground movement callback failed: "+independentInputBlock);
-            if(IndependentOtherTravelBusy())throw new InvalidOperationException("Another travel task took control; local walking stopped.");
-            if(!Player.IsLoaded||Player.ContentId!=independentCharacter||Client.TerritoryType!=independentTerritory)throw new InvalidOperationException("Navigation stopped: character or territory changed.");
-            if(!QuestOwnsMovement&&FollowMovementKeysHeld())throw new InvalidOperationException("Navigation stopped by your movement.");
-            if(Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]||Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.BoundByDuty]||Conditions[ConditionFlag.Mounted]||Conditions[ConditionFlag.InFlight])throw new InvalidOperationException("Navigation stopped for loading, combat, duty or mounted movement. Dismount for ground walking.");
             if(now-independentSince>TimeSpan.FromMinutes(15))throw new InvalidOperationException("Navigation exceeded its fifteen-minute total limit.");
             if(independentSearch!=null&&independentNearbyApproach&&now-independentPlanningSince>TimeSpan.FromSeconds(5))throw new InvalidOperationException($"Nearby approach blocked: no route found within 5 seconds ({independentSearch.Expanded} areas checked). The local approach could not be completed.");
             if(independentSearch!=null&&independentReplans>0&&now-independentPlanningSince>TimeSpan.FromSeconds(15))throw new InvalidOperationException("Blocked-route recovery found no alternative within 15 seconds; stopped without continuing to push the corner.");

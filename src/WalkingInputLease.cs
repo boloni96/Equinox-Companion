@@ -11,3 +11,13 @@ internal sealed class WalkingInputLease
     public WalkingInputDecision Check(DateTimeOffset now)=>Until==default?WalkingInputDecision.Inactive:
         now>=Until?WalkingInputDecision.Expired:WalkingInputDecision.Allowed;
 }
+
+// Yield to native/other-plugin input without abandoning a valid route on one frame.
+internal sealed class WalkingInputYield
+{
+    private DateTimeOffset since,until;
+    public void Conflict(DateTimeOffset now){if(since==default)since=now;until=now.AddMilliseconds(500);}
+    public bool Waiting(DateTimeOffset now)=>now<until;
+    public bool Expired(DateTimeOffset now)=>Waiting(now)&&since!=default&&now-since>=TimeSpan.FromSeconds(30);
+    public void Clear(){since=until=default;}
+}

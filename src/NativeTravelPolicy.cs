@@ -55,3 +55,18 @@ public static class NativeTravelPolicy
         return text==question||text==question+" Please be advised you must be playing solo or in a cross-world party for your transfer to be processed.";
     }
 }
+
+internal enum TravelContextAction { Use, Wait, Reopen, Stop }
+internal sealed class TravelContextRecovery
+{
+    public int Retries { get; private set; }
+    public DateTimeOffset RequestedAt { get; private set; }
+    public void Requested(DateTimeOffset now)=>RequestedAt=now;
+    public void Reset(){Retries=0;RequestedAt=default;}
+    public TravelContextAction Check(bool visible,bool sent,ulong hovered,ulong expected,DateTimeOffset now)
+    {
+        if(visible&&sent&&expected!=0&&hovered==expected)return TravelContextAction.Use;
+        if(sent&&now-RequestedAt<TimeSpan.FromSeconds(2))return TravelContextAction.Wait;
+        return ++Retries<=3?TravelContextAction.Reopen:TravelContextAction.Stop;
+    }
+}

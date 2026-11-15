@@ -71,7 +71,13 @@ public sealed partial class Plugin
             if(world!=trip.Source)throw new InvalidOperationException("The character's current world changed before the transfer request.");
             var context=SellerAddon("ContextMenu");
             if(context!=null){
-                if(!trip.ContextSent||lobby->HoveredCharacterContentId!=trip.Character)throw new InvalidOperationException("The character context menu does not belong to this trip.");
+                var action=trip.ContextRecovery.Check(true,trip.ContextSent,lobby->HoveredCharacterContentId,trip.Character,now);
+                if(action!=TravelContextAction.Use){
+                    if(action==TravelContextAction.Wait)return;
+                    if(action==TravelContextAction.Stop)throw new InvalidOperationException("Could not verify the character travel menu after three retries. Close it and retry.");
+                    RecordTravelPrompt("Reopening character travel menu",new{trip.Character,hovered=lobby->HoveredCharacterContentId,trip.ContextSent,retries=trip.ContextRecovery.Retries});
+                    CloseSellerAddon("ContextMenu");trip.ContextSent=false;trip.Next=now.AddMilliseconds(500);return;
+                }
                 var expected=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Lobby>().GetRowOrDefault(trip.ReturnHome?1117u:1150u)?.Text.ToString()??"";
                 if(context->AtkValues==null||context->AtkValuesCount<9)return;
                 var count=(int)context->AtkValues[0].UInt;var list=context->GetComponentListById(2);
@@ -81,11 +87,16 @@ public sealed partial class Plugin
                 }
                 throw new InvalidOperationException("The requested travel option is unavailable for this character.");
             }
-            if(trip.ContextSent)return;
+            if(trip.ContextSent){
+                var action=trip.ContextRecovery.Check(false,true,0,trip.Character,now);
+                if(action==TravelContextAction.Wait)return;
+                if(action==TravelContextAction.Stop)throw new InvalidOperationException("Character travel menu did not open after three retries.");
+                trip.ContextSent=false;
+            }
             if(index>250)throw new InvalidOperationException("Character index outside supported bounds.");
             var evt=new AtkEvent{Listener=(AtkEventListener*)menu,Target=&AtkStage.Instance()->AtkEventTarget,State=new(){StateFlags=(AtkEventStateFlags)(5+index)}};
             var data=new AtkEventData();((byte*)&data)[6]=1;
-            menu->ReceiveEvent(AtkEventType.MouseClick,5+index,&evt,&data);trip.ContextSent=true;
+            menu->ReceiveEvent(AtkEventType.MouseClick,5+index,&evt,&data);trip.ContextSent=true;trip.ContextRecovery.Requested(now);
             RecordTravelPrompt("Character context requested",new{trip.Character,index});return;
         }
         if(trip.Stage==NativeTravelStage.VisitIntro){

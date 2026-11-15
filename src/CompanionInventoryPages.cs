@@ -18,6 +18,7 @@ public sealed partial class CompanionSync
     private sealed record InventoryPage(string Snapshot,int Total,SharedItemLocation[] Locations,int? Next);
     private async Task<SharedRoster> ReadInventoryPages(string key,SharedRoster roster,CancellationToken token)
     {
+        var conflicts=new List<string>();
         for(var attempt=0;attempt<3;attempt++){
             var locations=new List<SharedItemLocation>();var seen=new HashSet<(string,string)>();
             string? snapshot=null;var offset=0;var total=-1;var restart=false;
@@ -27,7 +28,7 @@ public sealed partial class CompanionSync
                 using var request=new HttpRequestMessage(HttpMethod.Get,url);
                 request.Headers.Authorization=new AuthenticationHeaderValue("Bearer",key);AddInstallationHeader(request);
                 using var response=await client.SendAsync(request,HttpCompletionOption.ResponseHeadersRead,token);
-                if(response.StatusCode==HttpStatusCode.Conflict){restart=true;break;}
+                if(response.StatusCode==HttpStatusCode.Conflict){conflicts.Add($"attempt {attempt+1}: page {pageNumber+1}, {locations.Count}/{(total<0?"unknown":total.ToString())} locations received");restart=true;break;}
                 if(!response.IsSuccessStatusCode)throw new HttpRequestException("Shared inventory page unavailable",null,response.StatusCode);
                 var page=JsonSerializer.Deserialize<InventoryPage>(await ReadProfileBody(response,1200000,token),Json);
                 if(page==null||string.IsNullOrWhiteSpace(page.Snapshot)||page.Snapshot.Length>100||page.Total is <0 or >50000||page.Locations==null||page.Locations.Length>80||
@@ -43,7 +44,7 @@ public sealed partial class CompanionSync
             }
             if(!restart)break;
         }
-        throw new ProfileReadException("inventory snapshot changed during all three download attempts");
+        throw new ProfileReadException("inventory snapshot changed during all three download attempts ("+string.Join("; ",conflicts)+")");
     }
 }
 
