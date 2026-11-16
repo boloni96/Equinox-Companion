@@ -75,7 +75,7 @@ public sealed partial class Plugin
             var trip=new EstateTrip{Destination=address,Character=Player.ContentId,Mode=destination.Mode,Label=destination.Label,Started=DateTimeOffset.UtcNow};
             if(SameEstate(inside,address)&&destination.Mode!=0){
                 if(EstateTravelCommand.InteriorArrived(destination.Mode,true,inside!.Workshop,inside.Room)){FollowChatNotice("TRAVEL — Already "+destination.Label+".");return;}
-                if(destination.Mode==3&&!inside!.Workshop&&inside.Room==0){trip.Stage=5;trip.Aetheryte=entry.AetheryteId;trip.SubIndex=entry.SubIndex;trip.TeleportAttempts=1;trip.ActionAt=trip.Started;estateTrip=trip;estateTravelStatus="Waiting for estate teleport to start";RecordTravelPrompt("Estate teleport requested",new{trip.Label,trip.Aetheryte,trip.SubIndex,trip.TeleportAttempts});FollowChatNotice("TRAVEL — Walking to the FC workshop entrance.");return;}
+                if(destination.Mode==3&&!inside!.Workshop&&inside.Room==0){trip.Stage=5;trip.ActionAt=trip.Started;estateTrip=trip;estateTravelStatus="Walking to the FC workshop entrance";FollowChatNotice("TRAVEL — Walking to the FC workshop entrance.");return;}
             }
             if(destination.Mode==3&&manager!=null&&manager->GetCurrentHousingTerritoryType()==HousingTerritoryType.Workshop&&inside==null){
                 FollowChatNotice("TRAVEL — Workshop details are still loading. No teleport was started.");return;
