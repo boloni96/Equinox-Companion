@@ -13,7 +13,10 @@ public static class GardenCarePolicy
     public static string Protection(SharedGardenPlan plan, SharedGardenBed bed)
     {
         if(bed.KeepMature)return "Kept for repeated crosses · release Keep mature in the Journal when finished.";
-        if(plan.CompletedAt!=null)return "";
+        // A saved replacement plan describes future crops, not the standing crop.
+        // Only its confirmed planting/starter can be a protected neighbour.
+        if(plan.CompletedAt!=null||bed.Status is not ("confirmed" or "starter" or "replant")||
+            bed.Planted is {} planted&&planted<plan.At)return "";
         var required=(plan.Definition?.Steps??[]).Where(s=>s.Neighbour==bed.Bed && plan.Beds.FirstOrDefault(b=>b.Bed==s.Bed)?.Status!="confirmed").Select(s=>s.Bed).Distinct().ToArray();
         return required.Length>0?"Needed beside Bed "+string.Join(", ",required)+" until its planting is confirmed.":"";
     }

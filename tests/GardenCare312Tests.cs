@@ -32,6 +32,21 @@ internal static class GardenCare312Tests
         Check(saved.Steps.Length==8&&saved.Steps[0].ReplantOrder==9&&saved.Steps[0].StarterSoil=="Potting Soil","Existing favourite preserves the temporary starter and replacement");
         Check(saved.Steps.All(b=>b.Soil=="Grade 3 Thanalan Topsoil")&&saved.Steps[1].Crop=="Krakka Root","Favourite retains exact cross soil and alternating seeds");
         Check(GardenAutoPlant.Next(applied)==(1,GardenCareAction.Plant),"Auto plant accepts an existing favourite applied to an empty batch");
+        var standing=plan with {Beds=Enumerable.Range(1,8).Select(n=>Bed(n)).ToArray()};
+        var incoming=GardenPlanEditing.Build(favourite,standing);
+        var future=GardenPlanEditing.WithDefinition(standing,incoming,now);
+        Check(future.Beds.All(b=>GardenCarePolicy.Eligible(future,b,GardenCareAction.Harvest,now)),"Future saved cross must not protect the previous eight mature crops");
+        Check(GardenCarePolicy.HouseHarvest([future],future.HouseId,now).Length==1,"House harvest includes mature crops behind a saved plan");
+        Check(GardenAutoPlant.PrepareRouteBeds(future,incoming,now,true,false).Beds.Length==8,"Route preparation harvests all old mature crops before planting the future plan");
+        Check(!GardenCarePolicy.Eligible(future,future.Beds[0] with{KeepMature=true},GardenCareAction.Harvest,now),"Explicit Keep mature survives replacement plans");
+        Check(!GardenCarePolicy.Eligible(future,future.Beds[0] with{Queued=true},GardenCareAction.Harvest,now),"Unacknowledged actions remain protected against duplicate harvest");
+        foreach(var state in new[]{"confirmed","starter","replant"}){
+            var current=future.Beds[0] with{Status=state,Planted=now.AddSeconds(1)};
+            Check(GardenCarePolicy.Protection(future,current).Contains("Bed 2"),"Active "+state+" retains required neighbour protection");
+            Check(GardenCarePolicy.Protection(future,current with{Planted=now.AddDays(-5)})=="","Old crop timestamps cannot become future-plan neighbours");
+        }
+        Check(GardenCarePolicy.Protection(future,future.Beds[0] with{Planted=null})=="","An observed old crop with unknown planting time is not a confirmed future neighbour");
+        Check(GardenCarePolicy.Protection(future,future.Beds[0] with{Status="confirmed",Planted=null}).Length>0,"Confirmed plan neighbours remain protected when planting time is missing");
         Check(GardenCarePolicy.TargetAllowed(10,0,false,null,true),"Closing skipped mature bed permits game-cleared target");
         Check(!GardenCarePolicy.TargetAllowed(10,11,false,null,true),"Closing never accepts another selected object");
         Check(GardenCarePolicy.TargetAllowed(10,0,true,GardenCareAction.Inspect),"Inspection receipt permits cleared target");
