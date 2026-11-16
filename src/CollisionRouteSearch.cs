@@ -38,6 +38,7 @@ public sealed class CollisionRouteSearch
     private readonly Func<Vector3,bool>? arrival;
     private readonly Vector3 origin,goal;
     private readonly float range,spacing,heuristicWeight;
+    private readonly bool narrowApproach;
     private float searchRadius;
     private NavigationRoadRoute? roads;
     private readonly Frontier forward=new(false);
@@ -118,8 +119,9 @@ public sealed class CollisionRouteSearch
     }
     private static List<Vector3> Trail(Node? node){var p=new List<Vector3>();for(var n=node;n!=null;n=n.Previous)p.Add(n.Point);p.Reverse();return p;}
     private void Rejected(Vector3 point){rejected.Enqueue(point);if(rejected.Count>128)rejected.Dequeue();}
-    public CollisionRouteSearch(IWalkingCollision collision,Vector3 start,Vector3 goal,float range,float spacing=1f,float heuristicWeight=4f,NavigationRoadRoute? roads=null,bool bidirectional=true,IReadOnlyList<Vector3>? streetGuide=null,Func<Func<NavigationRoadRoute?>,Task<NavigationRoadRoute?>>? mapDetourWorker=null,Func<Vector3,bool>? arrival=null)
+    public CollisionRouteSearch(IWalkingCollision collision,Vector3 start,Vector3 goal,float range,float spacing=1f,float heuristicWeight=4f,NavigationRoadRoute? roads=null,bool bidirectional=true,IReadOnlyList<Vector3>? streetGuide=null,Func<Func<NavigationRoadRoute?>,Task<NavigationRoadRoute?>>? mapDetourWorker=null,Func<Vector3,bool>? arrival=null,bool narrowApproach=false)
     {
+        this.narrowApproach=narrowApproach;
         this.arrival=arrival;
         roadWorker=mapDetourWorker??(work=>Task.Run(work));
         this.collision=collision;this.goal=goal;this.range=Math.Clamp(range,.25f,5f);this.spacing=spacing/2;this.heuristicWeight=heuristicWeight;this.roads=roads;
@@ -355,7 +357,7 @@ public sealed class CollisionRouteSearch
         // Refinement is already restricted to rejected coarse edges. A large
         // artificial cost delays narrow openings behind distant street detours.
         // Keep only a small preference for coarse edges of similar length.
-        var cost=parent.Cost+.25f+Vector3.Distance(parent.Point,point)*(1+3*collision.RoutePenalty(point));
+        var cost=parent.Cost+(narrowApproach?.25f:24f)+Vector3.Distance(parent.Point,point)*(1+3*collision.RoutePenalty(point));
         side.Open.Enqueue(new(key,point,cost,parent),cost+heuristicWeight*Heuristic(point,side.Reverse));
     }
     private Key Address(Vector3 p)=>new((int)MathF.Round((p.X-origin.X)/spacing),(int)MathF.Round(p.Y*4),(int)MathF.Round((p.Z-origin.Z)/spacing));

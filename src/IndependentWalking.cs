@@ -46,7 +46,7 @@ public sealed partial class Plugin
         var target=independentInteractionRegion&&independentInteractionTarget!=0?Objects.FirstOrDefault(x=>x.GameObjectId==independentInteractionTarget):null;
         var targetPosition=target?.Position;var limit=target==null?0:InteractionLimit(target)-.25f;
         Func<Vector3,bool>? arrival=targetPosition is {} position?p=>InteractionApproachPolicy.WithinDistance(p,position,limit)&&independentCollision.InteractionVisible(p,position):null;
-        return new(new AvoidStalledTargets(new GameWalkingCollision(cacheGround:true,roadGuide:independentGeometryOnly?null:independentRoadGuide),independentBlockedTargets.ToArray()),start,goal,range,independentBlockedTargets.Count>0&&Vector3.Distance(start,goal)<12?.5f:1f,roads:independentGeometryOnly?null:independentRoadRoute,streetGuide:street,arrival:arrival);
+        return new(new AvoidStalledTargets(new GameWalkingCollision(cacheGround:true,roadGuide:independentGeometryOnly?null:independentRoadGuide),independentBlockedTargets.ToArray()),start,goal,range,independentBlockedTargets.Count>0&&Vector3.Distance(start,goal)<12?.5f:1f,roads:independentGeometryOnly?null:independentRoadRoute,streetGuide:street,arrival:arrival,narrowApproach:independentGeometryOnly&&Vector3.Distance(start,goal)<=30);
     }
     private bool IndependentTraversableConnector(Vector3 from,Vector3 to)=>AvoidStalledTargets.ClearOfBlocked(from,to,independentBlockedTargets)&&independentCollision.Traverse(from,to);
     private bool IndependentClearConnector(Vector3 from,Vector3 to)=>AvoidStalledTargets.ClearOfBlocked(from,to,independentBlockedTargets)&&independentCollision.ComfortableTraverse(from,to);

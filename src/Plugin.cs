@@ -1331,6 +1331,7 @@ public sealed partial class Plugin : IDalamudPlugin
 
     public void Dispose()
     {
+        SetGardenDialoguePause(false);
         StopCelebrationCheck();
         DisposeQuestTools();
         itemDeliveryClient.Dispose();

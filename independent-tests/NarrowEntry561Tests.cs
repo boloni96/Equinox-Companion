@@ -5,11 +5,11 @@ internal static class NarrowEntry561Tests
 {
  [ModuleInitializer] internal static void Run(){
   var collision=new Entry(false);
-  var search=new CollisionRouteSearch(collision,Vector3.Zero,new(8,0,2.5f),.25f,bidirectional:false);
+  var search=new CollisionRouteSearch(collision,Vector3.Zero,new(8,0,2.5f),.25f,bidirectional:false,narrowApproach:true);
   for(var i=0;i<100&&!search.Finished&&search.Expanded<250;i++)search.Advance(20,64);
   if(search.Path==null)throw new Exception("Narrow plot opening was deferred behind unrelated detours");
   for(var i=1;i<search.Path.Length;i++)if(!collision.Traverse(search.Path[i-1],search.Path[i]))throw new Exception("Entry path bypassed collision checks");
-  var closed=new CollisionRouteSearch(new Entry(true),Vector3.Zero,new(8,0,2.5f),.25f,bidirectional:false);
+  var closed=new CollisionRouteSearch(new Entry(true),Vector3.Zero,new(8,0,2.5f),.25f,bidirectional:false,narrowApproach:true);
   for(var i=0;i<100&&!closed.Finished&&closed.Expanded<250;i++)closed.Advance(20,64);
   if(closed.Path!=null)throw new Exception("Closed plot entrance was crossed");
   Console.WriteLine($"561 narrow entry reached in {search.Expanded} nodes; solid entrance rejected.");

@@ -209,6 +209,7 @@ public sealed partial class Plugin
         {
             if(!Player.IsLoaded||owner==0||Player.ContentId!=owner||Player.CurrentWorld.RowId!=world||!p.ObservingGardens||!p.atOutdoorEstate||SharedGardenLocation.Match(p.currentAddress,[original])!=original.HouseId||Objects.LocalPlayer is not {} player||(!walking&&Vector3.Distance(player.Position,origin)>1.5f)||Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51]||Conditions[ConditionFlag.Unconscious]||Conditions[ConditionFlag.TradeOpen]||p.HelperInCutscene()||p.sellerRun.Running||p.TraderRunning||p.retrievalRun.Running||p.organizeRunning||p.chestRunning)
                 throw new InvalidOperationException("Character, location, movement or active operation changed.");
+            p.SetGardenDialoguePause(true);
             var clearedDuringOpen=targetId!=0&&(Targets.Target?.GameObjectId??0)==0&&!menuSent&&p.gardenCareRun?.Action==GardenCareAction.Tend&&
                 (ExternalTendReceipt(openedBed)||DateTimeOffset.UtcNow-opened<TimeSpan.FromSeconds(2));
             if(!clearedDuringOpen&&!GardenCarePolicy.TargetAllowed(targetId,Targets.Target?.GameObjectId??0,menuSent&&(issuedAction switch { GardenCareAction.Plant=>confirmationSent, GardenCareAction.Fertilize=>itemSent, _=>true }),issuedAction,closing))throw new InvalidOperationException($"Selected garden target changed (bed {openedBed}, expected {targetId:X}, current {Targets.Target?.GameObjectId??0:X}, action {issuedAction}, closing {closing}).");
@@ -381,6 +382,6 @@ public sealed partial class Plugin
             if(SellerAddonPresentForGarden())return false;
             targetId=0;openedBed=0;walkedBed=0;return true;
         }
-        public void Release(){if(walking){p.StopNativeGardenMove("Garden care movement released","bed");walking=false;}p.RequestStorageRefresh();p.nextRosterRead=default;if(p.syncFailures==0)p.nextSync=default;}
+        public void Release(){p.SetGardenDialoguePause(false);if(walking){p.StopNativeGardenMove("Garden care movement released","bed");walking=false;}p.RequestStorageRefresh();p.nextRosterRead=default;if(p.syncFailures==0)p.nextSync=default;}
     }
 }
