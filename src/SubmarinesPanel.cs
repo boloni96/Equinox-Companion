@@ -2,6 +2,13 @@ using Dalamud.Bindings.ImGui;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
+    private void DrawSubmarineRoute(IEnumerable<int> route,string label="Route"){
+        var sectors=route.Where(id=>id>0).Select(id=>DataManager.GetExcelSheet<Lumina.Excel.Sheets.SubmarineExploration>().GetRowOrDefault((uint)id))
+            .Where(row=>row==null||!row.Value.StartingPoint).ToArray();
+        ImGui.TextUnformatted(label+": "+(sectors.Length==0?"Not recorded":string.Join(" → ",sectors.Select(row=>row?.Location.ToString() is {Length:>0} letter?letter:"?"))));
+        if(ImGui.IsItemHovered())ImGui.SetTooltip(sectors.Length==0?"No recorded voyage destinations.":string.Join("\n",sectors.Select(row=>row is {} value?value.Destination.ToString():"Unknown sector · refresh game data")));
+    }
+
     private static bool SubmarineBar(string label,int level)
     {
         var c=level switch{3=>new System.Numerics.Vector4(.95f,.48f,.12f,1),2=>new System.Numerics.Vector4(.85f,.72f,.12f,1),1=>new System.Numerics.Vector4(.18f,.65f,.35f,1),_=>new System.Numerics.Vector4(.35f,.38f,.42f,1)};
@@ -127,15 +134,16 @@ public sealed partial class Plugin
                             ImGui.TextWrapped(live?.NeedsRepair is {} repair?(repair?"Observed repair needed":"No broken parts at last workshop observation"):"Part condition not recorded — open workshop to refresh");
                             if(live is not null)
                             {
-                                ImGui.TextDisabled("Workshop observation · hover for route and part IDs");
-                                if(ImGui.IsItemHovered())ImGui.SetTooltip("Route: "+string.Join(", ",live.Route.Where(x=>x>0))+"\nParts: "+string.Join(", ",live.Parts));
+                                DrawSubmarineRoute(live.Route.Select(id=>(int)id));
+                                ImGui.TextDisabled("Workshop observation · hover for part IDs");
+                                if(ImGui.IsItemHovered())ImGui.SetTooltip("Parts: "+string.Join(", ",live.Parts));
                             }
                             if(saved is not null)
                             {
                                 if(live is not null)ImGui.TextUnformatted("Cached timer: "+VoyageTimer(saved.ReturnTime));
                                 ImGui.TextUnformatted($"Cached EXP: {saved.CurrentExp:N0} / {saved.NextLevelExp:N0}");
                                 foreach(var part in saved.PartItems.Select((id,i)=>i<saved.PartNames.Length&&saved.PartNames[i].Length>0?saved.PartNames[i]:$"Item #{id}"))ImGui.TextUnformatted(part);
-                                if(ImGui.IsItemHovered())ImGui.SetTooltip("Cached route: "+string.Join(", ",saved.Route.Where(x=>x>0)));
+                                DrawSubmarineRoute(saved.Route,"Cached route");
                             }
                             ImGui.TreePop();
                         }
@@ -154,7 +162,7 @@ public sealed partial class Plugin
             shown++;
             if(!SubmarineBar($"{v.FcName} · character assignment pending###unassigned-{v.FcId}",SubmarineAttention.Evaluate(v.Submarines.Select(x=>x.ReturnTime).ToArray(),v.Submarines.Select(x=>x.NeedsRepair).ToArray(),null,null,now).Level))continue;
             ImGui.TextDisabled($"Workshop observed {DisplayTime.Local(v.At)}");
-            foreach(var sub in v.Submarines)if(SubmarineBar($"{sub.Name} · {VoyageTimer(sub.ReturnTime)}###unassigned-sub-{sub.Slot}",SubmarineAttention.Evaluate([sub.ReturnTime],[sub.NeedsRepair],null,null,now).Level)){ImGui.TextUnformatted($"Rank {sub.Rank} · Parts: {string.Join(", ",sub.Parts)}");ImGui.TextUnformatted("Route: "+string.Join(", ",sub.Route));ImGui.TreePop();}
+            foreach(var sub in v.Submarines)if(SubmarineBar($"{sub.Name} · {VoyageTimer(sub.ReturnTime)}###unassigned-sub-{sub.Slot}",SubmarineAttention.Evaluate([sub.ReturnTime],[sub.NeedsRepair],null,null,now).Level)){ImGui.TextUnformatted($"Rank {sub.Rank} · Parts: {string.Join(", ",sub.Parts)}");DrawSubmarineRoute(sub.Route.Select(id=>(int)id));ImGui.TreePop();}
             ImGui.TreePop();
         }
         ImGui.EndChild();ImGui.EndTabItem();}

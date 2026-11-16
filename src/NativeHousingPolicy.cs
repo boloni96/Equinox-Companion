@@ -28,3 +28,14 @@ public static class NativeHousingPolicy
     }
     public static bool Position(Vector3 p)=>float.IsFinite(p.X)&&float.IsFinite(p.Y)&&float.IsFinite(p.Z)&&p.LengthSquared()<100000000;
 }
+
+public sealed record BringWardDestination(uint Territory,string District,int Ward)
+{
+    public static BringWardDestination? Capture(uint territory,int ward,bool outdoor){
+        if(!outdoor||ward is <1 or >30)return null;
+        var district=new[]{"Mist","The Lavender Beds","The Goblet","Shirogane","Empyreum"}
+            .Select(NativeHousingPolicy.District).FirstOrDefault(d=>d?.Territory==territory);
+        return district==null?null:new(territory,district.Name,ward);
+    }
+    public bool Matches(uint territory,int ward,bool outdoor)=>outdoor&&Territory==territory&&Ward==ward;
+}
