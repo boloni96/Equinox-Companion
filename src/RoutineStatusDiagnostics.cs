@@ -12,7 +12,7 @@ public sealed partial class Plugin
         Add("Housing travel",nativeHousingTrip!=null,nativeHousingStatus);
         Add("Shopping travel",shoppingTravel!=null,marketTravelStatus);
         Add("Aethernet",nativeAethernetTrip!=null,nativeAethernetStatus);
-        Add("House / friend travel",estateTrip!=null||estateHomeReturn!=null||goSeeHomeTrip!=null||goSeeFriendTrip!=null,independentWalkStatus);
+        Add("House / friend travel",estateTrip!=null||estateHomeReturn!=null||goSeeHomeTrip!=null||goSeeFriendTrip!=null,estateTrip!=null||estateHomeReturn!=null?estateTravelStatus:bidTravelMessage);
         Add("Navigation",FlightActive||independentSearch!=null||independentPath!=null||independentEntranceForward!=null,independentWalkStatus);
         Add("Gardening adventure",gardenTendRoute!=null||gardenAutoPlantPlan!=null||gardenHousePlant!=null||gardenHouseHarvest!=null,gardenTendStatus);
         Add("Garden care",gardenCareRun?.Running==true,gardenCareRun?.Status);

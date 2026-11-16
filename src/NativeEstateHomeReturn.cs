@@ -18,6 +18,7 @@ public sealed partial class Plugin
         public DateTimeOffset Next;
         public bool DcSelected,ContextSent,ReturnRequested,LoginSent,LoginConfirmed,LogoutConfirmed,NativeWorldRoute;
         public ushort WorldRequested;
+        public readonly GardenArrivalGate Arrival=new();
     }
     private EstateHomeReturn? estateHomeReturn;
     private unsafe void BeginEstateHomeReturn((int Property,int Mode,string Label) destination)
@@ -52,13 +53,15 @@ public sealed partial class Plugin
                 if(nativeWorldTrip!=null)return;
                 if(!Player.IsLoaded||Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51])return;
                 if(!EstateTravelCommand.CanResume(run.Character,Player.ContentId,run.HomeWorld,Player.CurrentWorld.RowId))throw new InvalidOperationException("Home-world travel stopped before arrival. "+nativeTravelStatus);
+                if(Objects.LocalPlayer is not {} self||!run.Arrival.Ready(Conditions[ConditionFlag.Casting],self.Position,now)){estateTravelStatus="Home world reached · waiting for arrival to settle";return;}
                 estateHomeReturn=null;StartEstateTravelCommand(run.Destination);return;
             }
             if(Player.IsLoaded){
                 if(Player.ContentId!=run.Character)throw new InvalidOperationException("A different character loaded. Estate travel cancelled.");
                 if(EstateTravelCommand.CanResume(run.Character,Player.ContentId,run.HomeWorld,Player.CurrentWorld.RowId)){
                     if(Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51])return;
-                    estateHomeReturn=null;StartEstateTravelCommand(run.Destination);return;
+                    if(Objects.LocalPlayer is not {} self||!run.Arrival.Ready(Conditions[ConditionFlag.Casting],self.Position,now)){estateTravelStatus="Home world reached · waiting for arrival to settle";return;}
+                estateHomeReturn=null;StartEstateTravelCommand(run.Destination);return;
                 }
                 if(run.LogoutConfirmed||Conditions[ConditionFlag.LoggingOut])return;
                 var logout=(AddonSelectYesno*)KeyboundAddon("SelectYesno");

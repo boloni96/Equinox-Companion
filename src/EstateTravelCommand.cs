@@ -18,7 +18,8 @@ public sealed partial class Plugin
         public required string Label;
         public required DateTimeOffset Started;
         public int Stage,EntrySteps,DoorRevealSteps,DoorAttempt;
-        public bool TeleportLoading;
+        public bool TeleportLoading,TeleportCasting;
+        public uint Aetheryte;public byte SubIndex;public int TeleportAttempts;
         public Vector3? EntryDirection;public OutdoorPlotEntry? Entry;
         public DateTimeOffset ActionAt,DoorMissingSince;
         public Vector3? Forward,DoorApproach;
@@ -26,8 +27,10 @@ public sealed partial class Plugin
         public readonly GardenArrivalGate Arrival=new();
     }
     private EstateTrip? estateTrip;
+    private string estateTravelStatus="Idle";
     private void StopEstateTravel(string reason)
     {
+        estateTravelStatus=reason;
         if(estateHomeReturn!=null){if(estateHomeReturn.NativeWorldRoute&&nativeWorldTrip?.Owner=="estate")StopNativeWorldTravel(reason);estateHomeReturn=null;FollowChatNotice("TRAVEL — Home return stopped. Any transfer already accepted by the game may finish.");}
         if(estateTrip==null)return;
         estateTrip=null;StopIndependentWalk("Estate travel: "+reason);
@@ -72,7 +75,7 @@ public sealed partial class Plugin
             var trip=new EstateTrip{Destination=address,Character=Player.ContentId,Mode=destination.Mode,Label=destination.Label,Started=DateTimeOffset.UtcNow};
             if(SameEstate(inside,address)&&destination.Mode!=0){
                 if(EstateTravelCommand.InteriorArrived(destination.Mode,true,inside!.Workshop,inside.Room)){FollowChatNotice("TRAVEL — Already "+destination.Label+".");return;}
-                if(destination.Mode==3&&!inside!.Workshop&&inside.Room==0){trip.Stage=5;trip.ActionAt=trip.Started;estateTrip=trip;FollowChatNotice("TRAVEL — Walking to the FC workshop entrance.");return;}
+                if(destination.Mode==3&&!inside!.Workshop&&inside.Room==0){trip.Stage=5;trip.Aetheryte=entry.AetheryteId;trip.SubIndex=entry.SubIndex;trip.TeleportAttempts=1;trip.ActionAt=trip.Started;estateTrip=trip;estateTravelStatus="Waiting for estate teleport to start";RecordTravelPrompt("Estate teleport requested",new{trip.Label,trip.Aetheryte,trip.SubIndex,trip.TeleportAttempts});FollowChatNotice("TRAVEL — Walking to the FC workshop entrance.");return;}
             }
             if(destination.Mode==3&&manager!=null&&manager->GetCurrentHousingTerritoryType()==HousingTerritoryType.Workshop&&inside==null){
                 FollowChatNotice("TRAVEL — Workshop details are still loading. No teleport was started.");return;
@@ -86,7 +89,7 @@ public sealed partial class Plugin
             foreach(var entry in telepo->TeleportList){
                 if(entry.HouseId.Id!=owned.Id||entry.AetheryteId==0)continue;
                 if(!telepo->Teleport(entry.AetheryteId,entry.SubIndex))throw new InvalidOperationException("The game refused the estate teleport.");
-                trip.ActionAt=trip.Started;estateTrip=trip;FollowChatNotice("TRAVEL — Teleporting to "+destination.Label+". /et stop cancels the remaining route.");return;
+                trip.Aetheryte=entry.AetheryteId;trip.SubIndex=entry.SubIndex;trip.TeleportAttempts=1;trip.ActionAt=trip.Started;estateTrip=trip;estateTravelStatus="Waiting for estate teleport to start";RecordTravelPrompt("Estate teleport requested",new{trip.Label,trip.Aetheryte,trip.SubIndex,trip.TeleportAttempts});FollowChatNotice("TRAVEL — Teleporting to "+destination.Label+". /et stop cancels the remaining route.");return;
             }
             throw new InvalidOperationException(shared
                 ?"Shared estate "+(sharedSlot+1)+" teleport is not available. Check your tenant access and the estate teleport settings."
@@ -105,9 +108,25 @@ public sealed partial class Plugin
             if(!Player.IsLoaded)return;
             if(Player.ContentId!=trip.Character||Player.CurrentWorld.RowId!=trip.Destination.WorldId)throw new InvalidOperationException("Character or world changed; estate travel stopped.");
             if(Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.BoundByDuty])throw new InvalidOperationException("Estate travel stopped for combat or duty.");
-            if(Conditions[ConditionFlag.Casting]||HelperInCutscene())return;
+            if(Conditions[ConditionFlag.Casting]){if(trip.Stage==0)trip.TeleportCasting=true;estateTravelStatus="Casting estate teleport";return;}
+            if(HelperInCutscene())return;
             if(Objects.LocalPlayer is not {} self)return;
             var manager=HousingManager.Instance();if(manager==null)return;
+            if(trip.Stage==0&&trip.Aetheryte!=0){
+                var atWard=Client.TerritoryType==trip.Destination.TerritoryTypeId&&manager->GetCurrentWard()==trip.Destination.Ward-1;
+                var telepo=Telepo.Instance();
+                var recovery=EstateTeleportRecovery.Decide(now-trip.ActionAt,atWard,trip.TeleportCasting||trip.TeleportLoading,telepo==null||telepo->ActiveTeleportRequest,trip.TeleportAttempts);
+                if(recovery==EstateTeleportAction.Stop)throw new InvalidOperationException("Estate teleport did not complete. Check the game's teleport message, then retry.");
+                if(recovery==EstateTeleportAction.Retry){
+                    if(QuestConversationVisible()||VisibleFollowAddon("SelectYesno")){estateTravelStatus="Resolve the open game dialogue before estate travel";return;}
+                    trip.TeleportAttempts++;trip.ActionAt=now;
+                    var accepted=telepo->Teleport(trip.Aetheryte,trip.SubIndex);
+                    RecordTravelPrompt("Estate teleport retry",new{trip.Label,trip.Aetheryte,trip.SubIndex,trip.TeleportAttempts,accepted});
+                    if(!accepted)throw new InvalidOperationException("The game refused the estate teleport retry.");
+                    estateTravelStatus="Retrying estate teleport · waiting for casting or loading";return;
+                }
+                estateTravelStatus=atWard?"Verifying estate arrival":trip.TeleportCasting||trip.TeleportLoading?"Waiting for estate teleport arrival":"Waiting for estate teleport to start";
+            }
             var inside=ReadEstateInterior(manager);
             var outside=AddressOf(manager->GetCurrentHouseId());
             var indoors=manager->GetCurrentHousingTerritoryType()!=HousingTerritoryType.Outdoor&&SameEstate(inside,trip.Destination);

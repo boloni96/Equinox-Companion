@@ -84,7 +84,7 @@ public sealed partial class Plugin
         if(nativeEventActive)return new("Event quest",questToolsStatus,"",()=>StopNativeEventQuest(IndicatorStopReason));
         if(independentQuestId!=0&&!independentUserPaused)return new("Quest",questToolsStatus,"",()=>StopIndependentQuest(IndicatorStopReason));
         if(bringTrip!=null)return new("Bring character",bringMessage,"",StopIndicatorBring);
-        if(estateTrip!=null||estateHomeReturn!=null)return new("House travel",independentWalkStatus,IndicatorWalkingCount(),StopIndicatorTravel);
+        if(estateTrip!=null||estateHomeReturn!=null)return new("House travel",estateTravelStatus,IndicatorWalkingCount(),StopIndicatorTravel);
         if(loginMenuReturn.Active||titleLoginProbe.Active||assignedLogin!=null||characterSwitchTarget!=null&&DateTimeOffset.UtcNow<characterSwitchUntil)
             return new(loginMenuReturn.Active?"Returning to title":titleLoginProbe.Active?"Checking login":assignedLoginConfirmed?"Login queue":"Switching character",characterTravelStatus,"",StopIndicatorLogin);
         if(shoppingTravel!=null||goSeeHomeTrip!=null||goSeeFriendTrip!=null)return new("Travel",independentWalkStatus,IndicatorWalkingCount(),StopIndicatorTravel);
