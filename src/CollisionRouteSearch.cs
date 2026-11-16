@@ -352,9 +352,10 @@ public sealed class CollisionRouteSearch
         var candidate=(parent.Point+destination)/2;candidate.Y=parent.Point.Y;
         if(!collision.Ground(candidate,out var point)&&!collision.Ground(candidate+new Vector3(0,.45f,0),out point)&&!collision.Ground(candidate-new Vector3(0,.45f,0),out point))return;
         var key=Address(point);if(side.Closed.ContainsKey(key))return;
-        // Prefer an available coarse route. A fixed fallback cost avoids filling
-        // open floors with shifted half-grid lanes while retaining tight turns.
-        var cost=parent.Cost+24+Vector3.Distance(parent.Point,point)*(1+3*collision.RoutePenalty(point));
+        // Refinement is already restricted to rejected coarse edges. A large
+        // artificial cost delays narrow openings behind distant street detours.
+        // Keep only a small preference for coarse edges of similar length.
+        var cost=parent.Cost+.25f+Vector3.Distance(parent.Point,point)*(1+3*collision.RoutePenalty(point));
         side.Open.Enqueue(new(key,point,cost,parent),cost+heuristicWeight*Heuristic(point,side.Reverse));
     }
     private Key Address(Vector3 p)=>new((int)MathF.Round((p.X-origin.X)/spacing),(int)MathF.Round(p.Y*4),(int)MathF.Round((p.Z-origin.Z)/spacing));
