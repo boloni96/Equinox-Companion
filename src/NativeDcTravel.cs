@@ -42,17 +42,28 @@ public sealed partial class Plugin
         if(SellerAddon("SelectString")!=null){if(!trip.ServiceSent&&SelectVerifiedServiceAccount(trip.Service)){trip.ServiceSent=true;RecordTravelPrompt("Service account selected",new{slot=trip.Service});}return;}
         trip.ServiceSent=false;
         var loginWorld=trip.TransferCommitted||trip.Stage==NativeTravelStage.Login?trip.Leg:trip.Source;
-        if(trip.Stage==NativeTravelStage.Login)
-            loginWorld=CharacterLoginWorldPolicy.ListWorld(trip.Home,trip.Leg,TravelDc(trip.Home),TravelDc(trip.Leg),TravelRegion(trip.Home),TravelRegion(trip.Leg));
-        if(trip.ReconnectLoginList){
+        var selectingCharacter=trip.Stage==NativeTravelStage.CharacterMenu || trip.Stage==NativeTravelStage.Login && !trip.LoginSent;
+        if(trip.Stage is NativeTravelStage.CharacterMenu or NativeTravelStage.Login){
+            var physicalWorld=trip.Stage==NativeTravelStage.CharacterMenu?trip.Source:trip.Leg;
+            loginWorld=CharacterLoginWorldPolicy.ListWorld(trip.Home,physicalWorld,TravelDc(trip.Home),TravelDc(physicalWorld),TravelRegion(trip.Home),TravelRegion(physicalWorld));
             var currentLobby=AgentLobby.Instance();
-            if(currentLobby!=null&&SellerAddon("_CharaSelectListMenu")!=null){
-                if(currentLobby->TemporaryLocked)return;
-                if(TravelDc(currentLobby->WorldId)!=TravelDc(loginWorld)){
-                    if(SellerAddon("ContextMenu")!=null||SellerAddon("SelectYesno")!=null||SellerAddon("SelectOk")!=null)return;
-                    ClickLoginMenuButton("_CharaSelectReturn",4);trip.DcSelected=false;return;
+            if(selectingCharacter && currentLobby!=null && SellerAddon("_CharaSelectListMenu")!=null){
+                var displayedWorld=currentLobby->WorldId;
+                var displayedDc=TravelDc(displayedWorld);
+                if(currentLobby->TemporaryLocked || displayedDc==0){
+                    trip.LoginList.Ready(-1,now);
+                    return;
                 }
-                trip.ReconnectLoginList=false;
+                if(displayedDc!=TravelDc(loginWorld)){
+                    nativeTravelStatus=$"Opening {TravelDcName(loginWorld)} for {trip.Name}'s {WorldName(loginWorld)} character list";
+                    if(SellerAddon("ContextMenu")!=null || SellerAddon("SelectYesno")!=null || SellerAddon("SelectOk")!=null || SellerAddon("_CharaSelectWorldServer")!=null)return;
+                    if(now>=trip.NextWorldSelection && ClickLoginMenuButton("_CharaSelectReturn",4)){
+                        trip.DcSelected=false;
+                        trip.NextWorldSelection=now.AddSeconds(3);
+                        RecordTravelPrompt("Changing character-list data center",new{displayedWorld,loginWorld,physicalWorld});
+                    }
+                    return;
+                }
             }
         }
         if(SelectLoginDataCenter(WorldName(loginWorld)??"",ref trip.DcSelected))return;
@@ -87,8 +98,17 @@ public sealed partial class Plugin
         if(lobby->TemporaryLocked){trip.LoginList.Ready(-1,now);nativeTravelStatus="Waiting for the character-selection server to unlock · "+trip.Stage;return;}
         if(trip.Stage==NativeTravelStage.CharacterMenu){
             var menu=SellerAddon("_CharaSelectListMenu");if(menu==null)return;
+            if(lobby->ServiceAccountIndex!=trip.Service)return;
+            if(lobby->WorldId!=loginWorld){
+                nativeTravelStatus=$"Selecting {WorldName(loginWorld)} to find {trip.Name} visiting {WorldName(trip.Source)}";
+                if(now>=trip.NextWorldSelection && SellerAddon("ContextMenu")==null && SellerAddon("SelectYesno")==null && SellerAddon("SelectOk")==null && SelectEstateLoginWorld((ushort)loginWorld)){
+                    trip.NextWorldSelection=now.AddSeconds(5);
+                    RecordTravelPrompt("Selected pre-transfer character list",new{loginWorld,trip.Source,trip.Home});
+                }
+                return;
+            }
             var index=NativeTravelCharacterIndex(trip,out var world);
-            if(index<0){RequestNativeTravelLoginWorld(trip,trip.Source);return;}
+            if(index<0){nativeTravelStatus=$"Waiting for {trip.Name} on the {WorldName(loginWorld)} list";return;}
             if(world!=trip.Source)throw new InvalidOperationException("The character's current world changed before the transfer request.");
             var context=SellerAddon("ContextMenu");
             if(context!=null){
@@ -201,10 +221,6 @@ public sealed partial class Plugin
             PrepareNativeFinalLeg(trip);
             SetNativeTravelStage(trip,NativeTravelStage.CharacterMenu,"Home return complete; continuing DC travel without logging in");
         }else SetNativeTravelStage(trip,NativeTravelStage.Login,"Transfer complete; logging into "+WorldName(trip.Leg));
-    }
-    private void RequestNativeTravelLoginWorld(NativeWorldTrip trip,uint world){
-        if(trip.RequestedLoginWorld==world)return;
-        if(SelectEstateLoginWorld((ushort)world)){trip.RequestedLoginWorld=world;RecordTravelPrompt("Login world selected",new{world});}
     }
     private unsafe int NativeTravelCharacterIndex(NativeWorldTrip trip,out uint world)
     {

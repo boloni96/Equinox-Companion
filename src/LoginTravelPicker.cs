@@ -90,7 +90,7 @@ public sealed partial class Plugin
             var trip=new NativeWorldTrip{Owner="login-menu",Character=target.Character,Name=target.Name,Home=target.Home,Source=target.Current,Destination=destination,
                 Leg=route==LoginTravelRoute.ReturnHome?target.Home:route==LoginTravelRoute.LoginThenWorld?target.Current:destination,
                 Service=target.Service,Started=DateTimeOffset.UtcNow,ReturnHome=route==LoginTravelRoute.ReturnHome,NoLogin=loginTravelNoLogin,
-                ReconnectLoginList=TravelDc(lobby->WorldId)!=TravelDc(target.Current),PreferredGateway=TravelCityPolicy.Preferred(config.TravelCity,config.ShoppingCity,false)};
+                PreferredGateway=TravelCityPolicy.Preferred(config.TravelCity,config.ShoppingCity,false)};
             nativeWorldTrip=trip;
             SetNativeTravelStage(trip,route==LoginTravelRoute.LoginThenWorld?NativeTravelStage.Login:NativeTravelStage.CharacterMenu,
                 route==LoginTravelRoute.LoginThenWorld?"Logging in for regional World Visit":trip.ReturnHome?"Returning the selected character home":"Preparing DC travel from character selection");
