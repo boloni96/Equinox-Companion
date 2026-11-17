@@ -6,6 +6,7 @@ public sealed partial class Plugin
     private string workshopSearch="";private int workshopAddQuantity=1;
     private PreparationPlan? workshopPreparation;
     private Dictionary<uint,string> workshopMaterialSources=[];
+    private Dictionary<(uint Item,int Set),Queue<bool>> workshopPreparedQualities=[];
     private RetrievalEntry[] workshopNqWithdraw=[],workshopHqWithdraw=[];
     private string workshopPreparationNotice="";
     private WorkshopQueueSave WorkshopSaved()
@@ -41,6 +42,7 @@ public sealed partial class Plugin
             }
             if(parts.Length==0&&live!=null)supplies.AddRange(live.Rows.Where(r=>workshopSelection.Contains(r.ItemId)));
             var bags=new Dictionary<uint,int>();var ret=new Dictionary<uint,int>();var outputs=new List<RetrievalEntry>();var nqWithdraw=new List<RetrievalEntry>();var hqWithdraw=new List<RetrievalEntry>();
+            workshopPreparedQualities=[];
             var notes=new List<string>();
             var recordedChest=WorkshopRecordedChest(0);
             workshopMaterialSources=retrievalStock.Select(s=>(s.Item,Text:$"Retainer {s.Holder}: {s.Quantity} {(s.Hq?"HQ":"NQ")} "))
@@ -53,6 +55,7 @@ public sealed partial class Plugin
                 var fcStock=recordedChest.Where(s=>s.Item==id);
                 var rn=retrievalStock.Where(s=>s.Item==id&&!s.Hq).Sum(s=>s.Quantity)+fcStock.Where(s=>!s.Hq).Sum(s=>s.Quantity);var rh=retrievalStock.Where(s=>s.Item==id&&s.Hq).Sum(s=>s.Quantity)+fcStock.Where(s=>s.Hq).Sum(s=>s.Quantity);
                 var allocation=WorkshopSetAllocator.Allocate(group,nq,hq,rn,rh,workshopWithdrawQuality);
+                foreach(var choices in allocation.Choices.GroupBy(c=>c.SetSize))workshopPreparedQualities[(id,choices.Key)]=new(choices.Select(c=>c.Hq));
                 var required=allocation.Required;var usedN=allocation.WithdrawNq;var usedH=allocation.WithdrawHq;var missing=allocation.Missing;
                 bags[id]=allocation.Bags;ret[id]=usedN+usedH;
                 if(required>0)outputs.Add(new(id,name,required));

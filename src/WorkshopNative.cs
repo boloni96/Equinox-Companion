@@ -145,6 +145,7 @@ public sealed partial class Plugin
                 if(phase.ItemId!=workshopBefore.ItemId||phase.Phase!=workshopBefore.Phase){StopWorkshop("Project or phase changed before delivery was verified.");return;}
                 var row=phase.Rows.FirstOrDefault(r=>r.ItemId==workshopSupply.ItemId);
                 if(row!=null&&row.SetsDelivered==workshopSupply.SetsDelivered+1&&RetrievalHeld(row.ItemId,workshopHq?RetrievalQuality.HqOnly:RetrievalQuality.NqOnly)==workshopBagBefore-row.SetSize){
+                    if(workshopQueueRun&&workshopDeliveryQualities.TryGetValue((row.ItemId,row.SetSize),out var allocatedQuality))allocatedQuality.TryDequeue(out _);
                     workshopBefore=phase;workshopSupply=null;
                     if(workshopQueueRun&&phase.Phase==phase.TotalPhases-1&&phase.Rows.All(r=>r.RemainingSets==0)){workshopActive.ReadyToCollect=phase.ItemId;SaveConfiguration();}
                     if(workshopSingleDelivery){StopWorkshop("Turn-in complete · click the next material when ready.");return;}
@@ -175,7 +176,7 @@ public sealed partial class Plugin
                     SellerAddon("SubmarinePartsMenu")->FireCallbackInt(-1);workshopMenuBefore="";WorkshopTransition(WorkshopStage.MenuTransition,"Opening the next production step",now);return;
                 }
                 if(workshopNeedsPreparation&&BeginWorkshopBulkPreparation(now))return;
-                var quality=WorkshopPolicy.ChooseHq(workshopQueueRun&&workshopWithdrawQuality==2?0:RetrievalHeld(row.ItemId,RetrievalQuality.NqOnly),workshopQueueRun&&workshopWithdrawQuality==1?0:RetrievalHeld(row.ItemId,RetrievalQuality.HqOnly),row.SetSize);
+                var quality=WorkshopDeliveryQuality(row);
                 if(quality==null){if(BeginWorkshopBulkPreparation(now))return;StopWorkshop($"Need one complete set of {row.SetSize} NQ or HQ {row.Name}. Prepare / withdraw materials, then Resume.");return;}
                 workshopSupply=row;workshopHq=quality.Value;workshopHqConfirmed=false;workshopRequestId=0;
                 workshopBagBefore=RetrievalHeld(row.ItemId,workshopHq?RetrievalQuality.HqOnly:RetrievalQuality.NqOnly);

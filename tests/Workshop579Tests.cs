@@ -24,6 +24,8 @@ internal static class Workshop579Tests
         Check("already delivered sets excluded",plan.Required==10&&plan.WithdrawNq==10);
         plan=WorkshopSetAllocator.Allocate([row],30,0,0,30,2);
         Check("HQ filter does not use NQ bags",plan.Bags==0&&plan.WithdrawHq==30);
+        plan=WorkshopSetAllocator.Allocate([new(1,"A",5,1),new(1,"A",10,1)],0,5,10,0,0);
+        Check("reserve HQ small set so larger NQ set stays intact",plan.Missing==0&&plan.WithdrawNq==10&&plan.Choices[0].Hq&&!plan.Choices[1].Hq);
         var failed=false;try{WorkshopBulkPolicy.Allocate([new(1,"A",10)],[],[new(1,9,false,false)],false);}catch(InvalidOperationException){failed=true;}
         Check("changed stock blocks before delivery",failed);
     }

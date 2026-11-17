@@ -3,6 +3,7 @@ using FFXIVClientStructs.FFXIV.Client.Game;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
+    private Dictionary<(uint Item,int Set),Queue<bool>> workshopDeliveryQualities=[];
     private bool workshopNeedsPreparation,workshopBulkRunning,workshopPreparedPhaseOnly;
     private int workshopPreparedThrough=int.MaxValue,workshopPreparedPhase;
     private uint workshopPreparedProject;
@@ -28,6 +29,7 @@ public sealed partial class Plugin
         }
         if(!WorkshopBulkFits()){StopWorkshop("Free bag space for at least the current production phase and one finished part, then resume.");return true;}
         workshopPreparedThrough=WorkshopSaved().Completed+projects;
+        workshopDeliveryQualities=workshopPreparedQualities.ToDictionary(e=>e.Key,e=>new Queue<bool>(e.Value));
         workshopNeedsPreparation=false;
         if(workshopNqWithdraw.Length==0&&workshopHqWithdraw.Length==0)return false;
         var position=Objects.LocalPlayer?.Position??Vector3.Zero;
@@ -78,8 +80,17 @@ public sealed partial class Plugin
         }
         NextWorkshopBulkBatch(now);
     }
+    private bool? WorkshopDeliveryQuality(WorkshopSupply row)
+    {
+        var nq=workshopQueueRun&&workshopWithdrawQuality==2?0:RetrievalHeld(row.ItemId,RetrievalQuality.NqOnly);
+        var hq=workshopQueueRun&&workshopWithdrawQuality==1?0:RetrievalHeld(row.ItemId,RetrievalQuality.HqOnly);
+        if(workshopQueueRun&&workshopDeliveryQualities.TryGetValue((row.ItemId,row.SetSize),out var choices)&&choices.TryPeek(out var high))
+            return (high?hq:nq)>=row.SetSize?high:null;
+        return WorkshopPolicy.ChooseHq(nq,hq,row.SetSize);
+    }
     private void ResetWorkshopBulk()
     {
+        workshopDeliveryQualities.Clear();
         workshopPreparedThrough=int.MaxValue;workshopPreparedPhaseOnly=false;
         workshopBulkRunning=workshopNeedsPreparation=false;workshopBulkCurrent=null;workshopBulkBatches.Clear();workshopBulkTargets.Clear();
     }
