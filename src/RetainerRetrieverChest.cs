@@ -120,6 +120,7 @@ public sealed partial class Plugin
     }
     private unsafe void TickChest(DateTimeOffset now)
     {
+        UpdateLiveCompanyChest(now);
         if(localStorageRunning){TickLocalStorage(now);return;}
         var open=config.EnableRetriever&&SellerAddon("FreeCompanyChest")!=null;
         if(open&&!chestWasOpen)chestToolsWindow.IsOpen=true;

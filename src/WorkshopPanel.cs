@@ -28,7 +28,7 @@ public sealed partial class Plugin
     }
     private void PrepareWorkshopMaterials(int maxProjects=int.MaxValue,bool currentPhaseOnly=false)
     {
-        workshopArtisanPreview=null;workshopArtisanNotice="";workshopPreparationOutputs=[];
+        workshopArtisanPreview=null;workshopArtisanNotice="";workshopPreparationOutputs=[];workshopNqWithdraw=[];workshopHqWithdraw=[];
         try{
             if(retrievalCatalog==null)return;RefreshRetrievalStock();var q=WorkshopSaved();var live=ReadWorkshopPhase();
             var parts=q.Items.SelectMany(e=>Enumerable.Repeat(e with{Quantity=1},e.Quantity)).Skip(q.Completed).ToArray();
@@ -45,7 +45,7 @@ public sealed partial class Plugin
             var bags=new Dictionary<uint,int>();var ret=new Dictionary<uint,int>();var outputs=new List<RetrievalEntry>();var nqWithdraw=new List<RetrievalEntry>();var hqWithdraw=new List<RetrievalEntry>();
             workshopPreparedQualities=[];
             var notes=new List<string>();
-            var recordedChest=WorkshopRecordedChest(0);
+            var recordedChest=WorkshopRecordedChest(0,requireReady:true);
             workshopMaterialSources=retrievalStock.Select(s=>(s.Item,Text:$"Retainer {s.Holder}: {s.Quantity} {(s.Hq?"HQ":"NQ")} "))
                 .Concat(recordedChest.Select(s=>(s.Item,Text:$"FC chest {(s.Page==22001?"crystals":"tab "+(s.Page-19999))}: {s.Quantity} {(s.Hq?"HQ":"NQ")} ")))
                 .GroupBy(s=>s.Item).ToDictionary(g=>g.Key,g=>string.Join("\n",g.Select(s=>s.Text)));
@@ -212,6 +212,9 @@ public sealed partial class Plugin
     }
     private void DrawWorkshopMaterials()
     {
+        if(workshopChestRefreshDue!=default&&DateTimeOffset.UtcNow>=workshopChestRefreshDue&&!WorkshopUiBusy){
+            workshopChestRefreshDue=default;PrepareWorkshopMaterials();
+        }
         var p=workshopPreparation;
         if(ImGui.Checkbox("Export missing only",ref workshopExportMissing)){workshopArtisanPreview=null;workshopArtisanNotice="";}
         if(ImGui.IsItemHovered())ImGui.SetTooltip("Checked: only recipes still needed after recorded stock. Unchecked: every recipe in the remaining queue, including subcrafts and items already owned. Raw/non-craftable materials stay in the material list.");
@@ -221,9 +224,13 @@ public sealed partial class Plugin
         if(ImGui.BeginTable("WorkshopMaterialActions",2,ImGuiTableFlags.SizingStretchSame)){
             ImGui.TableNextColumn();if(ImGui.Button("Withdraw turn-ins",new Vector2(-1,0)))RetrievalTry(()=>{
                 PrepareWorkshopMaterials();
+                if(workshopPreparation==null)throw new InvalidOperationException(workshopPreparationNotice);
                 BeginWorkshopPreparationWithdrawal(workshopWithdrawQuality==2?[]:workshopNqWithdraw,RetrievalQuality.NqOnly,workshopWithdrawQuality==1?[]:workshopHqWithdraw);
             });
-            ImGui.TableNextColumn();if(ImGui.Button("Withdraw ingredients",new Vector2(-1,0)))RetrievalTry(()=>BeginWorkshopPreparationWithdrawal(CraftingPreparation.IngredientWithdrawals(p!,workshopNqWithdraw.Concat(workshopHqWithdraw))));
+            ImGui.TableNextColumn();if(ImGui.Button("Withdraw ingredients",new Vector2(-1,0)))RetrievalTry(()=>{
+                PrepareWorkshopMaterials();if(workshopPreparation==null)throw new InvalidOperationException(workshopPreparationNotice);
+                BeginWorkshopPreparationWithdrawal(CraftingPreparation.IngredientWithdrawals(workshopPreparation,workshopNqWithdraw.Concat(workshopHqWithdraw)));
+            });
             ImGui.TableNextColumn();ImGui.BeginDisabled(p==null||workshopExportMissing&&p.Steps.Length==0);if(ImGui.Button("Copy Artisan list",new Vector2(-1,0)))RetrievalTry(CopyWorkshopArtisanList);ImGui.EndDisabled();
             if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))ImGui.SetTooltip("Copies every recipe in the chosen export mode, ingredients before outputs. Artisan can replace import settings with its defaults; verify stock skipping after import.");
             ImGui.TableNextColumn();ImGui.BeginDisabled(!Pi.InstalledPlugins.Any(x=>x.InternalName=="Artisan"&&x.IsLoaded));if(ImGui.Button("Open Artisan",new Vector2(-1,0)))Commands.ProcessCommand("/artisan lists");ImGui.EndDisabled();

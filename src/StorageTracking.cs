@@ -137,28 +137,16 @@ public sealed partial class Plugin
             foreach(var item in dresser->Data->PrismBoxItems)if(item.ItemId>0)items.Add(item.ItemId % 1000000);
             Save("dresser","Glamour Dresser",items);
         }
-        var chest=AgentFreeCompanyChest.Instance();
-        var proxy=InfoProxyFreeCompany.Instance();
-        var membership=InfoProxyFreeCompanyMember.Instance();
-        if(chest!=null && chest->IsAgentActive() && proxy!=null && proxy->Id>0 && membership!=null && membership->FreeCompanyId==proxy->Id && membership->CharData!=null && membership->EntryCount is >0 and <=512)
-        {
-            var member=false;
-            for(var i=0;i<(int)membership->EntryCount;i++)if(membership->CharData[i].ContentId==Player.ContentId && membership->CharData[i].HomeWorld==actor.HomeWorldId)member=true;
-            Span<StorageSlotValue> chestSlots=stackalloc StorageSlotValue[200];
-            if(member)foreach(var type in Enum.GetValues<InventoryType>().Where(t=>(uint)t is >=20000 and <=20004 or 22001))
-            {
-                var container=manager->GetInventoryContainer(type);
-                if(container==null || !container->IsLoaded || container->Items==null || container->Size is <=0 or >200)continue;
-                var key=$"fc:{proxy->Id}:{(uint)type}";
-                for(var i=0;i<container->Size;i++){var item=container->Items[i];chestSlots[i]=new(item.ItemId,item.Quantity,(item.Flags&InventoryItem.ItemFlags.HighQuality)!=0,(ushort)(item.SpiritbondOrCollectability>0?1:0),(byte)item.Flags);}
-                var slots=chestSlots[..container->Size];
-                if(!storageCaptureGate.Needs(actor,key,slots,now))continue;
-                var items=new List<uint>();
-                for(var i=0;i<container->Size;i++)if(container->Items[i].Quantity>0)items.Add(container->Items[i].ItemId % 1000000);
-                Save(key,$"Available in FC Chest · {((uint)type==22001?"Crystals":$"Inventory {(uint)type-19999}")} · {proxy->NameString}",items,ReadStacks(container));
-                storageCaptureGate.Remember(actor,key,slots,now);
-            }
+        // Read only the selected, ready page. Loaded containers can belong to
+        // previously visited tabs; the member-list UI is not an ownership prerequisite.
+        if(TryReadReadyCompanyChest(out var company,out var chestPage,out var readySlots)&&
+            liveChestGate.Observe(Player.ContentId,company,Player.CurrentWorld.RowId,chestPage,readySlots,now)){
+            var container=manager->GetInventoryContainer((InventoryType)chestPage);
+            var key=$"fc:{company}:{chestPage}";
+            var stacks=ReadStacks(container);
+            Save(key,$"Available in FC Chest · {(chestPage==22001?"Crystals":"Inventory "+(chestPage-19999))}",stacks.Select(s=>s.ItemId),stacks);
         }
+
         }
         // A stable, open retainer inventory is required before attributing its containers.
         var retainers=RetainerManager.Instance();
