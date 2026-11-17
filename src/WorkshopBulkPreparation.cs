@@ -50,7 +50,10 @@ public sealed partial class Plugin
         var needed=0;
         foreach(var high in new[]{false,true})foreach(var entry in high?workshopHqWithdraw:workshopNqWithdraw){
             var stack=(int)(DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>().GetRowOrDefault(entry.ItemId)?.StackSize??1);
-            if(CrystalStorage.IsItem(entry.ItemId))continue;
+            if(CrystalStorage.IsItem(entry.ItemId)){
+                if(CrystalStorage.Withdrawable(entry.ItemId,RetrievalHeld(entry.ItemId),entry.Quantity)<entry.Quantity)return false;
+                continue;
+            }
             var room=0;
             foreach(var type in new[]{InventoryType.Inventory1,InventoryType.Inventory2,InventoryType.Inventory3,InventoryType.Inventory4}){
                 var container=manager->GetInventoryContainer(type);if(container==null||!container->IsLoaded)return false;

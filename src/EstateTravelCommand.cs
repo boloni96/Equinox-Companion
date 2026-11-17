@@ -31,7 +31,7 @@ public sealed partial class Plugin
     private void StopEstateTravel(string reason)
     {
         estateTravelStatus=reason;
-        if(estateHomeReturn!=null){if(estateHomeReturn.NativeWorldRoute&&nativeWorldTrip?.Owner=="estate")StopNativeWorldTravel(reason);estateHomeReturn=null;FollowChatNotice("TRAVEL — Home return stopped. Any transfer already accepted by the game may finish.");}
+        if(estateHomeReturn!=null){if(nativeWorldTrip?.Owner=="estate")StopNativeWorldTravel(reason);estateHomeReturn=null;RecordTravelPrompt("Estate continuation stopped",new{reason});FollowChatNotice("TRAVEL — "+reason);}
         if(estateTrip==null)return;
         estateTrip=null;StopIndependentWalk("Estate travel: "+reason);
         FollowChatNotice("TRAVEL — "+reason);
@@ -48,6 +48,10 @@ public sealed partial class Plugin
             ?AddressOf(manager->GetCurrentIndoorHouseId()):null;
     }
     private static bool SameEstate(Address? a,Address b)=>a!=null&&a.WorldId==b.WorldId&&a.TerritoryTypeId==b.TerritoryTypeId&&a.Ward==b.Ward&&a.Plot==b.Plot;
+
+    private static unsafe HouseId EstateDestinationHouse(int property) => property>=3
+        ?HousingManager.GetOwnedHouseId(EstateType.SharedEstate,EstateTravelCommand.SharedSlot(property))
+        :HousingManager.GetOwnedHouseId(property==1?EstateType.PersonalEstate:EstateType.FreeCompanyEstate);
 
     private unsafe void StartEstateTravelCommand((int Property,int Mode,string Label) destination)
     {
@@ -66,7 +70,7 @@ public sealed partial class Plugin
             var sharedSlot=EstateTravelCommand.SharedSlot(destination.Property);
             if(shared&&sharedSlot<0)throw new InvalidOperationException("Shared estate "+(destination.Property-2)+" is not available for this character. No tenant estate can be selected in this slot. No travel started.");
             if(Player.CurrentWorld.RowId!=Player.HomeWorld.RowId){BeginEstateHomeReturn(destination);return;}
-            var owned=shared?HousingManager.GetOwnedHouseId(EstateType.SharedEstate,sharedSlot):HousingManager.GetOwnedHouseId(destination.Property==1?EstateType.PersonalEstate:EstateType.FreeCompanyEstate);
+            var owned=EstateDestinationHouse(destination.Property);
             var address=AddressOf(owned);
             if(address==null||address.WorldId!=Player.HomeWorld.RowId||address.Apartment)throw new InvalidOperationException(shared
                 ?"Shared estate "+(sharedSlot+1)+" is not available for this character. Check that you're a tenant there. No travel started."
@@ -99,7 +103,11 @@ public sealed partial class Plugin
 
     private unsafe void UpdateEstateTravel(DateTimeOffset now)
     {
-        if(estateHomeReturn!=null){UpdateEstateHomeReturn(now);return;}
+        if(estateHomeReturn!=null){
+            try{UpdateEstateHomeReturn(now);}
+            catch(Exception ex){StopEstateTravel("Home return stopped: "+ex.Message);}
+            return;
+        }
         if(estateTrip is not {} trip)return;
         try{
             if(followSession.Armed||independentQuestId!=0||eventAccountActive||gardenTendRoute!=null||assignedLogin!=null)throw new InvalidOperationException("Another routine started; estate travel stopped.");

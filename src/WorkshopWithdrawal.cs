@@ -22,8 +22,19 @@ public sealed partial class Plugin
             if(workshopCombinedStage==2){workshopCombinedStage=3;workshopCombinedDeadline=DateTimeOffset.UtcNow.AddMinutes(2);workshopStatus="Materials received · returning to fabrication station";}
             else workshopStatus="Turn-in withdrawal complete · refresh materials before crafting.";return;}
         workshopWithdrawalActiveQuality=next.Quality;
-        workshopWithdrawalTargets=next.Items.ToDictionary(e=>e.ItemId,e=>checked(RetrievalHeld(e.ItemId,next.Quality)+e.Quantity));
-        try{WithdrawPreparation(next.Items,next.Quality);}
+        workshopWithdrawalTargets=[];
+        var items=new List<RetrievalEntry>();
+        foreach(var entry in next.Items){
+            var held=RetrievalHeld(entry.ItemId,next.Quality);
+            var quantity=CrystalStorage.Withdrawable(entry.ItemId,held,entry.Quantity);
+            if(workshopPreparationWithdrawal && entry.ItemId==workshopPreparationItem)
+                quantity=Math.Min(quantity,Math.Max(0,workshopPreparationTarget-held));
+            if(quantity==0)continue;
+            workshopWithdrawalTargets[entry.ItemId]=checked(held+quantity);
+            items.Add(entry with{Quantity=quantity});
+        }
+        if(items.Count==0){StartNextWorkshopWithdrawal();return;}
+        try{WithdrawPreparation(items.ToArray(),next.Quality);}
         catch(Exception e){workshopWithdrawals.Clear();workshopWithdrawalPending=false;StopWorkshop("Withdrawal stopped: "+e.Message);}
     }
     private void TickWorkshopWithdrawal()

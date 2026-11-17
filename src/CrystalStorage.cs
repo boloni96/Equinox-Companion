@@ -3,6 +3,8 @@ namespace EquinoxCompanion;
 public static class CrystalStorage
 {
     public static bool IsItem(uint item) => item is >= 2 and <= 19;
+    public static int Withdrawable(uint item,int held,int requested) =>
+        IsItem(item) ? Math.Min(requested,Math.Max(0,9999-held)) : requested;
     public static bool IsContainer(uint container) => container is 2001 or 12001 or 22001;
     public static ChestStack Normalize(ChestStack stack)
     {

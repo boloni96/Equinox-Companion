@@ -5,6 +5,10 @@ internal static class CrystalStorage286Tests
  [ModuleInitializer] internal static void Run()
  {
   void Check(string label,bool ok){if(!ok)throw new Exception(label);Console.WriteLine("PASS crystals286 "+label);}
+  Check("one shard fits when holding 9998",CrystalStorage.Withdrawable(2,9998,8647)==1);
+  Check("full type skipped independently",CrystalStorage.Withdrawable(2,9999,8646)==0 && CrystalStorage.Withdrawable(3,0,500)==500);
+  Check("later pass uses newly freed room",CrystalStorage.Withdrawable(2,6000,8646)==3999);
+  Check("ordinary items retain their requested quantity",CrystalStorage.Withdrawable(100,9999,500)==500);
   var bag=CrystalStorage.Normalize(new ChestStack(2001,6,8,9990,false,9999));
   var retainer=CrystalStorage.Normalize(new ChestStack(12001,6,8,500,false,9999));
   var chest=CrystalStorage.Normalize(new ChestStack(22001,6,8,500,false,9999));

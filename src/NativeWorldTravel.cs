@@ -63,6 +63,7 @@ public sealed partial class Plugin
         if(nativeWorldTrip is not {} trip)return;
         RecordTravelPrompt("Travel stopped",new{reason,trip.TransferCommitted});nativeWorldTrip=null;
         StopIndependentWalk("Travel: "+reason);nativeTravelStatus=reason+(trip.TransferCommitted&&!arrived?" An accepted game transfer may still finish.":"");
+        if(!arrived && trip.Owner=="estate"){estateHomeReturn=null;estateTravelStatus=nativeTravelStatus;}
         if(trip.Owner=="login-menu")loginTravelMessage=nativeTravelStatus;
         FollowChatNotice("TRAVEL — "+nativeTravelStatus);
         if(!arrived&&trip.Owner=="bring"&&bringTrip!=null)EndBring(nativeTravelStatus);

@@ -117,7 +117,7 @@ public sealed partial class Plugin
     {
         var lobby=AgentLobby.Instance();
         var target=assignedLogin?.Target is {} c?TitleLoginTarget(c.Id):null;
-        var expected=target?.ContentId??estateHomeReturn?.Character.ToString()??"";
+        var expected=target?.ContentId??nativeWorldTrip?.Character.ToString()??"";
         var rows=new List<object>();
         if(lobby!=null&&lobby->LobbyData.CharaSelectEntries.LongCount is >0 and <=512)
             foreach(var item in lobby->LobbyData.CharaSelectEntries){
@@ -126,10 +126,10 @@ public sealed partial class Plugin
                     rows.Add(new{character=entry->ContentId.ToString(),name=entry->NameString,homeWorld=entry->HomeWorldId,currentWorld=entry->CurrentWorldId,flags=(int)entry->LoginFlags});
             }
         var dialog=(AddonSelectYesno*)SellerAddon("SelectYesno");
-        return new{status=characterTravelStatus,expectedCharacter=expected,expectedName=target?.Name??estateHomeReturn?.Name,
-            expectedSlot=assignedLogin?.ServiceAccount??estateHomeReturn?.ServiceSlot,
-            requested=assignedLogin!=null?assignedLoginSent:estateHomeReturn?.LoginSent??false,
-            confirmed=assignedLogin!=null?assignedLoginConfirmed:estateHomeReturn?.LoginConfirmed??false,
+        return new{status=characterTravelStatus,expectedCharacter=expected,expectedName=target?.Name??nativeWorldTrip?.Name,
+            expectedSlot=assignedLogin?.ServiceAccount??nativeWorldTrip?.Service,
+            requested=assignedLogin!=null?assignedLoginSent:nativeWorldTrip?.LoginSent??false,
+            confirmed=assignedLogin!=null?assignedLoginConfirmed:nativeWorldTrip?.LoginConfirmed??false,
             currentSlot=lobby==null?-1:(int)lobby->ServiceAccountIndex,
             displayedWorld=lobby==null?0:lobby->WorldId,
             lobbyCurrentWorld=lobby==null?0:lobby->LobbyData.CurrentWorldId,
