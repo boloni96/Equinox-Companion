@@ -1,9 +1,11 @@
 using FFXIVClientStructs.FFXIV.Client.System.Input;
+using Dalamud.Game.ClientState.Conditions;
 using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
+    private readonly WorkshopSceneReturn workshopSceneReturn=new();
     private bool workshopSceneArmed,workshopEscapeActive,workshopSkipConfirmed;
     private string workshopScene="";
     private int workshopSkipPulses;
@@ -11,6 +13,7 @@ public sealed partial class Plugin
     private void ResetWorkshopCutscene()
     {
         if(workshopEscapeActive){workshopEscapeActive=false;EndHelperNativeEscape();}
+        workshopSceneReturn.Reset();
         workshopSceneArmed=workshopSkipConfirmed=false;workshopScene="";workshopSkipPulses=0;workshopSkipLastPulse=default;
     }
     private bool WorkshopEscapeAllowed(int id)=>HelperNativeSkipPolicy.Escape(
@@ -20,7 +23,21 @@ public sealed partial class Plugin
     {
         if(!workshopSceneArmed)return false;
         var inScene=HelperInCutscene();
-        if(!inScene)return false;
+        var returned=workshopSceneReturn.Observe(inScene,Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51],now);
+        if(!inScene){
+            if(!workshopSceneReturn.Seen)return false;
+            // Release synthetic Escape immediately, even during the return debounce.
+            if(workshopEscapeActive){workshopEscapeActive=false;EndHelperNativeEscape();}
+            workshopDeadline=now.AddSeconds(45);
+            if(!returned)return true;
+            RecordTravelPrompt("Workshop production scene returned",new{scene=workshopScene,skipped=workshopSkipConfirmed,project=workshopBefore?.ItemId});
+            ResetWorkshopCutscene();
+            if(workshopStage==WorkshopStage.MenuTransition){
+                workshopMenuBefore="";workshopInteraction=default;
+                WorkshopTransition(WorkshopStage.Browse,"Production cutscene finished · reopening the fabrication station",now);
+            }
+            return false;
+        }
         workshopDeadline=now.AddSeconds(45);
         var scene=HelperScene();if(scene.Length==0)return true;
         if(workshopScene.Length==0)workshopScene=scene;
