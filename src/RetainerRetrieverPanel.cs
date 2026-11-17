@@ -130,7 +130,7 @@ public sealed partial class Plugin
         TickRetrievalPicker();
         if(retrievalError.Length>0)ImGui.TextWrapped(retrievalError);
         else if(organizerHasRun&&!organizeRunning)ImGui.TextWrapped(organizeStatus);
-        if(ImGui.BeginTabBar("RetrieverTabs")){
+        if(ImGui.BeginTabBar("RetrieverTabs",ImGuiTabBarFlags.FittingPolicyScroll|ImGuiTabBarFlags.TabListPopupButton)){
             if(ImGui.BeginTabItem("Inventory",organizerSelectInventory?ImGuiTabItemFlags.SetSelected:ImGuiTabItemFlags.None)){
                 organizerSelectInventory=false;
                 ImGui.SetNextItemWidth(220);ImGui.Combo("##InventoryView",ref retrievalInventoryView,"My inventory\0Retainers\0All recorded storage\0Saddlebags\0Housing storage\0Armoury Chest\0Equipped\0Armoire / dresser\0FC storage\0");

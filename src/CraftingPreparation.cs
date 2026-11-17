@@ -65,6 +65,19 @@ internal sealed record WorkshopProject(uint Sequence,uint ItemId,string Name,Wor
 internal sealed record WorkshopPhase(uint ItemId,int Phase,int TotalPhases,WorkshopSupply[] Rows);
 internal static class WorkshopPolicy
 {
+    internal static (RetrievalEntry[] Items,RetrievalQuality Quality)[] WithdrawalBatches(RetrievalEntry[] nq,RetrievalEntry[] hq,int filter)
+    {
+        if(filter is <0 or >2)throw new ArgumentException("Unknown quality filter.");
+        var result=new List<(RetrievalEntry[],RetrievalQuality)>();
+        if(filter!=2&&nq.Length>0)result.Add((nq,RetrievalQuality.NqOnly));
+        if(filter!=1&&hq.Length>0)result.Add((hq,RetrievalQuality.HqOnly));
+        return result.ToArray();
+    }
+    internal static void Clear(WorkshopQueueSave queue,uint world,string house)
+    {
+        queue.Items=[];queue.Completed=0;queue.PendingCollection=0;queue.ReadyToCollect=0;queue.CollectionBefore=0;
+        queue.World=world;queue.House=house;
+    }
     internal static int CompleteSets(int nq,int hq,int size)=>size>0?Math.Max(0,nq)/size+Math.Max(0,hq)/size:0;
     internal static (int Nq,int Hq) Supplements(int nq,int hq,int size,int sets)
     {

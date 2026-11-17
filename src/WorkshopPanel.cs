@@ -22,7 +22,7 @@ public sealed partial class Plugin
         if(entries.Any(e=>retrievalCatalog==null||!retrievalCatalog.Projects.ContainsKey(e.ItemId)))throw new InvalidOperationException("Queue requires finished workshop projects, not their ingredient list. Add projects below.");
         // Preserve completed prefix and ordering when appending more copies.
         if(q.Items.Sum(e=>e.Quantity)+entries.Sum(e=>e.Quantity)>999)throw new InvalidOperationException("Queue is limited to 999 projects.");
-        q.Items=q.Items.Concat(entries).ToArray();SaveConfiguration();workshopPreparation=null;
+        q.Items=q.Items.Concat(entries).ToArray();SaveConfiguration();workshopPreparation=null;workshopPreparationNotice="";workshopNqWithdraw=[];workshopHqWithdraw=[];workshopStatus=$"Added {entries.Sum(e=>e.Quantity)} projects to the queue.";
     }
     private void PrepareWorkshopMaterials()
     {
@@ -68,61 +68,125 @@ public sealed partial class Plugin
             if(!retrievalStockComplete)workshopPreparationNotice+="\nRetainer records are incomplete; refresh before crafting to avoid extras.";
         }catch(Exception e){workshopPreparation=null;workshopPreparationNotice=e.Message;}
     }
+    private int workshopView,workshopWithdrawQuality;
+    private bool workshopClearRequested,workshopOptionsRequested;
+    private bool WorkshopUiBusy=>workshopRunning||retrievalRun.Running||craftingWithdrawalPending||organizeRunning||chestRunning||gearRouting||armoireRunning||workshopWithdrawalPending;
+    private void ClearWorkshopQueue(WorkshopQueueSave q)
+    {
+        WorkshopPolicy.Clear(q,Player.CurrentWorld.RowId,WorkshopHouse());
+        workshopPreparation=null;workshopNqWithdraw=[];workshopHqWithdraw=[];workshopPreparationNotice="";
+        workshopSelection.Clear();workshopActive=null;workshopBefore=null;workshopSupply=null;
+        workshopStatus="Queue cleared. The in-game project is unchanged.";SaveConfiguration();
+    }
     private void DrawWorkshop()
     {
-        var enabled=config.EnableWorkshop;
-        if(ImGui.Checkbox("Enable automatic FC workshop delivery",ref enabled)){config.EnableWorkshop=enabled;SaveConfiguration();if(!enabled)StopWorkshop("Workshop tool disabled.");}
-        var manual=config.WorkshopManualDelivery;
-        if(ImGui.Checkbox("Automatically complete turn-ins I click in the game",ref manual)){
-            config.WorkshopManualDelivery=manual;
-            if(manual)config.EnableWorkshop=true;
-            SaveConfiguration();
-            if(!manual){if(workshopRunning&&workshopSingleDelivery)StopWorkshop("Manual turn-in assistance disabled.");else if(!workshopRunning)PauseWorkshop(false);}
-        }
-        ImGui.TextWrapped("You choose a material in the game's Material Delivery list. Companion selects one complete NQ stack (or HQ if needed), hands it over, and accepts its confirmations. It then waits for your next click.");
-        ImGui.TextWrapped(workshopStatus);
-        if(workshopRunning){if(ImGui.Button("Stop workshop"))StopWorkshop("Stopped by you. Queue saved; an already-confirmed hand-in may still finish.");}
         if(!Player.IsLoaded){ImGui.TextWrapped("Log in to view this character's queue.");return;}
-        var q=WorkshopSaved();
-        ImGui.TextWrapped($"Queue: {q.Completed} / {q.Items.Sum(e=>e.Quantity)} projects collected. Resume is always manual.");
-        ImGui.BeginDisabled(workshopRunning);
-        if(ImGui.Button("Add projects from current list"))RetrievalTry(()=>AddWorkshopProjects(RetainerRetrieval.Requested(retrievalItems,retrievalMultiplier,false,RetrievalRecipes())));
-        ImGui.SetNextItemWidth(100);ImGui.InputInt("Quantity per project",ref workshopAddQuantity);workshopAddQuantity=Math.Clamp(workshopAddQuantity,1,99);
-        if(ImGui.Button("Add complete Shark submarine"))RetrievalTry(()=>AddWorkshopProjects(retrievalCatalog!.Projects.Values.Where(p=>p.Name.StartsWith("Shark-class ",StringComparison.OrdinalIgnoreCase)).Select(p=>new RetrievalEntry(p.ItemId,p.Name,workshopAddQuantity)).ToArray()));
-        ImGui.SetNextItemWidth(-1);ImGui.InputTextWithHint("##WorkshopSearch","Search all FC projects",ref workshopSearch,100);
+        var q=WorkshopSaved();var total=q.Items.Sum(e=>e.Quantity);
+        ImGui.TextUnformatted($"{q.Completed}/{total} collected · {Math.Max(0,total-q.Completed)} remaining");
+        var status=workshopStatus.Length>85?workshopStatus[..82]+"…":workshopStatus;
+        ImGui.TextUnformatted(status);if(ImGui.IsItemHovered())ImGui.SetTooltip(workshopStatus);
+        // Fixed controls stay outside the scrolling content and confirmation is rendered outside disabled scopes.
+        if(ImGui.BeginTable("WorkshopToolbar",2,ImGuiTableFlags.SizingStretchSame)){
+            ImGui.TableNextColumn();
+            if(workshopWithdrawalPending){if(ImGui.Button("Stop withdrawal",new Vector2(-1,0)))CancelWorkshopWithdrawal();}
+            else if(workshopRunning){if(ImGui.Button("Stop workshop",new Vector2(-1,0)))StopWorkshop("Stopped by you. Queue preserved.");}
+            else {ImGui.BeginDisabled(WorkshopUiBusy||!config.EnableWorkshop||total<=q.Completed);if(ImGui.Button("Start / resume",new Vector2(-1,0)))StartWorkshop(true);ImGui.EndDisabled();}
+            ImGui.TableNextColumn();ImGui.BeginDisabled(WorkshopUiBusy||total==0&&q.PendingCollection==0&&q.ReadyToCollect==0);if(ImGui.Button("Clear queue…",new Vector2(-1,0)))workshopClearRequested=true;ImGui.EndDisabled();
+            ImGui.TableNextColumn();if(ImGui.Button("Options…",new Vector2(-1,0)))workshopOptionsRequested=true;
+            ImGui.TableNextColumn();ImGui.BeginDisabled(WorkshopUiBusy);if(ImGui.Button("Refresh materials",new Vector2(-1,0))){PrepareWorkshopMaterials();workshopView=2;}ImGui.EndDisabled();
+            ImGui.EndTable();
+        }
+        if(workshopOptionsRequested){ImGui.OpenPopup("Workshop options");workshopOptionsRequested=false;}
+        if(ImGui.BeginPopup("Workshop options")){
+            var enabled=config.EnableWorkshop;if(ImGui.Checkbox("Enable workshop automation",ref enabled)){config.EnableWorkshop=enabled;SaveConfiguration();if(!enabled)StopWorkshop("Workshop tool disabled.");}
+            var manual=config.WorkshopManualDelivery;
+            if(ImGui.Checkbox("Complete turn-ins I click in game",ref manual)){config.WorkshopManualDelivery=manual;if(manual)config.EnableWorkshop=true;SaveConfiguration();if(!manual){if(workshopRunning&&workshopSingleDelivery)StopWorkshop("Manual assistance disabled.");else if(!workshopRunning)PauseWorkshop(false);}}
+            ImGui.TextWrapped("Click a material in the game to deliver one full NQ or HQ set, including its confirmations. No queue required.");
+            ImGui.EndPopup();
+        }
+        if(!config.EnableWorkshop)ImGui.TextDisabled("Automation off · enable in Options");
+        if(workshopClearRequested){ImGui.OpenPopup("Clear workshop queue");workshopClearRequested=false;}
+        if(ImGui.BeginPopupModal("Clear workshop queue",ImGuiWindowFlags.AlwaysAutoResize)){
+            ImGui.TextUnformatted("Clear this character's saved queue and progress?");
+            ImGui.TextUnformatted("The current in-game project will remain active.");
+            ImGui.BeginDisabled(WorkshopUiBusy);
+            if(ImGui.Button("Clear queue")){ClearWorkshopQueue(q);ImGui.CloseCurrentPopup();}
+            ImGui.EndDisabled();ImGui.SameLine();if(ImGui.Button("Cancel"))ImGui.CloseCurrentPopup();
+            ImGui.EndPopup();
+        }
+        ImGui.SetNextItemWidth(-1);ImGui.Combo("##WorkshopView",ref workshopView,"Project queue\0Current delivery\0Materials / Artisan\0");
+        ImGui.BeginChild("WorkshopContent",new Vector2(0,Math.Max(60,ImGui.GetContentRegionAvail().Y)),false);
+        ImGui.BeginDisabled(WorkshopUiBusy);
+        if(workshopView==0)DrawWorkshopQueue(q);
+        else if(workshopView==1)DrawWorkshopDelivery();
+        else DrawWorkshopMaterials();
+        ImGui.EndDisabled();ImGui.EndChild();
+    }
+    private void DrawWorkshopQueue(WorkshopQueueSave q)
+    {
+        ImGui.SetNextItemWidth(100);ImGui.InputInt("Copies",ref workshopAddQuantity);workshopAddQuantity=Math.Clamp(workshopAddQuantity,1,99);
+        if(ImGui.BeginTable("WorkshopAddActions",2,ImGuiTableFlags.SizingStretchSame)){
+            ImGui.TableNextColumn();if(ImGui.Button("Add current list",new Vector2(-1,0)))RetrievalTry(()=>AddWorkshopProjects(RetainerRetrieval.Requested(retrievalItems,retrievalMultiplier,false,RetrievalRecipes())));
+            if(ImGui.IsItemHovered())ImGui.SetTooltip("Add the Organizer list's finished projects, using that list's quantities and multiplier.");
+            ImGui.TableNextColumn();if(ImGui.Button("Add Shark set",new Vector2(-1,0)))RetrievalTry(()=>AddWorkshopProjects(retrievalCatalog!.Projects.Values.Where(p=>p.Name.StartsWith("Shark-class ",StringComparison.OrdinalIgnoreCase)).Select(p=>new RetrievalEntry(p.ItemId,p.Name,workshopAddQuantity)).ToArray()));
+            if(ImGui.IsItemHovered())ImGui.SetTooltip($"Add {workshopAddQuantity} complete submarine(s): {workshopAddQuantity*4} parts. Copies also applies to search results.");
+            ImGui.EndTable();
+        }
+        ImGui.SetNextItemWidth(-1);ImGui.InputTextWithHint("##WorkshopSearch","Search FC projects…",ref workshopSearch,100);
         if(workshopSearch.Length>0&&retrievalCatalog!=null){
-            ImGui.BeginChild("WorkshopSearch",new Vector2(0,120),true);
+            ImGui.BeginChild("WorkshopSearchResults",new Vector2(0,100),true);
             foreach(var project in retrievalCatalog.Projects.Values.Where(p=>p.Name.Contains(workshopSearch,StringComparison.OrdinalIgnoreCase)).OrderBy(p=>p.Name).Take(100))if(ImGui.Selectable(project.Name+"##"+project.Sequence))RetrievalTry(()=>AddWorkshopProjects([new(project.ItemId,project.Name,workshopAddQuantity)]));
             ImGui.EndChild();
         }
-        if(ImGui.CollapsingHeader("Queued projects")){
-            var index=0;foreach(var e in q.Items){ImGui.TextUnformatted($"{e.Quantity} × {e.Name}");index+=e.Quantity;}
-            if(ImGui.Button("Clear queue…"))ImGui.OpenPopup("Clear workshop queue");
-            if(ImGui.BeginPopup("Clear workshop queue")){ImGui.TextWrapped("Clear saved progress and remaining projects? This does not discontinue the in-game project.");if(ImGui.Button("Clear saved queue")){q.Items=[];q.Completed=0;q.PendingCollection=0;q.ReadyToCollect=0;q.World=Player.CurrentWorld.RowId;q.House=WorkshopHouse();SaveConfiguration();workshopPreparation=null;ImGui.CloseCurrentPopup();}ImGui.EndPopup();}
+        if(q.Items.Length==0){ImGui.TextDisabled("Queue empty · add a set, list, or search result.");return;}
+        if(ImGui.BeginTable("WorkshopQueueRows",3,ImGuiTableFlags.RowBg|ImGuiTableFlags.BordersInnerV)){
+            ImGui.TableSetupColumn("Project",ImGuiTableColumnFlags.WidthStretch);ImGui.TableSetupColumn("Done",ImGuiTableColumnFlags.WidthFixed,50);ImGui.TableSetupColumn("Left",ImGuiTableColumnFlags.WidthFixed,50);ImGui.TableHeadersRow();
+            var previous=0;
+            foreach(var entry in q.Items){var done=Math.Clamp(q.Completed-previous,0,entry.Quantity);previous+=entry.Quantity;ImGui.TableNextRow();ImGui.TableNextColumn();ImGui.TextUnformatted(entry.Name);ImGui.TableNextColumn();ImGui.TextUnformatted(done.ToString());ImGui.TableNextColumn();ImGui.TextUnformatted((entry.Quantity-done).ToString());}
+            ImGui.EndTable();
         }
-        ImGui.BeginDisabled(!enabled);if(ImGui.Button("Start / resume project queue"))StartWorkshop(true);ImGui.EndDisabled();
+    }
+    private void DrawWorkshopDelivery()
+    {
         var live=ReadWorkshopPhase();
-        if(live!=null){
-            ImGui.Separator();ImGui.TextUnformatted($"Current project · phase {live.Phase+1}/{live.TotalPhases}");
-            if(ImGui.SmallButton("Select all materials"))workshopSelection=live.Rows.Where(r=>r.RemainingSets>0).Select(r=>r.ItemId).ToHashSet();ImGui.SameLine();if(ImGui.SmallButton("Clear selection"))workshopSelection.Clear();
-            foreach(var row in live.Rows){
-                var selected=workshopSelection.Contains(row.ItemId);if(ImGui.Checkbox(row.Name+"##Workshop"+row.ItemId,ref selected)){if(selected)workshopSelection.Add(row.ItemId);else workshopSelection.Remove(row.ItemId);}
+        // Keep the action visible even before the game opens Material Delivery.
+        ImGui.BeginDisabled(!config.EnableWorkshop||live==null||workshopSelection.Count==0);
+        if(ImGui.Button("Deliver selected",new Vector2(-1,0)))StartWorkshop(false);ImGui.EndDisabled();
+        if(live==null){ImGui.TextWrapped("Open Material Delivery at the fabrication station to select materials here.");return;}
+        ImGui.TextUnformatted($"Phase {live.Phase+1}/{live.TotalPhases}");
+        if(ImGui.SmallButton("Select all"))workshopSelection=live.Rows.Where(r=>r.RemainingSets>0).Select(r=>r.ItemId).ToHashSet();ImGui.SameLine();if(ImGui.SmallButton("Clear selection"))workshopSelection.Clear();
+        foreach(var row in live.Rows){
+            var selected=workshopSelection.Contains(row.ItemId);ImGui.BeginDisabled(row.RemainingSets==0);
+            if(ImGui.Checkbox($"{row.Name} · {row.SetsDelivered}/{row.SetsRequired}##Workshop{row.ItemId}",ref selected)){if(selected)workshopSelection.Add(row.ItemId);else workshopSelection.Remove(row.ItemId);}ImGui.EndDisabled();
+            if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled)){
                 var nq=RetrievalHeld(row.ItemId,RetrievalQuality.NqOnly);var hq=RetrievalHeld(row.ItemId,RetrievalQuality.HqOnly);var supplement=WorkshopPolicy.Supplements(nq,hq,row.SetSize,row.RemainingSets);
-                ImGui.TextDisabled($"{row.SetsDelivered}/{row.SetsRequired} sets · {row.SetSize}/set · bags {nq} NQ + {hq} HQ · {WorkshopPolicy.CompleteSets(nq,hq,row.SetSize)} full sets");
-                if(supplement.Nq>0)ImGui.TextWrapped($"For this row: add {supplement.Nq} NQ OR {supplement.Hq} HQ.");
+                ImGui.SetTooltip($"{row.SetSize} per set · bags: {nq} NQ + {hq} HQ\n{WorkshopPolicy.CompleteSets(nq,hq,row.SetSize)} full sets available\nAdd {supplement.Nq} NQ OR {supplement.Hq} HQ for this row.");
             }
-            ImGui.BeginDisabled(!enabled||workshopSelection.Count==0);if(ImGui.Button("Deliver selected materials"))StartWorkshop(false);ImGui.EndDisabled();
-        }else ImGui.TextDisabled("Open Material Delivery to choose individual turn-ins.");
-        if(ImGui.Button("Review remaining materials"))PrepareWorkshopMaterials();
-        if(workshopPreparation is {} p){
-            ImGui.TextWrapped(workshopPreparationNotice);
-            if(ImGui.Button("Withdraw NQ turn-ins"))RetrievalTry(()=>WithdrawPreparation(workshopNqWithdraw,RetrievalQuality.NqOnly));ImGui.SameLine();if(ImGui.Button("Withdraw HQ turn-ins"))RetrievalTry(()=>WithdrawPreparation(workshopHqWithdraw,RetrievalQuality.HqOnly));
-            if(ImGui.Button("Withdraw crafting ingredients"))RetrievalTry(()=>WithdrawPreparation(p.Withdraw.Where(e=>!workshopNqWithdraw.Any(x=>x.ItemId==e.ItemId)&&!workshopHqWithdraw.Any(x=>x.ItemId==e.ItemId)).ToArray()));
-            ImGui.BeginDisabled(p.Steps.Length==0);if(ImGui.Button("Copy missing crafts for Artisan"))ImGui.SetClipboardText(RetainerRetrieval.ExportArtisan("Workshop remaining materials",p.Steps));ImGui.SameLine();if(ImGui.Button("Open Artisan lists"))Commands.ProcessCommand("/artisan lists");ImGui.EndDisabled();
-            ImGui.TextWrapped("Import the copied list in Artisan. NQ is sufficient for every planned shortfall; HQ is also usable only in full sets. Review materials again after crafting.");
-            if(ImGui.Button("Copy missing raw ingredients"))ImGui.SetClipboardText(string.Join('\n',p.Missing.Select(e=>$"{e.Quantity} x {e.Name}")));
-            if(ImGui.CollapsingHeader("Remaining materials / subcrafts"))foreach(var r in p.Rows){ImGui.TextUnformatted($"{r.Name}: {r.Required} needed · {r.Bags} bags · {r.Retainers} retainers · craft {r.CraftQuantity} · missing {r.Missing}" );if(ImGui.IsItemHovered())ImGui.SetTooltip("Used for: "+string.Join(", ",r.UsedFor));}
-        }else if(workshopPreparationNotice.Length>0)ImGui.TextWrapped(workshopPreparationNotice);
+        }
+    }
+    private void DrawWorkshopMaterials()
+    {
+        var p=workshopPreparation;
+        ImGui.SetNextItemWidth(-1);ImGui.Combo("##WorkshopWithdrawQuality",ref workshopWithdrawQuality,"Quality: Both (NQ + HQ)\0Quality: NQ only\0Quality: HQ only\0");
+        if(ImGui.IsItemHovered())ImGui.SetTooltip("Filter the NQ/HQ turn-ins allocated by the materials review. Both withdraws each quality separately, preserving complete sets.");
+        ImGui.BeginDisabled(p==null);
+        if(ImGui.BeginTable("WorkshopMaterialActions",2,ImGuiTableFlags.SizingStretchSame)){
+            ImGui.TableNextColumn();if(ImGui.Button("Withdraw turn-ins",new Vector2(-1,0)))BeginWorkshopWithdrawal();
+            ImGui.TableNextColumn();if(ImGui.Button("Withdraw ingredients",new Vector2(-1,0)))RetrievalTry(()=>WithdrawPreparation(p!.Withdraw.Where(e=>!workshopNqWithdraw.Any(x=>x.ItemId==e.ItemId)&&!workshopHqWithdraw.Any(x=>x.ItemId==e.ItemId)).ToArray()));
+            ImGui.TableNextColumn();ImGui.BeginDisabled(p==null||p.Steps.Length==0);if(ImGui.Button("Copy Artisan list",new Vector2(-1,0)))ImGui.SetClipboardText(RetainerRetrieval.ExportArtisan("Workshop remaining materials",p!.Steps));ImGui.EndDisabled();
+            ImGui.TableNextColumn();ImGui.BeginDisabled(!Pi.InstalledPlugins.Any(x=>x.InternalName=="Artisan"&&x.IsLoaded));if(ImGui.Button("Open Artisan",new Vector2(-1,0)))Commands.ProcessCommand("/artisan lists");ImGui.EndDisabled();
+            ImGui.TableNextColumn();if(ImGui.Button("Copy missing raw",new Vector2(-1,0)))ImGui.SetClipboardText(string.Join('\n',p!.Missing.Select(e=>$"{e.Quantity} x {e.Name}")));
+            ImGui.EndTable();
+        }
         ImGui.EndDisabled();
+        if(p==null){ImGui.TextWrapped(workshopPreparationNotice.Length>0?workshopPreparationNotice:"Click Refresh materials above to calculate the remaining requirements.");return;}
+        ImGui.TextUnformatted($"{p.Steps.Length} recipes · {p.Missing.Length} raw shortages");
+        if(ImGui.IsItemHovered())ImGui.SetTooltip(workshopPreparationNotice);
+        if(ImGui.CollapsingHeader("Details / quality notes"))ImGui.TextWrapped(workshopPreparationNotice);
+        if(ImGui.BeginTable("WorkshopMaterialRows",4,ImGuiTableFlags.RowBg|ImGuiTableFlags.BordersInnerV)){
+            foreach(var name in new[]{"Item","Need","Craft","Missing"})ImGui.TableSetupColumn(name);ImGui.TableHeadersRow();
+            foreach(var r in p.Rows){ImGui.TableNextRow();ImGui.TableNextColumn();ImGui.TextUnformatted(r.Name);if(ImGui.IsItemHovered())ImGui.SetTooltip($"Bags allocated: {r.Bags} · Retainers allocated: {r.Retainers}\nUsed for: "+string.Join(", ",r.UsedFor));ImGui.TableNextColumn();ImGui.TextUnformatted(r.Required.ToString());ImGui.TableNextColumn();ImGui.TextUnformatted(r.CraftQuantity.ToString());ImGui.TableNextColumn();ImGui.TextUnformatted(r.Missing.ToString());}
+            ImGui.EndTable();
+        }
     }
 }

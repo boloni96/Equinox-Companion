@@ -80,6 +80,7 @@ public sealed partial class Plugin
     {
         if(now<workshopNext)return;workshopNext=now.AddMilliseconds(250);
         try{
+            TickWorkshopWithdrawal();
             if(!VisibleFollowAddon("Request"))workshopManualRequestSeen=false;
             if(!workshopRunning){ObserveManualWorkshopDelivery(now);if(!workshopRunning)return;}
             if(workshopSingleDelivery&&!config.WorkshopManualDelivery){StopWorkshop("Manual turn-in assistance disabled.");return;}
