@@ -9,10 +9,12 @@ public sealed partial class Plugin
     private string workshopCombinedHouse="";
     private RetrievalEntry[] workshopCombinedItems=[];
     private RetrievalQuality workshopCombinedQuality;
-    private bool BeginWorkshopRestock(WorkshopSupply row,DateTimeOffset now)
+    private bool BeginWorkshopRestock(WorkshopSupply row,DateTimeOffset now,bool chestTried=false)
     {
         if(!config.WorkshopWithdrawAndDeliver||!workshopQueueRun)return false;
         if(Player.CurrentWorld.RowId!=Player.HomeWorld.RowId){StopWorkshop("Withdraw + turn in requires your home world for retainer access.");return true;}
+        if(config.WorkshopUseChest&&!chestTried){BeginWorkshopChest(row,now);return true;}
+        workshopChestDeposit=false;
         RefreshRetrievalStock();
         var nq=RetrievalHeld(row.ItemId,RetrievalQuality.NqOnly);var hq=RetrievalHeld(row.ItemId,RetrievalQuality.HqOnly);
         var rn=retrievalStock.Where(s=>s.Item==row.ItemId&&!s.Hq).Sum(s=>s.Quantity);var rh=retrievalStock.Where(s=>s.Item==row.ItemId&&s.Hq).Sum(s=>s.Quantity);
@@ -28,9 +30,11 @@ public sealed partial class Plugin
     {
         if(workshopCombinedStage==0)return;
         try{
-            if(!config.EnableWorkshop||!config.EnableRetriever||!config.WorkshopWithdrawAndDeliver||!Player.IsLoaded||Player.ContentId!=workshopWithdrawalCharacter||Player.CurrentWorld.RowId!=workshopWithdrawalWorld||WorkshopHouse()!=workshopCombinedHouse||Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51])throw new InvalidOperationException("Character, workshop, world or settings changed.");
-            if(sellerRun.Running||TraderRunning||organizeRunning||chestRunning||retainerGilRunning||gearRouting||armoireRunning||gardenCareRun?.Running==true||gardenAutoPlantPlan!=null||gardenTendRoute!=null||nativeWorldTrip!=null||nativeHousingTrip!=null)throw new InvalidOperationException("Another routine took control.");
+            if(!config.EnableWorkshop||!config.EnableRetriever||(!config.WorkshopWithdrawAndDeliver&&!workshopChestDeposit)||!Player.IsLoaded||Player.ContentId!=workshopWithdrawalCharacter||Player.CurrentWorld.RowId!=workshopWithdrawalWorld||WorkshopHouse()!=workshopCombinedHouse||Conditions[ConditionFlag.InCombat]||Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51])throw new InvalidOperationException("Character, workshop, world or settings changed.");
+            if(sellerRun.Running||TraderRunning||organizeRunning||chestRunning&&workshopCombinedStage!=5||retainerGilRunning||gearRouting||armoireRunning||gardenCareRun?.Running==true||gardenAutoPlantPlan!=null||gardenTendRoute!=null||nativeWorldTrip!=null||nativeHousingTrip!=null)throw new InvalidOperationException("Another routine took control.");
             if(now>workshopCombinedDeadline)throw new InvalidOperationException("Combined workshop step timed out. Queue preserved.");
+            if(workshopCombinedStage is 4 or 5){TickWorkshopChest(now);return;}
+            if(SellerAddon("FreeCompanyChest")!=null){CloseSellerAddon("FreeCompanyChest");return;}
             if(workshopCombinedStage==2)return; // Withdrawal receipt owns this stage.
             if(VisibleFollowAddon("Request")||VisibleFollowAddon("SelectYesno"))throw new InvalidOperationException("Close the unrelated request or confirmation before resuming.");
             if(SellerAddon("SubmarinePartsMenu")!=null){CloseSellerAddon("SubmarinePartsMenu");return;}

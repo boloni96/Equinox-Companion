@@ -58,6 +58,7 @@ public sealed class WorkshopQueueSave
     public RetrievalEntry[] Items {get;set;}=[];
     public int Completed {get;set;}
     public uint ReadyToCollect {get;set;}
+    public uint PendingDeposit {get;set;}
     public uint PendingCollection {get;set;}
     public int CollectionBefore {get;set;}
 }
@@ -80,7 +81,7 @@ internal static class WorkshopPolicy
     }
     internal static void Clear(WorkshopQueueSave queue,uint world,string house)
     {
-        queue.Items=[];queue.Completed=0;queue.PendingCollection=0;queue.ReadyToCollect=0;queue.CollectionBefore=0;
+        queue.Items=[];queue.Completed=0;queue.PendingCollection=0;queue.ReadyToCollect=0;queue.CollectionBefore=0;queue.PendingDeposit=0;
         queue.World=world;queue.House=house;
     }
     internal static string NormalizePrompt(string text)=>string.Join(" ",text.Split((char[]?)null,StringSplitOptions.RemoveEmptyEntries));
@@ -102,6 +103,7 @@ internal static class WorkshopPolicy
         }
         return null;
     }
+    internal static bool DepositReceived(int before,int after,int remaining)=>before>0&&after==before-1&&remaining==0;
     internal static bool StationNearby(float distanceSquared)=>float.IsFinite(distanceSquared)&&distanceSquared>=0&&distanceSquared<=36;
     internal static bool FinalDeliveryMenuReceipt(WorkshopPhase before,WorkshopSupply supply,int bagBefore,int bagNow,IEnumerable<string> choices)
     {

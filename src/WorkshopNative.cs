@@ -50,7 +50,7 @@ public sealed partial class Plugin
     private void StopWorkshop(string reason)
     {
         ResetWorkshopCutscene();
-        if(workshopCombinedStage!=0){workshopCombinedStage=0;CancelWorkshopWithdrawal();StopIndependentWalk("Workshop stopped");}
+        if(workshopCombinedStage!=0){if(workshopCombinedStage==5&&chestRunning)StopChest("Workshop stopped.");workshopCombinedStage=0;CancelWorkshopWithdrawal();StopIndependentWalk("Workshop stopped");}
         workshopRunning=false;workshopStatus=reason;PauseWorkshop(false);
         RecordTravelPrompt("Workshop stopped",new{reason,queue=workshopQueueRun,completed=workshopActive?.Completed});
     }
@@ -66,11 +66,13 @@ public sealed partial class Plugin
             if(retrievalRun.Running||craftingWithdrawalPending||organizeRunning||chestRunning||gearRouting||armoireRunning||gardenCareRun?.Running==true||gardenAutoPlantPlan!=null||gardenTendRoute!=null||nativeWorldTrip!=null||nativeHousingTrip!=null)throw new InvalidOperationException("Stop the other active routine first.");
             if(VisibleFollowAddon("Request")||VisibleFollowAddon("SelectYesno"))throw new InvalidOperationException("Close the existing request or confirmation before starting.");
             var saved=config.WorkshopQueues.FirstOrDefault(q=>q.Character==Player.ContentId);
-            if(queue&&(saved==null||WorkshopPolicy.Next(saved)==null&&saved.PendingCollection==0))throw new InvalidOperationException("Add projects to the queue first.");
+            if(queue&&(saved==null||WorkshopPolicy.Next(saved)==null&&saved.PendingCollection==0&&saved.PendingDeposit==0))throw new InvalidOperationException("Add projects to the queue first.");
             if(queue&&(saved!.World!=Player.CurrentWorld.RowId||saved.House!=WorkshopHouse()))throw new InvalidOperationException("Return to the workshop where this queue was created.");
             if(!queue&&(ReadWorkshopPhase() is not {}||workshopSelection.Count==0))throw new InvalidOperationException("Open Material Delivery and select materials first.");
             workshopActive=queue?saved:new(){Character=Player.ContentId,World=Player.CurrentWorld.RowId,House=WorkshopHouse()};
-            workshopSingleDelivery=false;workshopQueueRun=queue;workshopBefore=ReadWorkshopPhase();workshopSupply=null;workshopRequestId=0;workshopInteraction=default;
+            workshopSingleDelivery=false;workshopQueueRun=queue;
+            if(queue&&saved!.PendingDeposit!=0&&config.WorkshopDepositParts){BeginWorkshopChest(null,DateTimeOffset.UtcNow);return;}
+            workshopBefore=ReadWorkshopPhase();workshopSupply=null;workshopRequestId=0;workshopInteraction=default;
             if(queue&&saved!.PendingCollection!=0&&RetrievalHeld(saved.PendingCollection)<=saved.CollectionBefore){
                 // No receipt yet: retain the verified project identity and retry only its collection menu.
                 saved.PendingCollection=0;SaveConfiguration();
@@ -99,7 +101,7 @@ public sealed partial class Plugin
             if(workshopStage==WorkshopStage.CollectionReceipt){
                 var q=workshopActive;
                 if(q.PendingCollection==0){StopWorkshop("Collection record is unavailable; review the queue.");return;}
-                if(RetrievalHeld(q.PendingCollection)>=q.CollectionBefore+1){q.Completed++;q.PendingCollection=0;q.ReadyToCollect=0;SaveConfiguration();workshopBefore=null;WorkshopTransition(WorkshopStage.Browse,"Collected project; checking next queued part",now);}
+                if(RetrievalHeld(q.PendingCollection)>=q.CollectionBefore+1){q.Completed++;if(config.WorkshopDepositParts)q.PendingDeposit=q.PendingCollection;q.PendingCollection=0;q.ReadyToCollect=0;SaveConfiguration();workshopBefore=null;WorkshopTransition(WorkshopStage.Browse,"Collected project; checking next queued part",now);if(q.PendingDeposit!=0)BeginWorkshopChest(null,now);}
                 return;
             }
             var yes=(AddonSelectYesno*)SellerAddon("SelectYesno");

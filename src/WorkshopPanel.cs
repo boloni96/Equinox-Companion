@@ -69,6 +69,7 @@ public sealed partial class Plugin
         }catch(Exception e){workshopPreparation=null;workshopPreparationNotice=e.Message;}
     }
     private int workshopView,workshopWithdrawQuality;
+    private bool workshopExportMissing=true;
     private bool workshopClearRequested,workshopOptionsRequested;
     private bool WorkshopUiBusy=>workshopCombinedStage!=0||workshopRunning||retrievalRun.Running||craftingWithdrawalPending||organizeRunning||chestRunning||gearRouting||armoireRunning||workshopWithdrawalPending;
     private void ClearWorkshopQueue(WorkshopQueueSave q)
@@ -91,7 +92,7 @@ public sealed partial class Plugin
             if(workshopCombinedStage!=0){if(ImGui.Button("Stop withdraw + turn in",new Vector2(-1,0)))StopWorkshop("Stopped by you. Queue preserved.");}
             else if(workshopWithdrawalPending){if(ImGui.Button("Stop withdrawal",new Vector2(-1,0)))CancelWorkshopWithdrawal();}
             else if(workshopRunning){if(ImGui.Button("Stop workshop",new Vector2(-1,0)))StopWorkshop("Stopped by you. Queue preserved.");}
-            else {ImGui.BeginDisabled(WorkshopUiBusy||!config.EnableWorkshop||total<=q.Completed);if(ImGui.Button("Start / resume",new Vector2(-1,0)))StartWorkshop(true);ImGui.EndDisabled();}
+            else {ImGui.BeginDisabled(WorkshopUiBusy||!config.EnableWorkshop||total<=q.Completed&&q.PendingDeposit==0);if(ImGui.Button("Start / resume",new Vector2(-1,0)))StartWorkshop(true);ImGui.EndDisabled();}
             ImGui.TableNextColumn();ImGui.BeginDisabled(WorkshopUiBusy||total==0&&q.PendingCollection==0&&q.ReadyToCollect==0);if(ImGui.Button("Clear queue…",new Vector2(-1,0)))workshopClearRequested=true;ImGui.EndDisabled();
             ImGui.TableNextColumn();if(ImGui.Button("Options…",new Vector2(-1,0)))workshopOptionsRequested=true;
             ImGui.TableNextColumn();ImGui.BeginDisabled(WorkshopUiBusy);if(ImGui.Button("Refresh materials",new Vector2(-1,0))){PrepareWorkshopMaterials();workshopView=2;}ImGui.EndDisabled();
@@ -105,6 +106,13 @@ public sealed partial class Plugin
         if(workshopOptionsRequested){ImGui.OpenPopup("Workshop options");workshopOptionsRequested=false;}
         if(ImGui.BeginPopup("Workshop options")){
             var enabled=config.EnableWorkshop;if(ImGui.Checkbox("Enable workshop automation",ref enabled)){config.EnableWorkshop=enabled;SaveConfiguration();if(!enabled)StopWorkshop("Workshop tool disabled.");}
+            ImGui.BeginDisabled(WorkshopUiBusy);
+            var useChest=config.WorkshopUseChest;if(ImGui.Checkbox("Withdraw materials from FC chest first",ref useChest)){config.WorkshopUseChest=useChest;SaveConfiguration();}
+            var deposit=config.WorkshopDepositParts;if(ImGui.Checkbox("Entrust finished parts to FC chest",ref deposit)){config.WorkshopDepositParts=deposit;SaveConfiguration();}
+            var tab=Math.Clamp(config.WorkshopChestTab,1,5)-1;
+            if(ImGui.Combo("Finished parts tab",ref tab,"Tab 1\0Tab 2\0Tab 3\0Tab 4\0Tab 5\0")){config.WorkshopChestTab=tab+1;SaveConfiguration();}
+            ImGui.TextWrapped("Material withdrawal checks accessible item tabs. Finished parts go only to the selected tab; full or restricted tabs stop the queue. Leftover materials stay in bags.");
+            ImGui.EndDisabled();
             var manual=config.WorkshopManualDelivery;
             if(ImGui.Checkbox("Complete turn-ins I click in game",ref manual)){config.WorkshopManualDelivery=manual;if(manual)config.EnableWorkshop=true;SaveConfiguration();if(!manual){if(workshopRunning&&workshopSingleDelivery)StopWorkshop("Manual assistance disabled.");else if(!workshopRunning)PauseWorkshop(false);}}
             ImGui.TextWrapped("Click a material in the game to deliver one full NQ or HQ set, including its confirmations. No queue required.");
@@ -173,13 +181,14 @@ public sealed partial class Plugin
     private void DrawWorkshopMaterials()
     {
         var p=workshopPreparation;
+        ImGui.Checkbox("Export missing only (Artisan skip off)",ref workshopExportMissing);
         ImGui.SetNextItemWidth(-1);ImGui.Combo("##WorkshopWithdrawQuality",ref workshopWithdrawQuality,"Quality: Both (NQ + HQ)\0Quality: NQ only\0Quality: HQ only\0");
         if(ImGui.IsItemHovered())ImGui.SetTooltip("Filter the NQ/HQ turn-ins allocated by the materials review. Both withdraws each quality separately, preserving complete sets.");
         ImGui.BeginDisabled(p==null);
         if(ImGui.BeginTable("WorkshopMaterialActions",2,ImGuiTableFlags.SizingStretchSame)){
             ImGui.TableNextColumn();if(ImGui.Button("Withdraw turn-ins",new Vector2(-1,0)))BeginWorkshopWithdrawal();
             ImGui.TableNextColumn();if(ImGui.Button("Withdraw ingredients",new Vector2(-1,0)))RetrievalTry(()=>WithdrawPreparation(p!.Withdraw.Where(e=>!workshopNqWithdraw.Any(x=>x.ItemId==e.ItemId)&&!workshopHqWithdraw.Any(x=>x.ItemId==e.ItemId)).ToArray()));
-            ImGui.TableNextColumn();ImGui.BeginDisabled(p==null||p.Steps.Length==0);if(ImGui.Button("Copy Artisan list",new Vector2(-1,0)))ImGui.SetClipboardText(RetainerRetrieval.ExportArtisan("Workshop required materials",CraftingPreparation.ArtisanTargets(p!),skipIfEnough:true));ImGui.EndDisabled();if(ImGui.IsItemHovered())ImGui.SetTooltip("Exports required quantities before stock subtraction. Artisan skips owned items; the Craft column remains your current shortage.");
+            ImGui.TableNextColumn();ImGui.BeginDisabled(p==null||p.Steps.Length==0);if(ImGui.Button("Copy Artisan list",new Vector2(-1,0)))ImGui.SetClipboardText(RetainerRetrieval.ExportArtisan(workshopExportMissing?"Workshop missing materials":"Workshop required materials",workshopExportMissing?p!.Steps:CraftingPreparation.ArtisanTargets(p!),skipIfEnough:!workshopExportMissing));ImGui.EndDisabled();if(ImGui.IsItemHovered())ImGui.SetTooltip(workshopExportMissing?"Exports only Craft quantities. Artisan skip-if-enough is OFF; do not subtract owned stock again.":"Exports required quantities. Artisan skip-if-enough is ON so Artisan subtracts stock.");
             ImGui.TableNextColumn();ImGui.BeginDisabled(!Pi.InstalledPlugins.Any(x=>x.InternalName=="Artisan"&&x.IsLoaded));if(ImGui.Button("Open Artisan",new Vector2(-1,0)))Commands.ProcessCommand("/artisan lists");ImGui.EndDisabled();
             ImGui.TableNextColumn();if(ImGui.Button("Copy missing raw",new Vector2(-1,0)))ImGui.SetClipboardText(string.Join('\n',p!.Missing.Select(e=>$"{e.Quantity} x {e.Name}")));
             ImGui.EndTable();
