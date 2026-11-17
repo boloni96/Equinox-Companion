@@ -85,6 +85,14 @@ internal static class WorkshopPolicy
         return prompt.StartsWith("Contribute "+quantity+" ",StringComparison.Ordinal)&&prompt.EndsWith(" to the company project?",StringComparison.Ordinal)&&
             (name.Length>0&&prompt.Contains(name,StringComparison.OrdinalIgnoreCase)||plural.Length>0&&prompt.Contains(plural,StringComparison.OrdinalIgnoreCase));
     }
+    internal static bool StationNearby(float distanceSquared)=>float.IsFinite(distanceSquared)&&distanceSquared>=0&&distanceSquared<=36;
+    internal static bool FinalDeliveryMenuReceipt(WorkshopPhase before,WorkshopSupply supply,int bagBefore,int bagNow,IEnumerable<string> choices)
+    {
+        if(supply.RemainingSets!=1||bagNow!=bagBefore-supply.SetSize||!before.Rows.Contains(supply)||before.Rows.Any(r=>r.ItemId!=supply.ItemId&&r.RemainingSets!=0))return false;
+        return choices.Any(s=>before.Phase<before.TotalPhases-1
+            ?s.StartsWith("Advance to the next phase of production.",StringComparison.Ordinal)
+            :s.StartsWith("Complete the construction of the ",StringComparison.Ordinal));
+    }
     internal static bool MenuArrived(bool phaseReady,bool bookReady,bool menuReady,bool sameMenu)=>phaseReady||bookReady||menuReady&&!sameMenu;
     internal static bool PrioritizeActive(WorkshopQueueSave queue,uint item)
     {

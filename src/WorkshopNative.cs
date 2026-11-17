@@ -123,11 +123,18 @@ public sealed partial class Plugin
             if(workshopStage is WorkshopStage.Request or WorkshopStage.Slot or WorkshopStage.Inserted){TickWorkshopRequest(now);return;}
             var phase=ReadWorkshopPhase();
             if(workshopStage==WorkshopStage.Receipt){
-                if(phase==null||workshopBefore==null||workshopSupply==null)return;
+                if(workshopBefore==null||workshopSupply==null)return;
+                if(phase==null){
+                    var completedMenu=SellerAddon("SelectString");
+                    if(completedMenu==null||!WorkshopPolicy.FinalDeliveryMenuReceipt(workshopBefore,workshopSupply,workshopBagBefore,
+                        RetrievalHeld(workshopSupply.ItemId,workshopHq?RetrievalQuality.HqOnly:RetrievalQuality.NqOnly),TransportChoices(completedMenu)))return;
+                    phase=workshopBefore with{Rows=workshopBefore.Rows.Select(r=>r==workshopSupply?r with{SetsDelivered=r.SetsDelivered+1}:r).ToArray()};
+                }
                 if(phase.ItemId!=workshopBefore.ItemId||phase.Phase!=workshopBefore.Phase){StopWorkshop("Project or phase changed before delivery was verified.");return;}
                 var row=phase.Rows.FirstOrDefault(r=>r.ItemId==workshopSupply.ItemId);
                 if(row!=null&&row.SetsDelivered==workshopSupply.SetsDelivered+1&&RetrievalHeld(row.ItemId,workshopHq?RetrievalQuality.HqOnly:RetrievalQuality.NqOnly)==workshopBagBefore-row.SetSize){
                     workshopBefore=phase;workshopSupply=null;
+                    if(workshopQueueRun&&phase.Phase==phase.TotalPhases-1&&phase.Rows.All(r=>r.RemainingSets==0)){workshopActive.ReadyToCollect=phase.ItemId;SaveConfiguration();}
                     if(workshopSingleDelivery){StopWorkshop("Turn-in complete · click the next material when ready.");return;}
                     WorkshopTransition(WorkshopStage.Browse,"Delivery confirmed",now);
                 }
@@ -194,10 +201,12 @@ public sealed partial class Plugin
                 SelectTravelChoice(menu,index);return;
             }
             if(now<workshopInteraction)return;
-            var target=Objects.FirstOrDefault(o=>o.IsTargetable&&o.ObjectKind==ObjectKind.EventObj&&
-                (o.BaseId==2011588||string.Equals(o.Name.TextValue,"Fabrication Station",StringComparison.OrdinalIgnoreCase))&&TargetWithinInteractionRange(o));
-            if(target==null){workshopStatus="Waiting for the fabrication station · open its menu or move within interaction reach.";return;}
-            if(HousingInteract(target))workshopInteraction=now.AddSeconds(3);
+            var target=Objects.FirstOrDefault(o=>o.IsTargetable&&(o.ObjectKind is ObjectKind.EventObj or ObjectKind.EventNpc)&&
+                (o.BaseId==2011588||string.Equals(o.Name.TextValue,"Fabrication Station",StringComparison.OrdinalIgnoreCase))&&WorkshopPolicy.StationNearby(System.Numerics.Vector3.DistanceSquared(Objects.LocalPlayer!.Position,o.Position)));
+            if(target==null){workshopStatus="Move closer to the fabrication station · Companion will open it automatically.";return;}
+            // The station's own geometry can fail the walking line-of-sight test.
+            // Attempt native interaction at close range; only a loaded menu advances the workflow.
+            if(HousingInteract(target)){workshopInteraction=now.AddSeconds(3);workshopStatus="Opening the fabrication station · waiting for its menu";}
         }catch(Exception e){StopWorkshop("Stopped: "+e.Message);}
     }
     private bool WorkshopContributionPrompt(string prompt,WorkshopSupply supply)
