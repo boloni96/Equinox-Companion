@@ -55,11 +55,7 @@ public sealed partial class Plugin
                 .OrderBy(o=>Vector3.DistanceSquared(self.Position,o.Position)).FirstOrDefault();
             if(target==null)throw new InvalidOperationException(bell?"No summoning bell found in this workshop.":"Fabrication station not found.");
             var range=bell?4f:5f;
-            if(Vector3.DistanceSquared(self.Position,target.Position)>range*range){
-                IndependentWalk(target.Position,range,now,allowFlight:false);
-                workshopStatus=(bell?"Walking to workshop bell · ":"Returning to fabrication station · ")+independentWalkStatus;return;
-            }
-            StopIndependentWalk("Workshop interaction reached");
+            if(!ApproachWorkshopTarget(target,range,now))return;
             if(bell){
                 workshopCombinedStage=2;workshopCombinedDeadline=now.AddMinutes(10);
                 workshopWithdrawals.Clear();workshopWithdrawals.Enqueue((workshopCombinedItems,workshopCombinedQuality));workshopWithdrawalPending=true;

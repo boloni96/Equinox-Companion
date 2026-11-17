@@ -38,7 +38,7 @@ public sealed partial class Plugin
     }
     private void CancelWorkshopWithdrawal()
     {
-        workshopCombinedStage=0;StopIndependentWalk("Workshop withdrawal stopped");PauseWorkshop(false);
+        workshopCombinedStage=0;workshopWalking=false;StopIndependentWalk("Workshop withdrawal stopped");PauseWorkshop(false);
         workshopWithdrawalPending=false;workshopWithdrawals.Clear();workshopWithdrawalTargets.Clear();
         CancelCraftingWithdrawal("Stopped by you.");if(retrievalRun.Running)retrievalRun.Stop("Stopped by you.");
         workshopStatus="Turn-in withdrawal stopped.";

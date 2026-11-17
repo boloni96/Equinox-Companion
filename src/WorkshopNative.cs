@@ -49,6 +49,7 @@ public sealed partial class Plugin
     }
     private void StopWorkshop(string reason)
     {
+        if(workshopWalking){workshopWalking=false;StopIndependentWalk("Workshop stopped");}
         workshopPreparationWithdrawal=false;workshopPreparationItems.Clear();
         ResetWorkshopCutscene();
         if(workshopCombinedStage!=0){if(workshopCombinedStage==5&&chestRunning)StopChest("Workshop stopped.");workshopCombinedStage=0;CancelWorkshopWithdrawal();StopIndependentWalk("Workshop stopped");}
@@ -214,8 +215,9 @@ public sealed partial class Plugin
             }
             if(now<workshopInteraction)return;
             var target=Objects.FirstOrDefault(o=>o.IsTargetable&&(o.ObjectKind is ObjectKind.EventObj or ObjectKind.EventNpc)&&
-                (o.BaseId==2011588||string.Equals(o.Name.TextValue,"Fabrication Station",StringComparison.OrdinalIgnoreCase))&&WorkshopPolicy.StationNearby(System.Numerics.Vector3.DistanceSquared(Objects.LocalPlayer!.Position,o.Position)));
-            if(target==null){workshopStatus="Move closer to the fabrication station · Companion will open it automatically.";return;}
+                (o.BaseId==2011588||string.Equals(o.Name.TextValue,"Fabrication Station",StringComparison.OrdinalIgnoreCase)));
+            if(target==null){workshopStatus="Waiting for the fabrication station to load.";return;}
+            if(!ApproachWorkshopTarget(target,4f,now))return;
             // The station's own geometry can fail the walking line-of-sight test.
             // Attempt native interaction at close range; only a loaded menu advances the workflow.
             if(HousingInteract(target)){workshopInteraction=now.AddSeconds(3);workshopStatus="Opening the fabrication station · waiting for its menu";}

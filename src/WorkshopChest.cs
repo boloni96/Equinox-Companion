@@ -55,8 +55,8 @@ public sealed partial class Plugin
             (string.Equals(o.Name.TextValue,"Company Chest",StringComparison.OrdinalIgnoreCase)||string.Equals(DataManager.GetExcelSheet<Lumina.Excel.Sheets.EObjName>(Dalamud.Game.ClientLanguage.English).GetRowOrDefault(o.BaseId)?.Singular.ToString(),"company chest",StringComparison.OrdinalIgnoreCase)))
             .OrderBy(o=>Vector3.DistanceSquared(o.Position,self.Position)).FirstOrDefault();
         if(target==null)throw new InvalidOperationException("No FC chest found in this workshop.");
-        if(Vector3.DistanceSquared(self.Position,target.Position)>16){IndependentWalk(target.Position,4,now,allowFlight:false);workshopStatus="Walking to workshop FC chest · "+independentWalkStatus;return;}
-        StopIndependentWalk("Workshop FC chest reached");if(now<workshopChestInteraction)return;
+        if(!ApproachWorkshopTarget(target,4f,now))return;
+        if(now<workshopChestInteraction)return;
         if(HousingInteract(target))workshopChestInteraction=now.AddSeconds(3);
     }
 }
