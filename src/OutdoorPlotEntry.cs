@@ -1,11 +1,12 @@
 using System.Numerics;
 namespace EquinoxCompanion;
 // The same bounded entry used after private/FC teleport, without door actions.
-internal sealed class OutdoorPlotEntry(Vector3 direction,Vector3? interior=null)
+internal sealed class OutdoorPlotEntry(Vector3 direction,Vector3? interior=null,Vector3? gardenLanding=null)
 {
     public Vector3 Direction { get; }=Vector3.Normalize(new(direction.X,0,direction.Z));
     public Vector3? Goal=interior;
     public bool GeometryRoute { get; }=interior.HasValue;
+    internal const float GardenEntryDistance=12f;
     private Vector3? boundaryPosition;
     public int Steps;
     private Vector3? confirmationGoal;
@@ -14,6 +15,10 @@ internal sealed class OutdoorPlotEntry(Vector3 direction,Vector3? interior=null)
     // Finish the current entry segment before handing movement to the garden.
     public bool Confirm(Vector3 position,bool matchingEstate){
         if(!matchingEstate)return false;
+        if(gardenLanding is {} start){
+            // Count actual forward movement along the landing heading, including on sloping plots.
+            return Vector3.Dot(position-start,Direction)>=GardenEntryDistance-.3f;
+        }
         if(GeometryRoute){
             boundaryPosition??=position;
             return Vector3.Distance(position,Goal!.Value)<=.5f||

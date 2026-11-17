@@ -75,16 +75,15 @@ public sealed partial class Plugin
         if(gardenAdventureSwitchSent){characterSwitchUntil=default;characterSwitchTarget=null;gardenAdventureSwitchSent=false;}
         try{Pi.GetIpcSubscriber<object>("Lifestream.Abort").InvokeAction();}catch{}
     }
-    private unsafe void TryApproachGardenPlot(SharedGardenPlan plan,DateTimeOffset now)
+    private unsafe void TryApproachGardenPlot(SharedGardenPlan plan,DateTimeOffset now,Vector3? heading)
     {
         var manager=HousingManager.Instance();var player=Objects.LocalPlayer;
         static string Norm(string? text)=>(text??"").Trim().Replace("The ","",StringComparison.OrdinalIgnoreCase).ToLowerInvariant();
         if(manager==null||manager->GetCurrentHousingTerritoryType()!=HousingTerritoryType.Outdoor||player==null||
-            Norm(WorldName(Player.CurrentWorld.RowId))!=Norm(plan.World)||Norm(DistrictName(Client.TerritoryType))!=Norm(plan.District)||manager->GetCurrentWard()!=plan.Ward-1||manager->GetCurrentDivision()!=(plan.Plot>30?2:1)||atOutdoorEstate||Conditions[ConditionFlag.Casting])return;
+            Norm(WorldName(Player.CurrentWorld.RowId))!=Norm(plan.World)||Norm(DistrictName(Client.TerritoryType))!=Norm(plan.District)||manager->GetCurrentWard()!=plan.Ward-1||manager->GetCurrentDivision()!=(plan.Plot>30?2:1)||(atOutdoorEstate&&heading==null)||Conditions[ConditionFlag.Casting])return;
         if(!config.GardenCareWalk)throw new InvalidOperationException("Enable Walk to mapped beds to approach the plot after teleporting, or move onto the plot first.");
         if(gardenPlotApproachAttempted)throw new InvalidOperationException("Plot entrance approach already attempted. Move inside the destination plot and restart.");
         if(Conditions[ConditionFlag.Unconscious]||Conditions[ConditionFlag.TradeOpen]||SellerAddonPresentForGarden())return;
-        var heading=gardenEstateLanding?.HeadingFor(Player.ContentId,Player.CurrentWorld.RowId,Client.TerritoryType,plan.Ward,plan.Plot,player.Position);
         if(heading is {} inward){
             StartNativeGardenMove([player.Position],"plot",plot:plan,inward:inward);
         }else{
@@ -261,8 +260,10 @@ public sealed partial class Plugin
                 if(!atDestination)throw new InvalidOperationException("Native approach did not confirm the requested plot. Export diagnostics and move inside before resuming.");
                 gardenPlotApproaching=false;gardenTendStatus="On the destination plot · approaching garden";
             }
-            if(!atDestination){
-                if(!LifestreamBusy()&&nativeHousingTrip==null&&goSeeHomeTrip==null&&goSeeFriendTrip==null)TryApproachGardenPlot(sourcePlan,now);
+            var heading=gardenEstateLanding?.HeadingFor(Player.ContentId,Player.CurrentWorld.RowId,Client.TerritoryType,sourcePlan.Ward,sourcePlan.Plot,Objects.LocalPlayer!.Position);
+            if(!atDestination||(config.GardenCareWalk&&heading.HasValue)){
+                if(heading.HasValue&&atOutdoorEstate&&!atDestination)throw new InvalidOperationException("Estate landing reached a different garden plot.");
+                if(!LifestreamBusy()&&nativeHousingTrip==null&&goSeeHomeTrip==null&&goSeeFriendTrip==null)TryApproachGardenPlot(sourcePlan,now,heading);
                 return;
             }
             if(LifestreamBusy()||nativeHousingTrip!=null||goSeeHomeTrip!=null)return;

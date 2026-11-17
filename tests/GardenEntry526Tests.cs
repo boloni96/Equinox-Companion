@@ -23,6 +23,11 @@ internal static class GardenEntry526Tests
         var goal=forward.Next(landing);
         if(forward.GeometryRoute||forward.Confirm(goal,false)||!forward.Confirm(goal,true))
             throw new Exception("Garden teleport entry needs a checked forward step and matching plot");
+        var garden=new OutdoorPlotEntry(Vector3.UnitX,gardenLanding:landing);
+        if(garden.Confirm(landing,true)||garden.Confirm(landing+Vector3.UnitX*9,true)||
+            garden.Confirm(landing+Vector3.UnitZ*12,true)||garden.Confirm(landing+Vector3.UnitX*12,false)||
+            !garden.Confirm(landing+Vector3.UnitX*12+Vector3.UnitY,true))
+            throw new Exception("Gardening must reach 12 yalms along the teleport heading on the matching plot");
         var entry=new OutdoorPlotEntry(Vector3.UnitZ,landing);
         if(!entry.GeometryRoute||entry.Goal!=landing)throw new Exception("Garden plot entry lost its geometry destination");
         if(entry.Confirm(landing,false))throw new Exception("Coordinates alone must not confirm the estate");
