@@ -162,7 +162,7 @@ public sealed partial class Plugin
                 var left=entry.Quantity-done;var minimum=WorkshopPolicy.MinimumRemaining(q,i);
                 ImGui.PushID(i);ImGui.TableNextRow();ImGui.TableNextColumn();ImGui.TextUnformatted(entry.Name);
                 ImGui.TableNextColumn();ImGui.TextUnformatted(done.ToString());ImGui.TableNextColumn();ImGui.SetNextItemWidth(-1);
-                if(ImGui.InputInt("##Remaining",ref left,0,0,ImGuiInputTextFlags.EnterReturnsTrue)){edited=i;requested=Math.Max(minimum,left);}
+                if(ImGui.InputInt("##Remaining",ref left,0,0,"%d",ImGuiInputTextFlags.EnterReturnsTrue)){edited=i;requested=Math.Max(minimum,left);}
                 if(ImGui.IsItemHovered())ImGui.SetTooltip("Remaining copies · type a quantity and press Enter. Completed copies are kept.");
                 ImGui.TableNextColumn();ImGui.BeginDisabled(entry.Quantity==done||minimum>0);
                 if(ImGui.SmallButton("X")){edited=i;requested=0;}
