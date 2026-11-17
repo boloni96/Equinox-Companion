@@ -78,6 +78,26 @@ internal static class WorkshopPolicy
         queue.Items=[];queue.Completed=0;queue.PendingCollection=0;queue.ReadyToCollect=0;queue.CollectionBefore=0;
         queue.World=world;queue.House=house;
     }
+    internal static string NormalizePrompt(string text)=>string.Join(" ",text.Split((char[]?)null,StringSplitOptions.RemoveEmptyEntries));
+    internal static bool ContributionPrompt(string prompt,int quantity,string name,string plural)
+    {
+        prompt=NormalizePrompt(prompt);name=NormalizePrompt(name);plural=NormalizePrompt(plural);
+        return prompt.StartsWith("Contribute "+quantity+" ",StringComparison.Ordinal)&&prompt.EndsWith(" to the company project?",StringComparison.Ordinal)&&
+            (name.Length>0&&prompt.Contains(name,StringComparison.OrdinalIgnoreCase)||plural.Length>0&&prompt.Contains(plural,StringComparison.OrdinalIgnoreCase));
+    }
+    internal static bool MenuArrived(bool phaseReady,bool bookReady,bool menuReady,bool sameMenu)=>phaseReady||bookReady||menuReady&&!sameMenu;
+    internal static bool PrioritizeActive(WorkshopQueueSave queue,uint item)
+    {
+        if(Next(queue)?.ItemId==item)return true;
+        if(queue.PendingCollection!=0||queue.ReadyToCollect!=0)return false;
+        var expanded=queue.Items.SelectMany(e=>Enumerable.Repeat(e with{Quantity=1},e.Quantity)).ToList();
+        var index=expanded.FindIndex(Math.Clamp(queue.Completed,0,expanded.Count),e=>e.ItemId==item);
+        if(index<0)return false;
+        var active=expanded[index];expanded.RemoveAt(index);expanded.Insert(queue.Completed,active);
+        var packed=new List<RetrievalEntry>();
+        foreach(var e in expanded){if(packed.Count>0&&packed[^1].ItemId==e.ItemId&&packed[^1].RecipeId==e.RecipeId)packed[^1]=packed[^1] with{Quantity=packed[^1].Quantity+1};else packed.Add(e);}
+        queue.Items=packed.ToArray();return true;
+    }
     internal static int CompleteSets(int nq,int hq,int size)=>size>0?Math.Max(0,nq)/size+Math.Max(0,hq)/size:0;
     internal static (int Nq,int Hq) Supplements(int nq,int hq,int size,int sets)
     {

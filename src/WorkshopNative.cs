@@ -1,4 +1,5 @@
 using Dalamud.Game.ClientState.Conditions;
+using Dalamud.Game.ClientState.Objects.Enums;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.UI;
 using FFXIVClientStructs.FFXIV.Client.UI;
@@ -98,7 +99,7 @@ public sealed partial class Plugin
             }
             var yes=(AddonSelectYesno*)SellerAddon("SelectYesno");
             if(yes!=null){
-                var prompt=yes->PromptText==null?"":TravelMenuText(yes->PromptText->NodeText.StringPtr)??"";
+                var prompt=WorkshopPolicy.NormalizePrompt(yes->PromptText==null?"":TravelMenuText(yes->PromptText->NodeText.StringPtr)??"");
                 if(prompt==workshopAcceptedPrompt)return;
                 var expected=workshopQueueRun?WorkshopPolicy.Next(workshopActive):null;
                 var allowed=false;
@@ -135,11 +136,15 @@ public sealed partial class Plugin
             var menu=SellerAddon("SelectString");
             if(workshopStage==WorkshopStage.MenuTransition){
                 // Do not click the old entry again while the server is processing it.
-                if(menu!=null&&string.Join('|',TransportChoices(menu))==workshopMenuBefore)return;
+                if(!WorkshopPolicy.MenuArrived(phase!=null,SellerAddon("CompanyCraftRecipeNoteBook")!=null,menu!=null,
+                    menu!=null&&string.Join('|',TransportChoices(menu))==workshopMenuBefore))return;
                 WorkshopTransition(WorkshopStage.Browse,"Checking next workshop step",now);
             }
             if(phase!=null){
-                if(workshopQueueRun){var expected=WorkshopPolicy.Next(workshopActive);if(expected==null){StopWorkshop("Queue complete.");return;}if(phase.ItemId!=expected.ItemId){StopWorkshop("Another project is active. Queue preserved; no project abandoned.");return;}}
+                if(workshopQueueRun){var expected=WorkshopPolicy.Next(workshopActive);if(expected==null){StopWorkshop("Queue complete.");return;}if(phase.ItemId!=expected.ItemId){
+                        if(!WorkshopPolicy.PrioritizeActive(workshopActive,phase.ItemId)){StopWorkshop("The active project is not among the remaining queued projects. Add it to the queue or use Deliver selected.");return;}
+                        SaveConfiguration();RecordTravelPrompt("Workshop queue resumed active project",new{project=phase.ItemId,completed=workshopActive.Completed});
+                    }}
                 else if(workshopBefore!=null&&(phase.ItemId!=workshopBefore.ItemId||phase.Phase!=workshopBefore.Phase)){StopWorkshop("Selected-material delivery complete; phase changed.");return;}
                 workshopBefore=phase;
                 var row=phase.Rows.FirstOrDefault(r=>r.RemainingSets>0&&(workshopQueueRun||workshopSelection.Contains(r.ItemId)));
@@ -189,19 +194,16 @@ public sealed partial class Plugin
                 SelectTravelChoice(menu,index);return;
             }
             if(now<workshopInteraction)return;
-            var target=Objects.FirstOrDefault(o=>o.BaseId==2011588&&TargetWithinInteractionRange(o));
-            if(target==null){StopWorkshop("Stand within reach of the fabrication station, then Resume.");return;}
+            var target=Objects.FirstOrDefault(o=>o.IsTargetable&&o.ObjectKind==ObjectKind.EventObj&&
+                (o.BaseId==2011588||string.Equals(o.Name.TextValue,"Fabrication Station",StringComparison.OrdinalIgnoreCase))&&TargetWithinInteractionRange(o));
+            if(target==null){workshopStatus="Waiting for the fabrication station · open its menu or move within interaction reach.";return;}
             if(HousingInteract(target))workshopInteraction=now.AddSeconds(3);
         }catch(Exception e){StopWorkshop("Stopped: "+e.Message);}
     }
     private bool WorkshopContributionPrompt(string prompt,WorkshopSupply supply)
     {
-        if(!prompt.StartsWith("Contribute "+supply.SetSize+" ",StringComparison.Ordinal)||!prompt.EndsWith(" to the company project?",StringComparison.Ordinal))return false;
-        // Request identity was verified against NpcTrade immediately before this prompt.
-        // Match singular/plural item names, including game quantity classifiers (lengths of, etc.).
         var item=DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>().GetRowOrDefault(supply.ItemId);
-        var name=supply.Name.ToLowerInvariant();var plural=item?.Plural.ToString().ToLowerInvariant()??"";
-        return prompt.Contains(name,StringComparison.OrdinalIgnoreCase)||(plural.Length>0&&prompt.Contains(plural,StringComparison.OrdinalIgnoreCase));
+        return WorkshopPolicy.ContributionPrompt(prompt,supply.SetSize,supply.Name,item?.Plural.ToString()??"");
     }
     private unsafe void TickWorkshopRequest(DateTimeOffset now)
     {
