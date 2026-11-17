@@ -3,7 +3,10 @@ using Dalamud.Game.ClientState.Objects.Enums;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
-    private bool workshopChestDeposit;
+    private bool workshopChestDeposit,workshopChestHq;
+    private WorkshopSupply? workshopChestSupply;
+    private uint[] workshopChestSources=[];
+    private int workshopChestGoal;
     private int workshopChestBagBefore;
     private DateTimeOffset workshopChestInteraction;
     private void BeginWorkshopChest(DateTimeOffset now)
@@ -19,6 +22,12 @@ public sealed partial class Plugin
         if(workshopCombinedStage==5){
             if(chestRunning){workshopStatus="Workshop FC chest · "+chestStatus;return;}
             if(chestStatus.StartsWith("Stopped",StringComparison.Ordinal))throw new InvalidOperationException(chestStatus);
+            if(!workshopChestDeposit){
+                var row=workshopChestSupply!;
+                var quality=workshopChestHq?RetrievalQuality.HqOnly:RetrievalQuality.NqOnly;
+                if(RetrievalHeld(row.ItemId,quality)>=(workshopPreparationWithdrawal?workshopChestGoal:row.SetSize)){workshopCombinedStage=3;workshopCombinedDeadline=now.AddMinutes(2);return;}
+                CloseSellerAddon("FreeCompanyChest");BeginWorkshopRestock(row,now,chestTried:true);return;
+            }
             var id=workshopActive!.PendingDeposit;
             if(!WorkshopPolicy.DepositReceived(workshopChestBagBefore,RetrievalHeld(id),chestGoals.GetValueOrDefault(id)))throw new InvalidOperationException("Finished part was not confirmed in the selected FC chest tab. Check capacity and permissions, then resume.");
             workshopActive.PendingDeposit=0;SaveConfiguration();
@@ -31,13 +40,13 @@ public sealed partial class Plugin
         if(menu!=null){var leave=TransportChoices(menu).FindIndex(s=>s=="Nothing.");if(leave<0)throw new InvalidOperationException("Close the current conversation before resuming.");SelectTravelChoice(menu,leave);return;}
         if(SellerAddon("RetainerList")!=null){CloseSellerAddon("RetainerList");return;}
         if(SellerAddon("FreeCompanyChest")!=null){
-            var quality=RetrievalQuality.Any;
-            var id=workshopActive!.PendingDeposit;
+            var quality=workshopChestDeposit?RetrievalQuality.Any:workshopChestHq?RetrievalQuality.HqOnly:RetrievalQuality.NqOnly;
+            var id=workshopChestDeposit?workshopActive!.PendingDeposit:workshopChestSupply!.ItemId;
             workshopChestBagBefore=RetrievalHeld(id,quality);
-            if(workshopChestBagBefore<1)throw new InvalidOperationException("Pending finished part is not in your bags; review the queue before resuming.");
-            var goals=new Dictionary<uint,int>{{id,1}};
-            var pages=new[]{(uint)(19999+Math.Clamp(config.WorkshopChestTab,1,5))};
-            retrievalError="";StartChest(4,explicitGoals:goals,explicitPages:pages,explicitQuality:quality);
+            if(workshopChestDeposit&&workshopChestBagBefore<1)throw new InvalidOperationException("Pending finished part is not in your bags; review the queue before resuming.");
+            var goals=new Dictionary<uint,int>{{id,workshopChestDeposit?1:workshopChestGoal}};
+            var pages=workshopChestDeposit?new[]{(uint)(19999+Math.Clamp(config.WorkshopChestTab,1,5))}:workshopChestSources;
+            retrievalError="";StartChest(workshopChestDeposit?4:0,explicitGoals:goals,explicitPages:pages,explicitQuality:quality);
             if(!chestRunning)throw new InvalidOperationException(retrievalError.Length>0?retrievalError:"FC chest transfer could not start.");
             workshopCombinedStage=5;workshopCombinedDeadline=now.AddMinutes(5);return;
         }

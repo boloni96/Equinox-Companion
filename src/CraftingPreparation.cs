@@ -103,6 +103,8 @@ internal static class WorkshopPolicy
         }
         return null;
     }
+    internal static bool PreferRecordedChest(int needed,int retainers,int chest,float chestDistance,float bellDistance)=>
+        needed>0&&chest>0&&float.IsFinite(chestDistance)&&(retainers<needed||chest>=needed&&chestDistance<=bellDistance);
     internal static bool DepositReceived(int before,int after,int remaining)=>before>0&&after==before-1&&remaining==0;
     internal static bool StationNearby(float distanceSquared)=>float.IsFinite(distanceSquared)&&distanceSquared>=0&&distanceSquared<=36;
     internal static bool FinalDeliveryMenuReceipt(WorkshopPhase before,WorkshopSupply supply,int bagBefore,int bagNow,IEnumerable<string> choices)

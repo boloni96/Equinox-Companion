@@ -9,7 +9,7 @@ public sealed partial class Plugin
     private string workshopCombinedHouse="";
     private RetrievalEntry[] workshopCombinedItems=[];
     private RetrievalQuality workshopCombinedQuality;
-    private bool BeginWorkshopRestock(WorkshopSupply row,DateTimeOffset now)
+    private bool BeginWorkshopRestock(WorkshopSupply row,DateTimeOffset now,bool chestTried=false)
     {
         if(!config.WorkshopWithdrawAndDeliver||!workshopQueueRun)return false;
         if(Player.CurrentWorld.RowId!=Player.HomeWorld.RowId){StopWorkshop("Withdraw + turn in requires your home world for retainer access.");return true;}
@@ -17,8 +17,10 @@ public sealed partial class Plugin
         RefreshRetrievalStock();
         var nq=RetrievalHeld(row.ItemId,RetrievalQuality.NqOnly);var hq=RetrievalHeld(row.ItemId,RetrievalQuality.HqOnly);
         var rn=retrievalStock.Where(s=>s.Item==row.ItemId&&!s.Hq).Sum(s=>s.Quantity);var rh=retrievalStock.Where(s=>s.Item==row.ItemId&&s.Hq).Sum(s=>s.Quantity);
-        var batch=WorkshopPolicy.Restock(row,nq,hq,rn,rh,workshopWithdrawQuality);
-        if(batch==null){StopWorkshop($"No recorded complete {row.SetSize}-item NQ/HQ set of {row.Name} available for the selected withdrawal quality. Refresh retainer stock or prepare materials, then resume.");return true;}
+        if(!chestTried&&TryWorkshopChestRestock(row,nq,hq,rn,rh,now))return true;
+        var batch=WorkshopPolicy.Restock(row,nq,hq,rn,rh,WorkshopActiveQualityFilter);
+        if(workshopPreparationWithdrawal&&batch is {} b)batch=(b.Hq,Math.Min(b.Quantity,Math.Max(0,workshopPreparationTarget-WorkshopPreparationHeld(row.ItemId))));
+        if(batch==null||batch.Value.Quantity<=0){StopWorkshop($"No recorded complete {row.SetSize}-item NQ/HQ set of {row.Name} available for the selected withdrawal quality. Refresh retainer stock or prepare materials, then resume.");return true;}
         workshopCombinedItems=[new(row.ItemId,row.Name,batch.Value.Quantity)];workshopCombinedQuality=batch.Value.Hq?RetrievalQuality.HqOnly:RetrievalQuality.NqOnly;
         workshopWithdrawalCharacter=Player.ContentId;workshopWithdrawalWorld=Player.CurrentWorld.RowId;workshopCombinedHouse=WorkshopHouse();
         workshopCombinedStage=1;workshopCombinedDeadline=now.AddMinutes(2);workshopRunning=false;
@@ -33,6 +35,7 @@ public sealed partial class Plugin
             if(sellerRun.Running||TraderRunning||organizeRunning||chestRunning&&workshopCombinedStage!=5||retainerGilRunning||gearRouting||armoireRunning||gardenCareRun?.Running==true||gardenAutoPlantPlan!=null||gardenTendRoute!=null||nativeWorldTrip!=null||nativeHousingTrip!=null)throw new InvalidOperationException("Another routine took control.");
             if(now>workshopCombinedDeadline)throw new InvalidOperationException("Combined workshop step timed out. Queue preserved.");
             if(workshopCombinedStage is 4 or 5){TickWorkshopChest(now);return;}
+            if(workshopCombinedStage==3&&workshopPreparationWithdrawal){FinishWorkshopPreparationItem(now);return;}
             if(SellerAddon("FreeCompanyChest")!=null){CloseSellerAddon("FreeCompanyChest");return;}
             if(workshopCombinedStage==2)return; // Withdrawal receipt owns this stage.
             if(VisibleFollowAddon("Request")||VisibleFollowAddon("SelectYesno"))throw new InvalidOperationException("Close the unrelated request or confirmation before resuming.");

@@ -49,6 +49,7 @@ public sealed partial class Plugin
     }
     private void StopWorkshop(string reason)
     {
+        workshopPreparationWithdrawal=false;workshopPreparationItems.Clear();
         ResetWorkshopCutscene();
         if(workshopCombinedStage!=0){if(workshopCombinedStage==5&&chestRunning)StopChest("Workshop stopped.");workshopCombinedStage=0;CancelWorkshopWithdrawal();StopIndependentWalk("Workshop stopped");}
         workshopRunning=false;workshopStatus=reason;PauseWorkshop(false);

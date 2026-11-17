@@ -43,7 +43,8 @@ public sealed partial class Plugin
             foreach(var group in supplies.GroupBy(r=>r.ItemId)){
                 var id=group.Key;var name=group.First().Name;
                 var nq=RetrievalHeld(id,RetrievalQuality.NqOnly);var hq=RetrievalHeld(id,RetrievalQuality.HqOnly);
-                var rn=retrievalStock.Where(s=>s.Item==id&&!s.Hq).Sum(s=>s.Quantity);var rh=retrievalStock.Where(s=>s.Item==id&&s.Hq).Sum(s=>s.Quantity);
+                var fcStock=WorkshopRecordedChest(id);
+                var rn=retrievalStock.Where(s=>s.Item==id&&!s.Hq).Sum(s=>s.Quantity)+fcStock.Where(s=>!s.Hq).Sum(s=>s.Quantity);var rh=retrievalStock.Where(s=>s.Item==id&&s.Hq).Sum(s=>s.Quantity)+fcStock.Where(s=>s.Hq).Sum(s=>s.Quantity);
                 var initialN=nq;var initialH=hq;var usedN=0;var usedH=0;var missing=0;var required=0;
                 foreach(var row in group.Where(r=>r.RemainingSets>0)){
                     for(var set=0;set<row.RemainingSets;set++){
@@ -61,6 +62,7 @@ public sealed partial class Plugin
             }
             // Keep all other raw/subcraft stock available; override turn-in allocations with whole-set accounting.
             var allBags=RetrievalBagTotals();var allRet=retrievalStock.GroupBy(s=>s.Item).ToDictionary(g=>g.Key,g=>g.Sum(s=>s.Quantity));
+            foreach(var group in WorkshopRecordedChest(0).GroupBy(s=>s.Item))allRet[group.Key]=checked(allRet.GetValueOrDefault(group.Key)+group.Sum(s=>s.Quantity));
             foreach(var (id,count) in bags)allBags[id]=count;foreach(var (id,count) in ret)allRet[id]=count;
             workshopPreparation=CraftingPreparation.Build(outputs,RetrievalRecipes(),allBags,allRet,retrievalStockComplete);
             workshopNqWithdraw=nqWithdraw.ToArray();workshopHqWithdraw=hqWithdraw.ToArray();
@@ -110,7 +112,7 @@ public sealed partial class Plugin
             var deposit=config.WorkshopDepositParts;if(ImGui.Checkbox("Entrust finished parts to FC chest",ref deposit)){config.WorkshopDepositParts=deposit;SaveConfiguration();}
             var tab=Math.Clamp(config.WorkshopChestTab,1,5)-1;
             if(ImGui.Combo("Finished parts tab",ref tab,"Tab 1\0Tab 2\0Tab 3\0Tab 4\0Tab 5\0")){config.WorkshopChestTab=tab+1;SaveConfiguration();}
-            ImGui.TextWrapped("Materials are retrieved from their recorded retainer holders. Finished parts go only to the selected FC chest tab; full or restricted tabs stop the queue. Leftover materials stay in bags.");
+            ImGui.TextWrapped("Materials use their recorded locations in this FC chest or your retainers; the route chooses an available source. Finished parts go only to the selected FC chest tab; full or restricted tabs stop the queue. Leftover materials stay in bags.");
             ImGui.EndDisabled();
             var manual=config.WorkshopManualDelivery;
             if(ImGui.Checkbox("Complete turn-ins I click in game",ref manual)){config.WorkshopManualDelivery=manual;if(manual)config.EnableWorkshop=true;SaveConfiguration();if(!manual){if(workshopRunning&&workshopSingleDelivery)StopWorkshop("Manual assistance disabled.");else if(!workshopRunning)PauseWorkshop(false);}}
@@ -185,8 +187,11 @@ public sealed partial class Plugin
         if(ImGui.IsItemHovered())ImGui.SetTooltip("Filter the NQ/HQ turn-ins allocated by the materials review. Both withdraws each quality separately, preserving complete sets.");
         ImGui.BeginDisabled(p==null);
         if(ImGui.BeginTable("WorkshopMaterialActions",2,ImGuiTableFlags.SizingStretchSame)){
-            ImGui.TableNextColumn();if(ImGui.Button("Withdraw turn-ins",new Vector2(-1,0)))BeginWorkshopWithdrawal();
-            ImGui.TableNextColumn();if(ImGui.Button("Withdraw ingredients",new Vector2(-1,0)))RetrievalTry(()=>WithdrawPreparation(p!.Withdraw.Where(e=>!workshopNqWithdraw.Any(x=>x.ItemId==e.ItemId)&&!workshopHqWithdraw.Any(x=>x.ItemId==e.ItemId)).ToArray()));
+            ImGui.TableNextColumn();if(ImGui.Button("Withdraw turn-ins",new Vector2(-1,0)))RetrievalTry(()=>{
+                PrepareWorkshopMaterials();
+                BeginWorkshopPreparationWithdrawal(workshopWithdrawQuality==2?[]:workshopNqWithdraw,RetrievalQuality.NqOnly,workshopWithdrawQuality==1?[]:workshopHqWithdraw);
+            });
+            ImGui.TableNextColumn();if(ImGui.Button("Withdraw ingredients",new Vector2(-1,0)))RetrievalTry(()=>BeginWorkshopPreparationWithdrawal(p!.Withdraw.Where(e=>!workshopNqWithdraw.Any(x=>x.ItemId==e.ItemId)&&!workshopHqWithdraw.Any(x=>x.ItemId==e.ItemId)).ToArray()));
             ImGui.TableNextColumn();ImGui.BeginDisabled(p==null||p.Steps.Length==0);if(ImGui.Button("Copy Artisan list",new Vector2(-1,0)))ImGui.SetClipboardText(RetainerRetrieval.ExportArtisan(workshopExportMissing?"Workshop missing materials":"Workshop required materials",workshopExportMissing?p!.Steps:CraftingPreparation.ArtisanTargets(p!),skipIfEnough:!workshopExportMissing));ImGui.EndDisabled();if(ImGui.IsItemHovered())ImGui.SetTooltip(workshopExportMissing?"Exports only Craft quantities. Artisan skip-if-enough is OFF; do not subtract owned stock again.":"Exports required quantities. Artisan skip-if-enough is ON so Artisan subtracts stock.");
             ImGui.TableNextColumn();ImGui.BeginDisabled(!Pi.InstalledPlugins.Any(x=>x.InternalName=="Artisan"&&x.IsLoaded));if(ImGui.Button("Open Artisan",new Vector2(-1,0)))Commands.ProcessCommand("/artisan lists");ImGui.EndDisabled();
             ImGui.TableNextColumn();if(ImGui.Button("Copy missing raw",new Vector2(-1,0)))ImGui.SetClipboardText(string.Join('\n',p!.Missing.Select(e=>$"{e.Quantity} x {e.Name}")));
@@ -199,7 +204,7 @@ public sealed partial class Plugin
         if(ImGui.CollapsingHeader("Details / quality notes"))ImGui.TextWrapped(workshopPreparationNotice);
         if(ImGui.BeginTable("WorkshopMaterialRows",4,ImGuiTableFlags.RowBg|ImGuiTableFlags.BordersInnerV)){
             foreach(var name in new[]{"Item","Need","Craft","Missing"})ImGui.TableSetupColumn(name);ImGui.TableHeadersRow();
-            foreach(var r in p.Rows){ImGui.TableNextRow();ImGui.TableNextColumn();ImGui.TextUnformatted(r.Name);if(ImGui.IsItemHovered())ImGui.SetTooltip($"Bags allocated: {r.Bags} · Retainers allocated: {r.Retainers}\nUsed for: "+string.Join(", ",r.UsedFor));ImGui.TableNextColumn();ImGui.TextUnformatted(r.Required.ToString());ImGui.TableNextColumn();ImGui.TextUnformatted(r.CraftQuantity.ToString());ImGui.TableNextColumn();ImGui.TextUnformatted(r.Missing.ToString());}
+            foreach(var r in p.Rows){ImGui.TableNextRow();ImGui.TableNextColumn();ImGui.TextUnformatted(r.Name);if(ImGui.IsItemHovered())ImGui.SetTooltip($"Bags allocated: {r.Bags} · Storage allocated: {r.Retainers}\nUsed for: "+string.Join(", ",r.UsedFor)+"\n"+WorkshopMaterialLocations(r.ItemId));ImGui.TableNextColumn();ImGui.TextUnformatted(r.Required.ToString());ImGui.TableNextColumn();ImGui.TextUnformatted(r.CraftQuantity.ToString());ImGui.TableNextColumn();ImGui.TextUnformatted(r.Missing.ToString());}
             ImGui.EndTable();
         }
     }
