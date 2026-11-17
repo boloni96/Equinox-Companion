@@ -12,6 +12,7 @@ public sealed partial class Plugin
     private unsafe bool CanReadHelperEscape(nint input,int id)
     {
         if(input!=(nint)UIInputData.Instance())return false;
+        if(workshopEscapeActive)return WorkshopEscapeAllowed(id)&&!FollowStopTextEntryActive()&&!HelperCutsceneReplayPolicy.BlockingAddons.Any(VisibleFollowAddon);
         if(nativeEventEscapeScene.Length>0)return NativeEventEscapeAllowed(id)&&!FollowStopTextEntryActive()&&!HelperCutsceneReplayPolicy.BlockingAddons.Any(VisibleFollowAddon);
         if(!helperIncoming.TryPeek(out var a))return false;
         var permitted=config.EnableFollowThem&&helperPermission.Active&&helperPermission.Quest&&helperPermission.Skip&&!helperSessionTextAdvance&&!HelperPaused&&!helperPermission.QuestPaused&&helperBlocked.Length==0&&Player.IsLoaded;
@@ -51,6 +52,7 @@ public sealed partial class Plugin
     private void ObserveHelperNativeEscape(DateTimeOffset now)
     {
         if(helperNativeEscapeUntil==default)return;
+        if(workshopEscapeActive){if(!WorkshopEscapeAllowed(3)){workshopEscapeActive=false;EndHelperNativeEscape();}return;}
         if(nativeEventEscapeScene.Length>0){
             if(!NativeEventEscapeAllowed(3)){nativeEventEscapeScene="";EndHelperNativeEscape();}return;
         }

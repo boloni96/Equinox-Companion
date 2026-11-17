@@ -49,6 +49,7 @@ public sealed partial class Plugin
     }
     private void StopWorkshop(string reason)
     {
+        ResetWorkshopCutscene();
         if(workshopCombinedStage!=0){workshopCombinedStage=0;CancelWorkshopWithdrawal();StopIndependentWalk("Workshop stopped");}
         workshopRunning=false;workshopStatus=reason;PauseWorkshop(false);
         RecordTravelPrompt("Workshop stopped",new{reason,queue=workshopQueueRun,completed=workshopActive?.Completed});
@@ -89,6 +90,7 @@ public sealed partial class Plugin
             if(workshopSingleDelivery&&!config.WorkshopManualDelivery){StopWorkshop("Manual turn-in assistance disabled.");return;}
             if(!config.EnableWorkshop||!config.EnableRetriever||!Player.IsLoaded||workshopActive==null||Player.ContentId!=workshopActive.Character||Player.CurrentWorld.RowId!=workshopActive.World||WorkshopHouse()!=workshopActive.House){StopWorkshop("Stopped: character, world, workshop or settings changed. Queue preserved.");return;}
             PauseWorkshop(true);
+            if(TickWorkshopCutscene(now))return;
             if(HelperInCutscene()){workshopDeadline=now.AddSeconds(45);return;}
             if(now>workshopDeadline){StopWorkshop("Stopped: "+workshopStatus+" was not confirmed. Queue preserved; check the game window.");return;}
             if(Conditions[ConditionFlag.InCombat]){StopWorkshop("Stopped: combat.");return;}
@@ -148,6 +150,7 @@ public sealed partial class Plugin
                 // Do not click the old entry again while the server is processing it.
                 if(!WorkshopPolicy.MenuArrived(phase!=null,SellerAddon("CompanyCraftRecipeNoteBook")!=null,menu!=null,
                     menu!=null&&string.Join('|',TransportChoices(menu))==workshopMenuBefore))return;
+                ResetWorkshopCutscene();
                 WorkshopTransition(WorkshopStage.Browse,"Checking next workshop step",now);
             }
             if(phase!=null){
@@ -201,6 +204,9 @@ public sealed partial class Plugin
                 if(index<0){StopWorkshop("Unrecognized workshop menu; queue preserved.");return;}
                 workshopMenuBefore=string.Join('|',choices);
                 if(workshopStage!=WorkshopStage.CollectConfirm)WorkshopTransition(WorkshopStage.MenuTransition,"Workshop: "+choices[index],now);
+                if(choices[index].StartsWith("Advance to the next phase of production.",StringComparison.Ordinal)||choices[index].StartsWith("Complete the construction of the ",StringComparison.Ordinal)){
+                    ResetWorkshopCutscene();workshopSceneArmed=true;
+                }
                 SelectTravelChoice(menu,index);return;
             }
             if(now<workshopInteraction)return;
