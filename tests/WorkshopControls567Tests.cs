@@ -26,6 +26,9 @@ internal static class WorkshopControls567Tests
         Check("editing preserves completed counts and pending deposit",draft.Items[0].Quantity==1&&draft.Completed==1&&draft.PendingDeposit==1);
         WorkshopPolicy.Clear(draft,0,"");
         Check("clear returns to unbound draft",draft.House==""&&draft.World==0&&draft.PendingDeposit==0);
+        var progress=new WorkshopQueueSave{Completed=5,Items=[new(1,"Bow",4),new(2,"Hull",4)]};
+        WorkshopPolicy.EditRemaining(progress,0,2);
+        Check("adding to completed row preserves later receipts",progress.Completed==5&&progress.Items[0].Quantity==4&&progress.Items[1].Quantity==4&&progress.Items[2].Quantity==2);
         RetrievalEntry[] nq=[new(1,"Lumber",20)],hq=[new(1,"Lumber",10)];
         var both=WorkshopPolicy.WithdrawalBatches(nq,hq,0);
         Check("Both keeps two distinct quality batches",both.Length==2&&both[0].Quality==RetrievalQuality.NqOnly&&both[0].Items[0].Quantity==20&&both[1].Quality==RetrievalQuality.HqOnly&&both[1].Items[0].Quantity==10);

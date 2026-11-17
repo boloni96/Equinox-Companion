@@ -90,6 +90,9 @@ internal static class WorkshopPolicy
         var done=Math.Clamp(queue.Completed-before,0,entry.Quantity);
         if(remaining<MinimumRemaining(queue,index)||remaining<0)throw new InvalidOperationException("Collect the pending part before removing its final copy.");
         if((long)queue.Items.Sum(e=>e.Quantity)-entry.Quantity+done+remaining>999)throw new InvalidOperationException("Queue is limited to 999 projects.");
+        // A fully completed row is in the immutable receipt prefix. New copies
+        // belong after the unfinished work, or later completed rows would shift.
+        if(done==entry.Quantity&&remaining>0){queue.Items=[..queue.Items,entry with{Quantity=remaining}];return;}
         queue.Items=queue.Items.Select((e,i)=>i==index?e with{Quantity=done+remaining}:e).Where(e=>e.Quantity>0).ToArray();
     }
     internal static bool MatchesProject(uint sequence,uint itemId,WorkshopProject project)=>sequence==project.Sequence&&itemId==project.ItemId;
