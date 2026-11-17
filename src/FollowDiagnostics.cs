@@ -20,6 +20,7 @@ public sealed partial class Plugin
         for(var i=0;i<captured;i++){
             var v=addon->AtkValues[i];var type=(int)v.Type&15;
             if(type is 8 or 10){var text=TravelMenuText(v.String.Value);if(!string.IsNullOrEmpty(text))values.Add(new {index=i,text=text[..Math.Min(300,text.Length)]});}
+            else if(type==2)values.Add(new {index=i,boolean=v.Bool});
             else if(type is 3 or 5)values.Add(new {index=i,number=v.UInt});
         }
         return new {name=addon->NameString,valueCount=addon->AtkValuesCount,capturedValueCount=captured,truncated=captured<addon->AtkValuesCount,values,textNodes=TravelNodeText(&addon->UldManager)};
