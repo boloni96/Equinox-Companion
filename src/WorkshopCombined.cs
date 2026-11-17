@@ -51,7 +51,7 @@ public sealed partial class Plugin
             var bell=workshopCombinedStage==1;
             var target=Objects.Where(o=>o.IsTargetable&&(o.ObjectKind is ObjectKind.EventObj or ObjectKind.EventNpc)&&
                 (bell?string.Equals(DataManager.GetExcelSheet<Lumina.Excel.Sheets.EObjName>(Dalamud.Game.ClientLanguage.English).GetRowOrDefault(o.BaseId)?.Singular.ToString(),"summoning bell",StringComparison.OrdinalIgnoreCase):
-                o.BaseId==2011588||string.Equals(o.Name.TextValue,"Fabrication Station",StringComparison.OrdinalIgnoreCase)))
+                o.BaseId==2007821||string.Equals(o.Name.TextValue,"Fabrication Station",StringComparison.OrdinalIgnoreCase)))
                 .OrderBy(o=>Vector3.DistanceSquared(self.Position,o.Position)).FirstOrDefault();
             if(target==null)throw new InvalidOperationException(bell?"No summoning bell found in this workshop.":"Fabrication station not found.");
             var range=bell?4f:5f;

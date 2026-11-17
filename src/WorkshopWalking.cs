@@ -14,7 +14,7 @@ public sealed partial class Plugin
         if(!workshopWalking){workshopWalking=true;workshopDeadline=now.AddMinutes(2);}
         // All three workshop objects share the interior. Use collision geometry,
         // not outdoor map roads or housing ward routes, and stop beside the object.
-        IndependentWalk(target.Position,range,now,allowFlight:false,geometryOnly:true);
+        IndependentWalk(target.Position,range,now,allowFlight:false,geometryOnly:true,objectRangeArrival:true);
         workshopStatus="Walking to "+target.Name.TextValue+" · "+independentWalkStatus;
         return false;
     }

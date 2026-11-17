@@ -8,7 +8,7 @@ using FFXIVClientStructs.FFXIV.Component.GUI;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
-    private enum WorkshopStage { Browse, ProjectConfirm, Request, Slot, Inserted, DeliveryConfirm, Receipt, MenuTransition, CollectConfirm, CollectionReceipt }
+    private enum WorkshopStage { Browse, ProjectList, ProjectConfirm, Request, Slot, Inserted, DeliveryConfirm, Receipt, MenuTransition, CollectConfirm, CollectionReceipt }
     private bool workshopRunning,workshopQueueRun,workshopHq,workshopHqConfirmed;
     private WorkshopStage workshopStage;
     private WorkshopQueueSave? workshopActive;
@@ -188,8 +188,27 @@ public sealed partial class Plugin
             var book=SellerAddon("CompanyCraftRecipeNoteBook");
             if(book!=null){
                 if(retrievalCatalog==null||!retrievalCatalog.Projects.TryGetValue(next.ItemId,out var project)){StopWorkshop("Project no longer exists in the crafting log.");return;}
-                var args=stackalloc AtkValue[8];for(var i=0;i<8;i++)args[i]=default;args[0].Type=AtkValueType.Int;args[0].Int=1;args[4].Type=AtkValueType.UInt;args[4].UInt=project.Sequence;
-                WorkshopTransition(WorkshopStage.ProjectConfirm,"Selecting "+next.Name,now);book->FireCallback(8,args,true);return;
+                if(!book->IsReady||book->AtkValues==null||book->AtkValuesCount<415)return;
+                var args=stackalloc AtkValue[8];for(var i=0;i<8;i++)args[i]=default;
+                args[0].Type=AtkValueType.Int;
+                if(workshopStage!=WorkshopStage.ProjectList){
+                    args[0].Int=2;
+                    args[2].Type=AtkValueType.UInt;args[2].UInt=project.Category;
+                    args[3].Type=AtkValueType.UInt;args[3].UInt=project.CraftType;
+                    for(var i=4;i<=6;i++)args[i].Type=AtkValueType.UInt;
+                    WorkshopTransition(WorkshopStage.ProjectList,"Opening crafting category for "+next.Name,now);
+                }else{
+                    var count=book->AtkValues[13].UInt;
+                    if(count==0)return;
+                    if(count>100){StopWorkshop("Crafting log list is unavailable; queue preserved.");return;}
+                    var listed=false;
+                    for(var i=0;i<(int)count;i++)
+                        if(WorkshopPolicy.MatchesProject(book->AtkValues[14+4*i].UInt,book->AtkValues[15+4*i].UInt,project)){listed=true;break;}
+                    if(!listed){StopWorkshop("The crafting log does not list "+next.Name+" in its category. Check unlocks; queue preserved.");return;}
+                    args[0].Int=1;args[4].Type=AtkValueType.UInt;args[4].UInt=project.Sequence;
+                    WorkshopTransition(WorkshopStage.ProjectConfirm,"Selecting "+next.Name,now);
+                }
+                helperReplaying=true;try{book->FireCallback(8,args,true);}finally{helperReplaying=false;}return;
             }
             if(menu!=null){
                 var choices=TransportChoices(menu);var index=-1;
@@ -215,7 +234,7 @@ public sealed partial class Plugin
             }
             if(now<workshopInteraction)return;
             var target=Objects.FirstOrDefault(o=>o.IsTargetable&&(o.ObjectKind is ObjectKind.EventObj or ObjectKind.EventNpc)&&
-                (o.BaseId==2011588||string.Equals(o.Name.TextValue,"Fabrication Station",StringComparison.OrdinalIgnoreCase)));
+                (o.BaseId==2007821||string.Equals(o.Name.TextValue,"Fabrication Station",StringComparison.OrdinalIgnoreCase)));
             if(target==null){workshopStatus="Waiting for the fabrication station to load.";return;}
             if(!ApproachWorkshopTarget(target,4f,now))return;
             // The station's own geometry can fail the walking line-of-sight test.

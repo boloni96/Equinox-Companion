@@ -67,10 +67,11 @@ internal sealed record WorkshopSupply(uint ItemId,string Name,int SetSize,int Se
     internal int RemainingSets=>Math.Max(0,SetsRequired-SetsDelivered);
     internal int RemainingQuantity=>checked(RemainingSets*SetSize);
 }
-internal sealed record WorkshopProject(uint Sequence,uint ItemId,string Name,WorkshopSupply[][] Phases);
+internal sealed record WorkshopProject(uint Sequence,uint ItemId,string Name,WorkshopSupply[][] Phases,uint Category=0,uint CraftType=0);
 internal sealed record WorkshopPhase(uint ItemId,int Phase,int TotalPhases,WorkshopSupply[] Rows);
 internal static class WorkshopPolicy
 {
+    internal static bool MatchesProject(uint sequence,uint itemId,WorkshopProject project)=>sequence==project.Sequence&&itemId==project.ItemId;
     internal static (RetrievalEntry[] Items,RetrievalQuality Quality)[] WithdrawalBatches(RetrievalEntry[] nq,RetrievalEntry[] hq,int filter)
     {
         if(filter is <0 or >2)throw new ArgumentException("Unknown quality filter.");
