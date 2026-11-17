@@ -5,6 +5,7 @@ public sealed partial class Plugin
 {
     private string workshopSearch="";private int workshopAddQuantity=1;
     private PreparationPlan? workshopPreparation;
+    private Dictionary<uint,string> workshopMaterialSources=[];
     private RetrievalEntry[] workshopNqWithdraw=[],workshopHqWithdraw=[];
     private string workshopPreparationNotice="";
     private WorkshopQueueSave WorkshopSaved()
@@ -41,10 +42,15 @@ public sealed partial class Plugin
             if(parts.Length==0&&live!=null)supplies.AddRange(live.Rows.Where(r=>workshopSelection.Contains(r.ItemId)));
             var bags=new Dictionary<uint,int>();var ret=new Dictionary<uint,int>();var outputs=new List<RetrievalEntry>();var nqWithdraw=new List<RetrievalEntry>();var hqWithdraw=new List<RetrievalEntry>();
             var notes=new List<string>();
+            var recordedChest=WorkshopRecordedChest(0);
+            workshopMaterialSources=retrievalStock.Select(s=>(s.Item,Text:$"Retainer {s.Holder}: {s.Quantity} {(s.Hq?"HQ":"NQ")} "))
+                .Concat(recordedChest.Select(s=>(s.Item,Text:$"FC chest {(s.Page==22001?"crystals":"tab "+(s.Page-19999))}: {s.Quantity} {(s.Hq?"HQ":"NQ")} ")))
+                .GroupBy(s=>s.Item).ToDictionary(g=>g.Key,g=>string.Join("\n",g.Select(s=>s.Text)));
+
             foreach(var group in supplies.GroupBy(r=>r.ItemId)){
                 var id=group.Key;var name=group.First().Name;
                 var nq=RetrievalHeld(id,RetrievalQuality.NqOnly);var hq=RetrievalHeld(id,RetrievalQuality.HqOnly);
-                var fcStock=WorkshopRecordedChest(id);
+                var fcStock=recordedChest.Where(s=>s.Item==id);
                 var rn=retrievalStock.Where(s=>s.Item==id&&!s.Hq).Sum(s=>s.Quantity)+fcStock.Where(s=>!s.Hq).Sum(s=>s.Quantity);var rh=retrievalStock.Where(s=>s.Item==id&&s.Hq).Sum(s=>s.Quantity)+fcStock.Where(s=>s.Hq).Sum(s=>s.Quantity);
                 var allocation=WorkshopSetAllocator.Allocate(group,nq,hq,rn,rh,workshopWithdrawQuality);
                 var required=allocation.Required;var usedN=allocation.WithdrawNq;var usedH=allocation.WithdrawHq;var missing=allocation.Missing;
@@ -55,7 +61,7 @@ public sealed partial class Plugin
             }
             // Keep all other raw/subcraft stock available; override turn-in allocations with whole-set accounting.
             var allBags=RetrievalBagTotals();var allRet=retrievalStock.GroupBy(s=>s.Item).ToDictionary(g=>g.Key,g=>g.Sum(s=>s.Quantity));
-            foreach(var group in WorkshopRecordedChest(0).GroupBy(s=>s.Item))allRet[group.Key]=checked(allRet.GetValueOrDefault(group.Key)+group.Sum(s=>s.Quantity));
+            foreach(var group in recordedChest.GroupBy(s=>s.Item))allRet[group.Key]=checked(allRet.GetValueOrDefault(group.Key)+group.Sum(s=>s.Quantity));
             foreach(var (id,count) in bags)allBags[id]=count;foreach(var (id,count) in ret)allRet[id]=count;
             workshopPreparation=CraftingPreparation.Build(outputs,RetrievalRecipes(),allBags,allRet,retrievalStockComplete);
             workshopNqWithdraw=nqWithdraw.ToArray();workshopHqWithdraw=hqWithdraw.ToArray();
@@ -197,7 +203,7 @@ public sealed partial class Plugin
         if(ImGui.CollapsingHeader("Details / quality notes"))ImGui.TextWrapped(workshopPreparationNotice);
         if(ImGui.BeginTable("WorkshopMaterialRows",6,ImGuiTableFlags.RowBg|ImGuiTableFlags.BordersInnerV)){
             foreach(var name in new[]{"Item","Need","Bags","Retainers / FC","Craft","Missing"})ImGui.TableSetupColumn(name);ImGui.TableHeadersRow();
-            foreach(var r in p.Rows){ImGui.TableNextRow();OrganizerMaterialRow(r.Coverage);ImGui.TableNextColumn();ImGui.TextUnformatted(r.Name);if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))ImGui.SetTooltip($"Bags allocated: {r.Bags} · Storage allocated: {r.Retainers}\nUsed for: "+string.Join(", ",r.UsedFor)+"\n"+WorkshopMaterialLocations(r.ItemId));ImGui.TableNextColumn();ImGui.TextUnformatted(r.Required.ToString());ImGui.TableNextColumn();ImGui.TextUnformatted(r.Bags.ToString());ImGui.TableNextColumn();ImGui.TextUnformatted(r.Retainers.ToString());ImGui.TableNextColumn();ImGui.TextUnformatted(r.CraftQuantity.ToString());ImGui.TableNextColumn();ImGui.TextUnformatted(r.Missing>0&&!r.Complete?$"≤ {r.Missing} · verify":r.Missing.ToString());}
+            foreach(var r in p.Rows){ImGui.TableNextRow();OrganizerMaterialRow(r.Coverage);ImGui.TableNextColumn();ImGui.TextUnformatted(r.Name);if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))ImGui.SetTooltip($"Bags allocated: {r.Bags} · Storage allocated: {r.Retainers}\nUsed for: "+string.Join(", ",r.UsedFor)+"\n"+workshopMaterialSources.GetValueOrDefault(r.ItemId,"No recorded storage location"));ImGui.TableNextColumn();ImGui.TextUnformatted(r.Required.ToString());ImGui.TableNextColumn();ImGui.TextUnformatted(r.Bags.ToString());ImGui.TableNextColumn();ImGui.TextUnformatted(r.Retainers.ToString());ImGui.TableNextColumn();ImGui.TextUnformatted(r.CraftQuantity.ToString());ImGui.TableNextColumn();ImGui.TextUnformatted(r.Missing>0&&!r.Complete?$"≤ {r.Missing} · verify":r.Missing.ToString());}
             ImGui.EndTable();
         }
     }

@@ -95,6 +95,7 @@ public sealed partial class Plugin
             if(!workshopRunning){ObserveManualWorkshopDelivery(now);if(!workshopRunning)return;}
             if(workshopSingleDelivery&&!config.WorkshopManualDelivery){StopWorkshop("Manual turn-in assistance disabled.");return;}
             if(!config.EnableWorkshop||!config.EnableRetriever||!Player.IsLoaded||workshopActive==null||Player.ContentId!=workshopActive.Character||Player.CurrentWorld.RowId!=workshopActive.World||WorkshopHouse()!=workshopActive.House){StopWorkshop("Stopped: character, world, workshop or settings changed. Queue preserved.");return;}
+            if(workshopQueueRun&&config.WorkshopWithdrawAndDeliver&&workshopActive.Completed>=workshopPreparedThrough)workshopNeedsPreparation=true;
             PauseWorkshop(true);
             if(TickWorkshopCutscene(now))return;
             if(HelperInCutscene()){workshopDeadline=now.AddSeconds(45);return;}
@@ -144,9 +145,7 @@ public sealed partial class Plugin
                 if(phase.ItemId!=workshopBefore.ItemId||phase.Phase!=workshopBefore.Phase){StopWorkshop("Project or phase changed before delivery was verified.");return;}
                 var row=phase.Rows.FirstOrDefault(r=>r.ItemId==workshopSupply.ItemId);
                 if(row!=null&&row.SetsDelivered==workshopSupply.SetsDelivered+1&&RetrievalHeld(row.ItemId,workshopHq?RetrievalQuality.HqOnly:RetrievalQuality.NqOnly)==workshopBagBefore-row.SetSize){
-                    workshopBefore=phase;
-                if(workshopPreparedPhaseOnly&&(phase.ItemId!=workshopPreparedProject||phase.Phase!=workshopPreparedPhase))workshopNeedsPreparation=true;
-                if(workshopNeedsPreparation&&BeginWorkshopBulkPreparation(now))return;workshopSupply=null;
+                    workshopBefore=phase;workshopSupply=null;
                     if(workshopQueueRun&&phase.Phase==phase.TotalPhases-1&&phase.Rows.All(r=>r.RemainingSets==0)){workshopActive.ReadyToCollect=phase.ItemId;SaveConfiguration();}
                     if(workshopSingleDelivery){StopWorkshop("Turn-in complete · click the next material when ready.");return;}
                     WorkshopTransition(WorkshopStage.Browse,"Delivery confirmed",now);
@@ -168,13 +167,14 @@ public sealed partial class Plugin
                     }}
                 else if(workshopBefore!=null&&(phase.ItemId!=workshopBefore.ItemId||phase.Phase!=workshopBefore.Phase)){StopWorkshop("Selected-material delivery complete; phase changed.");return;}
                 workshopBefore=phase;
-                if(workshopNeedsPreparation&&BeginWorkshopBulkPreparation(now))return;
+                if(workshopPreparedPhaseOnly&&(phase.ItemId!=workshopPreparedProject||phase.Phase!=workshopPreparedPhase))workshopNeedsPreparation=true;
                 var row=phase.Rows.FirstOrDefault(r=>r.RemainingSets>0&&(workshopQueueRun||workshopSelection.Contains(r.ItemId)));
                 if(row==null){
                     if(!workshopQueueRun){StopWorkshop("Selected materials delivered.");return;}
                     if(phase.Phase==phase.TotalPhases-1){workshopActive.ReadyToCollect=phase.ItemId;SaveConfiguration();}
                     SellerAddon("SubmarinePartsMenu")->FireCallbackInt(-1);workshopMenuBefore="";WorkshopTransition(WorkshopStage.MenuTransition,"Opening the next production step",now);return;
                 }
+                if(workshopNeedsPreparation&&BeginWorkshopBulkPreparation(now))return;
                 var quality=WorkshopPolicy.ChooseHq(workshopQueueRun&&workshopWithdrawQuality==2?0:RetrievalHeld(row.ItemId,RetrievalQuality.NqOnly),workshopQueueRun&&workshopWithdrawQuality==1?0:RetrievalHeld(row.ItemId,RetrievalQuality.HqOnly),row.SetSize);
                 if(quality==null){if(BeginWorkshopBulkPreparation(now))return;StopWorkshop($"Need one complete set of {row.SetSize} NQ or HQ {row.Name}. Prepare / withdraw materials, then Resume.");return;}
                 workshopSupply=row;workshopHq=quality.Value;workshopHqConfirmed=false;workshopRequestId=0;

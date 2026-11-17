@@ -36,6 +36,7 @@ public sealed partial class Plugin
             .Concat(WorkshopRecordedChest(0).Select(s=>new WorkshopBulkStock(s.Item,s.Quantity,s.Hq,true)));
         var batches=WorkshopBulkPolicy.Allocate(workshopNqWithdraw,workshopHqWithdraw,stock,Distance("Company Chest")<Distance("Summoning Bell"));
         workshopBulkBatches.Clear();foreach(var batch in batches)workshopBulkBatches.Enqueue(batch);
+        workshopChestDeposit=false;
         workshopBulkRunning=true;workshopRunning=false;workshopPreparationWithdrawal=false;
         workshopWithdrawalCharacter=Player.ContentId;workshopWithdrawalWorld=Player.CurrentWorld.RowId;workshopCombinedHouse=WorkshopHouse();
         PauseWorkshop(true);NextWorkshopBulkBatch(now);return true;
