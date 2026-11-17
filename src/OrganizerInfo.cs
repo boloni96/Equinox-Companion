@@ -18,7 +18,7 @@ public sealed partial class Plugin
         if(!ImGui.IsItemHovered())return;
         ImGui.BeginTooltip();ImGui.PushTextWrapPos(ImGui.GetFontSize()*31);
         ImGui.TextUnformatted("MATERIAL AVAILABILITY");
-        foreach(var entry in new[]{(PreparationCoverage.Bags,"Green: required materials are in bags."),(PreparationCoverage.Retainers,"Gold: recorded storage covers the rest; withdraw first."),(PreparationCoverage.Craftable,"Blue: all remaining crafts have enough recorded ingredients."),(PreparationCoverage.Missing,"Red: materials or crafting ingredients are missing. Inputs means a crafting ingredient shortage; hover the item for names."),(PreparationCoverage.Incomplete,"Grey: stock records are incomplete; verify the shortage.")}){
+        foreach(var entry in new[]{(PreparationCoverage.Bags,"Green: required materials are in bags."),(PreparationCoverage.Retainers,"Gold: recorded storage covers the rest; withdraw first."),(PreparationCoverage.Craftable,"Blue: all remaining crafts have enough recorded ingredients."),(PreparationCoverage.Missing,"Red: materials or crafting ingredients are missing. The Missing column names any ingredients blocking a craft."),(PreparationCoverage.Incomplete,"Grey: stock records are incomplete; verify the shortage.")}){
             ImGui.TextColored(OrganizerMaterialColor(entry.Item1) with {W=1},"■");ImGui.SameLine();ImGui.TextWrapped(entry.Item2);
         }
         ImGui.Separator();

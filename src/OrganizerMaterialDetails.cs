@@ -7,9 +7,15 @@ public sealed partial class Plugin
         ImGui.TextUnformatted(name);
         if(ImGui.IsItemClicked(ImGuiMouseButton.Left))ImGui.SetClipboardText(name);
     }
-    private static string OrganizerMissingLabel(PreparationRow row)=>row.Missing>0
-        ?(!row.Complete?$"≤ {row.Missing:N0} · verify":row.Missing.ToString("N0"))
-        :row.MissingIngredients.Length>0?"Inputs":"0";
+    private static void DrawOrganizerMissing(PreparationRow row)
+    {
+        if(row.Missing==0 && row.MissingIngredients.Length>0){
+            ImGui.TextWrapped(string.Join(", ",row.MissingIngredients));
+            if(ImGui.IsItemHovered())ImGui.SetTooltip("Shared ingredient shortage across the queue. Where Is Cheap counts each missing ingredient once.");
+            return;
+        }
+        ImGui.TextUnformatted(row.Missing>0&&!row.Complete?$"≤ {row.Missing:N0} · verify":row.Missing.ToString("N0"));
+    }
     private static string OrganizerMaterialDetails(PreparationRow row)
     {
         var use=string.Join("\n",row.DemandSources.Select(s=>$"{s.Quantity:N0} for {s.Name}"));

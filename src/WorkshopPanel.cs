@@ -77,6 +77,7 @@ public sealed partial class Plugin
     }
     private int workshopView,workshopWithdrawQuality,workshopMaterialView;
     private bool workshopExportMissing=true;
+    private bool workshopArtisanSkipsStock=true;
     private bool workshopClearRequested,workshopOptionsRequested;
     private bool WorkshopUiBusy=>workshopCombinedStage!=0||workshopRunning||retrievalRun.Running||craftingWithdrawalPending||organizeRunning||chestRunning||gearRouting||armoireRunning||workshopWithdrawalPending;
     private void ClearWorkshopQueue(WorkshopQueueSave q)
@@ -205,10 +206,13 @@ public sealed partial class Plugin
         PrepareWorkshopMaterials();
         if(workshopPreparation is not {} current||retrievalCatalog==null)throw new InvalidOperationException(workshopPreparationNotice);
         var export=CraftingPreparation.ArtisanPlan(current,workshopPreparationOutputs,RetrievalRecipes(),workshopExportMissing);
-        var text=RetainerRetrieval.ExportArtisan(workshopExportMissing?"Workshop missing materials":"Workshop full requirements",export.Steps,skipIfEnough:!workshopExportMissing);
+        var skipStock=!workshopExportMissing||workshopArtisanSkipsStock;
+        if(workshopExportMissing&&skipStock)
+            export=export with{Steps=CraftingPreparation.ArtisanTargets(current)};
+        var text=RetainerRetrieval.ExportArtisan(workshopExportMissing?"Workshop missing materials":"Workshop full requirements",export.Steps,skipIfEnough:skipStock);
         ImGui.SetClipboardText(text);workshopArtisanPreview=export;
         workshopArtisanNotice=$"Copied {export.Steps.Length} recipes · {export.Steps.Sum(s=>(long)s.Crafts):N0} crafts. "+
-            (workshopExportMissing?"In Artisan, verify Skip items you already have enough of is OFF.":"Full recipe chain included. In Artisan, verify Skip items you already have enough of is ON.");
+            (skipStock?"Inventory targets copied. Withdraw allocated turn-ins and ingredients before crafting. Use Companion for net shopping quantities.":"Exact craft counts copied for Artisan with stock skipping off.");
     }
     private void DrawWorkshopMaterials()
     {
@@ -218,6 +222,10 @@ public sealed partial class Plugin
         var p=workshopPreparation;
         if(ImGui.Checkbox("Export missing only",ref workshopExportMissing)){workshopArtisanPreview=null;workshopArtisanNotice="";}
         if(ImGui.IsItemHovered())ImGui.SetTooltip("Checked: only recipes still needed after recorded stock. Unchecked: every recipe in the remaining queue, including subcrafts and items already owned. Raw/non-craftable materials stay in the material list.");
+        if(workshopExportMissing){
+            if(ImGui.Checkbox("Artisan skips owned stock",ref workshopArtisanSkipsStock)){workshopArtisanPreview=null;workshopArtisanNotice="";}
+            if(ImGui.IsItemHovered())ImGui.SetTooltip("Match your Artisan list settings here. With both Skip Crafting Unnecessary Materials and Skip Up To List Amount enabled, export inventory targets for the remaining recipes. Fully stocked recipes are excluded.");
+        }
         ImGui.SetNextItemWidth(-1);if(ImGui.Combo("##WorkshopWithdrawQuality",ref workshopWithdrawQuality,"Quality: Both (NQ + HQ)\0Quality: NQ only\0Quality: HQ only\0")){PrepareWorkshopMaterials();p=workshopPreparation;}
         if(ImGui.IsItemHovered())ImGui.SetTooltip("Filter the NQ/HQ turn-ins allocated by the materials review. Both withdraws each quality separately, preserving complete sets.");
         ImGui.BeginDisabled(p==null);
@@ -248,8 +256,8 @@ public sealed partial class Plugin
             foreach(var step in exported.Steps){DrawOrganizerItemName(step.Name);ImGui.SameLine();ImGui.TextUnformatted($"· {step.Crafts:N0} crafts → {(long)step.Crafts*step.Yield:N0} items");}
             ImGui.TextWrapped($"{exported.Missing.Length} raw/non-craftable ingredient types are not recipes. Use Materials for current shortages.");
         }
-        ImGui.TextUnformatted($"{p.Steps.Length} recipes · {p.Missing.Length} raw shortages");
-        if(ImGui.IsItemHovered())ImGui.SetTooltip(workshopPreparationNotice+"\nInputs in the Missing column means a required crafting ingredient is missing. Hover the item for its name.");
+        ImGui.TextUnformatted($"{p.Steps.Length} recipes · {p.Missing.Length} raw shortage{(p.Missing.Length==1?"":"s")}");
+        if(ImGui.IsItemHovered())ImGui.SetTooltip(workshopPreparationNotice+"\nIngredient names in the Missing column identify shortages shared across the queue.");
         if(ImGui.CollapsingHeader("Details / quality notes"))ImGui.TextWrapped(workshopPreparationNotice);
         ImGui.SetNextItemWidth(-1);ImGui.Combo("##WorkshopMaterialView",ref workshopMaterialView,"All materials (turn-ins + ingredients)\0Turn-ins only\0Ingredients only (subcrafts + raw)\0");
         if(ImGui.IsItemHovered())ImGui.SetTooltip("Filters this table only. An item needed both as a turn-in and an ingredient appears in both views; its totals stay shared across the queue.");
@@ -257,7 +265,7 @@ public sealed partial class Plugin
             ImGui.TableSetupColumn("Item",ImGuiTableColumnFlags.WidthFixed,170);
             foreach(var name in new[]{"Need","Bags","Stored","Craft","Missing"})ImGui.TableSetupColumn(name,ImGuiTableColumnFlags.WidthStretch);
             ImGui.TableSetupScrollFreeze(1,1);ImGui.TableHeadersRow();
-            foreach(var r in p.Rows.Where(r=>r.MatchesView(workshopMaterialView))){ImGui.TableNextRow();OrganizerMaterialRow(r.Coverage);ImGui.TableNextColumn();DrawOrganizerItemName(r.Name);if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))ImGui.SetTooltip(OrganizerMaterialDetails(r)+"\n\nRecorded storage:\n"+workshopMaterialSources.GetValueOrDefault(r.ItemId,"No recorded storage location"));ImGui.TableNextColumn();ImGui.TextUnformatted(r.Required.ToString("N0"));ImGui.TableNextColumn();ImGui.TextUnformatted(r.Bags.ToString("N0"));ImGui.TableNextColumn();ImGui.TextUnformatted(r.Retainers.ToString("N0"));ImGui.TableNextColumn();ImGui.TextUnformatted(r.CraftQuantity.ToString("N0"));ImGui.TableNextColumn();ImGui.TextUnformatted(OrganizerMissingLabel(r));}
+            foreach(var r in p.Rows.Where(r=>r.MatchesView(workshopMaterialView))){ImGui.TableNextRow();OrganizerMaterialRow(r.Coverage);ImGui.TableNextColumn();DrawOrganizerItemName(r.Name);if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))ImGui.SetTooltip(OrganizerMaterialDetails(r)+"\n\nRecorded storage:\n"+workshopMaterialSources.GetValueOrDefault(r.ItemId,"No recorded storage location"));ImGui.TableNextColumn();ImGui.TextUnformatted(r.Required.ToString("N0"));ImGui.TableNextColumn();ImGui.TextUnformatted(r.Bags.ToString("N0"));ImGui.TableNextColumn();ImGui.TextUnformatted(r.Retainers.ToString("N0"));ImGui.TableNextColumn();ImGui.TextUnformatted(r.CraftQuantity.ToString("N0"));ImGui.TableNextColumn();DrawOrganizerMissing(r);}
             ImGui.EndTable();
         }
     }
