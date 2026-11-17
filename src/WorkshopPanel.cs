@@ -24,17 +24,18 @@ public sealed partial class Plugin
         if(q.Items.Sum(e=>e.Quantity)+entries.Sum(e=>e.Quantity)>999)throw new InvalidOperationException("Queue is limited to 999 projects.");
         q.Items=q.Items.Concat(entries).ToArray();SaveConfiguration();workshopPreparation=null;workshopPreparationNotice="";workshopNqWithdraw=[];workshopHqWithdraw=[];workshopStatus=$"Added {entries.Sum(e=>e.Quantity)} projects to the queue.";
     }
-    private void PrepareWorkshopMaterials()
+    private void PrepareWorkshopMaterials(int maxProjects=int.MaxValue,bool currentPhaseOnly=false)
     {
         try{
             if(retrievalCatalog==null)return;RefreshRetrievalStock();var q=WorkshopSaved();var live=ReadWorkshopPhase();
             var parts=q.Items.SelectMany(e=>Enumerable.Repeat(e with{Quantity=1},e.Quantity)).Skip(q.Completed).ToArray();
             if(q.PendingCollection!=0&&parts.Length>0)parts=parts.Skip(1).ToArray();
+            parts=parts.Take(Math.Max(1,maxProjects)).ToArray();
             var supplies=new List<WorkshopSupply>();
             for(var i=0;i<parts.Length;i++){
                 if(!retrievalCatalog.Projects.TryGetValue(parts[i].ItemId,out var project))throw new InvalidOperationException("Queued project is no longer available.");
                 var same=i==0&&live?.ItemId==project.ItemId;
-                if(same){supplies.AddRange(live!.Rows);supplies.AddRange(project.Phases.Skip(live.Phase+1).SelectMany(p=>p));}
+                if(same){supplies.AddRange(live!.Rows);if(!currentPhaseOnly)supplies.AddRange(project.Phases.Skip(live.Phase+1).SelectMany(p=>p));}
                 else supplies.AddRange(project.Phases.SelectMany(p=>p));
             }
             if(parts.Length==0&&live!=null)supplies.AddRange(live.Rows.Where(r=>workshopSelection.Contains(r.ItemId)));
@@ -45,20 +46,12 @@ public sealed partial class Plugin
                 var nq=RetrievalHeld(id,RetrievalQuality.NqOnly);var hq=RetrievalHeld(id,RetrievalQuality.HqOnly);
                 var fcStock=WorkshopRecordedChest(id);
                 var rn=retrievalStock.Where(s=>s.Item==id&&!s.Hq).Sum(s=>s.Quantity)+fcStock.Where(s=>!s.Hq).Sum(s=>s.Quantity);var rh=retrievalStock.Where(s=>s.Item==id&&s.Hq).Sum(s=>s.Quantity)+fcStock.Where(s=>s.Hq).Sum(s=>s.Quantity);
-                var initialN=nq;var initialH=hq;var usedN=0;var usedH=0;var missing=0;var required=0;
-                foreach(var row in group.Where(r=>r.RemainingSets>0)){
-                    for(var set=0;set<row.RemainingSets;set++){
-                        required=checked(required+row.SetSize);
-                        // Prefer a complete bag stack, then complete NQ/HQ sets including retainers.
-                        var quality=WorkshopPolicy.ChooseHq(nq,hq,row.SetSize)??WorkshopPolicy.ChooseHq(nq+rn,hq+rh,row.SetSize);
-                        if(quality==true){var fromBag=Math.Min(hq,row.SetSize);hq-=fromBag;var fromRet=row.SetSize-fromBag;rh-=fromRet;usedH+=fromRet;}
-                        else {var fromBag=Math.Min(nq,row.SetSize);nq-=fromBag;var fromRet=Math.Min(rn,row.SetSize-fromBag);rn-=fromRet;usedN+=fromRet;missing+=row.SetSize-fromBag-fromRet;}
-                    }
-                }
-                bags[id]=initialN-nq+initialH-hq;ret[id]=usedN+usedH;
+                var allocation=WorkshopSetAllocator.Allocate(group,nq,hq,rn,rh,workshopWithdrawQuality);
+                var required=allocation.Required;var usedN=allocation.WithdrawNq;var usedH=allocation.WithdrawHq;var missing=allocation.Missing;
+                bags[id]=allocation.Bags;ret[id]=usedN+usedH;
                 if(required>0)outputs.Add(new(id,name,required));
                 if(usedN>0)nqWithdraw.Add(new(id,name,usedN));if(usedH>0)hqWithdraw.Add(new(id,name,usedH));
-                if(missing>0)notes.Add($"{name}: prepare {missing} NQ to complete the planned sets (HQ remnants are kept separate).");
+                if(missing>0)notes.Add($"{name}: prepare {missing} {(workshopWithdrawQuality==2?"HQ":"NQ")} to complete the planned sets (HQ remnants are kept separate).");
             }
             // Keep all other raw/subcraft stock available; override turn-in allocations with whole-set accounting.
             var allBags=RetrievalBagTotals();var allRet=retrievalStock.GroupBy(s=>s.Item).ToDictionary(g=>g.Key,g=>g.Sum(s=>s.Quantity));
@@ -103,7 +96,7 @@ public sealed partial class Plugin
         ImGui.BeginDisabled(WorkshopUiBusy);
         var combined=config.WorkshopWithdrawAndDeliver;
         if(ImGui.Checkbox("Withdraw + turn in",ref combined)){config.WorkshopWithdrawAndDeliver=combined;SaveConfiguration();}
-        if(ImGui.IsItemHovered())ImGui.SetTooltip("Fetch missing finished materials from the workshop summoning bell, then return and continue this queue. Uses the Materials quality filter. Home world required.");
+        if(ImGui.IsItemHovered())ImGui.SetTooltip("Review the whole remaining queue and withdraw its turn-ins from recorded retainer / FC chest sources before delivering. Smaller batches only when bag capacity requires it. Uses the Materials quality filter. Home world required.");
         ImGui.EndDisabled();
         if(workshopOptionsRequested){ImGui.OpenPopup("Workshop options");workshopOptionsRequested=false;}
         if(ImGui.BeginPopup("Workshop options")){
@@ -202,9 +195,9 @@ public sealed partial class Plugin
         ImGui.TextUnformatted($"{p.Steps.Length} recipes · {p.Missing.Length} raw shortages");
         if(ImGui.IsItemHovered())ImGui.SetTooltip(workshopPreparationNotice);
         if(ImGui.CollapsingHeader("Details / quality notes"))ImGui.TextWrapped(workshopPreparationNotice);
-        if(ImGui.BeginTable("WorkshopMaterialRows",4,ImGuiTableFlags.RowBg|ImGuiTableFlags.BordersInnerV)){
-            foreach(var name in new[]{"Item","Need","Craft","Missing"})ImGui.TableSetupColumn(name);ImGui.TableHeadersRow();
-            foreach(var r in p.Rows){ImGui.TableNextRow();ImGui.TableNextColumn();ImGui.TextUnformatted(r.Name);if(ImGui.IsItemHovered())ImGui.SetTooltip($"Bags allocated: {r.Bags} · Storage allocated: {r.Retainers}\nUsed for: "+string.Join(", ",r.UsedFor)+"\n"+WorkshopMaterialLocations(r.ItemId));ImGui.TableNextColumn();ImGui.TextUnformatted(r.Required.ToString());ImGui.TableNextColumn();ImGui.TextUnformatted(r.CraftQuantity.ToString());ImGui.TableNextColumn();ImGui.TextUnformatted(r.Missing.ToString());}
+        if(ImGui.BeginTable("WorkshopMaterialRows",6,ImGuiTableFlags.RowBg|ImGuiTableFlags.BordersInnerV)){
+            foreach(var name in new[]{"Item","Need","Bags","Retainers / FC","Craft","Missing"})ImGui.TableSetupColumn(name);ImGui.TableHeadersRow();
+            foreach(var r in p.Rows){ImGui.TableNextRow();OrganizerMaterialRow(r.Coverage);ImGui.TableNextColumn();ImGui.TextUnformatted(r.Name);if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))ImGui.SetTooltip($"Bags allocated: {r.Bags} · Storage allocated: {r.Retainers}\nUsed for: "+string.Join(", ",r.UsedFor)+"\n"+WorkshopMaterialLocations(r.ItemId));ImGui.TableNextColumn();ImGui.TextUnformatted(r.Required.ToString());ImGui.TableNextColumn();ImGui.TextUnformatted(r.Bags.ToString());ImGui.TableNextColumn();ImGui.TextUnformatted(r.Retainers.ToString());ImGui.TableNextColumn();ImGui.TextUnformatted(r.CraftQuantity.ToString());ImGui.TableNextColumn();ImGui.TextUnformatted(r.Missing>0&&!r.Complete?$"≤ {r.Missing} · verify":r.Missing.ToString());}
             ImGui.EndTable();
         }
     }

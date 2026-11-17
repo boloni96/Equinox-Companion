@@ -35,10 +35,12 @@ public sealed partial class Plugin
             if(sellerRun.Running||TraderRunning||organizeRunning||chestRunning&&workshopCombinedStage!=5||retainerGilRunning||gearRouting||armoireRunning||gardenCareRun?.Running==true||gardenAutoPlantPlan!=null||gardenTendRoute!=null||nativeWorldTrip!=null||nativeHousingTrip!=null)throw new InvalidOperationException("Another routine took control.");
             if(now>workshopCombinedDeadline)throw new InvalidOperationException("Combined workshop step timed out. Queue preserved.");
             if(workshopCombinedStage is 4 or 5){TickWorkshopChest(now);return;}
+            if(workshopCombinedStage==3&&workshopBulkRunning){FinishWorkshopBulkBatch(now);return;}
             if(workshopCombinedStage==3&&workshopPreparationWithdrawal){FinishWorkshopPreparationItem(now);return;}
             if(SellerAddon("FreeCompanyChest")!=null){CloseSellerAddon("FreeCompanyChest");return;}
             if(workshopCombinedStage==2)return; // Withdrawal receipt owns this stage.
             if(VisibleFollowAddon("Request")||VisibleFollowAddon("SelectYesno"))throw new InvalidOperationException("Close the unrelated request or confirmation before resuming.");
+            if(SellerAddon("CompanyCraftRecipeNoteBook")!=null){CloseSellerAddon("CompanyCraftRecipeNoteBook");return;}
             if(SellerAddon("SubmarinePartsMenu")!=null){CloseSellerAddon("SubmarinePartsMenu");return;}
             var menu=SellerAddon("SelectString");
             if(menu!=null){
@@ -61,7 +63,7 @@ public sealed partial class Plugin
                 workshopWithdrawals.Clear();workshopWithdrawals.Enqueue((workshopCombinedItems,workshopCombinedQuality));workshopWithdrawalPending=true;
                 StartNextWorkshopWithdrawal();
             }else{
-                workshopCombinedStage=0;StartWorkshop(true);
+                workshopCombinedStage=0;StartWorkshop(true,resumePrepared:true);
             }
         }catch(Exception e){StopWorkshop("Withdraw + turn in stopped: "+e.Message);}
     }

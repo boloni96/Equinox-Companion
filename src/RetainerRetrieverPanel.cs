@@ -87,6 +87,7 @@ public sealed partial class Plugin
     });}
     private void DrawRetriever()
     {
+        windowFooter=DrawOrganizerInfo;
         PollInventoryReviewExport();
         if(!armoireRunning&&(gearRouting||organizerLastStorageRoute=="gear"&&organizerLastStorageCharacter==Player.ContentId)){ImGui.TextWrapped(gearStatus);if(gearRouting&&ImGui.SmallButton("Stop gear storage"))StopGearStorage("Stopped by you");}
         MaintainGearSetProtectionSelection();
@@ -95,6 +96,7 @@ public sealed partial class Plugin
         ImGui.SameLine();DrawGearStorageOptions();DrawGearStorageOptionsPopup();
         if(ImGui.BeginPopup("OrganizerSettings")){
             DrawGearSetProtectionOption();
+            var colors=config.CraftingColors;if(ImGui.Checkbox("Material availability colors",ref colors)){config.CraftingColors=colors;SaveConfiguration();}
             var sortTransfers=config.SortItemsAfterOrganizing;
             if(ImGui.Checkbox("Sort items after transfers",ref sortTransfers)){config.SortItemsAfterOrganizing=sortTransfers;SaveConfiguration();}
             MarketHelp("Sort each retainer after its final confirmed Entrust, Withdraw or Organize transfer, before closing it.");

@@ -196,7 +196,7 @@ public sealed partial class Plugin
             TraceKeyboundRun(independentNavigationRun,"entrance-forward-attempt",$"Collision model rejected entry; normal game movement from {self.Position} toward {destination}; max 3 yalms, stall limit 1.5s","estate-entry",false);
             independentWalkStatus="Trying the short entrance step · watching actual movement";return false;
         }
-        var cached=!objectRangeArrival&&!interactionRegion&&independentBlockedTargets.Count==0?RecallIndependentRoute(self.Position,destination,range):null;
+        var cached=independentBlockedTargets.Count==0?(objectRangeArrival?RecallWorkshopRoute(self.Position,destination,range):!interactionRegion?RecallIndependentRoute(self.Position,destination,range):null):null;
         if(cached!=null){independentPath=cached;independentWaypoint=1;independentCheckedWaypoint=-1;independentPhaseTimer.SetPlanning(false,now);independentWalkStatus="Using a saved route · checking the next section";return false;}
         // The opening is fully checked; the remainder starts at its fixed endpoint.
         var opening=interactionRegion||objectRangeArrival?Array.Empty<Vector3>():RecallIndependentPrefix(self.Position,destination)??(independentBlockedTargets.Count==0?VerifiedWalkingOpening.Build(independentCollision,self.Position,destination,range):[]);

@@ -8,7 +8,12 @@ public sealed partial class Plugin
     {
         var self=Objects.LocalPlayer;if(self==null)return false;
         if(Vector3.DistanceSquared(self.Position,target.Position)<=range*range){
-            if(workshopWalking)StopIndependentWalk("Workshop target reached");
+            if(workshopWalking){
+                if(independentCharacter==Player.ContentId&&independentTerritory==Client.TerritoryType&&Vector3.DistanceSquared(independentGoal,target.Position)<1){
+                    independentWalkedPoints.Add(self.Position);RememberIndependentRoute(independentWalkedPoints.ToArray());
+                }
+                StopIndependentWalk("Workshop target reached");
+            }
             workshopWalking=false;return true;
         }
         if(!workshopWalking){workshopWalking=true;workshopDeadline=now.AddMinutes(2);}

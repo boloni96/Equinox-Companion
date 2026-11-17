@@ -53,7 +53,6 @@ public sealed partial class Plugin
         ImGui.TextWrapped(retrievalStockNotice);
         if(craftingPreparationError.Length>0)ImGui.TextWrapped(craftingPreparationError);
         if(craftingPreparation is not {} p)return;
-        ImGui.TextWrapped("Green: in bags · Gold: withdraw · Blue: craftable · Red: missing · Grey: stock incomplete. Hover an item for what uses it. Workshop turn-ins also require whole NQ or HQ sets; use FC workshop for that review.");
         ImGui.BeginDisabled(retrievalRun.Running||craftingWithdrawalPending||workshopRunning||organizeRunning||chestRunning||gearRouting||armoireRunning);
         if(ImGui.Button("Withdraw allocated stock"))RetrievalTry(()=>WithdrawPreparation(p.Withdraw));
         ImGui.SameLine();if(ImGui.Button("Prepare Artisan list…"))PrepareRetrievalArtisanExport();
@@ -68,7 +67,7 @@ public sealed partial class Plugin
         if(craftingMissingFirst)rows=rows.OrderByDescending(r=>r.Coverage is PreparationCoverage.Missing or PreparationCoverage.Incomplete).ThenByDescending(r=>r.Missing).ThenBy(r=>r.Name);
         foreach(var r in rows){
             ImGui.TableNextRow();
-            if(config.CraftingColors){var c=r.Coverage switch{PreparationCoverage.Bags=>new Vector4(.08f,.5f,.16f,.65f),PreparationCoverage.Retainers=>new Vector4(.55f,.4f,.04f,.65f),PreparationCoverage.Craftable=>new Vector4(.05f,.3f,.6f,.65f),PreparationCoverage.Missing=>new Vector4(.6f,.12f,.1f,.65f),_=>new Vector4(.3f,.3f,.3f,.65f)};ImGui.TableSetBgColor(ImGuiTableBgTarget.RowBg0,ImGui.ColorConvertFloat4ToU32(c));}
+            OrganizerMaterialRow(r.Coverage);
             ImGui.TableNextColumn();ImGui.TextUnformatted(r.Name);if(ImGui.IsItemHovered())ImGui.SetTooltip("Used for: "+string.Join(", ",r.UsedFor)+"\n"+r.Coverage);
             ImGui.TableNextColumn();ImGui.TextUnformatted(r.Required.ToString());ImGui.TableNextColumn();ImGui.TextUnformatted(r.Bags.ToString());ImGui.TableNextColumn();ImGui.TextUnformatted(r.Retainers.ToString());ImGui.TableNextColumn();ImGui.TextUnformatted(r.CraftQuantity.ToString());ImGui.TableNextColumn();ImGui.TextUnformatted(r.Missing>0&&!r.Complete?$"≤ {r.Missing} · verify":r.Missing.ToString());
         }

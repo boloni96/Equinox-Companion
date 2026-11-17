@@ -22,6 +22,7 @@ public sealed partial class Plugin
         if(workshopCombinedStage==5){
             if(chestRunning){workshopStatus="Workshop FC chest · "+chestStatus;return;}
             if(chestStatus.StartsWith("Stopped",StringComparison.Ordinal))throw new InvalidOperationException(chestStatus);
+            if(workshopBulkRunning&&workshopBulkCurrent is {Chest:true}){FinishWorkshopBulkBatch(now);return;}
             if(!workshopChestDeposit){
                 var row=workshopChestSupply!;
                 var quality=workshopChestHq?RetrievalQuality.HqOnly:RetrievalQuality.NqOnly;
@@ -35,11 +36,20 @@ public sealed partial class Plugin
             workshopCombinedStage=3;workshopCombinedDeadline=now.AddMinutes(2);return;
         }
         if(VisibleFollowAddon("Request")||VisibleFollowAddon("SelectYesno"))throw new InvalidOperationException("Close the current request or confirmation before resuming.");
+        if(SellerAddon("CompanyCraftRecipeNoteBook")!=null){CloseSellerAddon("CompanyCraftRecipeNoteBook");return;}
         if(SellerAddon("SubmarinePartsMenu")!=null){CloseSellerAddon("SubmarinePartsMenu");return;}
         var menu=SellerAddon("SelectString");
         if(menu!=null){var leave=TransportChoices(menu).FindIndex(s=>s=="Nothing.");if(leave<0)throw new InvalidOperationException("Close the current conversation before resuming.");SelectTravelChoice(menu,leave);return;}
         if(SellerAddon("RetainerList")!=null){CloseSellerAddon("RetainerList");return;}
         if(SellerAddon("FreeCompanyChest")!=null){
+            if(workshopBulkRunning&&workshopBulkCurrent is {Chest:true} bulk){
+                var ids=bulk.Items.Select(e=>e.ItemId).ToHashSet();
+                var sources=WorkshopRecordedChest(0).Where(s=>ids.Contains(s.Item)&&RetainerRetrieval.AllowsQuality(s.Hq,bulk.Quality)).Select(s=>s.Page).Distinct().ToArray();
+                if(sources.Length==0)throw new InvalidOperationException("Recorded FC chest sources are unavailable. Refresh materials.");
+                retrievalError="";StartChest(0,explicitGoals:new(workshopBulkTargets),explicitPages:sources,explicitQuality:bulk.Quality);
+                if(!chestRunning)throw new InvalidOperationException(retrievalError.Length>0?retrievalError:"FC chest withdrawal could not start.");
+                workshopCombinedStage=5;workshopCombinedDeadline=now.AddMinutes(10);return;
+            }
             var quality=workshopChestDeposit?RetrievalQuality.Any:workshopChestHq?RetrievalQuality.HqOnly:RetrievalQuality.NqOnly;
             var id=workshopChestDeposit?workshopActive!.PendingDeposit:workshopChestSupply!.ItemId;
             workshopChestBagBefore=RetrievalHeld(id,quality);

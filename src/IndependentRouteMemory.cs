@@ -22,6 +22,9 @@ public sealed partial class Plugin
             start=FollowTravelPosition.From(position),goal=FollowTravelPosition.From(goal),reason="No complete route with matching destination and a valid start/end connector"});
         return route;
     }
+    private Vector3[]? RecallWorkshopRoute(Vector3 start,Vector3 goal,float range){
+        LoadIndependentRoutes();return WorkshopRouteReuse.Find(independentSavedRoutes!,Client.TerritoryType,start,goal,range,IndependentTraversableConnector);
+    }
     private void SaveIndependentRoutes(){
         try{var temporary=WalkingMemoryPath+".tmp";File.WriteAllText(temporary,JsonSerializer.Serialize(independentSavedRoutes,WalkingMemoryJson));File.Move(temporary,WalkingMemoryPath,true);}
         catch(Exception e){Log.Debug(e,"Could not save walking routes");}
