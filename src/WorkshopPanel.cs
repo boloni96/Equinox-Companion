@@ -214,6 +214,35 @@ public sealed partial class Plugin
         workshopArtisanNotice=$"Copied {export.Steps.Length} recipes · {export.Steps.Sum(s=>(long)s.Crafts):N0} crafts. "+
             (skipStock?"Inventory targets copied. Withdraw allocated turn-ins and ingredients before crafting. Use Companion for net shopping quantities.":"Exact craft counts copied for Artisan with stock skipping off.");
     }
+    private PreparationRow[]? workshopSortSource;
+    private PreparationRow[] workshopSortedRows=[];
+    private int workshopSortColumn=-1;
+    private bool workshopSortDescending;
+
+    private unsafe PreparationRow[] SortedWorkshopRows(PreparationRow[] rows)
+    {
+        var specs=ImGui.TableGetSortSpecs();
+        if(specs.SpecsCount==0)return rows;
+        var column=specs.Specs.ColumnIndex;
+        var descending=specs.Specs.SortDirection==ImGuiSortDirection.Descending;
+        if(ReferenceEquals(rows,workshopSortSource)&&column==workshopSortColumn&&descending==workshopSortDescending)
+            return workshopSortedRows;
+
+        var names=StringComparer.OrdinalIgnoreCase;
+        if(column==0){
+            workshopSortedRows=(descending?rows.OrderByDescending(r=>r.Name,names):rows.OrderBy(r=>r.Name,names)).ToArray();
+        }else{
+            // A named ingredient shortage sorts between a numeric shortage and a covered row.
+            (int,int) Quantity(PreparationRow r)=>column switch{
+                1=>(0,r.Required),2=>(0,r.Bags),3=>(0,r.Retainers),4=>(0,r.CraftQuantity),
+                _=>(r.Missing>0?2:r.MissingIngredients.Length>0?1:0,r.Missing)};
+            var sorted=descending?rows.OrderByDescending(Quantity):rows.OrderBy(Quantity);
+            workshopSortedRows=sorted.ThenBy(r=>r.Name,names).ToArray();
+        }
+        workshopSortSource=rows;workshopSortColumn=column;workshopSortDescending=descending;
+        return workshopSortedRows;
+    }
+
     private void DrawWorkshopMaterials()
     {
         if(workshopChestRefreshDue!=default&&DateTimeOffset.UtcNow>=workshopChestRefreshDue&&!WorkshopUiBusy){
@@ -256,11 +285,11 @@ public sealed partial class Plugin
         if(ImGui.CollapsingHeader("Details / quality notes"))ImGui.TextWrapped(workshopPreparationNotice);
         ImGui.SetNextItemWidth(-1);ImGui.Combo("##WorkshopMaterialView",ref workshopMaterialView,"All materials (turn-ins + ingredients)\0Turn-ins only\0Ingredients only (subcrafts + raw)\0");
         if(ImGui.IsItemHovered())ImGui.SetTooltip("Filters this table only. An item needed both as a turn-in and an ingredient appears in both views; its totals stay shared across the queue.");
-        if(ImGui.BeginTable("WorkshopMaterialRows",6,ImGuiTableFlags.RowBg|ImGuiTableFlags.BordersInnerV|ImGuiTableFlags.ScrollY|ImGuiTableFlags.ScrollX,new Vector2(0,Math.Max(100,ImGui.GetContentRegionAvail().Y)),560)){
+        if(ImGui.BeginTable("WorkshopMaterialRows",6,ImGuiTableFlags.Sortable|ImGuiTableFlags.SortTristate|ImGuiTableFlags.RowBg|ImGuiTableFlags.BordersInnerV|ImGuiTableFlags.ScrollY|ImGuiTableFlags.ScrollX,new Vector2(0,Math.Max(100,ImGui.GetContentRegionAvail().Y)),560)){
             ImGui.TableSetupColumn("Item",ImGuiTableColumnFlags.WidthFixed,170);
-            foreach(var name in new[]{"Need","Bags","Stored","Craft","Missing"})ImGui.TableSetupColumn(name,ImGuiTableColumnFlags.WidthStretch);
+            foreach(var name in new[]{"Need","Bags","Stored","Craft","Missing"})ImGui.TableSetupColumn(name,ImGuiTableColumnFlags.WidthStretch|ImGuiTableColumnFlags.PreferSortDescending);
             ImGui.TableSetupScrollFreeze(1,1);ImGui.TableHeadersRow();
-            foreach(var r in p.Rows.Where(r=>r.MatchesView(workshopMaterialView))){ImGui.TableNextRow();OrganizerMaterialRow(r.Coverage);ImGui.TableNextColumn();DrawOrganizerItemName(r.Name);if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))ImGui.SetTooltip(OrganizerMaterialDetails(r)+"\n\nRecorded storage:\n"+workshopMaterialSources.GetValueOrDefault(r.ItemId,"No recorded storage location"));ImGui.TableNextColumn();ImGui.TextUnformatted(r.Required.ToString("N0"));ImGui.TableNextColumn();ImGui.TextUnformatted(r.Bags.ToString("N0"));ImGui.TableNextColumn();ImGui.TextUnformatted(r.Retainers.ToString("N0"));ImGui.TableNextColumn();ImGui.TextUnformatted(r.CraftQuantity.ToString("N0"));ImGui.TableNextColumn();DrawOrganizerMissing(r);}
+            foreach(var r in SortedWorkshopRows(p.Rows).Where(r=>r.MatchesView(workshopMaterialView))){ImGui.TableNextRow();OrganizerMaterialRow(r.Coverage);ImGui.TableNextColumn();DrawOrganizerItemName(r.Name);if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))ImGui.SetTooltip(OrganizerMaterialDetails(r)+"\n\nRecorded storage:\n"+workshopMaterialSources.GetValueOrDefault(r.ItemId,"No recorded storage location"));ImGui.TableNextColumn();ImGui.TextUnformatted(r.Required.ToString("N0"));ImGui.TableNextColumn();ImGui.TextUnformatted(r.Bags.ToString("N0"));ImGui.TableNextColumn();ImGui.TextUnformatted(r.Retainers.ToString("N0"));ImGui.TableNextColumn();ImGui.TextUnformatted(r.CraftQuantity.ToString("N0"));ImGui.TableNextColumn();DrawOrganizerMissing(r);}
             ImGui.EndTable();
         }
     }
