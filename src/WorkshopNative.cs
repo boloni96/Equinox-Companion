@@ -67,7 +67,7 @@ public sealed partial class Plugin
             if(queue&&(saved!.World!=Player.CurrentWorld.RowId||saved.House!=WorkshopHouse()))throw new InvalidOperationException("Return to the workshop where this queue was created.");
             if(!queue&&(ReadWorkshopPhase() is not {}||workshopSelection.Count==0))throw new InvalidOperationException("Open Material Delivery and select materials first.");
             workshopActive=queue?saved:new(){Character=Player.ContentId,World=Player.CurrentWorld.RowId,House=WorkshopHouse()};
-            workshopQueueRun=queue;workshopBefore=ReadWorkshopPhase();workshopSupply=null;workshopRequestId=0;workshopInteraction=default;
+            workshopSingleDelivery=false;workshopQueueRun=queue;workshopBefore=ReadWorkshopPhase();workshopSupply=null;workshopRequestId=0;workshopInteraction=default;
             if(queue&&saved!.PendingCollection!=0&&RetrievalHeld(saved.PendingCollection)<=saved.CollectionBefore){
                 // No receipt yet: retain the verified project identity and retry only its collection menu.
                 saved.PendingCollection=0;SaveConfiguration();
@@ -78,8 +78,11 @@ public sealed partial class Plugin
     }
     private unsafe void TickWorkshop(DateTimeOffset now)
     {
-        if(!workshopRunning||now<workshopNext)return;workshopNext=now.AddMilliseconds(250);
+        if(now<workshopNext)return;workshopNext=now.AddMilliseconds(250);
         try{
+            if(!VisibleFollowAddon("Request"))workshopManualRequestSeen=false;
+            if(!workshopRunning){ObserveManualWorkshopDelivery(now);if(!workshopRunning)return;}
+            if(workshopSingleDelivery&&!config.WorkshopManualDelivery){StopWorkshop("Manual turn-in assistance disabled.");return;}
             if(!config.EnableWorkshop||!config.EnableRetriever||!Player.IsLoaded||workshopActive==null||Player.ContentId!=workshopActive.Character||Player.CurrentWorld.RowId!=workshopActive.World||WorkshopHouse()!=workshopActive.House){StopWorkshop("Stopped: character, world, workshop or settings changed. Queue preserved.");return;}
             PauseWorkshop(true);
             if(now>workshopDeadline){StopWorkshop("Stopped: "+workshopStatus+" was not confirmed. Queue preserved; check the game window.");return;}
@@ -122,7 +125,9 @@ public sealed partial class Plugin
                 if(phase.ItemId!=workshopBefore.ItemId||phase.Phase!=workshopBefore.Phase){StopWorkshop("Project or phase changed before delivery was verified.");return;}
                 var row=phase.Rows.FirstOrDefault(r=>r.ItemId==workshopSupply.ItemId);
                 if(row!=null&&row.SetsDelivered==workshopSupply.SetsDelivered+1&&RetrievalHeld(row.ItemId,workshopHq?RetrievalQuality.HqOnly:RetrievalQuality.NqOnly)==workshopBagBefore-row.SetSize){
-                    workshopBefore=phase;workshopSupply=null;WorkshopTransition(WorkshopStage.Browse,"Delivery confirmed",now);
+                    workshopBefore=phase;workshopSupply=null;
+                    if(workshopSingleDelivery){StopWorkshop("Turn-in complete · click the next material when ready.");return;}
+                    WorkshopTransition(WorkshopStage.Browse,"Delivery confirmed",now);
                 }
                 return;
             }

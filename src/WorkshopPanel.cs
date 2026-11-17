@@ -72,6 +72,14 @@ public sealed partial class Plugin
     {
         var enabled=config.EnableWorkshop;
         if(ImGui.Checkbox("Enable automatic FC workshop delivery",ref enabled)){config.EnableWorkshop=enabled;SaveConfiguration();if(!enabled)StopWorkshop("Workshop tool disabled.");}
+        var manual=config.WorkshopManualDelivery;
+        if(ImGui.Checkbox("Automatically complete turn-ins I click in the game",ref manual)){
+            config.WorkshopManualDelivery=manual;
+            if(manual)config.EnableWorkshop=true;
+            SaveConfiguration();
+            if(!manual){if(workshopRunning&&workshopSingleDelivery)StopWorkshop("Manual turn-in assistance disabled.");else if(!workshopRunning)PauseWorkshop(false);}
+        }
+        ImGui.TextWrapped("You choose a material in the game's Material Delivery list. Companion selects one complete NQ stack (or HQ if needed), hands it over, and accepts its confirmations. It then waits for your next click.");
         ImGui.TextWrapped(workshopStatus);
         if(workshopRunning){if(ImGui.Button("Stop workshop"))StopWorkshop("Stopped by you. Queue saved; an already-confirmed hand-in may still finish.");}
         if(!Player.IsLoaded){ImGui.TextWrapped("Log in to view this character's queue.");return;}

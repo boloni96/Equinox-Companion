@@ -73,6 +73,9 @@ internal static class WorkshopPolicy
         return missing==0?(0,0):(checked(missing*size-Math.Max(0,nq)%size),checked(missing*size-Math.Max(0,hq)%size));
     }
     internal static bool? ChooseHq(int nq,int hq,int size)=>size<1?null:nq>=size?false:hq>=size?true:null;
+    internal static bool ManualRequestMatches(WorkshopPhase phase,uint project,int index,uint item,int quantity)=>
+        Valid(phase)&&phase.ItemId==project&&index>=0&&index<phase.Rows.Length&&
+        phase.Rows[index].RemainingSets>0&&phase.Rows[index].ItemId==item&&phase.Rows[index].SetSize==quantity;
     internal static bool Valid(WorkshopPhase p)=>p.ItemId>0&&p.TotalPhases is >0 and <=12&&p.Phase>=0&&p.Phase<p.TotalPhases&&p.Rows.Length is >0 and <=12&&p.Rows.All(r=>r.ItemId>0&&r.SetSize is >0 and <=999&&r.SetsRequired is >0 and <=99&&r.SetsDelivered>=0&&r.SetsDelivered<=r.SetsRequired);
     internal static RetrievalEntry? Next(WorkshopQueueSave q)=>q.Items.SelectMany(e=>Enumerable.Repeat(e with{Quantity=1},e.Quantity)).Skip(q.Completed).FirstOrDefault();
 }
