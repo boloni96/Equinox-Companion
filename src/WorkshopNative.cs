@@ -49,6 +49,7 @@ public sealed partial class Plugin
     }
     private void StopWorkshop(string reason)
     {
+        if(workshopCombinedStage!=0){workshopCombinedStage=0;CancelWorkshopWithdrawal();StopIndependentWalk("Workshop stopped");}
         workshopRunning=false;workshopStatus=reason;PauseWorkshop(false);
         RecordTravelPrompt("Workshop stopped",new{reason,queue=workshopQueueRun,completed=workshopActive?.Completed});
     }
@@ -82,6 +83,7 @@ public sealed partial class Plugin
         if(now<workshopNext)return;workshopNext=now.AddMilliseconds(250);
         try{
             TickWorkshopWithdrawal();
+            TickWorkshopCombined(now);if(workshopCombinedStage!=0)return;
             if(!VisibleFollowAddon("Request"))workshopManualRequestSeen=false;
             if(!workshopRunning){ObserveManualWorkshopDelivery(now);if(!workshopRunning)return;}
             if(workshopSingleDelivery&&!config.WorkshopManualDelivery){StopWorkshop("Manual turn-in assistance disabled.");return;}
@@ -161,7 +163,7 @@ public sealed partial class Plugin
                     SellerAddon("SubmarinePartsMenu")->FireCallbackInt(-1);workshopMenuBefore="";WorkshopTransition(WorkshopStage.MenuTransition,"Opening the next production step",now);return;
                 }
                 var quality=WorkshopPolicy.ChooseHq(RetrievalHeld(row.ItemId,RetrievalQuality.NqOnly),RetrievalHeld(row.ItemId,RetrievalQuality.HqOnly),row.SetSize);
-                if(quality==null){StopWorkshop($"Need one complete set of {row.SetSize} NQ or HQ {row.Name}. Prepare / withdraw materials, then Resume.");return;}
+                if(quality==null){if(BeginWorkshopRestock(row,now))return;StopWorkshop($"Need one complete set of {row.SetSize} NQ or HQ {row.Name}. Prepare / withdraw materials, then Resume.");return;}
                 workshopSupply=row;workshopHq=quality.Value;workshopHqConfirmed=false;workshopRequestId=0;
                 workshopBagBefore=RetrievalHeld(row.ItemId,workshopHq?RetrievalQuality.HqOnly:RetrievalQuality.NqOnly);
                 var agent=AgentCompanyCraftMaterial.Instance();if(agent==null||!agent->IsAgentActive()||agent->ResultItem!=phase.ItemId)return;

@@ -85,6 +85,18 @@ internal static class WorkshopPolicy
         return prompt.StartsWith("Contribute "+quantity+" ",StringComparison.Ordinal)&&prompt.EndsWith(" to the company project?",StringComparison.Ordinal)&&
             (name.Length>0&&prompt.Contains(name,StringComparison.OrdinalIgnoreCase)||plural.Length>0&&prompt.Contains(plural,StringComparison.OrdinalIgnoreCase));
     }
+    internal static (bool Hq,int Quantity)? Restock(WorkshopSupply row,int nq,int hq,int rn,int rh,int filter)
+    {
+        if(row.SetSize<=0||row.RemainingSets<=0||filter is <0 or >2)return null;
+        foreach(var high in new[]{false,true}){
+            if(high&&filter==1||!high&&filter==2)continue;
+            var held=high?hq:nq;var stock=high?rh:rn;
+            var sets=Math.Min(row.RemainingSets,(held+stock)/row.SetSize);
+            var take=sets*row.SetSize-held;
+            if(sets>0&&take>0&&take<=stock)return (high,take);
+        }
+        return null;
+    }
     internal static bool StationNearby(float distanceSquared)=>float.IsFinite(distanceSquared)&&distanceSquared>=0&&distanceSquared<=36;
     internal static bool FinalDeliveryMenuReceipt(WorkshopPhase before,WorkshopSupply supply,int bagBefore,int bagNow,IEnumerable<string> choices)
     {

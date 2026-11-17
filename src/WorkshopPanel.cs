@@ -70,7 +70,7 @@ public sealed partial class Plugin
     }
     private int workshopView,workshopWithdrawQuality;
     private bool workshopClearRequested,workshopOptionsRequested;
-    private bool WorkshopUiBusy=>workshopRunning||retrievalRun.Running||craftingWithdrawalPending||organizeRunning||chestRunning||gearRouting||armoireRunning||workshopWithdrawalPending;
+    private bool WorkshopUiBusy=>workshopCombinedStage!=0||workshopRunning||retrievalRun.Running||craftingWithdrawalPending||organizeRunning||chestRunning||gearRouting||armoireRunning||workshopWithdrawalPending;
     private void ClearWorkshopQueue(WorkshopQueueSave q)
     {
         WorkshopPolicy.Clear(q,Player.CurrentWorld.RowId,WorkshopHouse());
@@ -88,7 +88,8 @@ public sealed partial class Plugin
         // Fixed controls stay outside the scrolling content and confirmation is rendered outside disabled scopes.
         if(ImGui.BeginTable("WorkshopToolbar",2,ImGuiTableFlags.SizingStretchSame)){
             ImGui.TableNextColumn();
-            if(workshopWithdrawalPending){if(ImGui.Button("Stop withdrawal",new Vector2(-1,0)))CancelWorkshopWithdrawal();}
+            if(workshopCombinedStage!=0){if(ImGui.Button("Stop withdraw + turn in",new Vector2(-1,0)))StopWorkshop("Stopped by you. Queue preserved.");}
+            else if(workshopWithdrawalPending){if(ImGui.Button("Stop withdrawal",new Vector2(-1,0)))CancelWorkshopWithdrawal();}
             else if(workshopRunning){if(ImGui.Button("Stop workshop",new Vector2(-1,0)))StopWorkshop("Stopped by you. Queue preserved.");}
             else {ImGui.BeginDisabled(WorkshopUiBusy||!config.EnableWorkshop||total<=q.Completed);if(ImGui.Button("Start / resume",new Vector2(-1,0)))StartWorkshop(true);ImGui.EndDisabled();}
             ImGui.TableNextColumn();ImGui.BeginDisabled(WorkshopUiBusy||total==0&&q.PendingCollection==0&&q.ReadyToCollect==0);if(ImGui.Button("Clear queue…",new Vector2(-1,0)))workshopClearRequested=true;ImGui.EndDisabled();
@@ -96,6 +97,11 @@ public sealed partial class Plugin
             ImGui.TableNextColumn();ImGui.BeginDisabled(WorkshopUiBusy);if(ImGui.Button("Refresh materials",new Vector2(-1,0))){PrepareWorkshopMaterials();workshopView=2;}ImGui.EndDisabled();
             ImGui.EndTable();
         }
+        ImGui.BeginDisabled(WorkshopUiBusy);
+        var combined=config.WorkshopWithdrawAndDeliver;
+        if(ImGui.Checkbox("Withdraw + turn in",ref combined)){config.WorkshopWithdrawAndDeliver=combined;SaveConfiguration();}
+        if(ImGui.IsItemHovered())ImGui.SetTooltip("Fetch missing finished materials from the workshop summoning bell, then return and continue this queue. Uses the Materials quality filter. Home world required.");
+        ImGui.EndDisabled();
         if(workshopOptionsRequested){ImGui.OpenPopup("Workshop options");workshopOptionsRequested=false;}
         if(ImGui.BeginPopup("Workshop options")){
             var enabled=config.EnableWorkshop;if(ImGui.Checkbox("Enable workshop automation",ref enabled)){config.EnableWorkshop=enabled;SaveConfiguration();if(!enabled)StopWorkshop("Workshop tool disabled.");}

@@ -32,6 +32,7 @@ public sealed class Configuration : IPluginConfiguration
     public bool WithdrawTradableOnly { get; set; }
     public bool EnableRetriever { get; set; }
     public bool EnableWorkshop { get; set; }
+    public bool WorkshopWithdrawAndDeliver { get; set; }
     public bool WorkshopManualDelivery { get; set; }
     public bool CraftingColors { get; set; } = true;
     public List<WorkshopQueueSave> WorkshopQueues { get; set; } = [];
