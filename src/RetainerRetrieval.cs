@@ -6,10 +6,10 @@ public enum RetrievalMode { FinalItems, AllMaterials, CompletedItems, DirectIngr
 public sealed record RetrievalEntry(uint ItemId, string Name, int Quantity, uint RecipeId = 0, bool ReadyMaterial = false);
 public sealed record RetrievalPreset(string Name, RetrievalEntry[] Items, int Multiplier = 1, bool IncludesSubcrafts = false, bool ArtisanPreset = false, RetrievalMode Mode = RetrievalMode.CompletedItems, Dictionary<uint,uint>? RecipeChoices = null, RetrievalQuality Quality = RetrievalQuality.Any, ulong DestinationRetainer = 0, uint[]? SendCategories = null, EntrustSelection? Entrust = null, string PlanId = "", int CategoryWithdrawQuantity = 1, int CategoryKeepQuantity = 0, bool? FilterPlanCategories = null);
 internal sealed record RetrievalRecipe(uint Id,uint ItemId,int Yield,RetrievalEntry[] Ingredients,string Job);
-internal sealed record RetrievalPreview(uint ItemId,string Name,int Required,int Held,int? Available)
+internal sealed record RetrievalPreview(uint ItemId,string Name,int Required,int Held,int? Available,int RecordedAvailable=0)
 {
     public int Need=>Math.Max(0,Required-Held);
-    public int? Missing=>Available.HasValue?Math.Max(0,Need-Available.Value):null;
+    public int? Missing=>Need<=RecordedAvailable?0:Available.HasValue?Math.Max(0,Need-Available.Value):null;
 }
 internal sealed class RetrievalRecipeChoiceException(uint itemId,string name):ArgumentException("Choose the recipe to use for "+name+"."){internal uint ItemId=>itemId;}
 internal static class RetainerRetrieval
@@ -61,7 +61,7 @@ internal static class RetainerRetrieval
     }
     internal sealed record CraftStep(uint RecipeId,uint ItemId,string Name,int Crafts,int Yield);
     internal sealed record CraftPlan(RetrievalEntry[] Materials,CraftStep[] Steps);
-    private static RetrievalRecipe? Recipe(RetrievalEntry e,IReadOnlyDictionary<uint,RetrievalRecipe[]> recipes)
+    internal static RetrievalRecipe? Recipe(RetrievalEntry e,IReadOnlyDictionary<uint,RetrievalRecipe[]> recipes)
     {
         if(!recipes.TryGetValue(e.ItemId,out var choices)||choices.Length==0){if(e.RecipeId!=0)throw new ArgumentException("Saved recipe is unavailable for "+e.Name+". Choose a current recipe.");return null;}
         var same=choices.Select(x=>x.Yield+"|"+string.Join(";",x.Ingredients.OrderBy(i=>i.ItemId).Select(i=>i.ItemId+":"+i.Quantity))).Distinct().Count()==1;

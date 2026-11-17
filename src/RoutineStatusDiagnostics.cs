@@ -25,6 +25,7 @@ public sealed partial class Plugin
         Add("Armoire",armoireRunning,armoireStatus);
         Add("Organizer",organizeRunning,organizeStatus);
         Add("Preparing withdrawal",craftingWithdrawalPending,retrievalError);
+        Add("Workshop",workshopRunning,workshopStatus);
         Add("Transfer",retrievalRun.Running,retrievalRun.Status);
         Add(localStorageRunning?"Storage transfer":"Company chest",chestRunning,chestStatus);
         Add("Retainer gil",retainerGilRunning,retainerGilStatus);

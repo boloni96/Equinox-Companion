@@ -24,7 +24,7 @@ public sealed partial class Plugin
     }
     private void UpdateRetriever(DateTimeOffset now)
     {
-        TickGearStorage(now);TickArmoireOrganizer(now);TickStorageRefresh(now);TickRetainerTools(now);TickRetainerGil(now);TickChest(now);TickOrganize(now);
+        TickWorkshop(now);TickGearStorage(now);TickArmoireOrganizer(now);TickStorageRefresh(now);TickRetainerTools(now);TickRetainerGil(now);TickChest(now);TickOrganize(now);
         if(retrievalPort.Pause.RestorePending)retrievalPort.Pause.Release(now);
         if(!config.EnableRetriever){CancelCraftingWithdrawal("");if(retrievalRun.Running)retrievalRun.Stop("Retriever disabled.");retrieverWindow.IsOpen=false;ForgetOptionalLauncher("Equinox Organizer");return;}
         if(retrievalRun.Running&&retrievalRun.State!=RetrievalRun.Phase.Prepare&&retrievalPort.Pause.Held){var pause=retrievalPort.Pause.Check(now);if(!pause.Ready){retrievalRun.Stop(pause.Error.Length>0?pause.Error:"Another AutoRetainer task started; retrieval stopped.");return;}}

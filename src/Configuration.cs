@@ -31,6 +31,9 @@ public sealed class Configuration : IPluginConfiguration
     public int OrganizerBindingFilter { get; set; }
     public bool WithdrawTradableOnly { get; set; }
     public bool EnableRetriever { get; set; }
+    public bool EnableWorkshop { get; set; }
+    public bool CraftingColors { get; set; } = true;
+    public List<WorkshopQueueSave> WorkshopQueues { get; set; } = [];
     public Dictionary<ulong,List<RetainerAssignment>> RetainerAssignments { get; set; } = [];
     public HashSet<ulong> UseRetainerAssignments { get; set; } = [];
     public List<RetainerInventoryRecord> OrganizerInventories { get; set; } = [];

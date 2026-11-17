@@ -92,6 +92,7 @@ public sealed partial class Plugin
         if(armoireRunning)return new("Armoire",armoireStatus,"",()=>StopArmoireOrganizer(IndicatorStopReason));
         if(craftingWithdrawalPending)return new("Preparing withdrawal",retrievalError,"",()=>CancelCraftingWithdrawal(IndicatorStopReason));
         if(organizeRunning)return new("Organizer",organizeStatus,"",()=>StopOrganize(IndicatorStopReason));
+        if(workshopRunning)return new("Workshop",workshopStatus,"",()=>StopWorkshop(IndicatorStopReason));
         if(retrievalRun.Running)return new("Transfer",retrievalRun.Status,"",()=>retrievalRun.Stop(IndicatorStopReason));
         if(chestRunning)return new("Company chest",chestStatus,"",()=>StopChest(IndicatorStopReason));
         if(retainerGilRunning)return new("Retainer gil",retainerGilStatus,$"{retainerGilIndex}/{retainerGilTargets.Length}",()=>StopRetainerGil(IndicatorStopReason));

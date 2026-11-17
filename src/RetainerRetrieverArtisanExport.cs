@@ -9,7 +9,7 @@ public sealed partial class Plugin
     private string retrievalExportError="",retrievalExportNotice="";
     private void PrepareRetrievalArtisanExport()
     {
-        retrievalExportMissing=false;retrievalExportNotice="";BuildRetrievalArtisanExport();
+        retrievalExportMissing=true;retrievalExportNotice="";BuildRetrievalArtisanExport();
         ImGui.OpenPopup("Prepare Artisan crafting list");
     }
     private void BuildRetrievalArtisanExport()
@@ -18,15 +18,11 @@ public sealed partial class Plugin
         try
         {
             if(retrievalCatalog==null)return;
-            var outputs=RetainerRetrieval.Requested(retrievalItems,retrievalMultiplier,retrievalIncludesSubcrafts,RetrievalRecipes());
-            outputs=RetainerRetrieval.WorkshopTurnIns(outputs,retrievalCatalog.Outfits);
-            outputs=RetainerRetrieval.WorkshopTurnIns(outputs,retrievalCatalog.WorkshopByItem);
-            if(retrievalExportMissing)
-            {
-                RefreshRetrievalStock();if(!retrievalStockComplete)throw new InvalidOperationException("Some retainer stock is unknown. Refresh inventory after visiting your retainers, or choose all requested outputs.");
-                outputs=outputs.Select(e=>e with{Quantity=Math.Max(0,e.Quantity-RetrievalHeld(e.ItemId)-retrievalStock.Where(s=>s.Item==e.ItemId).Sum(s=>s.Quantity))}).Where(e=>e.Quantity>0).ToArray();
-            }
-            var plan=RetainerRetrieval.PlanCrafts(outputs,RetrievalRecipes());retrievalExportSteps=plan.Steps;retrievalExportMaterials=plan.Materials;
+            RefreshRetrievalStock();
+            var plan=BuildPreparation(retrievalExportMissing);
+            retrievalExportSteps=plan.Steps;retrievalExportMaterials=plan.Missing;
+            if(retrievalExportMissing&&!retrievalStockComplete)retrievalExportNotice="Some retainer stock is unrecorded. This list uses known stock; refresh before crafting to avoid making extras.";
+
         }
         catch(RetrievalRecipeChoiceException e){retrievalRecipeChoice=e.ItemId;retrievalExportError=e.Message+" Close this review, choose the recipe in Withdraw, then prepare again.";}
         catch(Exception e){retrievalExportError=e.Message;}
@@ -35,7 +31,7 @@ public sealed partial class Plugin
     {
         ImGui.SetNextWindowSize(new Vector2(600,450),ImGuiCond.FirstUseEver);
         if(!ImGui.BeginPopupModal("Prepare Artisan crafting list"))return;
-        if(ImGui.Checkbox("Only missing outputs (NQ + HQ bags and recorded retainers)",ref retrievalExportMissing))BuildRetrievalArtisanExport();
+        if(ImGui.Checkbox("Use owned outputs and subcrafts (NQ + HQ)",ref retrievalExportMissing))BuildRetrievalArtisanExport();
         ImGui.TextWrapped("Review the crafting order below. Copy, then use Artisan → Lists → Import List From Clipboard (Artisan Export). No crafting starts automatically.");
         ImGui.BeginChild("CraftExportReview",new Vector2(0,Math.Max(100,ImGui.GetContentRegionAvail().Y-100)),false);
         foreach(var s in retrievalExportSteps){DrawRetrievalIcon(s.ItemId);ImGui.TextUnformatted($"{s.Name} · {s.Crafts} crafts → {s.Crafts*s.Yield} items");}
