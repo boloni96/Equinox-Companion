@@ -152,7 +152,12 @@ public sealed partial class Plugin
         var expected=WorldName(world);if(string.IsNullOrWhiteSpace(expected))return false;
         for(var i=0;i<Math.Min(strings->Size,16);i++){
             var p=strings->StringArray[i].Value;if(p==null)break;
-            if(TravelMenuText(p)==expected){LoginCallback(addon,25,0,i);return true;}
+            if(TravelMenuText(p)==expected){
+                var previous=usingSharedTravel;
+                usingSharedTravel=true;
+                try{LoginCallback(addon,25,0,i);}finally{usingSharedTravel=previous;}
+                return true;
+            }
         }
         return false;
     }

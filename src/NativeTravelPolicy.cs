@@ -70,3 +70,22 @@ internal sealed class TravelContextRecovery
         return ++Retries<=3?TravelContextAction.Reopen:TravelContextAction.Stop;
     }
 }
+
+internal sealed class TravelLoginListGate
+{
+    private int previousRow = -1;
+    private DateTimeOffset first, last;
+
+    public bool Ready(int row, DateTimeOffset now)
+    {
+        if (row < 0 || row != previousRow || now - last > TimeSpan.FromSeconds(1))
+            first = now;
+        previousRow = row;
+        last = now;
+        return row >= 0 && now - first >= TimeSpan.FromSeconds(2);
+    }
+
+    public static bool IsNamedLoginPrompt(string text, string name) =>
+        !string.IsNullOrWhiteSpace(name) &&
+        text.Split(new[] { '\r', '\n' }, 2)[0].Trim() == $"Logging in with {name}.";
+}

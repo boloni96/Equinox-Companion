@@ -42,11 +42,13 @@ public sealed partial class Plugin
         if(SellerAddon("SelectString")!=null){if(!trip.ServiceSent&&SelectVerifiedServiceAccount(trip.Service)){trip.ServiceSent=true;RecordTravelPrompt("Service account selected",new{slot=trip.Service});}return;}
         trip.ServiceSent=false;
         var loginWorld=trip.TransferCommitted||trip.Stage==NativeTravelStage.Login?trip.Leg:trip.Source;
+        if(trip.Stage==NativeTravelStage.Login)
+            loginWorld=CharacterLoginWorldPolicy.ListWorld(trip.Home,trip.Leg,TravelDc(trip.Home),TravelDc(trip.Leg),TravelRegion(trip.Home),TravelRegion(trip.Leg));
         if(trip.ReconnectLoginList){
             var currentLobby=AgentLobby.Instance();
             if(currentLobby!=null&&SellerAddon("_CharaSelectListMenu")!=null){
                 if(currentLobby->TemporaryLocked)return;
-                if(TravelDc(currentLobby->WorldId)!=TravelDc(trip.Source)){
+                if(TravelDc(currentLobby->WorldId)!=TravelDc(loginWorld)){
                     if(SellerAddon("ContextMenu")!=null||SellerAddon("SelectYesno")!=null||SellerAddon("SelectOk")!=null)return;
                     ClickLoginMenuButton("_CharaSelectReturn",4);trip.DcSelected=false;return;
                 }
@@ -58,12 +60,31 @@ public sealed partial class Plugin
         var lobby=AgentLobby.Instance();if(lobby==null)return;
         if(lobby->ServiceAccountIndex>=0&&lobby->ServiceAccountIndex!=trip.Service)throw new InvalidOperationException("The displayed service account differs from the requested account.");
         if(trip.Stage==NativeTravelStage.Login&&trip.LoginSent){
-            if(ConfirmNativeLogin(true,trip.Character,WorldName(trip.Home)??"",trip.Service,trip.Name,(ushort)trip.Leg)){
+            var dialog=(AddonSelectYesno*)SellerAddon("SelectYesno");
+            if(lobby->WorldId==loginWorld && ConfirmNativeLogin(true,trip.Character,WorldName(trip.Home)??"",trip.Service,trip.Name,(ushort)trip.Leg)){
                 trip.LoginConfirmed=true;nativeTravelStatus="Login accepted; waiting for the queue and destination arrival";RecordTravelPrompt("Login confirmed",new{trip.Character,trip.Leg,trip.Service});
+                return;
             }
-            return; // Never touch queue dialogs after issuing login.
+            var elapsed=now-trip.LoginRequestedAt;
+            if(dialog!=null && elapsed>=TimeSpan.FromSeconds(3)){
+                nativeTravelStatus=$"Verifying login for {trip.Name} on {WorldName(trip.Leg)} · displayed list: {WorldName(lobby->WorldId)}";
+                var prompt=dialog->PromptText==null?"":TravelMenuText(dialog->PromptText->NodeText.StringPtr)??"";
+                if(lobby->WorldId!=0 && lobby->WorldId!=loginWorld && lobby->ServiceAccountIndex==trip.Service &&
+                    trip.StaleLoginRetries<2 && TravelLoginListGate.IsNamedLoginPrompt(prompt,trip.Name) &&
+                    NativeEventButton((AtkUnitBase*)dialog,dialog->NoButton)){
+                    trip.LoginSent=false;
+                    trip.StaleLoginRetries++;
+                    trip.LoginList.Ready(-1,now);
+                    RecordTravelPrompt("Dismissed stale character login",new{trip.Name,expectedWorld=loginWorld,displayedWorld=lobby->WorldId,trip.StaleLoginRetries});
+                    return;
+                }
+                if(elapsed>=TimeSpan.FromSeconds(15))throw new InvalidOperationException(nativeTravelStatus+". Review the open game prompt.");
+            }
+            if(dialog==null && elapsed>=TimeSpan.FromSeconds(20))
+                throw new InvalidOperationException("The game did not present a verifiable login prompt. Check the character list or login queue.");
+            return;
         }
-        if(lobby->TemporaryLocked){nativeTravelStatus="Waiting for the character-selection server to unlock · "+trip.Stage;return;}
+        if(lobby->TemporaryLocked){trip.LoginList.Ready(-1,now);nativeTravelStatus="Waiting for the character-selection server to unlock · "+trip.Stage;return;}
         if(trip.Stage==NativeTravelStage.CharacterMenu){
             var menu=SellerAddon("_CharaSelectListMenu");if(menu==null)return;
             var index=NativeTravelCharacterIndex(trip,out var world);
@@ -146,11 +167,28 @@ public sealed partial class Plugin
             return;
         }
         if(trip.Stage==NativeTravelStage.Login){
-            var menu=SellerAddon("_CharaSelectListMenu");if(menu==null)return;
+            var menu=SellerAddon("_CharaSelectListMenu");
+            if(menu==null || !menu->IsReady || lobby->ServiceAccountIndex!=trip.Service ||
+                SellerAddon("SelectYesno")!=null || SellerAddon("SelectOk")!=null || SellerAddon("ContextMenu")!=null){
+                trip.LoginList.Ready(-1,now);
+                return;
+            }
+            if(lobby->WorldId!=loginWorld){
+                trip.LoginList.Ready(-1,now);
+                nativeTravelStatus=$"Selecting {WorldName(loginWorld)} for login · displayed list: {WorldName(lobby->WorldId)}";
+                if(lobby->WorldId!=0 && now>=trip.NextWorldSelection && SelectEstateLoginWorld((ushort)loginWorld)){
+                    trip.NextWorldSelection=now.AddSeconds(5);
+                    RecordTravelPrompt("Reselected login world",new{world=loginWorld});
+                }
+                return;
+            }
             var index=NativeTravelCharacterIndex(trip,out var world);
-            if(index<0){RequestNativeTravelLoginWorld(trip,trip.Leg);return;}
-            if(world!=trip.Leg){nativeTravelStatus="Waiting for the character's destination world to update";return;}
-            ClickNativeLoginCharacter(menu,index);trip.LoginSent=true;RecordTravelPrompt("Login requested",new{trip.Character,trip.Leg,trip.Service});
+            nativeTravelStatus=$"Waiting for {trip.Name} on the settled {WorldName(loginWorld)} list";
+            if(!trip.LoginList.Ready(world==trip.Leg?index:-1,now))return;
+            usingSharedTravel=true;
+            try{ClickNativeLoginCharacter(menu,index);}finally{usingSharedTravel=false;}
+            trip.LoginSent=true;trip.LoginRequestedAt=now;
+            RecordTravelPrompt("Login requested",new{trip.Character,trip.Leg,trip.Service,index});
         }
     }
     private void CompleteNativeTransfer(NativeWorldTrip trip)

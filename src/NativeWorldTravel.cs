@@ -19,6 +19,9 @@ public sealed partial class Plugin
         public bool NoLogin,ReconnectLoginList;
         public bool PartyLeaveSent,PartyLeaveConfirmed,LogoutCommandSent,HomeReturnAcknowledged;public DateTimeOffset PartyLeaveAt;
         public bool ReturnHome,DcSelected,ContextSent,LoginSent,LoginConfirmed,GatewaySent,TransferCommitted;
+        public readonly TravelLoginListGate LoginList = new();
+        public DateTimeOffset LoginRequestedAt, NextWorldSelection;
+        public int StaleLoginRetries;
         public readonly TravelContextRecovery ContextRecovery=new();
         public bool WorldDcRequested;public DateTimeOffset WorldDcRequestedAt;
         public uint Gateway,PreferredGateway,RequestedLoginWorld;public bool ServiceSent,LogoutConfirmed,IntroSent;public int ApproachAttempt;public Vector3? ApproachGoal;

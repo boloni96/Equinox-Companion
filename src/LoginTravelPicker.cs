@@ -59,10 +59,11 @@ public sealed partial class Plugin
                 foreach(var dc in loginTravelWorlds)ImGui.TableSetupColumn(dc[0].Dc);
                 ImGui.TableHeadersRow();ImGui.TableNextRow();
                 var sourceDc=TravelDc(target.Current);var homeDc=TravelDc(target.Home);
+                var sourceRegion=TravelRegion(target.Current);var homeRegion=TravelRegion(target.Home);
                 foreach(var dc in loginTravelWorlds){
-                    ImGui.TableNextColumn();var destinationDc=TravelDc(dc[0].Id);
+                    ImGui.TableNextColumn();var destinationDc=TravelDc(dc[0].Id);var destinationRegion=TravelRegion(dc[0].Id);
                     foreach(var world in dc){
-                        var route=NativeTravelPolicy.FromCharacterList(target.Current,target.Home,world.Id,sourceDc,homeDc,destinationDc,loginTravelNoLogin);
+                        var route=NativeTravelPolicy.FromCharacterList(target.Current,target.Home,world.Id,sourceDc,homeDc,destinationDc,loginTravelNoLogin,sourceRegion,homeRegion,destinationRegion);
                         ImGui.BeginDisabled(busy||!valid||route==LoginTravelRoute.Unavailable);
                         if(ImGui.Button((world.Id==target.Home?"Home · ":"")+world.Name+"##"+world.Id,new Vector2(-1,0)))StartLoginTravel(target,world.Id);
                         var hovered=ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled);ImGui.EndDisabled();
