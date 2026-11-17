@@ -1,53 +1,37 @@
+using System.Numerics;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
-    private bool workshopPreparationWithdrawal;
-    private readonly Queue<(RetrievalEntry Item,RetrievalQuality Quality)> workshopPreparationItems=new();
-    private RetrievalQuality workshopPreparationQuality;
-    private int WorkshopActiveQualityFilter=>workshopPreparationWithdrawal?(workshopPreparationQuality==RetrievalQuality.NqOnly?1:workshopPreparationQuality==RetrievalQuality.HqOnly?2:0):workshopWithdrawQuality;
-    private int WorkshopPreparationHeld(uint id)=>RetrievalHeld(id,workshopPreparationQuality);
-    private uint workshopPreparationItem;
+    private bool workshopWithdrawOnly;
     private long workshopDeferredCrystals;
-    private int workshopPreparationTarget,workshopPreparationLastCount;
-    private void BeginWorkshopPreparationWithdrawal(RetrievalEntry[] items,RetrievalQuality quality=RetrievalQuality.Any,RetrievalEntry[]? hqItems=null)
+    private Dictionary<(uint Item,bool Hq),int> workshopRetainerTargets=[];
+
+    private void BeginWorkshopPreparationWithdrawal(bool turnIns,bool ingredients)
     {
         if(WorkshopUiBusy)throw new InvalidOperationException("Stop the active operation first.");
-        if(!config.EnableWorkshop||!config.WorkshopWithdrawAndDeliver||WorkshopHouse().Length==0)throw new InvalidOperationException("Enable workshop automation and Withdraw + turn in, then enter your workshop.");
-        if(items.Length==0&&(hqItems?.Length??0)==0)throw new InvalidOperationException("No recorded ingredient stock to withdraw.");
-        workshopDeferredCrystals=0;
-        workshopPreparationItems.Clear();foreach(var item in items)workshopPreparationItems.Enqueue((item,quality));
-        foreach(var item in hqItems??[])workshopPreparationItems.Enqueue((item,RetrievalQuality.HqOnly));
-        workshopActive=WorkshopSaved();workshopQueueRun=true;workshopPreparationWithdrawal=true;
-        NextWorkshopPreparationItem(DateTimeOffset.UtcNow);
-    }
-    private void NextWorkshopPreparationItem(DateTimeOffset now)
-    {
-        while(workshopPreparationItems.TryDequeue(out var next)){
-            var item=next.Item;
-            workshopPreparationQuality=next.Quality;
-            workshopPreparationItem=item.ItemId;
-            workshopPreparationLastCount=WorkshopPreparationHeld(item.ItemId);
-            var take=CrystalStorage.Withdrawable(item.ItemId,workshopPreparationLastCount,item.Quantity);
-            workshopDeferredCrystals+=item.Quantity-take;
-            if(take==0)continue;
-            workshopPreparationTarget=checked(workshopPreparationLastCount+take);
-            BeginWorkshopRestock(new(item.ItemId,item.Name,1,workshopPreparationTarget),now);
+        if(!config.EnableWorkshop||!config.WorkshopWithdrawAndDeliver||WorkshopHouse().Length==0||Player.CurrentWorld.RowId!=Player.HomeWorld.RowId)
+            throw new InvalidOperationException("Enable workshop automation and Withdraw + turn in, then enter your home-world workshop.");
+        PrepareWorkshopMaterials();
+        if(workshopPreparation==null)throw new InvalidOperationException(workshopPreparationNotice);
+        var stock=retrievalStock.Select(s=>new WorkshopBulkStock(s.Item,s.Quantity,s.Hq,false))
+            .Concat(WorkshopRecordedChest(0,true).Select(s=>new WorkshopBulkStock(s.Item,s.Quantity,s.Hq,true))).ToArray();
+        var extras=ingredients?CraftingPreparation.IngredientWithdrawals(workshopPreparation,workshopNqWithdraw.Concat(workshopHqWithdraw)):[];
+        var position=Objects.LocalPlayer?.Position??Vector3.Zero;
+        float Distance(string name)=>Objects.Where(o=>o.IsTargetable&&o.Name.TextValue==name).Select(o=>Vector3.DistanceSquared(position,o.Position)).DefaultIfEmpty(float.PositiveInfinity).Min();
+        var batches=WorkshopBulkPolicy.Preparation(workshopNqWithdraw,workshopHqWithdraw,turnIns,extras,stock,Distance("Company Chest")<Distance("Summoning Bell"),id=>RetrievalHeld(id),out workshopDeferredCrystals);
+        if(batches.Length==0){
+            workshopStatus=workshopDeferredCrystals>0?WorkshopWithdrawalSummary():"No recorded stock to withdraw for this selection.";
             return;
         }
-        StopWorkshop(workshopDeferredCrystals>0
-            ?$"Withdrawal pass complete · {workshopDeferredCrystals:N0} shards, crystals or clusters left in storage at the carrying limit. Craft to free room, then refresh and withdraw again."
-            :"Ingredient withdrawal complete.");
+        workshopBulkBatches.Clear();foreach(var batch in batches)workshopBulkBatches.Enqueue(batch);
+        workshopActive=WorkshopSaved();workshopWithdrawOnly=true;workshopBulkRunning=true;workshopRunning=false;workshopChestDeposit=false;
+        workshopWithdrawalCharacter=Player.ContentId;workshopWithdrawalWorld=Player.CurrentWorld.RowId;workshopCombinedHouse=WorkshopHouse();
+        PauseWorkshop(true);NextWorkshopBulkBatch(DateTimeOffset.UtcNow);
     }
-    private unsafe void FinishWorkshopPreparationItem(DateTimeOffset now)
-    {
-        if(SellerAddon("FreeCompanyChest")!=null){CloseSellerAddon("FreeCompanyChest");return;}
-        if(SellerAddon("RetainerList")!=null){CloseSellerAddon("RetainerList");return;}
-        var count=WorkshopPreparationHeld(workshopPreparationItem);
-        if(count<workshopPreparationTarget){
-            if(count<=workshopPreparationLastCount){StopWorkshop("Ingredient withdrawal incomplete · stock changed or capacity unavailable. Refresh materials before retrying.");return;}
-            workshopPreparationLastCount=count;
-            BeginWorkshopRestock(new(workshopPreparationItem,SearchItemName(workshopPreparationItem),1,workshopPreparationTarget),now,chestTried:true);return;
-        }
-        NextWorkshopPreparationItem(now);
-    }
+    private string WorkshopWithdrawalSummary()=>workshopDeferredCrystals>0
+        ?$"Withdrawal pass complete · {workshopDeferredCrystals:N0} shards, crystals or clusters deferred at the carrying limit. Craft to free room, then withdraw again."
+        :"Workshop withdrawal complete.";
+    private int RemainingWorkshopRetainerStock(RetrievalSlot slot)=>
+        workshopRetainerTargets.TryGetValue((slot.ItemId,slot.Hq),out var target)
+            ?Math.Max(0,target-RetrievalHeld(slot.ItemId,slot.Hq?RetrievalQuality.HqOnly:RetrievalQuality.NqOnly)):0;
 }

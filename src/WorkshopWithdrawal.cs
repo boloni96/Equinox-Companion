@@ -27,8 +27,8 @@ public sealed partial class Plugin
         foreach(var entry in next.Items){
             var held=RetrievalHeld(entry.ItemId,next.Quality);
             var quantity=CrystalStorage.Withdrawable(entry.ItemId,held,entry.Quantity);
-            if(workshopPreparationWithdrawal && entry.ItemId==workshopPreparationItem)
-                quantity=Math.Min(quantity,Math.Max(0,workshopPreparationTarget-held));
+            if(workshopWithdrawOnly && workshopBulkTargets.TryGetValue(entry.ItemId,out var target))
+                quantity=Math.Min(quantity,Math.Max(0,target-held));
             if(quantity==0)continue;
             workshopWithdrawalTargets[entry.ItemId]=checked(held+quantity);
             items.Add(entry with{Quantity=quantity});

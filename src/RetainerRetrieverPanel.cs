@@ -83,7 +83,7 @@ public sealed partial class Plugin
         if(owned.Length==0)throw new InvalidOperationException("Retainer list is still loading. Try Withdraw again once it appears.");
         var order=WithdrawalRetainerOrder.Build(owned,retrievalStock.Select(s=>new WithdrawalStock(s.Retainer,s.Item,s.Quantity,s.Hq)),retrievalPlan,id=>RetrievalHeld(id,retrievalQuality,RetrievalTradeFilter),retrievalSubtract&&!retrievalTransferAll,retrievalQuality,retrievalStockComplete);
         if(order.Retainers.Length==0){retrievalPort.Release();PrintEquinox(retrievalPlan.All(e=>retrievalSubtract&&!retrievalTransferAll&&RetrievalHeld(e.ItemId,retrievalQuality,RetrievalTradeFilter)>=e.Quantity)?"You already have the required items in your bags.":"No recorded retainer holds the requested items / quality. Refresh inventories if stock has changed.");return;}
-        retrievalRun.Start(order.Retainers,retrievalPlan,retrievalSubtract,DateTimeOffset.UtcNow,order.KnownHolders,allAvailable:retrievalTransferAll);
+        retrievalRun.Start(order.Retainers,retrievalPlan,retrievalSubtract,DateTimeOffset.UtcNow,order.KnownHolders,allAvailable:retrievalTransferAll,slotLimit:workshopWithdrawOnly&&workshopCombinedStage==2?RemainingWorkshopRetainerStock:null);
     });}
     private void DrawRetriever()
     {

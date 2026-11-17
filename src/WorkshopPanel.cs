@@ -229,16 +229,11 @@ public sealed partial class Plugin
         ImGui.SetNextItemWidth(-1);if(ImGui.Combo("##WorkshopWithdrawQuality",ref workshopWithdrawQuality,"Quality: Both (NQ + HQ)\0Quality: NQ only\0Quality: HQ only\0")){PrepareWorkshopMaterials();p=workshopPreparation;}
         if(ImGui.IsItemHovered())ImGui.SetTooltip("Filter the NQ/HQ turn-ins allocated by the materials review. Both withdraws each quality separately, preserving complete sets.");
         ImGui.BeginDisabled(p==null);
+        if(ImGui.Button("Withdraw all",new Vector2(-1,0)))RetrievalTry(()=>BeginWorkshopPreparationWithdrawal(true,true));
+        if(ImGui.IsItemHovered())ImGui.SetTooltip("Withdraw allocated turn-ins and ingredients together in one pass through the retainers and FC chest.");
         if(ImGui.BeginTable("WorkshopMaterialActions",2,ImGuiTableFlags.SizingStretchSame)){
-            ImGui.TableNextColumn();if(ImGui.Button("Withdraw turn-ins",new Vector2(-1,0)))RetrievalTry(()=>{
-                PrepareWorkshopMaterials();
-                if(workshopPreparation==null)throw new InvalidOperationException(workshopPreparationNotice);
-                BeginWorkshopPreparationWithdrawal(workshopWithdrawQuality==2?[]:workshopNqWithdraw,RetrievalQuality.NqOnly,workshopWithdrawQuality==1?[]:workshopHqWithdraw);
-            });
-            ImGui.TableNextColumn();if(ImGui.Button("Withdraw ingredients",new Vector2(-1,0)))RetrievalTry(()=>{
-                PrepareWorkshopMaterials();if(workshopPreparation==null)throw new InvalidOperationException(workshopPreparationNotice);
-                BeginWorkshopPreparationWithdrawal(CraftingPreparation.IngredientWithdrawals(workshopPreparation,workshopNqWithdraw.Concat(workshopHqWithdraw)));
-            });
+            ImGui.TableNextColumn();if(ImGui.Button("Withdraw turn-ins",new Vector2(-1,0)))RetrievalTry(()=>BeginWorkshopPreparationWithdrawal(true,false));
+            ImGui.TableNextColumn();if(ImGui.Button("Withdraw ingredients",new Vector2(-1,0)))RetrievalTry(()=>BeginWorkshopPreparationWithdrawal(false,true));
             ImGui.TableNextColumn();ImGui.BeginDisabled(p==null||workshopExportMissing&&p.Steps.Length==0);if(ImGui.Button("Copy Artisan list",new Vector2(-1,0)))RetrievalTry(CopyWorkshopArtisanList);ImGui.EndDisabled();
             if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))ImGui.SetTooltip("Copies every recipe in the chosen export mode, ingredients before outputs. Artisan can replace import settings with its defaults; verify stock skipping after import.");
             ImGui.TableNextColumn();ImGui.BeginDisabled(!Pi.InstalledPlugins.Any(x=>x.InternalName=="Artisan"&&x.IsLoaded));if(ImGui.Button("Open Artisan",new Vector2(-1,0)))Commands.ProcessCommand("/artisan lists");ImGui.EndDisabled();

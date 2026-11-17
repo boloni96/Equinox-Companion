@@ -39,7 +39,7 @@ public sealed partial class Plugin
         var batches=WorkshopBulkPolicy.Allocate(workshopNqWithdraw,workshopHqWithdraw,stock,Distance("Company Chest")<Distance("Summoning Bell"));
         workshopBulkBatches.Clear();foreach(var batch in batches)workshopBulkBatches.Enqueue(batch);
         workshopChestDeposit=false;
-        workshopBulkRunning=true;workshopRunning=false;workshopPreparationWithdrawal=false;
+        workshopBulkRunning=true;workshopRunning=false;workshopWithdrawOnly=false;
         workshopWithdrawalCharacter=Player.ContentId;workshopWithdrawalWorld=Player.CurrentWorld.RowId;workshopCombinedHouse=WorkshopHouse();
         PauseWorkshop(true);NextWorkshopBulkBatch(now);return true;
     }
@@ -67,10 +67,26 @@ public sealed partial class Plugin
     {
         if(!workshopBulkBatches.TryDequeue(out var batch)){
             workshopBulkCurrent=null;workshopBulkRunning=false;workshopBulkTargets.Clear();
+            if(workshopWithdrawOnly){StopWorkshop(WorkshopWithdrawalSummary());return;}
             workshopCombinedStage=3;workshopCombinedDeadline=now.AddMinutes(2);
             workshopStatus="Queue materials received · returning to fabrication station";return;
         }
         workshopBulkCurrent=batch;
+        workshopRetainerTargets.Clear();
+        foreach(var part in batch.RetainerParts)foreach(var e in part.Items){
+            var held=RetrievalHeld(e.ItemId,part.Quality);
+            workshopRetainerTargets[(e.ItemId,part.Quality==RetrievalQuality.HqOnly)]=checked(held+CrystalStorage.Withdrawable(e.ItemId,held,e.Quantity));
+        }
+        if(workshopWithdrawOnly){
+            var items=new List<RetrievalEntry>();
+            foreach(var e in batch.Items){
+                var quantity=CrystalStorage.Withdrawable(e.ItemId,RetrievalHeld(e.ItemId,batch.Quality),e.Quantity);
+                workshopDeferredCrystals+=e.Quantity-quantity;
+                if(quantity>0)items.Add(e with{Quantity=quantity});
+            }
+            if(items.Count==0){NextWorkshopBulkBatch(now);return;}
+            workshopBulkCurrent=batch=batch with{Items=items.ToArray()};
+        }
         workshopBulkTargets=batch.Items.ToDictionary(e=>e.ItemId,e=>checked(RetrievalHeld(e.ItemId,batch.Quality)+e.Quantity));
         if(batch.Chest){BeginWorkshopChest(now);workshopChestDeposit=false;}
         else {workshopCombinedItems=batch.Items;workshopCombinedQuality=batch.Quality;workshopCombinedStage=1;workshopCombinedDeadline=now.AddMinutes(2);}
@@ -78,7 +94,7 @@ public sealed partial class Plugin
     }
     private void FinishWorkshopBulkBatch(DateTimeOffset now)
     {
-        if(workshopBulkCurrent==null||!workshopBulkTargets.All(e=>RetrievalHeld(e.Key,workshopBulkCurrent.Quality)>=e.Value)){
+        if(workshopBulkCurrent==null||workshopRetainerTargets.Any(e=>RetrievalHeld(e.Key.Item,e.Key.Hq?RetrievalQuality.HqOnly:RetrievalQuality.NqOnly)<e.Value)||!workshopBulkTargets.All(e=>RetrievalHeld(e.Key,workshopBulkCurrent.Quality)>=e.Value)){
             StopWorkshop("Queue preparation stopped: allocated materials did not all arrive. Check space / stock, then resume. No delivery was started.");return;
         }
         NextWorkshopBulkBatch(now);
@@ -93,7 +109,7 @@ public sealed partial class Plugin
     }
     private void ResetWorkshopBulk()
     {
-        workshopDeliveryQualities.Clear();
+        workshopWithdrawOnly=false;workshopRetainerTargets.Clear();workshopDeliveryQualities.Clear();
         workshopPreparedThrough=int.MaxValue;workshopPreparedPhaseOnly=false;
         workshopBulkRunning=workshopNeedsPreparation=false;workshopBulkCurrent=null;workshopBulkBatches.Clear();workshopBulkTargets.Clear();
     }

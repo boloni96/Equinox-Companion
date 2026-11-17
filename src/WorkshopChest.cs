@@ -26,7 +26,7 @@ public sealed partial class Plugin
             if(!workshopChestDeposit){
                 var row=workshopChestSupply!;
                 var quality=workshopChestHq?RetrievalQuality.HqOnly:RetrievalQuality.NqOnly;
-                if(RetrievalHeld(row.ItemId,quality)>=(workshopPreparationWithdrawal?workshopChestGoal:row.SetSize)){workshopCombinedStage=3;workshopCombinedDeadline=now.AddMinutes(2);return;}
+                if(RetrievalHeld(row.ItemId,quality)>=row.SetSize){workshopCombinedStage=3;workshopCombinedDeadline=now.AddMinutes(2);return;}
                 CloseSellerAddon("FreeCompanyChest");BeginWorkshopRestock(row,now,chestTried:true);return;
             }
             var id=workshopActive!.PendingDeposit;

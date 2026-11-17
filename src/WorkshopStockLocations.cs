@@ -37,15 +37,14 @@ public sealed partial class Plugin
     {
         var stock=WorkshopRecordedChest(row.ItemId);if(stock.Length==0)return false;
         var cn=stock.Where(s=>!s.Hq).Sum(s=>s.Quantity);var ch=stock.Where(s=>s.Hq).Sum(s=>s.Quantity);
-        var batch=WorkshopPolicy.Restock(row,nq,hq,rn+cn,rh+ch,WorkshopActiveQualityFilter);if(batch==null)return false;
+        var batch=WorkshopPolicy.Restock(row,nq,hq,rn+cn,rh+ch,workshopWithdrawQuality);if(batch==null)return false;
         var high=batch.Value.Hq;var held=high?hq:nq;var ret=high?rh:rn;var chest=high?ch:cn;
         var self=Objects.LocalPlayer;if(self==null)return false;
         float Distance(string name)=>Objects.Where(o=>o.IsTargetable&&string.Equals(o.Name.TextValue,name,StringComparison.OrdinalIgnoreCase)).Select(o=>Vector3.DistanceSquared(self.Position,o.Position)).DefaultIfEmpty(float.PositiveInfinity).Min();
-        if(!WorkshopPolicy.PreferRecordedChest(workshopPreparationWithdrawal?workshopPreparationTarget-WorkshopPreparationHeld(row.ItemId):row.SetSize-held,ret,chest,Distance("Company Chest"),Distance("Summoning Bell")))return false;
+        if(!WorkshopPolicy.PreferRecordedChest(row.SetSize-held,ret,chest,Distance("Company Chest"),Distance("Summoning Bell")))return false;
         BeginWorkshopChest(now);if(workshopCombinedStage!=4)return true;
         workshopChestDeposit=false;workshopChestSupply=row;workshopChestHq=high;
         var take=Math.Min(batch.Value.Quantity,chest);
-        if(workshopPreparationWithdrawal)take=Math.Min(take,Math.Max(0,workshopPreparationTarget-WorkshopPreparationHeld(row.ItemId)));
         workshopChestGoal=checked(held+take);
         workshopChestSources=stock.Where(s=>s.Hq==high).Select(s=>s.Page).Distinct().ToArray();
         workshopStatus=$"Withdraw {row.Name} · recorded in FC chest "+string.Join(", ",workshopChestSources.Select(p=>p==22001?"crystals":"tab "+(p-19999)));

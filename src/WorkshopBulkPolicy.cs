@@ -1,6 +1,9 @@
 namespace EquinoxCompanion;
 internal sealed record WorkshopBulkStock(uint Item,int Quantity,bool Hq,bool Chest);
-internal sealed record WorkshopBulkBatch(bool Chest,RetrievalQuality Quality,RetrievalEntry[] Items);
+internal sealed record WorkshopBulkBatch(bool Chest,RetrievalQuality Quality,RetrievalEntry[] Items)
+{
+    public WorkshopBulkBatch[] RetainerParts {get;init;}=[];
+}
 internal static class WorkshopBulkPolicy
 {
     internal static WorkshopBulkBatch[] Allocate(RetrievalEntry[] nq,RetrievalEntry[] hq,IEnumerable<WorkshopBulkStock> stock,bool chestNearer)
@@ -19,6 +22,35 @@ internal static class WorkshopBulkPolicy
         }
         return groups.OrderBy(g=>g.Key.Chest==chestNearer?0:1).ThenBy(g=>g.Key.Hq)
             .Select(g=>new WorkshopBulkBatch(g.Key.Chest,g.Key.Hq?RetrievalQuality.HqOnly:RetrievalQuality.NqOnly,g.Value.ToArray())).ToArray();
+    }
+    internal static WorkshopBulkBatch[] Preparation(RetrievalEntry[] reservedNq,RetrievalEntry[] reservedHq,bool turnIns,RetrievalEntry[] ingredients,WorkshopBulkStock[] stock,bool chestNearer,Func<uint,int> held,out long deferred)
+    {
+        var nq=new List<RetrievalEntry>();var hq=new List<RetrievalEntry>();
+        if(turnIns){nq.AddRange(reservedNq);hq.AddRange(reservedHq);}
+        var spareNq=stock.Where(s=>!s.Hq).GroupBy(s=>s.Item).ToDictionary(g=>g.Key,g=>g.Sum(s=>s.Quantity));
+        foreach(var e in reservedNq)spareNq[e.ItemId]=spareNq.GetValueOrDefault(e.ItemId)-e.Quantity;
+        foreach(var e in RetainerRetrieval.Combine(ingredients)){
+            var normal=Math.Min(e.Quantity,Math.Max(0,spareNq.GetValueOrDefault(e.ItemId)));
+            if(normal>0)nq.Add(e with{Quantity=normal});
+            if(normal<e.Quantity){
+                var high=e.Quantity-normal;
+                var free=stock.Where(s=>s.Hq&&s.Item==e.ItemId).Sum(s=>s.Quantity)-reservedHq.Where(x=>x.ItemId==e.ItemId).Sum(x=>x.Quantity);
+                if(free<high)throw new InvalidOperationException("Refresh changed stock for "+e.Name+".");
+                hq.Add(e with{Quantity=high});
+            }
+        }
+        var capped=new List<RetrievalEntry>();deferred=0;
+        foreach(var e in RetainerRetrieval.Combine(nq)){
+            var take=CrystalStorage.IsItem(e.ItemId)?CrystalStorage.Withdrawable(e.ItemId,held(e.ItemId),e.Quantity):e.Quantity;
+            deferred+=e.Quantity-take;
+            if(take>0)capped.Add(e with{Quantity=take});
+        }
+        var batches=Allocate(capped.ToArray(),hq.ToArray(),stock,chestNearer);
+        var ret=batches.Where(b=>!b.Chest).ToArray();
+        if(ret.Length==0)return batches;
+        var combined=new WorkshopBulkBatch(false,RetrievalQuality.Any,RetainerRetrieval.Combine(ret.SelectMany(b=>b.Items))){RetainerParts=ret};
+        var chest=batches.Where(b=>b.Chest);
+        return (chestNearer?chest.Append(combined):chest.Prepend(combined)).ToArray();
     }
     internal static int NewSlots(int quantity,int room,int stack)=>quantity<=room?0:checked((quantity-room+Math.Max(1,stack)-1)/Math.Max(1,stack));
 }
