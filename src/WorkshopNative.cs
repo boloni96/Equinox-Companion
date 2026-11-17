@@ -89,6 +89,7 @@ public sealed partial class Plugin
             if(workshopSingleDelivery&&!config.WorkshopManualDelivery){StopWorkshop("Manual turn-in assistance disabled.");return;}
             if(!config.EnableWorkshop||!config.EnableRetriever||!Player.IsLoaded||workshopActive==null||Player.ContentId!=workshopActive.Character||Player.CurrentWorld.RowId!=workshopActive.World||WorkshopHouse()!=workshopActive.House){StopWorkshop("Stopped: character, world, workshop or settings changed. Queue preserved.");return;}
             PauseWorkshop(true);
+            if(HelperInCutscene()){workshopDeadline=now.AddSeconds(45);return;}
             if(now>workshopDeadline){StopWorkshop("Stopped: "+workshopStatus+" was not confirmed. Queue preserved; check the game window.");return;}
             if(Conditions[ConditionFlag.InCombat]){StopWorkshop("Stopped: combat.");return;}
             if(HelperInCutscene()||Conditions[ConditionFlag.BetweenAreas]||Conditions[ConditionFlag.BetweenAreas51])return;
