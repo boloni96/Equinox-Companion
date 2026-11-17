@@ -52,15 +52,41 @@ public sealed partial class Plugin
             rows.Add(CrystalStorage.Normalize(new(type,i,s.ItemId,s.Quantity,(s.Flags&InventoryItem.ItemFlags.HighQuality)!=0,item.HasValue?(int)item.Value.StackSize:0,item.HasValue&&!item.Value.IsUntradable&&s.SpiritbondOrCollectability==0)));
         }return rows.ToArray();
     }
-    private unsafe void BeginChestPage(DateTimeOffset now)
+    private DateTimeOffset chestTabRetryAt;
+    private unsafe AtkComponentRadioButton* ChestPageButton(uint page)
     {
-        var page=chestPages[chestPageIndex];var addon=SellerAddon("FreeCompanyChest");if(addon==null)throw new InvalidOperationException("Chest closed.");
-        var values=stackalloc AtkValue[2];values[0].Type=AtkValueType.Int;values[0].Int=0;values[1].Type=AtkValueType.Int;values[1].Int=page==22001?5:(int)page-20000;
-        // Selecting the native tab already requests its contents. Do not send a duplicate request.
-        addon->FireCallback(2,values);
+        var addon=SellerAddon("FreeCompanyChest");if(addon==null||!addon->IsReady)return null;
+        var index=page==22001?5:(int)page-20000;
+        if(index is <0 or >5)return null;
+        // AddonFreeCompanyChest: five item radio pointers at 0x250,
+        // followed by crystals at 0x278. Matches the access fields below.
+        var tab=*(AtkComponentRadioButton**)((byte*)addon+0x250+index*8);
+        return tab!=null&&tab->OwnerNode!=null&&tab->GetComponentType()==ComponentType.RadioButton&&tab->OwnerNode->IsVisible()?tab:null;
+    }
+    private unsafe bool ChestPageSelected(uint page,DateTimeOffset now)
+    {
+        var tab=ChestPageButton(page);
+        if(tab==null){chestStatus="Waiting for the company chest tab controls…";return false;}
+        var addon=SellerAddon("FreeCompanyChest");
+        // StageFlag and IsDataNotReady disable tab work while a server request
+        // or the game's UI lock is active. Cached containers alone are not ready.
+        if(addon==null||*((byte*)addon+0x4EC)!=0||*((byte*)addon+0x4F4)!=0||!tab->IsEnabled){chestStatus="Waiting for the company chest to unlock its tabs…";return false;}
+        var kind=*((byte*)addon+0x4D8);var index=*((byte*)addon+0x4D9);
+        if(tab->IsSelected&&(page==22001?kind==1:kind==0&&index==page-20000))return true;
+        chestPageReady=false;chestPageSample=null;
+        if(now<chestTabRetryAt)return false;
+        var evt=KeyboundButtonEvent((AtkComponentButton*)tab);
+        if(evt==null){chestStatus="Waiting for the chest tab selection event…";return false;}
+        var click=*evt;chestTabRetryAt=now.AddSeconds(1);
+        tab->SetActive();SendKeyboundButtonEvent(addon,&click);
+        chestStatus=$"Selecting {(page==22001?"crystals":"chest tab "+(page-19999))}…";
+        return false;
+    }
+    private void BeginChestPage(DateTimeOffset now)
+    {
         chestDestinationRequested=chestMode!=3;chestPageReady=false;chestPageSample=null;
-        chestNext=now.AddSeconds(2);chestDeadline=now.AddSeconds(15);
-        chestStatus=$"Reading {(page==22001?"crystals":"chest tab "+(page-19999))}…";
+        chestTabRetryAt=default;chestNext=now;chestDeadline=now.AddSeconds(20);
+        chestStatus="Waiting for the chest tab to be ready…";
     }
     private void EnsureChestMove()
     {
@@ -108,6 +134,10 @@ public sealed partial class Plugin
             if(access!=3&&!((chestMode==1||chestMode==4)&&access==2)){StopChest("Stopped: chest permissions changed.");return;}
             var manager=InventoryManager.Instance();if(manager==null)throw new InvalidOperationException("Inventory unavailable.");
             foreach(var op in manager->PendingOperations)if(!op.IsEmpty){if(now>chestDeadline)StopChest("Stopped: inventory transaction timed out. Check the chest before retrying.");return;}
+            if(!ChestPageSelected(page,now)){
+                if(now>chestDeadline)StopChest("Stopped: the requested chest tab did not become ready. No new transfer sent.");
+                return;
+            }
             if(!chestDestinationRequested){
                 GameMain.ExecuteCommand(404,19999+chestDestination);chestDestinationRequested=true;
                 chestNext=now.AddSeconds(2);chestStatus="Waiting for the destination chest tab…";return;
