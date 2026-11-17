@@ -3,7 +3,9 @@ using FFXIVClientStructs.FFXIV.Client.Game;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
-    private bool workshopNeedsPreparation,workshopBulkRunning;
+    private bool workshopNeedsPreparation,workshopBulkRunning,workshopPreparedPhaseOnly;
+    private int workshopPreparedThrough=int.MaxValue,workshopPreparedPhase;
+    private uint workshopPreparedProject;
     private readonly Queue<WorkshopBulkBatch> workshopBulkBatches=new();
     private WorkshopBulkBatch? workshopBulkCurrent;
     private Dictionary<uint,int> workshopBulkTargets=[];
@@ -19,9 +21,13 @@ public sealed partial class Plugin
         // Prefer the whole remaining queue. Capacity is the only reason to stage
         // fewer projects; reserve one bag slot for the completed part.
         var projects=WorkshopSaved().Items.Sum(e=>e.Quantity)-WorkshopSaved().Completed;
+        workshopPreparedPhaseOnly=false;
         while(!WorkshopBulkFits()&&projects>1){projects=Math.Max(1,projects/2);PrepareWorkshopMaterials(projects);}
-        if(!WorkshopBulkFits()&&ReadWorkshopPhase()!=null)PrepareWorkshopMaterials(1,currentPhaseOnly:true);
+        if(!WorkshopBulkFits()&&ReadWorkshopPhase() is {} current){
+            PrepareWorkshopMaterials(1,currentPhaseOnly:true);workshopPreparedPhaseOnly=true;workshopPreparedPhase=current.Phase;workshopPreparedProject=current.ItemId;
+        }
         if(!WorkshopBulkFits()){StopWorkshop("Free bag space for at least the current production phase and one finished part, then resume.");return true;}
+        workshopPreparedThrough=WorkshopSaved().Completed+projects;
         workshopNeedsPreparation=false;
         if(workshopNqWithdraw.Length==0&&workshopHqWithdraw.Length==0)return false;
         var position=Objects.LocalPlayer?.Position??Vector3.Zero;
@@ -73,6 +79,7 @@ public sealed partial class Plugin
     }
     private void ResetWorkshopBulk()
     {
+        workshopPreparedThrough=int.MaxValue;workshopPreparedPhaseOnly=false;
         workshopBulkRunning=workshopNeedsPreparation=false;workshopBulkCurrent=null;workshopBulkBatches.Clear();workshopBulkTargets.Clear();
     }
 }

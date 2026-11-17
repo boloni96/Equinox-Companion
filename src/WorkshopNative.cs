@@ -74,7 +74,7 @@ public sealed partial class Plugin
             if(!queue&&(ReadWorkshopPhase() is not {}||workshopSelection.Count==0))throw new InvalidOperationException("Open Material Delivery and select materials first.");
             workshopActive=queue?saved:new(){Character=Player.ContentId,World=Player.CurrentWorld.RowId,House=WorkshopHouse()};
             workshopSingleDelivery=false;workshopQueueRun=queue;
-            if(queue&&!resumePrepared)workshopNeedsPreparation=config.WorkshopWithdrawAndDeliver;
+            if(queue&&(!resumePrepared||saved!.Completed>=workshopPreparedThrough))workshopNeedsPreparation=config.WorkshopWithdrawAndDeliver;
             if(queue&&saved!.PendingDeposit!=0&&config.WorkshopDepositParts){BeginWorkshopChest(DateTimeOffset.UtcNow);return;}
             workshopBefore=ReadWorkshopPhase();workshopSupply=null;workshopRequestId=0;workshopInteraction=default;
             if(queue&&saved!.PendingCollection!=0&&RetrievalHeld(saved.PendingCollection)<=saved.CollectionBefore){
@@ -145,6 +145,7 @@ public sealed partial class Plugin
                 var row=phase.Rows.FirstOrDefault(r=>r.ItemId==workshopSupply.ItemId);
                 if(row!=null&&row.SetsDelivered==workshopSupply.SetsDelivered+1&&RetrievalHeld(row.ItemId,workshopHq?RetrievalQuality.HqOnly:RetrievalQuality.NqOnly)==workshopBagBefore-row.SetSize){
                     workshopBefore=phase;
+                if(workshopPreparedPhaseOnly&&(phase.ItemId!=workshopPreparedProject||phase.Phase!=workshopPreparedPhase))workshopNeedsPreparation=true;
                 if(workshopNeedsPreparation&&BeginWorkshopBulkPreparation(now))return;workshopSupply=null;
                     if(workshopQueueRun&&phase.Phase==phase.TotalPhases-1&&phase.Rows.All(r=>r.RemainingSets==0)){workshopActive.ReadyToCollect=phase.ItemId;SaveConfiguration();}
                     if(workshopSingleDelivery){StopWorkshop("Turn-in complete · click the next material when ready.");return;}
