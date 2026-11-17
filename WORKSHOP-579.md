@@ -7,3 +7,5 @@ Withdraw + turn in now reviews remaining queue requirements before the first mat
 Workshop navigation reuses routes only after observed arrival, matching territory, destination, endpoint range and a traversable entry connector. Live next-segment collision checks remain enabled; blocked connections replan.
 
 Tests cover multi-item batches, split FC/retainer sources, quality isolation, complete delivery sets, delivered counters, changed stock, stack capacity, and lower-floor route reuse. In-game full-queue withdrawal and layout verification are still required.
+
+Plans / Add items: Clear all now removes only items matching current source/search/category results across all pages. Other items, name, quantities, filters and settings remain intact; Undo restores and re-saves an edited saved plan. The separate whole-list clear remains available in Organizer options.
