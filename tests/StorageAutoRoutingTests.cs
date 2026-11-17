@@ -37,6 +37,23 @@ internal static class StorageAutoRoutingTests
         var splitRules=StorageAutoRouting.Resolve(org,split,_=>58).Rules;
         Check("unique category items stay on their current retainer",splitRules.Length==0);
         
+        var merged=new Dictionary<ulong,ChestStack[]>{{0,[Item(0,0,100,20),Item(0,1,100,20)]},{1,[Item(10000,0,100,90),Empty(10000,1)]},{2,[Item(10000,0,100,10),Empty(10000,1)]}};
+        var mergePlan=p with{Rules=[new(0,all,[],[100],Destinations:[1,2])]};
+        var deposits=StorageRouting.Build(mergePlan,merged,_=>58,true);
+        Check("same home before another holder's partial stack",deposits.Remaining==0&&deposits.Moves.All(m=>m.Retainer==1)&&deposits.Moves.Sum(m=>m.Move.Quantity)==40);
+        Check("home partial stack filled before empty slot",deposits.Moves[0].Move.Quantity==9&&deposits.Moves[0].Move.Destination.Slot==0);
+        var consolidate=new Dictionary<ulong,ChestStack[]>{{0,[Empty(0,0),Empty(0,1),Empty(0,2)]},{1,[Item(10000,0,100,99),Empty(10000,1)]},{2,[Item(10000,0,100,20)]}};
+        var flexible=mergePlan with{Rules=[new(StorageRouting.AllSources,all,[],[100],Destinations:[1,2],Flexible:true)]};
+        var gathered=StorageRouting.Build(flexible,consolidate,_=>58,includeExistingBags:false);
+        Check("shared assignment consolidates using empty home slots",gathered.Remaining==0&&gathered.Moves.Any(m=>m.Withdraw&&m.Retainer==2)&&gathered.Moves.Where(m=>!m.Withdraw&&!m.Internal).All(m=>m.Retainer==1));
+        consolidate[1]=[Item(10000,0,100,99)];
+        Check("full assigned home leaves overflow in place",!StorageRouting.Build(flexible,consolidate,_=>58,includeExistingBags:false).Moves.Any(m=>m.Withdraw));
+        consolidate[1]=[Item(10000,0,101,99),Empty(10000,1)];
+        Check("unique assigned stock does not move to empty earlier home",!StorageRouting.Build(flexible,consolidate,_=>58,includeExistingBags:false).Moves.Any(m=>m.Withdraw));
+        merged[0]=[Item(0,0,100,10,true)];
+        var qualityMerge=StorageRouting.Build(mergePlan,merged,_=>58,true);
+        Check("HQ shares retainer but never NQ stack",qualityMerge.Moves.All(m=>m.Retainer==1&&m.Move.Source.Hq&&m.Move.Destination.Item==0));
+
         Check("all-retainer choice survives preset export",RetainerRetrieval.Import(RetainerRetrieval.Export(new("All",[],DestinationRetainer:all)),_=>null).DestinationRetainer==all);
     }
 }

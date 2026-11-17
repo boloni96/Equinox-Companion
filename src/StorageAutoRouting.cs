@@ -65,12 +65,15 @@ public static class StorageAutoRouting
             while(amount>0){
                 var source=state[0].First(s=>s.Container==original.Container&&s.Slot==original.Slot);
                 bool Same(ChestStack d)=>d.Item==source.Item&&d.Hq==source.Hq;
+                var home=owners.Where(id=>(rule.To==AllRetainers||rule.To==id)&&(rule.Destinations==null||rule.Destinations.Contains(id)))
+                    .OrderBy(id=>rule.Destinations==null?0:Array.IndexOf(rule.Destinations,id))
+                    .FirstOrDefault(id=>state[id].Any(s=>s.Item==source.Item&&s.Quantity>0));
                 var targets=owners.Where(id=>(rule.To==AllRetainers||rule.To==id)&&(rule.Destinations==null||rule.Destinations.Contains(id)))
                     .Where(id=>!rule.Duplicates||inventories[id].Any(s=>Same(s)&&s.Quantity>0))
                     .SelectMany(id=>state[id].Where(d=>source.Item is >=2 and <=19?d.Container==12001:d.Container is >=10000 and <=10006)
                         .Where(d=>d.CanDeposit&&(Same(d)&&d.Quantity<d.Limit||d.Item==0))
                         .Select(d=>(Owner:id,Slot:d,Existing:inventories[id].Any(s=>Same(s)&&s.Quantity>0))))
-                    .OrderByDescending(x=>Same(x.Slot)).ThenByDescending(x=>x.Existing).ThenBy(x=>rule.Destinations==null?0:Array.IndexOf(rule.Destinations,x.Owner)).ThenBy(x=>Array.IndexOf(owners,x.Owner)).ThenBy(x=>x.Slot.Container).ThenBy(x=>x.Slot.Slot).ToArray();
+                    .OrderByDescending(x=>x.Owner==home).ThenByDescending(x=>Same(x.Slot)).ThenByDescending(x=>x.Existing).ThenBy(x=>rule.Destinations==null?0:Array.IndexOf(rule.Destinations,x.Owner)).ThenBy(x=>Array.IndexOf(owners,x.Owner)).ThenBy(x=>x.Slot.Container).ThenBy(x=>x.Slot.Slot).ToArray();
                 if(targets.Length==0){remaining+=amount;break;}
                 var target=targets[0];var qty=Math.Min(amount,(target.Slot.Item==0?source.Limit:target.Slot.Limit)-target.Slot.Quantity);
                 if(qty<=0){remaining+=amount;break;}

@@ -315,6 +315,21 @@ public sealed partial class Plugin
         finally {sellerDispatchingCompare=false;}
         sellerComparison.Clear();manualCompareAt=default;return false;
     }
+    private DateTimeOffset sellerHistoryOpenAt;
+    private unsafe void OpenSellerHistoryEarly(DateTimeOffset now)
+    {
+        var capture=sellerComparison;
+        if(!Player.IsLoaded||manualSuspendUntilClose||capture.Item==0||capture.HistoryRequested||
+            !(sellerRun.Running?config.Seller.OpenHistory:manualShowHistory)||now<sellerHistoryOpenAt)return;
+        var proxy=InfoProxyItemSearch.Instance();
+        var result=(AddonItemSearchResult*)SellerAddon("ItemSearchResult");
+        if(capture.World!=Player.CurrentWorld.RowId||capture.RespondedAt<capture.RequestedAt||capture.Error!=0||
+            proxy==null||proxy->SearchItemId%1_000_000!=capture.Item||result==null||
+            result->History==null||!result->History->IsEnabled)return;
+        // UI opening does not require all listing packets; pricing still does.
+        sellerHistoryOpenAt=now.AddMilliseconds(100);
+        capture.HistoryRequested=SellerButton((AtkUnitBase*)result,result->History,23);
+    }
     private unsafe SellerComparison? ReadSellerComparison()
     {
         DrainSellerComparison();
@@ -402,6 +417,7 @@ public sealed partial class Plugin
         if(!config.Seller.Enabled||marketLoad!=null||marketLoadFailed)return;
         try {
             DrainSellerComparison();
+            OpenSellerHistoryEarly(now);
             DrainMarketSales();
             sellerRun.Tick(now);
             UpdateMarketJournal(now);

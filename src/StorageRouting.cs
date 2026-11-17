@@ -40,12 +40,13 @@ public static class StorageRouting
             if(rule!=null){
                 var destination=rule.To;
                 if(rule.Flexible&&owner!=Bags&&rule.Destinations?.Contains(owner)==true){
-                    // A category assignment defines allowed homes, not a priority.
-                    // Only move an already-correct group when it fits existing partial
-                    // stacks on an earlier holder and actually consolidates storage.
+                    // Consolidate with an earlier holder, including its empty slots.
+                    // Unique items stay put; a full home keeps overflow elsewhere.
                     destination=owner;var total=rows.Where(x=>Same(x,s)).Sum(x=>x.Quantity);
                     foreach(var candidate in inventories.Keys.TakeWhile(id=>id!=owner).Where(id=>id!=Bags&&rule.Destinations.Contains(id)))
-                        if(inventories[candidate].Where(x=>Same(x,s)&&x.CanDeposit).Sum(x=>Math.Max(0,x.Limit-x.Quantity))>=total){destination=candidate;break;}
+                        if(inventories[candidate].Any(x=>x.Item==s.Item&&x.Quantity>0)&&
+                            inventories[candidate].Where(x=>x.CanDeposit&&(Crystal(s.Item)?x.Container==12001:x.Container is >=10000 and <=10006))
+                                .Sum(x=>Same(x,s)?(long)Math.Max(0,x.Limit-x.Quantity):x.Item==0?(long)s.Limit:0)>=total){destination=candidate;break;}
                 }
                 goals[(owner,s.Item,s.Hq)]=destination;
             }
