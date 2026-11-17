@@ -10,7 +10,7 @@ public sealed partial class Plugin
 {
     // Bounded local history, independent of FollowThem and garden recording.
     // Scan a few known UI surfaces per frame, never a recursive whole-UI dump.
-    private static readonly string[] RecordedTravelMenus=["SelectString","SelectIconString","SelectYesno","SelectOk","ContextMenu","WorldTravelSelect","WorldTravelFinderReady","WorldTravelFinderStatus","LobbyDKTCheck","LobbyDKTWorldList","LobbyDKTCheckExec","LobbyWKTCheck","LobbyWKTCheckHome","LobbyWKTWorldList","TitleDCWorldMap","_TitleMenu","_CharaSelectListMenu","_CharaSelectWorldServer","_CharaSelectReturn","Teleport","TelepotTown","TeleportHousingFriend","HousingSelectBlock","HousingSelectRoom","MansionSelectRoom"];
+    private static readonly string[] RecordedTravelMenus=["SelectString","SelectIconString","SelectYesno","SelectOk","ContextMenu","WorldTravelSelect","WorldTravelFinderReady","WorldTravelFinderStatus","LobbyDKTCheck","LobbyDKTWorldList","LobbyDKTCheckExec","LobbyWKTCheck","LobbyWKTCheckHome","LobbyWKTWorldList","TitleDCWorldMap","_TitleMenu","_CharaSelectListMenu","_CharaSelectWorldServer","_CharaSelectReturn","Teleport","TelepotTown","TeleportHousingFriend","HousingSelectBlock","HousingSelectRoom","MansionSelectRoom","CompanyCraftRecipeNoteBook","CompanyCraftSupply","Request","InputNumeric"];
     private readonly Queue<object> travelPromptHistory=new();
     private readonly Dictionary<string,string> travelPromptLast=new();
     private int travelPromptCursor;private DateTimeOffset travelPromptNext;private long travelPromptSequence,travelPromptDropped;
@@ -31,7 +31,7 @@ public sealed partial class Plugin
         while(travelPromptHistory.Count>=600){travelPromptHistory.Dequeue();travelPromptDropped++;}
         travelPromptHistory.Enqueue(new {sequence=++travelPromptSequence,at=DateTimeOffset.UtcNow,kind,trip=nativeWorldTrip?.Id,stage=nativeWorldTrip?.Stage.ToString(),status=nativeTravelStatus,detail});
     }
-    private object TravelPromptExport()=>new {schema=3,mapClick=new{enabled=config.MapAethernetTravel,inputs=mapTravelInputCount,lastResult=mapTravelLastResult},capacity=600,dropped=travelPromptDropped,coverage="Known travel/login menus and World Visit controls, DC/world rows, input parameters, callbacks and wait reasons. Bounded snapshots on changes; not every game UI event.",records=travelPromptHistory.ToArray()};
+    private object TravelPromptExport()=>new {schema=4,mapClick=new{enabled=config.MapAethernetTravel,inputs=mapTravelInputCount,lastResult=mapTravelLastResult},capacity=600,dropped=travelPromptDropped,coverage="Known travel/login menus, World Visit controls and FC workshop crafting-log/material-supply windows, contribution requests, input parameters, callbacks and wait reasons. Bounded snapshots on changes; not every game UI event.",records=travelPromptHistory.ToArray()};
     private unsafe void UpdateTravelPromptRecorder(DateTimeOffset now)
     {
         if(now<travelPromptNext)return;
