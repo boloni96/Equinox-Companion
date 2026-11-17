@@ -205,7 +205,7 @@ public sealed partial class Plugin
                 workshopMenuBefore=string.Join('|',choices);
                 if(workshopStage!=WorkshopStage.CollectConfirm)WorkshopTransition(WorkshopStage.MenuTransition,"Workshop: "+choices[index],now);
                 if(choices[index].StartsWith("Advance to the next phase of production.",StringComparison.Ordinal)||choices[index].StartsWith("Complete the construction of the ",StringComparison.Ordinal)){
-                    ResetWorkshopCutscene();workshopSceneArmed=true;
+                    ResetWorkshopCutscene();workshopSceneArmed=true;UpdateHelperSceneHook();
                 }
                 SelectTravelChoice(menu,index);return;
             }

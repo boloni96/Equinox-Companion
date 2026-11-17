@@ -14,7 +14,7 @@ public sealed partial class Plugin
     private void ResetHelperNativeScene(){helperNativeScene="";helperNativeScenes.Clear();}
     private unsafe void UpdateHelperSceneHook()
     {
-        var enabled=RecordingQuest||helperPermission.Active&&helperPermission.Quest&&!HelperPaused&&!helperPermission.QuestPaused;
+        var enabled=workshopRunning&&workshopSceneArmed||RecordingQuest||helperPermission.Active&&helperPermission.Quest&&!HelperPaused&&!helperPermission.QuestPaused;
         if(enabled&&helperSceneHook==null&&!helperSceneHookFailed){
             try{helperSceneHook=Interop.HookFromAddress<HelperSceneDelegate>(EventFramework.MemberFunctionPointers.ProcessEventPlay,ObserveHelperScene);}
             catch(Exception e){helperSceneHookFailed=true;helperError="Quest scene observer unavailable; quest replay cannot be verified.";Log.Error(e,helperError);}
