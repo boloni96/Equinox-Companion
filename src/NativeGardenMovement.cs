@@ -11,14 +11,14 @@ public sealed partial class Plugin
     private NativeGardenMove? nativeGardenMove;
     private string nativeGardenMoveFailure="";
     private bool NativeGardenWalking=>nativeGardenMove!=null;
-    private void StartNativeGardenMove(IEnumerable<Vector3> points,string owner,IGameObject? target=null,SharedGardenPlan? plot=null)
+    private void StartNativeGardenMove(IEnumerable<Vector3> points,string owner,IGameObject? target=null,SharedGardenPlan? plot=null,Vector3? inward=null)
     {
         if(nativeGardenMove is {} prior&&prior.Owner!=owner)throw new InvalidOperationException("Another garden movement is active.");
         var route=points.ToArray();if(route.Length is <1 or >8||route.Any(p=>!NativeHousingPolicy.Position(p)))throw new InvalidOperationException("Garden route has invalid points.");
         if(LifestreamBusy()||nativeHousingTrip!=null||nativeWorldTrip!=null||nativeAethernetTrip!=null)throw new InvalidOperationException("Finish the active journey before garden walking.");
         StopIndependentWalk("Starting native garden movement",resetFailure:true);nativeGardenMoveFailure="";
-        nativeGardenMove=new(){Points=new(route),Owner=owner,Deadline=DateTimeOffset.UtcNow.AddSeconds(90),HardDeadline=DateTimeOffset.UtcNow.AddMinutes(3),Character=Player.ContentId,World=Player.CurrentWorld.RowId,Territory=Client.TerritoryType,Target=target?.GameObjectId??0,Plot=plot,Entry=plot!=null?new OutdoorPlotEntry(Vector3.UnitZ,route[0]):null};
-        RecordTravelPrompt("Garden movement started",new{owner,target=target?.BaseId,plot=plot?.Plot,ward=plot?.Ward,points=route.Select(FollowTravelPosition.From).ToArray()});
+        nativeGardenMove=new(){Points=new(route),Owner=owner,Deadline=DateTimeOffset.UtcNow.AddSeconds(90),HardDeadline=DateTimeOffset.UtcNow.AddMinutes(3),Character=Player.ContentId,World=Player.CurrentWorld.RowId,Territory=Client.TerritoryType,Target=target?.GameObjectId??0,Plot=plot,Entry=plot==null?null:inward is {} direction?new OutdoorPlotEntry(direction):new OutdoorPlotEntry(Vector3.UnitZ,route[0])};
+        RecordTravelPrompt("Garden movement started",new{owner,target=target?.BaseId,plot=plot?.Plot,ward=plot?.Ward,entry=inward.HasValue?"estate teleport heading":plot!=null?"yard route":null,heading=inward.HasValue?FollowTravelPosition.From(inward.Value):null,points=route.Select(FollowTravelPosition.From).ToArray()});
     }
     private void StopNativeGardenMove(string reason,string? owner=null)
     {

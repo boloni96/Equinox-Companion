@@ -121,6 +121,8 @@ public sealed partial class Plugin
                 if(at==null&&!trip.Geometry.IsCompletedSuccessfully)throw new InvalidOperationException("Estate landing geometry is unavailable; arrival could not be verified.");
                 var placard=at!=null?self.Position:trip.Geometry.Result.Placards[trip.Plot-1];
                 if(NativeHousingPolicy.GoSeeArrival(true,at!=null,self.Position,placard,true,true)){
+                    if(gardenTendRoute!=null&&gardenTendTravelSent)
+                        gardenEstateLanding=new(Player.ContentId,trip.World,Client.TerritoryType,trip.Ward,trip.Plot,self.Position,self.Rotation);
                     goSeeNativeUntil=default;
                     StopNativeHousing($"Arrived at {trip.District.Name} W{trip.Ward} P{trip.Plot} · GO SEE complete.");return;
                 }

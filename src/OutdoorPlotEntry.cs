@@ -30,3 +30,13 @@ internal sealed class OutdoorPlotEntry(Vector3 direction,Vector3? interior=null)
         Steps++;return (Goal=position+Direction*3).Value;
     }
 }
+
+internal sealed record GardenEstateLanding(ulong Character,uint World,uint Territory,int Ward,int Plot,Vector3 Position,float Rotation)
+{
+    public Vector3? HeadingFor(ulong character,uint world,uint territory,int ward,int plot,Vector3 position)
+    {
+        if(character!=Character||world!=World||territory!=Territory||ward!=Ward||plot!=Plot||
+            Vector3.DistanceSquared(Position,position)>1f)return null;
+        return new Vector3(MathF.Sin(Rotation),0,MathF.Cos(Rotation));
+    }
+}

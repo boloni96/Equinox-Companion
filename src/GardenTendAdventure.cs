@@ -15,6 +15,7 @@ public sealed partial class Plugin
     private HashSet<string> gardenAdventureCharacters=[];
     private string gardenAdventureMain="";
     private DateTimeOffset gardenTendDeadline,gardenAdventureNext,gardenSupplyRefreshUntil;
+    private GardenEstateLanding? gardenEstateLanding;
     private bool gardenPlotApproaching,gardenPlotApproachAttempted;
     private DateTimeOffset gardenPlotApproachAt;
     private readonly GardenWalkProgress gardenPlotProgress=new();
@@ -83,10 +84,16 @@ public sealed partial class Plugin
         if(!config.GardenCareWalk)throw new InvalidOperationException("Enable Walk to mapped beds to approach the plot after teleporting, or move onto the plot first.");
         if(gardenPlotApproachAttempted)throw new InvalidOperationException("Plot entrance approach already attempted. Move inside the destination plot and restart.");
         if(Conditions[ConditionFlag.Unconscious]||Conditions[ConditionFlag.TradeOpen]||SellerAddonPresentForGarden())return;
-        var entrance=NativeGardenInteriorLanding(Client.TerritoryType,plan.Plot);
-        if(entrance==null){gardenTendStatus="Reading native plot entrance";return;}
-        if(Vector3.Distance(player.Position,entrance.Value)>40)throw new InvalidOperationException("The requested plot entrance is not nearby. Finish GO SEE first.");
-        StartNativeGardenMove([entrance.Value],"plot",plot:plan);
+        var heading=gardenEstateLanding?.HeadingFor(Player.ContentId,Player.CurrentWorld.RowId,Client.TerritoryType,plan.Ward,plan.Plot,player.Position);
+        if(heading is {} inward){
+            StartNativeGardenMove([player.Position],"plot",plot:plan,inward:inward);
+        }else{
+            var entrance=NativeGardenInteriorLanding(Client.TerritoryType,plan.Plot);
+            if(entrance==null){gardenTendStatus="Reading native plot entrance";return;}
+            if(Vector3.Distance(player.Position,entrance.Value)>40)throw new InvalidOperationException("The requested plot entrance is not nearby. Finish GO SEE first.");
+            StartNativeGardenMove([entrance.Value],"plot",plot:plan);
+        }
+        gardenEstateLanding=null;
         gardenPlotApproaching=gardenPlotApproachAttempted=true;gardenPlotApproachAt=now;
         gardenTendStatus="Walking through the plot entrance · "+plan.HouseName;
     }
@@ -237,7 +244,7 @@ public sealed partial class Plugin
                 gardenTendStatus="Continuing on this plot · "+sourcePlan.HouseName+" · Batch "+work.Batch;
             }
             if(!gardenTendTravelSent){
-                if(LifestreamBusy())throw new InvalidOperationException("Another Lifestream journey is active.");EnsureBidWorlds();var world=bidWorlds!.FirstOrDefault(w=>w.Name==sourcePlan.World);if(world.Id==0)throw new InvalidOperationException("Destination world unavailable.");gardenArrival.Reset();GoSeeBid(world.Id,sourcePlan.District,sourcePlan.Ward,sourcePlan.Plot);if(now>=goSeeNativeUntil&&nativeHousingTrip==null&&goSeeHomeTrip==null&&goSeeFriendTrip==null&&!LifestreamBusy())
+                if(LifestreamBusy())throw new InvalidOperationException("Another Lifestream journey is active.");EnsureBidWorlds();var world=bidWorlds!.FirstOrDefault(w=>w.Name==sourcePlan.World);if(world.Id==0)throw new InvalidOperationException("Destination world unavailable.");gardenArrival.Reset();gardenEstateLanding=null;GoSeeBid(world.Id,sourcePlan.District,sourcePlan.Ward,sourcePlan.Plot);if(now>=goSeeNativeUntil&&nativeHousingTrip==null&&goSeeHomeTrip==null&&goSeeFriendTrip==null&&!LifestreamBusy())
                     throw new InvalidOperationException("House travel did not start: "+bidTravelMessage);
                 gardenTendTravelSent=true;gardenTravelHouse=work.House;gardenTravelCharacter=Player.ContentId;gardenTendStatus="Travelling to "+sourcePlan.HouseName;
                 return;

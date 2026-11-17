@@ -14,6 +14,15 @@ internal static class GardenEntry526Tests
         if(!Valid(receipt)||Valid(receipt with{Bed=2})||Valid(receipt with{At=now.AddSeconds(-1)})||Valid(receipt with{Kind="garden.status"})||Valid(receipt with{Actor=actor with{ContentId="999"}}))
             throw new Exception("Only fresh successful tending of this exact bed by this character may satisfy an early action");
         var landing=new Vector3(10,0,10);
+        var teleport=new GardenEstateLanding(123,410,641,15,15,landing,0);
+        var heading=teleport.HeadingFor(123,410,641,15,15,landing);
+        if(heading!=Vector3.UnitZ||teleport.HeadingFor(123,410,641,15,16,landing)!=null||
+            teleport.HeadingFor(123,410,641,15,15,landing+Vector3.UnitX*2)!=null)
+            throw new Exception("Use the settled heading only at the verified teleport landing");
+        var forward=new OutdoorPlotEntry(heading.Value);
+        var goal=forward.Next(landing);
+        if(forward.GeometryRoute||forward.Confirm(goal,false)||!forward.Confirm(goal,true))
+            throw new Exception("Garden teleport entry needs a checked forward step and matching plot");
         var entry=new OutdoorPlotEntry(Vector3.UnitZ,landing);
         if(!entry.GeometryRoute||entry.Goal!=landing)throw new Exception("Garden plot entry lost its geometry destination");
         if(entry.Confirm(landing,false))throw new Exception("Coordinates alone must not confirm the estate");
