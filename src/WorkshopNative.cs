@@ -71,7 +71,7 @@ public sealed partial class Plugin
             if(!queue&&(ReadWorkshopPhase() is not {}||workshopSelection.Count==0))throw new InvalidOperationException("Open Material Delivery and select materials first.");
             workshopActive=queue?saved:new(){Character=Player.ContentId,World=Player.CurrentWorld.RowId,House=WorkshopHouse()};
             workshopSingleDelivery=false;workshopQueueRun=queue;
-            if(queue&&saved!.PendingDeposit!=0&&config.WorkshopDepositParts){BeginWorkshopChest(null,DateTimeOffset.UtcNow);return;}
+            if(queue&&saved!.PendingDeposit!=0&&config.WorkshopDepositParts){BeginWorkshopChest(DateTimeOffset.UtcNow);return;}
             workshopBefore=ReadWorkshopPhase();workshopSupply=null;workshopRequestId=0;workshopInteraction=default;
             if(queue&&saved!.PendingCollection!=0&&RetrievalHeld(saved.PendingCollection)<=saved.CollectionBefore){
                 // No receipt yet: retain the verified project identity and retry only its collection menu.
@@ -101,7 +101,7 @@ public sealed partial class Plugin
             if(workshopStage==WorkshopStage.CollectionReceipt){
                 var q=workshopActive;
                 if(q.PendingCollection==0){StopWorkshop("Collection record is unavailable; review the queue.");return;}
-                if(RetrievalHeld(q.PendingCollection)>=q.CollectionBefore+1){q.Completed++;if(config.WorkshopDepositParts)q.PendingDeposit=q.PendingCollection;q.PendingCollection=0;q.ReadyToCollect=0;SaveConfiguration();workshopBefore=null;WorkshopTransition(WorkshopStage.Browse,"Collected project; checking next queued part",now);if(q.PendingDeposit!=0)BeginWorkshopChest(null,now);}
+                if(RetrievalHeld(q.PendingCollection)>=q.CollectionBefore+1){q.Completed++;if(config.WorkshopDepositParts)q.PendingDeposit=q.PendingCollection;q.PendingCollection=0;q.ReadyToCollect=0;SaveConfiguration();workshopBefore=null;WorkshopTransition(WorkshopStage.Browse,"Collected project; checking next queued part",now);if(q.PendingDeposit!=0)BeginWorkshopChest(now);}
                 return;
             }
             var yes=(AddonSelectYesno*)SellerAddon("SelectYesno");

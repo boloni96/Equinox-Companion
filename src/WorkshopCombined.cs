@@ -9,11 +9,10 @@ public sealed partial class Plugin
     private string workshopCombinedHouse="";
     private RetrievalEntry[] workshopCombinedItems=[];
     private RetrievalQuality workshopCombinedQuality;
-    private bool BeginWorkshopRestock(WorkshopSupply row,DateTimeOffset now,bool chestTried=false)
+    private bool BeginWorkshopRestock(WorkshopSupply row,DateTimeOffset now)
     {
         if(!config.WorkshopWithdrawAndDeliver||!workshopQueueRun)return false;
         if(Player.CurrentWorld.RowId!=Player.HomeWorld.RowId){StopWorkshop("Withdraw + turn in requires your home world for retainer access.");return true;}
-        if(config.WorkshopUseChest&&!chestTried){BeginWorkshopChest(row,now);return true;}
         workshopChestDeposit=false;
         RefreshRetrievalStock();
         var nq=RetrievalHeld(row.ItemId,RetrievalQuality.NqOnly);var hq=RetrievalHeld(row.ItemId,RetrievalQuality.HqOnly);

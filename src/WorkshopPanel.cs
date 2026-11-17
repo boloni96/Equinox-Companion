@@ -107,11 +107,10 @@ public sealed partial class Plugin
         if(ImGui.BeginPopup("Workshop options")){
             var enabled=config.EnableWorkshop;if(ImGui.Checkbox("Enable workshop automation",ref enabled)){config.EnableWorkshop=enabled;SaveConfiguration();if(!enabled)StopWorkshop("Workshop tool disabled.");}
             ImGui.BeginDisabled(WorkshopUiBusy);
-            var useChest=config.WorkshopUseChest;if(ImGui.Checkbox("Withdraw materials from FC chest first",ref useChest)){config.WorkshopUseChest=useChest;SaveConfiguration();}
             var deposit=config.WorkshopDepositParts;if(ImGui.Checkbox("Entrust finished parts to FC chest",ref deposit)){config.WorkshopDepositParts=deposit;SaveConfiguration();}
             var tab=Math.Clamp(config.WorkshopChestTab,1,5)-1;
             if(ImGui.Combo("Finished parts tab",ref tab,"Tab 1\0Tab 2\0Tab 3\0Tab 4\0Tab 5\0")){config.WorkshopChestTab=tab+1;SaveConfiguration();}
-            ImGui.TextWrapped("Material withdrawal checks accessible item tabs. Finished parts go only to the selected tab; full or restricted tabs stop the queue. Leftover materials stay in bags.");
+            ImGui.TextWrapped("Materials are retrieved from their recorded retainer holders. Finished parts go only to the selected FC chest tab; full or restricted tabs stop the queue. Leftover materials stay in bags.");
             ImGui.EndDisabled();
             var manual=config.WorkshopManualDelivery;
             if(ImGui.Checkbox("Complete turn-ins I click in game",ref manual)){config.WorkshopManualDelivery=manual;if(manual)config.EnableWorkshop=true;SaveConfiguration();if(!manual){if(workshopRunning&&workshopSingleDelivery)StopWorkshop("Manual assistance disabled.");else if(!workshopRunning)PauseWorkshop(false);}}
