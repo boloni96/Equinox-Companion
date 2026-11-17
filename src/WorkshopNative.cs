@@ -70,7 +70,7 @@ public sealed partial class Plugin
             if(VisibleFollowAddon("Request")||VisibleFollowAddon("SelectYesno"))throw new InvalidOperationException("Close the existing request or confirmation before starting.");
             var saved=config.WorkshopQueues.FirstOrDefault(q=>q.Character==Player.ContentId);
             if(queue&&(saved==null||WorkshopPolicy.Next(saved)==null&&saved.PendingCollection==0&&saved.PendingDeposit==0))throw new InvalidOperationException("Add projects to the queue first.");
-            if(queue&&(saved!.World!=Player.CurrentWorld.RowId||saved.House!=WorkshopHouse()))throw new InvalidOperationException("Return to the workshop where this queue was created.");
+            if(queue){WorkshopPolicy.BindForRun(saved!,Player.CurrentWorld.RowId,WorkshopHouse());SaveConfiguration();}
             if(!queue&&(ReadWorkshopPhase() is not {}||workshopSelection.Count==0))throw new InvalidOperationException("Open Material Delivery and select materials first.");
             workshopActive=queue?saved:new(){Character=Player.ContentId,World=Player.CurrentWorld.RowId,House=WorkshopHouse()};
             workshopSingleDelivery=false;workshopQueueRun=queue;

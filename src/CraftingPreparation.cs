@@ -71,6 +71,27 @@ internal sealed record WorkshopProject(uint Sequence,uint ItemId,string Name,Wor
 internal sealed record WorkshopPhase(uint ItemId,int Phase,int TotalPhases,WorkshopSupply[] Rows);
 internal static class WorkshopPolicy
 {
+    internal static void BindForRun(WorkshopQueueSave queue,uint world,string house)
+    {
+        if(world==0||string.IsNullOrEmpty(house))throw new InvalidOperationException("Enter the company workshop to run this queue.");
+        if(queue.House.Length==0){queue.World=world;queue.House=house;return;}
+        if(queue.World!=world||queue.House!=house)throw new InvalidOperationException("Return to the workshop where this queue was started.");
+    }
+    internal static int MinimumRemaining(WorkshopQueueSave queue,int index)
+    {
+        var before=queue.Items.Take(index).Sum(e=>e.Quantity);
+        var first=before<=queue.Completed&&queue.Completed<before+queue.Items[index].Quantity;
+        return first&&(queue.ReadyToCollect!=0||queue.PendingCollection!=0)?1:0;
+    }
+    internal static void EditRemaining(WorkshopQueueSave queue,int index,int remaining)
+    {
+        if(index<0||index>=queue.Items.Length)throw new ArgumentOutOfRangeException(nameof(index));
+        var entry=queue.Items[index];var before=queue.Items.Take(index).Sum(e=>e.Quantity);
+        var done=Math.Clamp(queue.Completed-before,0,entry.Quantity);
+        if(remaining<MinimumRemaining(queue,index)||remaining<0)throw new InvalidOperationException("Collect the pending part before removing its final copy.");
+        if((long)queue.Items.Sum(e=>e.Quantity)-entry.Quantity+done+remaining>999)throw new InvalidOperationException("Queue is limited to 999 projects.");
+        queue.Items=queue.Items.Select((e,i)=>i==index?e with{Quantity=done+remaining}:e).Where(e=>e.Quantity>0).ToArray();
+    }
     internal static bool MatchesProject(uint sequence,uint itemId,WorkshopProject project)=>sequence==project.Sequence&&itemId==project.ItemId;
     internal static (RetrievalEntry[] Items,RetrievalQuality Quality)[] WithdrawalBatches(RetrievalEntry[] nq,RetrievalEntry[] hq,int filter)
     {

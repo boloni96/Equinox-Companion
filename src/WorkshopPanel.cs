@@ -13,14 +13,12 @@ public sealed partial class Plugin
     {
         var q=config.WorkshopQueues.FirstOrDefault(q=>q.Character==Player.ContentId);
         if(q!=null)return q;
-        q=new(){Character=Player.ContentId,World=Player.CurrentWorld.RowId,House=WorkshopHouse()};config.WorkshopQueues.Add(q);return q;
+        q=new(){Character=Player.ContentId};config.WorkshopQueues.Add(q);return q;
     }
     private void AddWorkshopProjects(RetrievalEntry[] entries)
     {
-        if(!Player.IsLoaded||WorkshopHouse().Length==0)throw new InvalidOperationException("Enter the company workshop to create its queue.");
+        if(!Player.IsLoaded)throw new InvalidOperationException("Log in to create this character’s queue.");
         var q=WorkshopSaved();
-        if(q.House.Length==0){q.House=WorkshopHouse();q.World=Player.CurrentWorld.RowId;}
-        if(q.House!=WorkshopHouse()||q.World!=Player.CurrentWorld.RowId)throw new InvalidOperationException("This queue belongs to another workshop. Finish or clear it before creating a different one.");
         if(entries.Any(e=>retrievalCatalog==null||!retrievalCatalog.Projects.ContainsKey(e.ItemId)))throw new InvalidOperationException("Queue requires finished workshop projects, not their ingredient list. Add projects below.");
         // Preserve completed prefix and ordering when appending more copies.
         if(q.Items.Sum(e=>e.Quantity)+entries.Sum(e=>e.Quantity)>999)throw new InvalidOperationException("Queue is limited to 999 projects.");
@@ -78,7 +76,7 @@ public sealed partial class Plugin
     private bool WorkshopUiBusy=>workshopCombinedStage!=0||workshopRunning||retrievalRun.Running||craftingWithdrawalPending||organizeRunning||chestRunning||gearRouting||armoireRunning||workshopWithdrawalPending;
     private void ClearWorkshopQueue(WorkshopQueueSave q)
     {
-        WorkshopPolicy.Clear(q,Player.CurrentWorld.RowId,WorkshopHouse());
+        WorkshopPolicy.Clear(q,0,"");
         workshopPreparation=null;workshopNqWithdraw=[];workshopHqWithdraw=[];workshopPreparationNotice="";
         workshopSelection.Clear();workshopActive=null;workshopBefore=null;workshopSupply=null;
         workshopStatus="Queue cleared. The in-game project is unchanged.";SaveConfiguration();
@@ -156,11 +154,27 @@ public sealed partial class Plugin
             ImGui.EndChild();
         }
         if(q.Items.Length==0){ImGui.TextDisabled("Queue empty · add a set, list, or search result.");return;}
-        if(ImGui.BeginTable("WorkshopQueueRows",3,ImGuiTableFlags.RowBg|ImGuiTableFlags.BordersInnerV)){
-            ImGui.TableSetupColumn("Project",ImGuiTableColumnFlags.WidthStretch);ImGui.TableSetupColumn("Done",ImGuiTableColumnFlags.WidthFixed,50);ImGui.TableSetupColumn("Left",ImGuiTableColumnFlags.WidthFixed,50);ImGui.TableHeadersRow();
-            var previous=0;
-            foreach(var entry in q.Items){var done=Math.Clamp(q.Completed-previous,0,entry.Quantity);previous+=entry.Quantity;ImGui.TableNextRow();ImGui.TableNextColumn();ImGui.TextUnformatted(entry.Name);ImGui.TableNextColumn();ImGui.TextUnformatted(done.ToString());ImGui.TableNextColumn();ImGui.TextUnformatted((entry.Quantity-done).ToString());}
+        if(ImGui.BeginTable("WorkshopQueueRows",4,ImGuiTableFlags.RowBg|ImGuiTableFlags.BordersInnerV)){
+            ImGui.TableSetupColumn("Project",ImGuiTableColumnFlags.WidthStretch);ImGui.TableSetupColumn("Done",ImGuiTableColumnFlags.WidthFixed,50);ImGui.TableSetupColumn("Left",ImGuiTableColumnFlags.WidthFixed,70);ImGui.TableSetupColumn("##Remove",ImGuiTableColumnFlags.WidthFixed,28);ImGui.TableHeadersRow();
+            var previous=0;var edited=-1;var requested=0;
+            for(var i=0;i<q.Items.Length;i++){
+                var entry=q.Items[i];var done=Math.Clamp(q.Completed-previous,0,entry.Quantity);previous+=entry.Quantity;
+                var left=entry.Quantity-done;var minimum=WorkshopPolicy.MinimumRemaining(q,i);
+                ImGui.PushID(i);ImGui.TableNextRow();ImGui.TableNextColumn();ImGui.TextUnformatted(entry.Name);
+                ImGui.TableNextColumn();ImGui.TextUnformatted(done.ToString());ImGui.TableNextColumn();ImGui.SetNextItemWidth(-1);
+                if(ImGui.InputInt("##Remaining",ref left,0,0,ImGuiInputTextFlags.EnterReturnsTrue)){edited=i;requested=Math.Max(minimum,left);}
+                if(ImGui.IsItemHovered())ImGui.SetTooltip("Remaining copies · type a quantity and press Enter. Completed copies are kept.");
+                ImGui.TableNextColumn();ImGui.BeginDisabled(entry.Quantity==done||minimum>0);
+                if(ImGui.SmallButton("X")){edited=i;requested=0;}
+                if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))ImGui.SetTooltip(minimum>0?"Collect the pending part first.":"Remove remaining copies of this part. Completed copies are kept.");
+                ImGui.EndDisabled();ImGui.PopID();
+            }
             ImGui.EndTable();
+            if(edited>=0)RetrievalTry(()=>{
+                WorkshopPolicy.EditRemaining(q,edited,requested);SaveConfiguration();
+                workshopPreparation=null;workshopNqWithdraw=[];workshopHqWithdraw=[];workshopPreparationNotice="";
+                workshopStatus="Queue updated. The in-game project is unchanged.";
+            });
         }
     }
     private void DrawWorkshopDelivery()
