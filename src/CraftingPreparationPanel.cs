@@ -72,7 +72,7 @@ public sealed partial class Plugin
             ImGui.TableNextRow();
             OrganizerMaterialRow(r.Coverage);
             ImGui.TableNextColumn();DrawOrganizerItemName(r.Name);if(ImGui.IsItemHovered())ImGui.SetTooltip(OrganizerMaterialDetails(r));
-            ImGui.TableNextColumn();ImGui.TextUnformatted(r.Required.ToString());ImGui.TableNextColumn();ImGui.TextUnformatted(r.Bags.ToString());ImGui.TableNextColumn();ImGui.TextUnformatted(r.Retainers.ToString());ImGui.TableNextColumn();ImGui.TextUnformatted(r.CraftQuantity.ToString());ImGui.TableNextColumn();ImGui.TextUnformatted(r.Missing>0&&!r.Complete?$"≤ {r.Missing} · verify":r.Missing.ToString());
+            ImGui.TableNextColumn();ImGui.TextUnformatted(r.Required.ToString());ImGui.TableNextColumn();ImGui.TextUnformatted(r.Bags.ToString());ImGui.TableNextColumn();ImGui.TextUnformatted(r.Retainers.ToString());ImGui.TableNextColumn();ImGui.TextUnformatted(r.CraftQuantity.ToString());ImGui.TableNextColumn();ImGui.TextUnformatted(OrganizerMissingLabel(r));
         }
         ImGui.EndTable();
     }

@@ -32,7 +32,7 @@ public sealed partial class Plugin
         ImGui.SetNextWindowSize(new Vector2(600,450),ImGuiCond.FirstUseEver);
         if(!ImGui.BeginPopupModal("Prepare Artisan crafting list"))return;
         if(ImGui.Checkbox("Missing only (Companion subtracts owned stock)",ref retrievalExportMissing))BuildRetrievalArtisanExport();
-        ImGui.TextWrapped(retrievalExportMissing?"Exact missing craft counts: Artisan skip-if-enough is disabled. Do not enable stock subtraction again.":"Full requirements: Artisan skip-if-enough is enabled so Artisan subtracts owned stock once.");
+        ImGui.TextWrapped(retrievalExportMissing?"Exact missing craft counts: after import, verify Artisan stock skipping is OFF. Artisan can replace imported settings with its defaults.":"Full requirements: after import, verify Artisan stock skipping is ON so stock is subtracted once.");
         ImGui.TextWrapped("Review the crafting order below. Copy, then use Artisan → Lists → Import List From Clipboard (Artisan Export). No crafting starts automatically.");
         ImGui.BeginChild("CraftExportReview",new Vector2(0,Math.Max(100,ImGui.GetContentRegionAvail().Y-100)),false);
         foreach(var s in retrievalExportSteps){DrawRetrievalIcon(s.ItemId);ImGui.TextUnformatted($"{s.Name} · {s.Crafts} crafts → {s.Crafts*s.Yield} items");}

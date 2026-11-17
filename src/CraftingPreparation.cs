@@ -2,20 +2,31 @@ namespace EquinoxCompanion;
 
 internal enum PreparationCoverage { Bags, Retainers, Craftable, Missing, Incomplete }
 internal sealed record PreparationUse(string Name,int Quantity);
+internal sealed record PreparationStockAllocation(int Bags,int Retainers);
 internal sealed record PreparationRow(uint ItemId,string Name,int Required,int Bags,int Retainers,int CraftQuantity,int Missing,bool Complete,string[] UsedFor,PreparationCoverage Coverage)
 {
     public PreparationUse[] DemandSources {get;init;}=[];
+    public int RequestedQuantity {get;init;}
+    public string[] MissingIngredients {get;init;}=[];
+    public bool MatchesView(int view)=>view switch{1=>RequestedQuantity>0,2=>Required>RequestedQuantity,_=>true};
 }
 internal sealed record PreparationPlan(PreparationRow[] Rows,RetainerRetrieval.CraftStep[] Steps,RetrievalEntry[] Withdraw,RetrievalEntry[] Missing);
 internal static class CraftingPreparation
 {
+    internal static RetrievalEntry[] IngredientWithdrawals(PreparationPlan plan,IEnumerable<RetrievalEntry> turnIns)
+    {
+        var reserved=RetainerRetrieval.Combine(turnIns).ToDictionary(e=>e.ItemId,e=>e.Quantity);
+        return plan.Withdraw.Select(e=>e with{Quantity=Math.Max(0,e.Quantity-reserved.GetValueOrDefault(e.ItemId))}).Where(e=>e.Quantity>0).ToArray();
+    }
+    internal static PreparationPlan ArtisanPlan(PreparationPlan missing,IEnumerable<RetrievalEntry> outputs,IReadOnlyDictionary<uint,RetrievalRecipe[]> recipes,bool missingOnly)=>
+        missingOnly?missing:Build(outputs,recipes,new Dictionary<uint,int>(),new Dictionary<uint,int>(),true);
     internal static RetainerRetrieval.CraftStep[] ArtisanTargets(PreparationPlan plan)
     {
         var required=plan.Rows.ToDictionary(r=>r.ItemId,r=>r.Required);
         return plan.Steps.Select(s=>s with{Crafts=checked((required[s.ItemId]+s.Yield-1)/s.Yield)}).ToArray();
     }
     // Aggregate demand before allocating stock, so shared subcrafts and recipe yields are counted once.
-    internal static PreparationPlan Build(IEnumerable<RetrievalEntry> outputs,IReadOnlyDictionary<uint,RetrievalRecipe[]> recipes,IReadOnlyDictionary<uint,int> bags,IReadOnlyDictionary<uint,int> retainers,bool complete)
+    internal static PreparationPlan Build(IEnumerable<RetrievalEntry> outputs,IReadOnlyDictionary<uint,RetrievalRecipe[]> recipes,IReadOnlyDictionary<uint,int> bags,IReadOnlyDictionary<uint,int> retainers,bool complete,IReadOnlyDictionary<uint,PreparationStockAllocation>? outputStock=null)
     {
         var roots=RetainerRetrieval.Combine(outputs);var entries=new Dictionary<uint,RetrievalEntry>();
         var chosen=new Dictionary<uint,RetrievalRecipe?>();var order=new List<uint>();var visiting=new HashSet<uint>();
@@ -31,12 +42,24 @@ internal static class CraftingPreparation
             visiting.Remove(e.ItemId);order.Add(e.ItemId);
         }
         foreach(var root in roots)Discover(root,0);
-        var demand=roots.ToDictionary(x=>x.ItemId,x=>x.Quantity);var used=new Dictionary<uint,Dictionary<string,int>>();
+        var rootDemand=roots.ToDictionary(x=>x.ItemId,x=>x.Quantity);var demand=new Dictionary<uint,int>(rootDemand);var used=new Dictionary<uint,Dictionary<string,int>>();
         var rows=new Dictionary<uint,PreparationRow>();var crafts=new Dictionary<uint,RetainerRetrieval.CraftStep>();
         foreach(var id in order.AsEnumerable().Reverse()){
             var e=entries[id];var need=demand.GetValueOrDefault(id);if(need==0)continue;
             if(need>RetainerRetrieval.MaxQuantity)throw new ArgumentException("Crafting quantity exceeds limit.");
             var bag=Math.Min(need,Math.Max(0,bags.GetValueOrDefault(id)));var ret=Math.Min(need-bag,Math.Max(0,retainers.GetValueOrDefault(id)));
+            if(outputStock!=null&&outputStock.TryGetValue(id,out var reserved)){
+                // Delivery needs complete sets of one quality. Other crafts can
+                // use leftover stock of either quality, without allocating the
+                // delivery portion twice or discarding its unused remainder.
+                if(reserved.Bags<0||reserved.Retainers<0||(long)reserved.Bags+reserved.Retainers>rootDemand.GetValueOrDefault(id)||
+                    reserved.Bags>bags.GetValueOrDefault(id)||reserved.Retainers>retainers.GetValueOrDefault(id))
+                    throw new InvalidOperationException("Stock changed for "+e.Name+"; refresh materials before preparing.");
+                var ingredientNeed=Math.Max(0,need-rootDemand.GetValueOrDefault(id));
+                var extraBags=Math.Min(ingredientNeed,Math.Max(0,bags.GetValueOrDefault(id)-reserved.Bags));
+                var extraRetainers=Math.Min(ingredientNeed-extraBags,Math.Max(0,retainers.GetValueOrDefault(id)-reserved.Retainers));
+                bag=checked(reserved.Bags+extraBags);ret=checked(reserved.Retainers+extraRetainers);
+            }
             var remaining=need-bag-ret;var recipe=chosen[id];var made=0;
             if(remaining>0&&recipe!=null){
                 var count=checked((remaining+recipe.Yield-1)/recipe.Yield);made=checked(count*recipe.Yield);
@@ -48,14 +71,17 @@ internal static class CraftingPreparation
         // Children precede parents: shortages propagate through every affected recipe.
         foreach(var id in order){if(!rows.TryGetValue(id,out var row))continue;
             var blocked=row.Missing>0||(crafts.ContainsKey(id)&&chosen[id]!.Ingredients.Any(i=>rows.TryGetValue(i.ItemId,out var child)&&child.Coverage is PreparationCoverage.Missing or PreparationCoverage.Incomplete));
-            rows[id]=row with{UsedFor=used.TryGetValue(id,out var parents)?parents.Keys.Order().ToArray():["Requested output"],Coverage=blocked?(complete?PreparationCoverage.Missing:PreparationCoverage.Incomplete):row.Coverage};
+            var missingIngredients=crafts.ContainsKey(id)?chosen[id]!.Ingredients
+                .SelectMany(i=>rows.TryGetValue(i.ItemId,out var child)?child.Missing>0?new[]{child.Name}:child.MissingIngredients:Array.Empty<string>())
+                .Distinct().Order().ToArray():Array.Empty<string>();
+            rows[id]=row with{UsedFor=used.TryGetValue(id,out var parents)?parents.Keys.Order().ToArray():["Requested output"],MissingIngredients=missingIngredients,Coverage=blocked?(complete?PreparationCoverage.Missing:PreparationCoverage.Incomplete):row.Coverage};
         }
         foreach(var id in rows.Keys.ToArray()){
             var sources=new List<PreparationUse>();
             var direct=roots.FirstOrDefault(e=>e.ItemId==id);
             if(direct!=null)sources.Add(new("Workshop / requested output",direct.Quantity));
             if(used.TryGetValue(id,out var parents))sources.AddRange(parents.OrderBy(e=>e.Key).Select(e=>new PreparationUse(e.Key,e.Value)));
-            rows[id]=rows[id] with{DemandSources=sources.ToArray()};
+            rows[id]=rows[id] with{DemandSources=sources.ToArray(),RequestedQuantity=direct?.Quantity??0};
         }
         return new(rows.Values.ToArray(),order.Where(crafts.ContainsKey).Select(id=>crafts[id]).ToArray(),rows.Values.Where(r=>r.Retainers>0).Select(r=>new RetrievalEntry(r.ItemId,r.Name,r.Retainers)).ToArray(),rows.Values.Where(r=>r.Missing>0).Select(r=>new RetrievalEntry(r.ItemId,r.Name,r.Missing)).ToArray());
     }
