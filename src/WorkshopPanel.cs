@@ -179,7 +179,7 @@ public sealed partial class Plugin
         if(ImGui.BeginTable("WorkshopMaterialActions",2,ImGuiTableFlags.SizingStretchSame)){
             ImGui.TableNextColumn();if(ImGui.Button("Withdraw turn-ins",new Vector2(-1,0)))BeginWorkshopWithdrawal();
             ImGui.TableNextColumn();if(ImGui.Button("Withdraw ingredients",new Vector2(-1,0)))RetrievalTry(()=>WithdrawPreparation(p!.Withdraw.Where(e=>!workshopNqWithdraw.Any(x=>x.ItemId==e.ItemId)&&!workshopHqWithdraw.Any(x=>x.ItemId==e.ItemId)).ToArray()));
-            ImGui.TableNextColumn();ImGui.BeginDisabled(p==null||p.Steps.Length==0);if(ImGui.Button("Copy Artisan list",new Vector2(-1,0)))ImGui.SetClipboardText(RetainerRetrieval.ExportArtisan("Workshop remaining materials",p!.Steps));ImGui.EndDisabled();
+            ImGui.TableNextColumn();ImGui.BeginDisabled(p==null||p.Steps.Length==0);if(ImGui.Button("Copy Artisan list",new Vector2(-1,0)))ImGui.SetClipboardText(RetainerRetrieval.ExportArtisan("Workshop required materials",CraftingPreparation.ArtisanTargets(p!),skipIfEnough:true));ImGui.EndDisabled();if(ImGui.IsItemHovered())ImGui.SetTooltip("Exports required quantities before stock subtraction. Artisan skips owned items; the Craft column remains your current shortage.");
             ImGui.TableNextColumn();ImGui.BeginDisabled(!Pi.InstalledPlugins.Any(x=>x.InternalName=="Artisan"&&x.IsLoaded));if(ImGui.Button("Open Artisan",new Vector2(-1,0)))Commands.ProcessCommand("/artisan lists");ImGui.EndDisabled();
             ImGui.TableNextColumn();if(ImGui.Button("Copy missing raw",new Vector2(-1,0)))ImGui.SetClipboardText(string.Join('\n',p!.Missing.Select(e=>$"{e.Quantity} x {e.Name}")));
             ImGui.EndTable();

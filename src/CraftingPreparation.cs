@@ -5,6 +5,11 @@ internal sealed record PreparationRow(uint ItemId,string Name,int Required,int B
 internal sealed record PreparationPlan(PreparationRow[] Rows,RetainerRetrieval.CraftStep[] Steps,RetrievalEntry[] Withdraw,RetrievalEntry[] Missing);
 internal static class CraftingPreparation
 {
+    internal static RetainerRetrieval.CraftStep[] ArtisanTargets(PreparationPlan plan)
+    {
+        var required=plan.Rows.ToDictionary(r=>r.ItemId,r=>r.Required);
+        return plan.Steps.Select(s=>s with{Crafts=checked((required[s.ItemId]+s.Yield-1)/s.Yield)}).ToArray();
+    }
     // Aggregate demand before allocating stock, so shared subcrafts and recipe yields are counted once.
     internal static PreparationPlan Build(IEnumerable<RetrievalEntry> outputs,IReadOnlyDictionary<uint,RetrievalRecipe[]> recipes,IReadOnlyDictionary<uint,int> bags,IReadOnlyDictionary<uint,int> retainers,bool complete)
     {

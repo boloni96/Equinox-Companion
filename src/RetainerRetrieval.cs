@@ -138,11 +138,11 @@ internal static class RetainerRetrieval
         var requested=Requested(entries,multiplier,false,recipes);
         return mode!=RetrievalMode.AllMaterials?requested:PlanCrafts(requested,recipes).Materials;
     }
-    internal static string ExportArtisan(string name,CraftStep[] steps)
+    internal static string ExportArtisan(string name,CraftStep[] steps,bool skipIfEnough=false)
     {
         if(steps.Length==0)throw new ArgumentException("There are no craftable items in this selection.");
         // Artisan's documented UI import reads plain NewCraftingList JSON and assigns its own ID.
-        return JsonSerializer.Serialize(new{Name=name,ID=0,Recipes=steps.Select(s=>new{ID=s.RecipeId,Quantity=s.Crafts,ListItemOptions=new{Skipping=false}}).ToArray(),SkipIfEnough=false,IsPremade=false},new JsonSerializerOptions{WriteIndented=true});
+        return JsonSerializer.Serialize(new{Name=name,ID=0,Recipes=steps.Select(s=>new{ID=s.RecipeId,Quantity=s.Crafts,ListItemOptions=new{Skipping=false}}).ToArray(),SkipIfEnough=skipIfEnough,IsPremade=false},new JsonSerializerOptions{WriteIndented=true});
     }
     internal static string Export(RetrievalPreset list)=>JsonSerializer.Serialize(new {Format="EquinoxRetrieval",Version=1,List=list},new JsonSerializerOptions{WriteIndented=true});
     internal static RetrievalPreset Import(string text,Func<string,RetrievalEntry?> resolve, Func<uint[]>? protectedItems = null)
