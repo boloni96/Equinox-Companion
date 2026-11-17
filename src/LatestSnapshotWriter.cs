@@ -1,7 +1,7 @@
 namespace EquinoxCompanion;
 
 // One writer, at most one waiting snapshot. A later snapshot subsumes earlier edits.
-public sealed class LatestSnapshotWriter<T>(Action<T> write) where T : class
+public sealed class LatestSnapshotWriter<T>(Action<T> write,bool retainFailedSnapshot=true) where T : class
 {
     private readonly object gate = new();
     private T? pending;
@@ -20,7 +20,7 @@ public sealed class LatestSnapshotWriter<T>(Action<T> write) where T : class
             T value;
             lock(gate) { if(pending is null) { worker=Task.CompletedTask; return; } value=pending;pending=null; }
             try { write(value);lock(gate)failure=null; }
-            catch(Exception e) { lock(gate) { failure=e;pending??=value;worker=Task.CompletedTask;return; } }
+            catch(Exception e) { lock(gate) { failure=e;if(retainFailedSnapshot)pending??=value;worker=Task.CompletedTask;return; } }
         }
     }
     public void Flush(T latest)

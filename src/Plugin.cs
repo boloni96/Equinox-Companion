@@ -194,8 +194,8 @@ public sealed partial class Plugin : IDalamudPlugin
                 AtkUnitBase.MemberFunctionPointers.FireCallbackInt, ObserveCallbackInt);
         }
         catch (Exception ex) { errorJournal.Record("plugin", "Garden integer callback observer unavailable", exceptionType:ex.GetType().Name); Log.Error(ex, "Garden integer callback observer unavailable"); }
-        config = Pi.GetPluginConfig() as Configuration ?? new();
-        configurationWriter = new(snapshot => Pi.SavePluginConfig(snapshot));
+        config = ConfigurationFile.Load(Pi.ConfigFile.FullName) ?? Pi.GetPluginConfig() as Configuration ?? new();
+        configurationWriter = new(snapshot => ConfigurationFile.Save(Pi.ConfigFile.FullName,snapshot),retainFailedSnapshot:false);
         BeginConfigurationWarmup();
         if (OptionalToolAvailability.InitializeCamera(config)) SaveConfiguration();
         config.FollowThem ??= new();

@@ -12,6 +12,7 @@ public sealed partial class Plugin
     private DateTimeOffset configurationDue;
     private double maxDrawMs,maxUpdateMs,maxSnapshotMs;
     private string configurationError="";
+    private Exception? configurationLastFailure;
     private readonly Dictionary<string, double> performanceStages = [];
     private void TrackPerformance(string stage, long started)
     {
@@ -32,9 +33,13 @@ public sealed partial class Plugin
         if(configurationWriter.Failure is {} error)
         {
             configurationError="Local save failed: "+error.GetType().Name+". Retrying; keep Companion loaded.";
-            if(!configurationDirty){configurationDirty=true;configurationDue=DateTimeOffset.UtcNow.AddSeconds(5);}
+            configurationDirty=true;
+            if(!ReferenceEquals(configurationLastFailure,error)){
+                configurationLastFailure=error;configurationDue=DateTimeOffset.UtcNow.AddSeconds(error is OutOfMemoryException?30:5);
+                Log.Error(error,"Equinox configuration write failed; previous save preserved.");
+            }
         }
-        else configurationError="";
+        else {configurationError="";configurationLastFailure=null;}
         // Keep edits dirty while serialization is busy; capture the newest state once free.
         if(configurationWarmup is {IsCompleted:false})return;
         if(configurationWarmup is {} warmup){_ = warmup.Exception;configurationWarmup=null;}
