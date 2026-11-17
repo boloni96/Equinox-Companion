@@ -160,7 +160,7 @@ public sealed partial class Plugin
             for(var i=0;i<q.Items.Length;i++){
                 var entry=q.Items[i];var done=Math.Clamp(q.Completed-previous,0,entry.Quantity);previous+=entry.Quantity;
                 var left=entry.Quantity-done;var minimum=WorkshopPolicy.MinimumRemaining(q,i);
-                ImGui.PushID(i);ImGui.TableNextRow();ImGui.TableNextColumn();ImGui.TextUnformatted(entry.Name);
+                ImGui.PushID(i);ImGui.TableNextRow();ImGui.TableNextColumn();DrawOrganizerItemName(entry.Name);if(ImGui.IsItemHovered())ImGui.SetTooltip("Click to copy item name");
                 ImGui.TableNextColumn();ImGui.TextUnformatted(done.ToString());ImGui.TableNextColumn();ImGui.SetNextItemWidth(-1);
                 if(ImGui.InputInt("##Remaining",ref left,0,0,"%d",ImGuiInputTextFlags.EnterReturnsTrue)){edited=i;requested=Math.Max(minimum,left);}
                 if(ImGui.IsItemHovered())ImGui.SetTooltip("Remaining copies · type a quantity and press Enter. Completed copies are kept.");
@@ -199,7 +199,7 @@ public sealed partial class Plugin
     {
         var p=workshopPreparation;
         ImGui.Checkbox("Export missing only (Artisan skip off)",ref workshopExportMissing);
-        ImGui.SetNextItemWidth(-1);ImGui.Combo("##WorkshopWithdrawQuality",ref workshopWithdrawQuality,"Quality: Both (NQ + HQ)\0Quality: NQ only\0Quality: HQ only\0");
+        ImGui.SetNextItemWidth(-1);if(ImGui.Combo("##WorkshopWithdrawQuality",ref workshopWithdrawQuality,"Quality: Both (NQ + HQ)\0Quality: NQ only\0Quality: HQ only\0")){PrepareWorkshopMaterials();p=workshopPreparation;}
         if(ImGui.IsItemHovered())ImGui.SetTooltip("Filter the NQ/HQ turn-ins allocated by the materials review. Both withdraws each quality separately, preserving complete sets.");
         ImGui.BeginDisabled(p==null);
         if(ImGui.BeginTable("WorkshopMaterialActions",2,ImGuiTableFlags.SizingStretchSame)){
@@ -211,6 +211,9 @@ public sealed partial class Plugin
             ImGui.TableNextColumn();ImGui.BeginDisabled(p==null||p.Steps.Length==0);if(ImGui.Button("Copy Artisan list",new Vector2(-1,0)))ImGui.SetClipboardText(RetainerRetrieval.ExportArtisan(workshopExportMissing?"Workshop missing materials":"Workshop required materials",workshopExportMissing?p!.Steps:CraftingPreparation.ArtisanTargets(p!),skipIfEnough:!workshopExportMissing));ImGui.EndDisabled();if(ImGui.IsItemHovered())ImGui.SetTooltip(workshopExportMissing?"Exports only Craft quantities. Artisan skip-if-enough is OFF; do not subtract owned stock again.":"Exports required quantities. Artisan skip-if-enough is ON so Artisan subtracts stock.");
             ImGui.TableNextColumn();ImGui.BeginDisabled(!Pi.InstalledPlugins.Any(x=>x.InternalName=="Artisan"&&x.IsLoaded));if(ImGui.Button("Open Artisan",new Vector2(-1,0)))Commands.ProcessCommand("/artisan lists");ImGui.EndDisabled();
             ImGui.TableNextColumn();if(ImGui.Button("Copy missing raw",new Vector2(-1,0)))ImGui.SetClipboardText(string.Join('\n',p!.Missing.Select(e=>$"{e.Quantity} x {e.Name}")));
+            ImGui.TableNextColumn();ImGui.BeginDisabled(p==null||p.Missing.Length==0);
+            if(ImGui.Button("Where Is Cheap",new Vector2(-1,0)))RetrievalTry(()=>{PrepareWorkshopMaterials();if(workshopPreparation is {} current)OpenMissingMaterialShopping(current);});
+            ImGui.EndDisabled();if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))ImGui.SetTooltip("Send missing raw materials and quantities to Where Is Cheap. Updates matching items; keeps other shopping entries.");
             ImGui.EndTable();
         }
         ImGui.EndDisabled();
@@ -218,9 +221,11 @@ public sealed partial class Plugin
         ImGui.TextUnformatted($"{p.Steps.Length} recipes · {p.Missing.Length} raw shortages");
         if(ImGui.IsItemHovered())ImGui.SetTooltip(workshopPreparationNotice);
         if(ImGui.CollapsingHeader("Details / quality notes"))ImGui.TextWrapped(workshopPreparationNotice);
-        if(ImGui.BeginTable("WorkshopMaterialRows",6,ImGuiTableFlags.RowBg|ImGuiTableFlags.BordersInnerV)){
-            foreach(var name in new[]{"Item","Need","Bags","Retainers / FC","Craft","Missing"})ImGui.TableSetupColumn(name);ImGui.TableHeadersRow();
-            foreach(var r in p.Rows){ImGui.TableNextRow();OrganizerMaterialRow(r.Coverage);ImGui.TableNextColumn();ImGui.TextUnformatted(r.Name);if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))ImGui.SetTooltip($"Bags allocated: {r.Bags} · Storage allocated: {r.Retainers}\nUsed for: "+string.Join(", ",r.UsedFor)+"\n"+workshopMaterialSources.GetValueOrDefault(r.ItemId,"No recorded storage location"));ImGui.TableNextColumn();ImGui.TextUnformatted(r.Required.ToString());ImGui.TableNextColumn();ImGui.TextUnformatted(r.Bags.ToString());ImGui.TableNextColumn();ImGui.TextUnformatted(r.Retainers.ToString());ImGui.TableNextColumn();ImGui.TextUnformatted(r.CraftQuantity.ToString());ImGui.TableNextColumn();ImGui.TextUnformatted(r.Missing>0&&!r.Complete?$"≤ {r.Missing} · verify":r.Missing.ToString());}
+        if(ImGui.BeginTable("WorkshopMaterialRows",6,ImGuiTableFlags.RowBg|ImGuiTableFlags.BordersInnerV|ImGuiTableFlags.ScrollY|ImGuiTableFlags.ScrollX,new Vector2(0,Math.Max(100,ImGui.GetContentRegionAvail().Y)),560)){
+            ImGui.TableSetupColumn("Item",ImGuiTableColumnFlags.WidthFixed,170);
+            foreach(var name in new[]{"Need","Bags","Stored","Craft","Missing"})ImGui.TableSetupColumn(name,ImGuiTableColumnFlags.WidthStretch);
+            ImGui.TableSetupScrollFreeze(1,1);ImGui.TableHeadersRow();
+            foreach(var r in p.Rows){ImGui.TableNextRow();OrganizerMaterialRow(r.Coverage);ImGui.TableNextColumn();DrawOrganizerItemName(r.Name);if(ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))ImGui.SetTooltip(OrganizerMaterialDetails(r)+"\n\nRecorded storage:\n"+workshopMaterialSources.GetValueOrDefault(r.ItemId,"No recorded storage location"));ImGui.TableNextColumn();ImGui.TextUnformatted(r.Required.ToString("N0"));ImGui.TableNextColumn();ImGui.TextUnformatted(r.Bags.ToString("N0"));ImGui.TableNextColumn();ImGui.TextUnformatted(r.Retainers.ToString("N0"));ImGui.TableNextColumn();ImGui.TextUnformatted(r.CraftQuantity.ToString("N0"));ImGui.TableNextColumn();ImGui.TextUnformatted(r.Missing>0&&!r.Complete?$"≤ {r.Missing} · verify":r.Missing.ToString("N0"));}
             ImGui.EndTable();
         }
     }

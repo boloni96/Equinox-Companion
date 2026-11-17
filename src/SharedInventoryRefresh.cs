@@ -15,7 +15,7 @@ public sealed partial class Plugin
                 var result=sharedInventoryTask.IsCompletedSuccessfully?sharedInventoryTask.Result:
                     new InventoryReadResult(null,"Shared inventory refresh failed; keeping saved inventory.");
                 sharedInventoryError=result.Error??"";
-                sharedInventoryStatus=result.Error??"Shared inventory updated.";
+                sharedInventoryStatus=result.Error??result.Notice??"Shared inventory updated.";
                 if(result.Locations is {} locations&&config.SharedRoster is {ItemStoragePaging:>=1} current){
                     // Only inventory is replaced. A newer house/profile response
                     // may have arrived while these inventory pages were loading.

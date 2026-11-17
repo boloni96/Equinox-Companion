@@ -24,6 +24,16 @@ public sealed partial class Plugin
     private DateTimeOffset marketShoppingNext;
     private int marketShoppingCursor;
     private bool? marketShoppingExpand;
+    private void OpenMissingMaterialShopping(PreparationPlan plan)
+    {
+        var missing=plan.Missing.Where(e=>e.Quantity>0).Select(e=>new MarketShoppingRequest(e.Name,e.Quantity)).ToArray();
+        if(missing.Length==0)throw new InvalidOperationException("No missing raw materials in this review.");
+        var items=MarketShopping.WithRequirements(marketShoppingEntries.Select(e=>e.Request),missing);
+        CancelMarketSearch();CancelMarketShopping();marketShoppingEntries.Clear();
+        marketShoppingEntries.AddRange(items.Select(e=>new ShoppingEntry(e)));
+        marketShoppingCursor=0;marketShoppingNext=default;marketShoppingMode=true;marketShoppingExpand=false;
+        marketPendingLookup=false;SaveMarketShopping();OpenMarketSearch("");
+    }
     private void RestoreMarketShopping()
     {
         foreach(var request in (config.MarketShoppingItems ?? []).Take(MarketShopping.MaxItems))

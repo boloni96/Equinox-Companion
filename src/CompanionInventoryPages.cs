@@ -9,16 +9,20 @@ public sealed partial class CompanionSync
         try{
             using var deadline=CancellationTokenSource.CreateLinkedTokenSource(cancel.Token);
             deadline.CancelAfter(TimeSpan.FromSeconds(90));
-            var updated=await ReadInventoryPages(key,roster,deadline.Token);return new(updated.ItemLocations,null);
+            return await ReadInventoryPages(key,deadline.Token);
         }
         catch(Exception ex)when(ex is HttpRequestException or OperationCanceledException or JsonException or InvalidOperationException or ProfileReadException or IOException){
             return new(null,ProfileFailure("Shared inventory",ex)+"; keeping saved inventory.");
         }
     }
     private sealed record InventoryPage(string Snapshot,int Total,SharedItemLocation[] Locations,int? Next);
-    private async Task<SharedRoster> ReadInventoryPages(string key,SharedRoster roster,CancellationToken token)
+    private async Task<InventoryReadResult> ReadInventoryPages(string key,CancellationToken token)
     {
         var conflicts=new List<string>();
+        // Every location is an independently timestamped storage observation.
+        // Retain validated observations across snapshot conflicts, but never treat
+        // their union as a complete snapshot or delete locations we did not read.
+        var observed=new Dictionary<(string Owner,string Key),SharedItemLocation>();
         for(var attempt=0;attempt<3;attempt++){
             var locations=new List<SharedItemLocation>();var seen=new HashSet<(string,string)>();
             string? snapshot=null;var offset=0;var total=-1;var restart=false;
@@ -37,18 +41,32 @@ public sealed partial class CompanionSync
                 foreach(var row in page.Locations){
                     if(row==null||string.IsNullOrEmpty(row.OwnerId)||string.IsNullOrEmpty(row.Key)||row.Items==null||row.Items.Length>10000||row.Stacks?.Length>10000||!seen.Add((row.OwnerId,row.Key)))throw new JsonException("Invalid shared inventory location");
                     locations.Add(row);
+                    var identity=(row.OwnerId,row.Key);
+                    if(!observed.TryGetValue(identity,out var previous)||row.At>previous.At)observed[identity]=row;
                 }
-                if(page.Next==null){if(locations.Count!=total)throw new JsonException("Incomplete shared inventory");return roster with{ItemLocations=locations.ToArray(),ItemLocationsTruncated=false};}
+                if(page.Next==null){if(locations.Count!=total)throw new JsonException("Incomplete shared inventory");return new(locations.ToArray(),null);}
                 if(page.Next!=locations.Count||page.Next<=offset||page.Next>=total)throw new JsonException("Invalid inventory continuation");
                 offset=page.Next.Value;
             }
             if(!restart)break;
         }
+        if(observed.Count>0)return new(observed.Values.ToArray(),null,false,
+            $"Shared inventory: refreshed {observed.Count} storage locations; inventory changed during download. Unread locations kept; full refresh will retry.");
         throw new ProfileReadException("inventory snapshot changed during all three download attempts ("+string.Join("; ",conflicts)+")");
     }
 }
 
-public sealed record InventoryReadResult(SharedItemLocation[]? Locations,string? Error)
+public sealed record InventoryReadResult(SharedItemLocation[]? Locations,string? Error,bool Complete=true,string? Notice=null)
 {
-    public SharedRoster ApplyTo(SharedRoster current)=>Locations is {} items?current with{ItemLocations=items,ItemLocationsTruncated=false}:current;
+    public SharedRoster ApplyTo(SharedRoster current)
+    {
+        if(Locations is not {} items)return current;
+        if(Complete)return current with{ItemLocations=items,ItemLocationsTruncated=false};
+        var merged=(current.ItemLocations??[]).GroupBy(l=>(l.OwnerId,l.Key)).ToDictionary(g=>g.Key,g=>g.MaxBy(l=>l.At)!);
+        foreach(var item in items){
+            var key=(item.OwnerId,item.Key);
+            if(!merged.TryGetValue(key,out var previous)||item.At>previous.At)merged[key]=item;
+        }
+        return current with{ItemLocations=merged.Values.ToArray(),ItemLocationsTruncated=true};
+    }
 }

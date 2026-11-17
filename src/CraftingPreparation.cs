@@ -1,7 +1,11 @@
 namespace EquinoxCompanion;
 
 internal enum PreparationCoverage { Bags, Retainers, Craftable, Missing, Incomplete }
-internal sealed record PreparationRow(uint ItemId,string Name,int Required,int Bags,int Retainers,int CraftQuantity,int Missing,bool Complete,string[] UsedFor,PreparationCoverage Coverage);
+internal sealed record PreparationUse(string Name,int Quantity);
+internal sealed record PreparationRow(uint ItemId,string Name,int Required,int Bags,int Retainers,int CraftQuantity,int Missing,bool Complete,string[] UsedFor,PreparationCoverage Coverage)
+{
+    public PreparationUse[] DemandSources {get;init;}=[];
+}
 internal sealed record PreparationPlan(PreparationRow[] Rows,RetainerRetrieval.CraftStep[] Steps,RetrievalEntry[] Withdraw,RetrievalEntry[] Missing);
 internal static class CraftingPreparation
 {
@@ -27,7 +31,7 @@ internal static class CraftingPreparation
             visiting.Remove(e.ItemId);order.Add(e.ItemId);
         }
         foreach(var root in roots)Discover(root,0);
-        var demand=roots.ToDictionary(x=>x.ItemId,x=>x.Quantity);var used=new Dictionary<uint,HashSet<string>>();
+        var demand=roots.ToDictionary(x=>x.ItemId,x=>x.Quantity);var used=new Dictionary<uint,Dictionary<string,int>>();
         var rows=new Dictionary<uint,PreparationRow>();var crafts=new Dictionary<uint,RetainerRetrieval.CraftStep>();
         foreach(var id in order.AsEnumerable().Reverse()){
             var e=entries[id];var need=demand.GetValueOrDefault(id);if(need==0)continue;
@@ -37,14 +41,21 @@ internal static class CraftingPreparation
             if(remaining>0&&recipe!=null){
                 var count=checked((remaining+recipe.Yield-1)/recipe.Yield);made=checked(count*recipe.Yield);
                 crafts[id]=new(recipe.Id,id,e.Name,count,recipe.Yield);
-                foreach(var i in recipe.Ingredients){demand[i.ItemId]=checked(demand.GetValueOrDefault(i.ItemId)+count*i.Quantity);if(!used.TryGetValue(i.ItemId,out var parents))used[i.ItemId]=parents=[];parents.Add(e.Name);}
+                foreach(var i in recipe.Ingredients){demand[i.ItemId]=checked(demand.GetValueOrDefault(i.ItemId)+count*i.Quantity);if(!used.TryGetValue(i.ItemId,out var parents))used[i.ItemId]=parents=[];parents[e.Name]=checked(parents.GetValueOrDefault(e.Name)+count*i.Quantity);}
             }
             rows[id]=new(id,e.Name,need,bag,ret,made,recipe==null?remaining:0,complete,[],bag==need?PreparationCoverage.Bags:bag+ret==need?PreparationCoverage.Retainers:PreparationCoverage.Craftable);
         }
         // Children precede parents: shortages propagate through every affected recipe.
         foreach(var id in order){if(!rows.TryGetValue(id,out var row))continue;
             var blocked=row.Missing>0||(crafts.ContainsKey(id)&&chosen[id]!.Ingredients.Any(i=>rows.TryGetValue(i.ItemId,out var child)&&child.Coverage is PreparationCoverage.Missing or PreparationCoverage.Incomplete));
-            rows[id]=row with{UsedFor=used.TryGetValue(id,out var parents)?parents.Order().ToArray():["Requested output"],Coverage=blocked?(complete?PreparationCoverage.Missing:PreparationCoverage.Incomplete):row.Coverage};
+            rows[id]=row with{UsedFor=used.TryGetValue(id,out var parents)?parents.Keys.Order().ToArray():["Requested output"],Coverage=blocked?(complete?PreparationCoverage.Missing:PreparationCoverage.Incomplete):row.Coverage};
+        }
+        foreach(var id in rows.Keys.ToArray()){
+            var sources=new List<PreparationUse>();
+            var direct=roots.FirstOrDefault(e=>e.ItemId==id);
+            if(direct!=null)sources.Add(new("Workshop / requested output",direct.Quantity));
+            if(used.TryGetValue(id,out var parents))sources.AddRange(parents.OrderBy(e=>e.Key).Select(e=>new PreparationUse(e.Key,e.Value)));
+            rows[id]=rows[id] with{DemandSources=sources.ToArray()};
         }
         return new(rows.Values.ToArray(),order.Where(crafts.ContainsKey).Select(id=>crafts[id]).ToArray(),rows.Values.Where(r=>r.Retainers>0).Select(r=>new RetrievalEntry(r.ItemId,r.Name,r.Retainers)).ToArray(),rows.Values.Where(r=>r.Missing>0).Select(r=>new RetrievalEntry(r.ItemId,r.Name,r.Missing)).ToArray());
     }

@@ -13,6 +13,19 @@ internal static class MarketShopping
 {
     internal const int MaxItems = 100, MaxQuantity = 1_000_000;
     private static readonly Regex Line = new(@"^\s*([0-9]+(?:,[0-9]{3})*)\s*[x×]\s*(\S.*?)\s*$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    // Updating a shortage twice must not double the purchase quantity.
+    // Keep unrelated shopping entries; the latest shortage replaces a matching quantity.
+    internal static MarketShoppingRequest[] WithRequirements(IEnumerable<MarketShoppingRequest> existing,IEnumerable<MarketShoppingRequest> requirements)
+    {
+        var result=existing.ToList();
+        foreach(var item in requirements){
+            if(string.IsNullOrWhiteSpace(item.Name)||item.Quantity is <1 or >MaxQuantity)throw new ArgumentException("Invalid missing-material quantity.");
+            var index=result.FindIndex(e=>e.Name.Equals(item.Name,StringComparison.OrdinalIgnoreCase));
+            if(index<0)result.Add(item);else result[index]=item;
+        }
+        if(result.Count>MaxItems)throw new ArgumentException($"Where Is Cheap supports {MaxItems} items. Clear some shopping entries first.");
+        return result.ToArray();
+    }
     internal static MarketImport Parse(string text)
     {
         if(text.Length > 20000) return new([], ["The list is too long (maximum 20,000 characters)."]);
