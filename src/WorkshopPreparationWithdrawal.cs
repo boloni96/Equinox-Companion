@@ -20,7 +20,9 @@ public sealed partial class Plugin
         float Distance(string name)=>Objects.Where(o=>o.IsTargetable&&o.Name.TextValue==name).Select(o=>Vector3.DistanceSquared(position,o.Position)).DefaultIfEmpty(float.PositiveInfinity).Min();
         var batches=WorkshopBulkPolicy.Preparation(workshopNqWithdraw,workshopHqWithdraw,turnIns,extras,stock,Distance("Company Chest")<Distance("Summoning Bell"),id=>RetrievalHeld(id),out workshopDeferredCrystals);
         if(batches.Length==0){
-            workshopStatus=workshopDeferredCrystals>0?WorkshopWithdrawalSummary():"No recorded stock to withdraw for this selection.";
+            workshopStatus=workshopDeferredCrystals>0?WorkshopWithdrawalSummary()
+                :ingredients&&!turnIns?"No crafting ingredients to withdraw from recorded storage after reserving turn-ins."
+                :"No recorded stock to withdraw for this selection.";
             return;
         }
         workshopBulkBatches.Clear();foreach(var batch in batches)workshopBulkBatches.Enqueue(batch);
