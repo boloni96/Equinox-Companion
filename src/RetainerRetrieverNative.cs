@@ -13,12 +13,15 @@ public sealed partial class Plugin
     private DateTimeOffset retrievalTick;private string retrievalLastStatus="";
     private unsafe int RetrievalHeld(uint item,RetrievalQuality quality=RetrievalQuality.Any,int tradeFilter=0){var m=InventoryManager.Instance();if(m==null)return 0;var count=0;foreach(var t in new[]{InventoryType.Inventory1,InventoryType.Inventory2,InventoryType.Inventory3,InventoryType.Inventory4,InventoryType.Crystals}){var c=m->GetInventoryContainer(t);if(c==null||!c->IsLoaded)continue;for(var i=0;i<c->Size;i++)if(c->Items[i].ItemId==item&&(tradeFilter==0||RetrievalAllowsTradeFilter(c->Items[i],tradeFilter))&&RetainerRetrieval.AllowsQuality((c->Items[i].Flags&InventoryItem.ItemFlags.HighQuality)!=0,quality))count=checked(count+c->Items[i].Quantity);}return count;}
     // One snapshot for the browse display; transfer verification still reads live slots.
-    private unsafe Dictionary<uint,int> RetrievalBagTotals()
+    private unsafe Dictionary<uint,int> RetrievalBagTotals(Dictionary<uint,int>? hqTotals=null)
     {
         var result=new Dictionary<uint,int>();var m=InventoryManager.Instance();if(m==null)return result;
         foreach(var t in new[]{InventoryType.Inventory1,InventoryType.Inventory2,InventoryType.Inventory3,InventoryType.Inventory4,InventoryType.Crystals}){
             var c=m->GetInventoryContainer(t);if(c==null||!c->IsLoaded)continue;
-            for(var i=0;i<c->Size;i++){var slot=c->Items[i];if(slot.ItemId>0)result[slot.ItemId]=checked(result.GetValueOrDefault(slot.ItemId)+slot.Quantity);}
+            for(var i=0;i<c->Size;i++){var slot=c->Items[i];if(slot.ItemId==0)continue;
+                result[slot.ItemId]=checked(result.GetValueOrDefault(slot.ItemId)+slot.Quantity);
+                if(hqTotals!=null&&(slot.Flags&InventoryItem.ItemFlags.HighQuality)!=0)
+                    hqTotals[slot.ItemId]=checked(hqTotals.GetValueOrDefault(slot.ItemId)+slot.Quantity);}
         }
         return result;
     }
