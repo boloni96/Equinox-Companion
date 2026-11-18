@@ -196,6 +196,15 @@ internal static class WorkshopPolicy
         var missing=Math.Max(0,sets-CompleteSets(nq,hq,size));
         return missing==0?(0,0):(checked(missing*size-Math.Max(0,nq)%size),checked(missing*size-Math.Max(0,hq)%size));
     }
+    internal static bool? PickerQuality(int nqOption,int hqOption,bool preferHq,int mode)
+    {
+        bool nq=nqOption>=0 && mode!=2;
+        bool hq=hqOption>=0 && mode!=1;
+        if(preferHq && hq)return true;
+        if(nq)return false;
+        return hq ? true : null;
+    }
+
     internal static bool? ChooseHq(int nq,int hq,int size)=>size<1?null:nq>=size?false:hq>=size?true:null;
     internal static bool ManualRequestMatches(WorkshopPhase phase,uint project,int index,uint item,int quantity)=>
         Valid(phase)&&phase.ItemId==project&&index>=0&&index<phase.Rows.Length&&

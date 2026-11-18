@@ -15,6 +15,12 @@ internal static class WorkshopManual566Tests
         Check("completed row rejected",!WorkshopPolicy.ManualRequestMatches(p with{Rows=[new(5056,"Mythril plate",6,3,3)]},21794,0,5056,6));
         Check("NQ preferred for manual request",WorkshopPolicy.ChooseHq(6,12,6)==false);
         Check("HQ selected when only HQ has full set",WorkshopPolicy.ChooseHq(2,6,6)==true);
+        Check("both uses HQ when preferred NQ has no complete picker stack",WorkshopPolicy.PickerQuality(-1,0,false,0)==true);
+        Check("both uses NQ when preferred HQ has no complete picker stack",WorkshopPolicy.PickerQuality(0,-1,true,0)==false);
+        Check("both retains allocated quality when available",WorkshopPolicy.PickerQuality(0,1,true,0)==true);
+        Check("NQ only rejects fallback HQ",WorkshopPolicy.PickerQuality(-1,0,false,1)==null);
+        Check("HQ only rejects fallback NQ",WorkshopPolicy.PickerQuality(0,-1,true,2)==null);
+        Check("no complete picker stacks",WorkshopPolicy.PickerQuality(-1,-1,false,0)==null);
         Check("mixed partial stacks not submitted",WorkshopPolicy.ChooseHq(2,4,6)==null);
     }
 }

@@ -263,14 +263,23 @@ public sealed partial class Plugin
         if(workshopStage==WorkshopStage.Request){if(agent->SelectedTurnInSlot>=0){StopWorkshop("An item selection is already active.");return;}WorkshopTransition(WorkshopStage.Slot,"Selecting the complete quality stack",now);agent->SelectTurnInSlot(0);return;}
         if(workshopStage==WorkshopStage.Slot){
             if(agent->SelectedTurnInSlot!=0||agent->SelectedTurnInSlotItemOptions is <1 or >140)return;
-            var option=-1;
+            int nqOption=-1, hqOption=-1;
             for(var i=0;i<agent->SelectedTurnInSlotItemOptions;i++){
                 var item=agent->SelectedTurnInSlotItemOptionValues[i].Value;
-                if(item==null||item->IsSymbolic||item->ItemId!=workshopSupply.ItemId||item->Quantity<workshopSupply.SetSize||(item->Flags&InventoryItem.ItemFlags.HighQuality)!= (workshopHq?InventoryItem.ItemFlags.HighQuality:InventoryItem.ItemFlags.None))continue;
+                if(item==null||item->IsSymbolic||item->ItemId!=workshopSupply.ItemId||item->Quantity<workshopSupply.SetSize)continue;
                 if(item->Container is not (InventoryType.Inventory1 or InventoryType.Inventory2 or InventoryType.Inventory3 or InventoryType.Inventory4))continue;
-                option=i;break;
+                if((item->Flags&InventoryItem.ItemFlags.HighQuality)!=0){
+                    if(hqOption<0)hqOption=i;
+                }else if(nqOption<0)nqOption=i;
             }
-            if(option<0){StopWorkshop("No single matching NQ/HQ stack can supply this set. Consolidate the stacks, then Resume.");return;}
+            var selectedHq=WorkshopPolicy.PickerQuality(nqOption,hqOption,workshopHq,workshopQueueRun?workshopWithdrawQuality:0);
+            if(selectedHq==null){
+                StopWorkshop($"No eligible bag stack in the picker contains {workshopSupply.SetSize} {workshopSupply.Name} of an allowed quality. Finish or close the request before resuming.");
+                return;
+            }
+            workshopHq=selectedHq.Value;
+            var option=workshopHq?hqOption:nqOption;
+            workshopBagBefore=RetrievalHeld(workshopSupply.ItemId,workshopHq?RetrievalQuality.HqOnly:RetrievalQuality.NqOnly);
             var args=stackalloc AtkValue[4];for(var i=0;i<4;i++){args[i]=default;args[i].Type=AtkValueType.Int;}args[1].Int=option;var result=new AtkValue();
             WorkshopTransition(WorkshopStage.Inserted,"Material selected; handing over once",now);agent->ReceiveEvent(&result,args,4,1);return;
         }

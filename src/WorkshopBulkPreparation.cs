@@ -104,7 +104,7 @@ public sealed partial class Plugin
         var nq=workshopQueueRun&&workshopWithdrawQuality==2?0:RetrievalHeld(row.ItemId,RetrievalQuality.NqOnly);
         var hq=workshopQueueRun&&workshopWithdrawQuality==1?0:RetrievalHeld(row.ItemId,RetrievalQuality.HqOnly);
         if(workshopQueueRun&&workshopDeliveryQualities.TryGetValue((row.ItemId,row.SetSize),out var choices)&&choices.TryPeek(out var high))
-            return (high?hq:nq)>=row.SetSize?high:null;
+            if((high?hq:nq)>=row.SetSize)return high;
         return WorkshopPolicy.ChooseHq(nq,hq,row.SetSize);
     }
     private void ResetWorkshopBulk()
