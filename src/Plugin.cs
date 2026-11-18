@@ -30,6 +30,7 @@ public sealed partial class Plugin : IDalamudPlugin
 {
     [PluginService] internal static IDalamudPluginInterface Pi { get; private set; } = null!;
     [PluginService] internal static IDataManager DataManager { get; private set; } = null!;
+    [PluginService] internal static IGameInventory WorkshopInventory { get; private set; } = null!;
     [PluginService] internal static IFramework Framework { get; private set; } = null!;
     [PluginService] internal static IObjectTable Objects { get; private set; } = null!;
     [PluginService] internal static IPlayerState Player { get; private set; } = null!;
@@ -249,6 +250,7 @@ public sealed partial class Plugin : IDalamudPlugin
         Pi.UiBuilder.Draw += Draw;
         Pi.UiBuilder.OpenMainUi += Open;
         Pi.UiBuilder.OpenConfigUi += OpenSettings;
+        WorkshopInventory.InventoryChangedRaw += WorkshopInventoryChanged;
         Framework.Update += Update;
         Framework.Update += UpdateKeyboundRewards;
         Framework.Update += UpdateKeybound;
@@ -1372,6 +1374,7 @@ public sealed partial class Plugin : IDalamudPlugin
         Chat.LogMessage -= OnLog;
         Chat.ChatMessage -= OnGardenChat;
         foreach (var menuEvent in MenuEvents) Addons.UnregisterListener(menuEvent, GardenMenus, OnGardenMenu);
+        WorkshopInventory.InventoryChangedRaw -= WorkshopInventoryChanged;
         Framework.Update -= Update;
         Framework.Update -= UpdateKeyboundRewards;
         Framework.Update -= UpdateKeybound;
