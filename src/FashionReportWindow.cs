@@ -111,7 +111,6 @@ public sealed partial class Plugin
                 nextCheck = FashionCompletion.Window(now).Start;
                 status = "Judging is closed. The next guide check is Friday at 08:00 UTC.";
             }
-            else if (picture is not null) nextCheck = FashionCompletion.Window(now).End;
             else if (now >= nextCheck) Refresh();
         }
         public override void PostDraw()=>plugin.MeasureWindow(WindowName,PostDrawMeasured,"PostDraw");
