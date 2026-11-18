@@ -18,8 +18,9 @@ public sealed partial class Plugin
         private IDalamudTextureWrap? picture;
         private string title = "Fashion Report XIV · V1";
         private string status = "";
-        private DateTimeOffset lastLoaded;
-        private DateTimeOffset lastAttempt;
+        private DateTimeOffset nextCheck;
+        private int loadingWeek;
+        private int pictureWeek;
         private bool expanded;
         private bool resize;
         private float zoom = 1;
@@ -42,49 +43,75 @@ public sealed partial class Plugin
         public void OpenReport()
         {
             IsOpen = true;
-            if (picture is null || DateTimeOffset.UtcNow - lastLoaded > TimeSpan.FromHours(1)) Refresh();
+            Tick();
         }
         private void Refresh()
         {
-            if (loading is not null) return;
-            lastAttempt = DateTimeOffset.UtcNow;
+            var now = DateTimeOffset.UtcNow;
+            if (loading is not null || !FashionCompletion.IsOpen(now)) return;
+            loadingWeek = FashionCompletion.WeekNumber(now);
+            var reset = FashionCompletion.Window(now).End;
+            nextCheck = now.AddHours(1) < reset ? now.AddHours(1) : reset;
             status = "Loading current V1 picture…";
-            loading = LoadAsync();
+            loading = LoadAsync(loadingWeek);
         }
-        private async Task<(IDalamudTextureWrap, string)> LoadAsync()
+        private async Task<string> ReadTitleAsync(int week)
         {
-            var label = "Fashion Report XIV · V1";
-            try
-            {
-                var text = await http.GetStringAsync("https://fashionreportxiv.com/api/report-state", cancel.Token);
-                using var doc = JsonDocument.Parse(text);
-                var options = doc.RootElement.GetProperty("lastOptions");
-                label = "Week " + options.GetProperty("week").ToString() + " · " + options.GetProperty("reportTitle").GetString() + " · V1";
-            }
-            catch (Exception) when (!cancel.IsCancellationRequested) { /* The image can still be read when metadata is unavailable. */ }
-            var bytes = await http.GetByteArrayAsync("https://fashionreportxiv.com/hint.png?equinox=" + DateTimeOffset.UtcNow.ToUnixTimeSeconds(), cancel.Token);
+            var url = "https://fashionreportxiv.com/api/report-state?equinox=" + DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            using var doc = JsonDocument.Parse(await http.GetStringAsync(url, cancel.Token));
+            var options = doc.RootElement.GetProperty("lastOptions");
+            if (!int.TryParse(options.GetProperty("week").ToString(), out var publishedWeek) || publishedWeek != week)
+                throw new InvalidDataException($"Waiting for the week {week} guide.");
+            var theme = options.GetProperty("reportTitle").GetString();
+            if (string.IsNullOrWhiteSpace(theme)) throw new InvalidDataException("Missing Fashion Report theme.");
+            return $"Week {week} · {theme} · V1";
+        }
+        private async Task<(IDalamudTextureWrap, string)> LoadAsync(int week)
+        {
+            var label = await ReadTitleAsync(week);
+            var bytes = await http.GetByteArrayAsync("https://fashionreportxiv.com/hint.png?equinox=" + DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), cancel.Token);
+            if (await ReadTitleAsync(week) != label) throw new InvalidDataException("The guide changed during download.");
             var texture = await Textures.CreateFromImageAsync(bytes, "Equinox Fashion Report V1", cancel.Token);
             return (texture, label);
         }
-        public void Tick(bool login = false)
+        public void Tick()
         {
-            if (loading?.IsCompleted == true)
+            var now = DateTimeOffset.UtcNow;
+            if (loading is { IsCompleted: false } || (loading is null && now < nextCheck)) return;
+            var week = FashionCompletion.WeekNumber(now);
+            if (picture is not null && pictureWeek != week)
             {
-                if (loading.IsCompletedSuccessfully)
+                picture.Dispose();
+                picture = null;
+                title = "Fashion Report XIV · V1";
+            }
+            if (loading is { } completed)
+            {
+                loading = null;
+                if (completed.IsCompletedSuccessfully)
                 {
-                    picture?.Dispose();
-                    (picture, title) = loading.Result;
-                    lastLoaded = DateTimeOffset.UtcNow;
-                    status = "Scroll to zoom · Drag to move · Click to expand/shrink. · Kaiyoko Star / Fashion Report XIV";
+                    var result = completed.Result;
+                    if (week == loadingWeek)
+                    {
+                        picture?.Dispose();
+                        (picture, title) = result;
+                        pictureWeek = week;
+                        status = "Scroll to zoom · Drag to move · Click to expand/shrink. · Kaiyoko Star / Fashion Report XIV";
+                    }
+                    else result.Texture.Dispose();
                 }
                 else
                 {
-                    Log.Warning(loading.Exception, "Fashion Report picture download failed.");
-                    status = picture is null ? "Picture unavailable. Try Refresh or Open in browser." : "Refresh failed; showing the previously downloaded picture.";
+                    Log.Warning(completed.Exception, "Fashion Report picture download failed.");
+                    status = picture is null ? $"Week {week} guide unavailable. Retrying in an hour, or choose Refresh." : "Refresh failed. Showing the verified picture for this week.";
                 }
-                loading = null;
             }
-            if (loading is null && (login || DateTimeOffset.UtcNow - lastAttempt > TimeSpan.FromHours(1))) Refresh();
+            if (!FashionCompletion.IsOpen(now))
+            {
+                nextCheck = FashionCompletion.Window(now).Start;
+                status = "Judging is closed. The next guide check is Friday at 08:00 UTC.";
+            }
+            else if (now >= nextCheck) Refresh();
         }
         public override void PostDraw()=>plugin.MeasureWindow(WindowName,PostDrawMeasured,"PostDraw");
         private void PostDrawMeasured() => HandleNativeCollapse(this, Minimize);
@@ -102,7 +129,7 @@ public sealed partial class Plugin
         private void DrawContent()
         {
             ImGui.TextWrapped(title);
-            ImGui.BeginDisabled(loading is not null);
+            ImGui.BeginDisabled(loading is not null || !FashionCompletion.IsOpen(DateTimeOffset.UtcNow));
             if (ImGui.Button("Refresh")) Refresh();
             ImGui.EndDisabled();
             ImGui.SameLine();

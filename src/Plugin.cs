@@ -406,7 +406,6 @@ public sealed partial class Plugin : IDalamudPlugin
             gardenBedSync=null;sharedEstateGate.Reset();
             gate.Reset(); StopRecording(); character = Player.ContentId;
             discoveryStage = 0; nextDiscovery = default; nextCharacterRefresh = default; characterReadyAt = now.AddSeconds(15);
-            fashionWindow.Tick(login: true);
         }
         fashionWindow.Tick();
         if (recording && now >= recordingUntil) StopRecording();
