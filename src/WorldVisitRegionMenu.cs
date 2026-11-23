@@ -1,4 +1,5 @@
 using FFXIVClientStructs.FFXIV.Component.GUI;
+using FFXIVClientStructs.FFXIV.Client.UI;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
@@ -52,14 +53,16 @@ public sealed partial class Plugin
         try{match->List->DispatchItemEvent(index,AtkEventType.ListItemClick);}finally{usingSharedTravel=false;}
         nativeTravelStatus="Selecting "+expected+" · waiting for its world list";return false;
     }
-    private unsafe bool TrySelectWorldVisitWorld(AtkUnitBase* menu,string expected)
+    private unsafe bool TrySelectWorldVisitWorld(AtkUnitBase* menu,string expected,uint destination)
     {
         if(menu->UldManager.NodeList==null||menu->UldManager.NodeListCount>512)return false;
+        bool hasWorldRows=false;
         AtkComponentList* selected=null;var selectedIndex=-1;var matches=0;
         foreach(var address in WorldVisitComponents(menu)){
             var component=(AtkComponentBase*)address;
             if(component==null||component->GetComponentType()!=ComponentType.List)continue;
             var list=(AtkComponentList*)component;var count=list->GetItemCount();
+            if(count>0 && component->OwnerNode!=null && component->OwnerNode->NodeId==7)hasWorldRows=true;
             if(count is <1 or >64||!list->IsItemInteractionEnabled)continue;
             for(var row=0;row<count;row++){
                 if(list->GetItemDisabledState(row))continue;
@@ -70,6 +73,8 @@ public sealed partial class Plugin
                 selected=list;selectedIndex=row;matches++;
             }
         }
+        if(matches==0 && !hasWorldRows && menu->IsReady)
+            return TrySelectWorldVisitTable(menu,expected,destination);
         if(matches!=1||selected==null)return false;
         // Use the visible list, not WorldTranslate string offsets: the regional
         // selector added DC/home/current labels ahead of the world-name block.
@@ -83,4 +88,25 @@ public sealed partial class Plugin
         NativeTravelCallback(menu,0,callback);
         return true;
     }
+    private unsafe bool TrySelectWorldVisitTable(AtkUnitBase* menu,string expected,uint destination)
+    {
+        var module=RaptureAtkModule.Instance();
+        int index=(int)StringArrayType.WorldTranslate;
+        if(module==null||module->AtkArrayDataHolder.StringArrayCount<=index||module->AtkArrayDataHolder.StringArrays==null)return false;
+        var data=module->AtkArrayDataHolder.StringArrays[index];
+        if(data==null||data->StringArray==null||data->Size<4)return false;
+        EnsureBidWorlds();
+        var region=TravelRegion(Player.CurrentWorld.RowId);
+        var centers=bidWorlds!.Where(w=>w.Region==region).Select(w=>w.Dc).ToHashSet(StringComparer.Ordinal);
+        var dc=TravelDcName(destination);
+        var roster=bidWorlds!.Where(w=>w.Dc==dc).Select(w=>w.Name).ToHashSet(StringComparer.Ordinal);
+        var labels=new string[Math.Min(data->Size,26)];
+        for(int i=0;i<labels.Length;i++)labels[i]=(TravelMenuText(data->StringArray[i].Value)??"").Trim();
+        int callback=WorldVisitSelectionPolicy.TableCallback(labels,centers,dc,roster,expected);
+        if(callback<0)return false;
+        RecordTravelPrompt("World Visit world requested",new{world=expected,callback,source="regional destination table"});
+        NativeTravelCallback(menu,0,callback);
+        return true;
+    }
+
 }

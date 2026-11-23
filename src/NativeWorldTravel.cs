@@ -194,7 +194,7 @@ public sealed partial class Plugin
             var menu=SellerAddon("WorldTravelSelect");if(menu==null)return;
             // The visible destination row is stronger evidence than a stale dropdown selection index.
             // It also handles the native return-home row while visiting another data center.
-            if(TrySelectWorldVisitWorld(menu,WorldName(trip.Leg)??"")){
+            if(TrySelectWorldVisitWorld(menu,WorldName(trip.Leg)??"",trip.Leg)){
                 SetNativeTravelStage(trip,NativeTravelStage.WorldConfirm,"Confirming destination "+WorldName(trip.Leg));return;
             }
             if(!SelectWorldVisitDc(menu,trip,now))return;
