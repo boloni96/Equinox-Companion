@@ -162,7 +162,7 @@ public sealed partial class Plugin
                 if (run.Step==RetainerStep.List) return;
                 if (QuestConversationVisible() || VisibleFollowAddon("SelectYesno")) throw new InvalidOperationException("Close the open dialogue and resume.");
                 var self=Objects.LocalPlayer;if(self==null)return;
-                var bell=Objects.Where(o=>o.IsTargetable && (o.ObjectKind is ObjectKind.EventObj or ObjectKind.Housing) &&
+                var bell=Objects.Where(o=>o.Address!=0 && o.IsTargetable && (o.ObjectKind is ObjectKind.EventObj or ObjectKind.EventNpc) &&
                     (string.Equals(o.Name.TextValue,"Summoning Bell",StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(DataManager.GetExcelSheet<Lumina.Excel.Sheets.EObjName>(Dalamud.Game.ClientLanguage.English).GetRowOrDefault(o.BaseId)?.Singular.ToString(),"summoning bell",StringComparison.OrdinalIgnoreCase)))
                     .OrderBy(o=>Vector3.DistanceSquared(self.Position,o.Position)).FirstOrDefault();
