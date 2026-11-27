@@ -381,7 +381,7 @@ public sealed partial class Plugin
         if(sellerAutoRetainerPause!=null)TraceAutoRetainerHandoff();
         sellerComparison.Clear();
     }
-    private unsafe void StartSeller(bool apply)
+    private unsafe void StartSeller(bool apply, HashSet<ulong>? adventureRetainers = null)
     {
         if(retainerGilRunning||organizeRunning||retrievalRun.Running||chestRunning){sellerNotice="Finish the retainer/chest transfer first.";return;}
         if(marketLoadFailed){sellerNotice="Retry loading the market records first.";return;}
@@ -391,11 +391,12 @@ public sealed partial class Plugin
         if(!Player.IsLoaded||Player.HomeWorld.RowId!=Player.CurrentWorld.RowId){sellerNotice="Use your home world’s summoning bell.";return;}
         var all=ReadSellerRetainers();
         var current=RetainerManager.Instance()==null?0:RetainerManager.Instance()->LastSelectedRetainerId;
-        var selected=sellerScope switch {0=>all.Where(x=>x.Id==current&&SellerActive(current)).ToArray(),1=>all.Where(x=>config.Seller.SelectedRetainers.Contains(x.Id)).ToArray(),_=>all};
+        var selected=adventureRetainers!=null?all.Where(r=>adventureRetainers.Contains(r.Id)).ToArray():sellerScope switch {0=>all.Where(x=>x.Id==current&&SellerActive(current)).ToArray(),1=>all.Where(x=>config.Seller.SelectedRetainers.Contains(x.Id)).ToArray(),_=>all};
+        if(adventureRetainers!=null&&selected.Length!=adventureRetainers.Count){sellerNotice="An assigned retainer is unavailable on this character.";return;}
         if(selected.Length==0){sellerNotice="Select a retainer or choose All retainers.";return;}
         if(SellerAddon("RetainerList")==null&&!SellerActive(current)){sellerNotice="Open the summoning-bell retainer list first.";return;}
         ReleaseMarketBuddyLock();
-        var handoff=sellerAutoRetainerPause.Acquire(DateTimeOffset.UtcNow);TraceAutoRetainerHandoff();
+        var handoff=adventureRetainers!=null?sellerAutoRetainerPause.Check(DateTimeOffset.UtcNow):sellerAutoRetainerPause.Acquire(DateTimeOffset.UtcNow);TraceAutoRetainerHandoff();
         if(handoff.Error.Length>0){sellerNotice=handoff.Error;ReleaseSellerLocks();TraceSeller("Run blocked",sellerNotice);return;}
         sellerSelectRetry=default;manualEditor=null;manualSuspendUntilClose=false;sellerNotice="";
         TraceSeller("Run requested",apply?"Update prices":"Check prices",new {retainers=selected,character=Player.ContentId,world=Player.CurrentWorld.RowId});
@@ -627,6 +628,7 @@ public sealed partial class Plugin
     }
     private void DisposeEquinoxMarket()
     {
+        if(retainerAdventure!=null)StopRetainerAdventure("Companion unloading.");
         DisableMarketHooks();marketWatchClient.Dispose();sellerResultHook?.Dispose();marketHistoryHook?.Dispose();DisposeMarketWindows();
         if(sellerAutoRetainerPause.RestorePending){Log.Warning("AutoRetainer pause could not be released during Companion unload. Resume it from AutoRetainer's controls.");errorJournal.Record("seller-autoretainer","AutoRetainer pause release failed during Companion unload; resume from AutoRetainer controls.");}
         if(marketLoad==null&&!marketLoadFailed)try{marketWriter.Flush(marketLedger);}catch(Exception ex){Log.Error(ex,"Market ledger could not be saved");}

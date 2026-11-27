@@ -25,6 +25,7 @@ public sealed partial class Plugin
     }
     private void StopIndicatorTravel()
     {
+        if(retainerAdventure!=null)StopRetainerAdventure(IndicatorStopReason);
         if(nativeHousingTrip!=null&&gardenTendRoute!=null)StopIndicatorGarden();
         if(nativeHousingTrip!=null&&deliveryRun.Length>0)StopIndicatorDelivery();
         var owner=nativeWorldTrip?.Owner;
@@ -68,6 +69,7 @@ public sealed partial class Plugin
         ?$"{Math.Clamp(independentWaypoint,0,independentPath.Length-1)}/{independentPath.Length-1}":"";
     private IndicatorWork? CurrentIndicatorWork()
     {
+        if(retainerAdventure!=null)return new("Retainer adventure",retainerAdventureStatus,retainerAdventure.Step==RetainerStep.Seller?$"{sellerRun.RetainerIndex+1}/{sellerRun.RetainerCount}":"",()=>StopRetainerAdventure(IndicatorStopReason));
         if(nativeHousingTrip!=null)return new("Housing travel",nativeHousingStatus,$"{Math.Min(6,nativeHousingTrip.Stage/2+1)}/6",StopIndicatorTravel);
         if(shoppingTravel!=null)return new("Shopping travel",marketTravelStatus,$"{Math.Clamp(shoppingTravel.Stage+1,1,4)}/4",StopIndicatorTravel);
         if(nativeAethernetTrip!=null)return new("Aethernet",nativeAethernetStatus,$"{Math.Min(3,nativeAethernetTrip.Stage)+1}/4",StopIndicatorTravel);

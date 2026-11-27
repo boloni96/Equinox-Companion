@@ -51,7 +51,7 @@ public sealed partial class Plugin
  private void UpdateAdventure()
  {
   var started=System.Diagnostics.Stopwatch.GetTimestamp();
-  try{UpdateAdventureCore();}finally{RecordPerformanceElapsed("Adventure sync",started);}
+  try{UpdateAdventureCore();TickRetainerAdventure(DateTimeOffset.UtcNow);}finally{RecordPerformanceElapsed("Adventure sync",started);}
  }
  private void UpdateAdventureCore()
  {
@@ -64,7 +64,7 @@ public sealed partial class Plugin
    var reply=adventureRequest.IsCompletedSuccessfully?adventureRequest.Result:new AdventureReply(null,"Adventure request failed.");
    if(adventureRequest.IsFaulted)_=adventureRequest.Exception;
    if(adventureRequestKey==config.PairingKey){adventureMessage=reply.Status;adventureFresh=reply.Boards is not null;if(reply.Boards is null){if(adventureFollowReply is {} retryFollow)adventurePendingTravel=retryFollow;adventureFollowReply=null;adventurePresenceSession.Reset();}if(reply.Boards is {} boards){adventureBoards=AdventurePolicy.Reconcile(adventureBoards,boards,adventureMutation).Select(adventureView.Apply).ToArray();adventureFetched=now;ApplyAdventureFollowReply();CacheAdventures();}
-    adventureNext=now.AddSeconds(AdventurePollPolicy.Seconds(adventureWindow.IsOpen,gardenTendRoute!=null,reply.Boards is null));
+    adventureNext=now.AddSeconds(AdventurePollPolicy.Seconds(adventureWindow.IsOpen,gardenTendRoute!=null||retainerAdventure!=null,reply.Boards is null));
    }adventureRequest=null;adventureMutation=false;
   }
   if(adventureRequest is null&&adventureQueuedAction is {} queued){
@@ -74,7 +74,7 @@ public sealed partial class Plugin
    if(adventureFresh&&latest is not null&&(queued.Index is {} index&&index>=0&&index<=latest.Stops.Length||task is not null&&AdventurePolicy.CanEdit(task)))AdventureAction(latest,queued.Index,task,queued.Value);
   }
   UpdateAdventurePresence(now);
-  if(adventureRequest is null&&config.SyncEnabled&&config.PairingKey.Length==64&&now>=adventureNext){adventureRequestKey=config.PairingKey;adventureRequest=adventureSync.Read(config.PairingKey);adventureNext=now.AddSeconds(AdventurePollPolicy.Seconds(adventureWindow.IsOpen,gardenTendRoute!=null,false));}
+  if(adventureRequest is null&&config.SyncEnabled&&config.PairingKey.Length==64&&now>=adventureNext){adventureRequestKey=config.PairingKey;adventureRequest=adventureSync.Read(config.PairingKey);adventureNext=now.AddSeconds(AdventurePollPolicy.Seconds(adventureWindow.IsOpen,gardenTendRoute!=null||retainerAdventure!=null,false));}
  }
 
  private void CacheAdventures()
@@ -252,6 +252,7 @@ public sealed partial class Plugin
   }
   board=FilterAdventure(board);
   if(board.Stops.Length==0){ImGui.TextWrapped("No characters in this adventure match the selected accounts.");return;}
+  DrawRetainerAdventure(board);
   DrawTendAdventure(board);
   DrawAdventureTotal(board);
   DrawAdventureLocation(board);

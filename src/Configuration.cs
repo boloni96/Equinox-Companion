@@ -89,6 +89,8 @@ public sealed class Configuration : IPluginConfiguration
     public bool GardenAdventureTend { get; set; } = true;
     public bool GardenAdventurePlant { get; set; }
     public bool GardenAdventureHarvest { get; set; }
+    public bool RetainerAdventurePrivate { get; set; }
+    public bool RetainerAdventureSwitch { get; set; }
     public bool GardenAdventureSwitch { get; set; }
     public bool GardenCareWalk { get; set; }
     public HashSet<string> GardenResyncBatches { get; set; } = [];
