@@ -151,10 +151,10 @@ public sealed partial class Plugin
             {
                 var pause=sellerAutoRetainerPause.Check(now);
                 if (pause.Error.Length>0) throw new InvalidOperationException(pause.Error);
-                if (!pause.Ready) { retainerAdventureStatus="Waiting for AutoRetainer to pause…"; return; }
+                if (!pause.Ready) { retainerAdventureStatus=pause.Status; return; }
                 if (SellerAddon("RetainerList")!=null)
                 {
-                    if (ReadSellerRetainers().Length==0) return;
+                    if (ReadSellerRetainers().Length==0) { retainerAdventureStatus="Bell opened · waiting for the game to load your retainers…"; return; }
                     if (run.Walking) { StopIndependentWalk("Bell reached");run.Walking=false; }
                     StartSeller(run.Apply,stop.Retainers);
                     if (!sellerRun.Running) throw new InvalidOperationException(sellerNotice);

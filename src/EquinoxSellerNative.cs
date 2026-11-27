@@ -162,7 +162,7 @@ public sealed partial class Plugin
     private void SellerEditorOpened(AddonEvent e,AddonArgs args)=>BeginManualSeller();
     private void BeginManualSeller()
     {
-        if(!config.Seller.Enabled || sellerRun.Running)return;
+        if(!config.Seller.Enabled || sellerRun.Running || retainerAdventure?.BellPause == true)return;
         manualEditor=null;manualDecision=null;manualRetainer=0;manualEditorAt=DateTimeOffset.UtcNow;manualCompareAt=default;manualSuspendUntilClose=false;
         sellerComparison.Clear();manualInventory=default;marketPollAt=DateTimeOffset.UtcNow;
         manualAutoCompare=config.Seller.OpenCompare&&!Keys[Dalamud.Game.ClientState.Keys.VirtualKey.SHIFT];
@@ -383,6 +383,7 @@ public sealed partial class Plugin
     }
     private unsafe void StartSeller(bool apply, HashSet<ulong>? adventureRetainers = null)
     {
+        if(adventureRetainers == null && retainerAdventure?.BellPause == true){sellerNotice="Automatic retainers is opening the bell.";return;}
         if(retainerGilRunning||organizeRunning||retrievalRun.Running||chestRunning){sellerNotice="Finish the retainer/chest transfer first.";return;}
         if(marketLoadFailed){sellerNotice="Retry loading the market records first.";return;}
         if(!config.Seller.Enabled||!marketHooksEnabled||marketLoad!=null){sellerNotice="Enable Market and wait for its saved records first.";return;}
@@ -440,7 +441,8 @@ public sealed partial class Plugin
             var rm=RetainerManager.Instance();var active=rm==null?0:rm->LastSelectedRetainerId;
             if(ReadSellerStock(active) is {} stock)RememberMarketStock(active,stock,now);
             RememberMarketVisit(active,now);
-            if(!sellerRun.Running)UpdateManualSeller(active,now);
+            // The adventure owns the AutoRetainer pause while it approaches and opens the bell.
+            if(!sellerRun.Running && retainerAdventure?.BellPause != true)UpdateManualSeller(active,now);
             UpdateMarketHighlights();
         }catch(Exception ex){sellerRun.Stop("Seller stopped after an unexpected response; check the last listing.");sellerNotice="Market tools paused: "+ex.GetType().Name;TraceSeller("Error",sellerNotice,new {message=ex.Message,stack=ex.StackTrace});throw;}
     }
