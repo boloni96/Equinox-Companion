@@ -9,6 +9,8 @@ public sealed partial class Plugin
 {
     private sealed record CatalogueEntry(string Category, uint Id, uint ItemId, EventQuestDefinition? Quest = null);
     private CatalogueEntry[][]? collectionGroups;
+    private byte[] lastOrchestrionUnlocks = [];
+    private DateTimeOffset nextOrchestrionRefresh;
     private int nextCollectionGroup;
     private int priorityCollectionTurn;
     private int nextPriorityCollection;
@@ -26,6 +28,8 @@ public sealed partial class Plugin
         if (!SyncValidation.ActorReady(actor) || state == null || !state->PlayerState.IsLoaded) return;
         if (collectionCharacter != Player.ContentId)
         {
+            lastOrchestrionUnlocks = [];
+            nextOrchestrionRefresh = default;
             collectionCharacter = Player.ContentId;keyboundCollectionRefreshItems.Clear();
             collectionReadyAt = now.AddSeconds(15);
             nextOrdinaryQuest = 0; nextCollectionGroup = 0; priorityCollectionTurn = 0; nextPriorityCollection = 0;
@@ -48,10 +52,21 @@ public sealed partial class Plugin
             nextCollectionGroup--;
             segmentIndex = priority[nextPriorityCollection++ % priority.Length];
         }
-        if(keyboundCollectionRefreshItems.Count>0){
+        var refreshRequested = keyboundCollectionRefreshItems.Count > 0;
+        if(refreshRequested){
             var requested=Array.FindIndex(collectionGroups,g=>g.Any(e=>keyboundCollectionRefreshItems.Contains(e.ItemId)));
             if(requested>=0){segmentIndex=requested;foreach(var entry in collectionGroups[requested])keyboundCollectionRefreshItems.Remove(entry.ItemId);}
             else keyboundCollectionRefreshItems.Clear();
+        }
+        // Check the small unlock bitset each collection tick. Read individual
+        // unlocks through the game API only when a normal or changed group is due.
+        var rollFlags = state->PlayerState.UnlockedOrchestrionRolls;
+        if (collectionGroups[segmentIndex][0].Category != "orchestrion" &&
+            !refreshRequested && now >= nextOrchestrionRefresh &&
+            !rollFlags.SequenceEqual(lastOrchestrionUnlocks))
+        {
+            var rollGroup = Array.FindIndex(collectionGroups, entries => entries[0].Category == "orchestrion");
+            if (rollGroup >= 0) segmentIndex = rollGroup;
         }
         var group = collectionGroups[segmentIndex];
         var unlocked = new List<uint>(); var obtained = new List<uint>(); var known = new List<uint>();
@@ -92,6 +107,11 @@ public sealed partial class Plugin
                 group[0].Quest is null?0:segmentIndex+1,
                 group[0].Quest is null?null:group.Select(x=>x.Quest!).ToArray(),
                 group[0].Category=="quest"&&QuestManager.Instance()!=null?known.Where(id=>QuestManager.Instance()->IsQuestAccepted(id)).ToArray():null)));
+        if (group[0].Category == "orchestrion")
+        {
+            lastOrchestrionUnlocks = rollFlags.ToArray();
+            nextOrchestrionRefresh = now.AddSeconds(15);
+        }
         collectionStatus = $"{group[0].Category}: {unlocked.Count}/{group.Length} unlocked · {obtained.Count} reward items held";
     }
 
