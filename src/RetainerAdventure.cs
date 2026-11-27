@@ -16,6 +16,7 @@ public sealed partial class Plugin
         public bool BellPause, Walking;
         public DateTimeOffset Next, Deadline;
         public ulong Owner;
+        public string? BellName;
     }
     private RetainerAdventure? retainerAdventure;
     private string retainerAdventureStatus = "";
@@ -150,7 +151,7 @@ public sealed partial class Plugin
             {
                 var pause=sellerAutoRetainerPause.Check(now);
                 if (pause.Error.Length>0) throw new InvalidOperationException(pause.Error);
-                if (!pause.Ready) return;
+                if (!pause.Ready) { retainerAdventureStatus="Waiting for AutoRetainer to pause…"; return; }
                 if (SellerAddon("RetainerList")!=null)
                 {
                     if (ReadSellerRetainers().Length==0) return;
@@ -162,17 +163,35 @@ public sealed partial class Plugin
                 if (run.Step==RetainerStep.List) return;
                 if (QuestConversationVisible() || VisibleFollowAddon("SelectYesno")) throw new InvalidOperationException("Close the open dialogue and resume.");
                 var self=Objects.LocalPlayer;if(self==null)return;
-                var bell=Objects.Where(o=>o.Address!=0 && o.IsTargetable && (o.ObjectKind is ObjectKind.EventObj or ObjectKind.EventNpc) &&
-                    (string.Equals(o.Name.TextValue,"Summoning Bell",StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(DataManager.GetExcelSheet<Lumina.Excel.Sheets.EObjName>(Dalamud.Game.ClientLanguage.English).GetRowOrDefault(o.BaseId)?.Singular.ToString(),"summoning bell",StringComparison.OrdinalIgnoreCase)))
-                    .OrderBy(o=>Vector3.DistanceSquared(self.Position,o.Position)).FirstOrDefault();
-                if (bell==null) { retainerAdventureStatus="Waiting for a summoning bell inside "+destination.Label;return; }
-                if (Vector3.DistanceSquared(self.Position,bell.Position)>16)
+                run.BellName ??= DataManager.GetExcelSheet<Lumina.Excel.Sheets.EObjName>()
+                    .GetRowOrDefault(2000401)?.Singular.ToString();
+                var bell = Objects.Where(o => o.Address != 0 &&
+                    (o.ObjectKind is ObjectKind.HousingEventObject or ObjectKind.EventObj or ObjectKind.EventNpc) &&
+                    ((o.ObjectKind == ObjectKind.EventObj && o.BaseId == 2000401) ||
+                     (!string.IsNullOrEmpty(run.BellName) && string.Equals(o.Name.TextValue, run.BellName, StringComparison.OrdinalIgnoreCase)) ||
+                     string.Equals(o.Name.TextValue, "Summoning Bell", StringComparison.OrdinalIgnoreCase) ||
+                     o.Name.TextValue == "リテイナーベル" ||
+                     (o.ObjectKind != ObjectKind.HousingEventObject &&
+                      string.Equals(DataManager.GetExcelSheet<Lumina.Excel.Sheets.EObjName>(Dalamud.Game.ClientLanguage.English)
+                          .GetRowOrDefault(o.BaseId)?.Singular.ToString(), "summoning bell", StringComparison.OrdinalIgnoreCase))))
+                    .OrderByDescending(o => o.IsTargetable)
+                    .ThenBy(o => Vector3.DistanceSquared(self.Position, o.Position)).FirstOrDefault();
+                if (bell == null)
                 {
-                    run.Walking=true;IndependentWalk(bell.Position,4,now,allowFlight:false,geometryOnly:true,objectRangeArrival:true);
-                    retainerAdventureStatus="Walking to the summoning bell";return;
+                    retainerAdventureStatus = run.Private ? "Looking for a placed Summoning Bell inside your private house…"
+                        : "Looking for the Summoning Bell inside the FC workshop…";
+                    return;
                 }
-                if (run.Walking) { StopIndependentWalk("Bell reached");run.Walking=false; }
+                var distance = Vector3.Distance(self.Position, bell.Position);
+                if (distance > 4)
+                {
+                    run.Walking = true;
+                    IndependentWalk(bell.Position, 4, now, allowFlight:false, geometryOnly:true, objectRangeArrival:true);
+                    retainerAdventureStatus = $"Walking to the summoning bell · {distance:F1} yalms";
+                    return;
+                }
+                if (run.Walking) { StopIndependentWalk("Bell reached"); run.Walking = false; }
+                if (!bell.IsTargetable) { retainerAdventureStatus = "Bell found · waiting for it to become targetable…"; return; }
                 TargetSystem.Instance()->InteractWithObject((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)bell.Address,false);
                 run.Step=RetainerStep.List;run.Deadline=now.AddSeconds(20);retainerAdventureStatus="Opening the retainer list…";return;
             }
