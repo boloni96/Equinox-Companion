@@ -53,11 +53,12 @@ public sealed partial class Plugin
         // Market hooks are installed only while the optional tool is enabled.
         if(config.Seller.Enabled)EnableMarketHooks();
     }
-    private void LoadMarketLedger()
+    private bool marketCanStartFresh;
+    private void LoadMarketLedger(bool allowFresh = false)
     {
         if (marketLoad != null) return;
         var path = MarketDataPath;
-        marketLoad = Task.Run(() => MarketLedgerFile.Load(path));
+        marketLoad = Task.Run(() => MarketLedgerFile.Load(path, allowFresh));
     }
 
     private unsafe void EnableMarketHooks()
@@ -414,7 +415,7 @@ public sealed partial class Plugin
                 sellerNotice=result.Notice;
                 if(result.Notice.Length>0)marketFileStatus=result.Notice;
             }
-            else {marketLoadFailed=true;marketDataError="Market tracking paused. "+marketLoad.Exception!.InnerException?.Message;Log.Error(marketLoad.Exception!,marketDataError);}
+            else {marketLoadFailed=true;marketCanStartFresh=marketLoad.Exception?.InnerException is InvalidDataException;marketDataError="Market tracking paused. "+marketLoad.Exception!.InnerException?.Message;Log.Error(marketLoad.Exception!,marketDataError);}
             marketLoad=null;
         }
         if(marketDirty&&now>=marketSaveAt&&!marketLoadFailed){marketWriter.Enqueue(marketLedger);marketDirty=false;}

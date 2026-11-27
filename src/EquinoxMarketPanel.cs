@@ -79,6 +79,9 @@ public sealed partial class Plugin
         if (marketDataError.Length > 0) ImGui.TextWrapped(marketDataError);
         if (marketLoadFailed && marketLoad == null && ImGui.SmallButton("Retry loading market records"))
             LoadMarketLedger();
+        if (marketLoadFailed && marketCanStartFresh && marketLoad == null &&
+            ImGui.SmallButton("Keep files and start a new local ledger"))
+            LoadMarketLedger(true);
     }
 
     private void DrawEquinoxSeller()

@@ -17,6 +17,22 @@ try
     File.WriteAllText(path,"invalid primary");File.WriteAllText(path+".bak","invalid backup");
     var paused=false;try{MarketLedgerFile.Load(path);}catch(InvalidDataException){paused=true;}
     Check("Unreadable primary and backup stay intact",paused&&File.ReadAllText(path)=="invalid primary"&&File.ReadAllText(path+".bak")=="invalid backup");
+    var padded=Path.Combine(ledgerDir.FullName,"padded.json");
+    var original=JsonSerializer.SerializeToUtf8Bytes(sample);
+    byte[] paddedBytes=[0,0,..original,0,0];
+    File.WriteAllBytes(padded,paddedBytes);
+    Check("Recover zero padded history",MarketLedgerFile.Load(padded).Ledger.Prices.Single().After==110 &&
+        File.ReadAllBytes(padded).SequenceEqual(original) &&
+        File.ReadAllBytes(Directory.GetFiles(ledgerDir.FullName,"padded.json.unreadable-*").Single()).SequenceEqual(paddedBytes));
+    var zeros=Path.Combine(ledgerDir.FullName,"zeros.json");
+    File.WriteAllBytes(zeros,new byte[32]);File.WriteAllBytes(zeros+".bak",new byte[64]);
+    Check("Resume zero-only history with both originals preserved",MarketLedgerFile.Load(zeros).Notice.Length>0 &&
+        Directory.GetFiles(ledgerDir.FullName,"zeros.json.unreadable-*").Length==2 && MarketLedgerFile.Load(zeros).Notice=="");
+    var stale=Path.Combine(ledgerDir.FullName,"stale.json");
+    File.WriteAllBytes(stale,new byte[32]);File.WriteAllBytes(stale+".abc.tmp",original);
+    Check("Prefer orphaned complete snapshot over fresh start",MarketLedgerFile.Load(stale).Ledger.Prices.Single().After==110);
+    Check("Manual fresh start preserves ambiguous files",MarketLedgerFile.Load(path,true).Ledger.Prices.Length==0 &&
+        File.ReadAllText(path+".bak")=="invalid backup");
 }
 finally { ledgerDir.Delete(true); }
 SellerComparison Compare(long[] prices,bool hq=false)=>new(10,20,now,true,prices.Select((p,i)=>new SellerOffer((ulong)(i+10),p,hq,99)).ToArray(),false,[]);

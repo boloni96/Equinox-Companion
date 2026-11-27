@@ -11,7 +11,7 @@ internal static class MarketLedgerFile
         NumberHandling = JsonNumberHandling.AllowReadingFromString
     };
 
-    private static MarketLedger Read(string path)
+    private static (MarketLedger Ledger, byte[]? Repaired) Read(string path)
     {
         for (var attempt = 0; ; attempt++)
         {
@@ -23,9 +23,29 @@ internal static class MarketLedgerFile
         }
     }
 
-    private static MarketLedger ReadSnapshot(string path)
+    private static (MarketLedger Ledger, byte[]? Repaired) ReadSnapshot(string path)
     {
         using var input = File.OpenRead(path);
+        try { return (Parse(input), null); }
+        catch (JsonException)
+        {
+            input.Position = 0;
+            var bytes = new byte[checked((int)input.Length)];
+            input.ReadExactly(bytes);
+            var start = Array.FindIndex(bytes, b => b != 0);
+            if (start < 0) throw new EmptyLedgerException();
+            var end = Array.FindLastIndex(bytes, b => b != 0);
+            if (start == 0 && end == bytes.Length - 1) throw;
+            var repaired = bytes[start..(end + 1)];
+            using var trimmed = new MemoryStream(repaired);
+            return (Parse(trimmed), repaired);
+        }
+    }
+
+    private sealed class EmptyLedgerException() : IOException("File is empty or contains only zero bytes.") { }
+
+    private static MarketLedger Parse(Stream input)
+    {
         var ledger = JsonSerializer.Deserialize<MarketLedger>(input, Options);
         if (ledger?.Retainers == null || ledger.Income == null || ledger.Prices == null ||
             ledger.Retainers.Any(r => r?.Stock == null || r.Stock.Any(s => s == null)) ||
@@ -45,35 +65,57 @@ internal static class MarketLedgerFile
         }
     }
 
-    internal static (MarketLedger Ledger, string Notice) Load(string path)
+    internal static (MarketLedger Ledger, string Notice) Load(string path, bool allowFresh = false)
     {
         using var gate = OpenLock(path);
-        var missing = false;
+        var directory = Path.GetDirectoryName(path)!;
+        var file = Path.GetFileName(path);
+        var candidates = new[] { path, path + ".bak", path + ".tmp" }.Concat(
+            Directory.EnumerateFiles(directory, file + ".*.tmp")
+                .Concat(Directory.EnumerateFiles(directory, file + ".unreadable-*"))
+                .OrderByDescending(File.GetLastWriteTimeUtc));
+        var unreadable = new List<string>();
         Exception? invalid = null;
-        try { return (Read(path), ""); }
-        catch (FileNotFoundException) { missing = true; }
-        catch (Exception e) when (e is JsonException or InvalidDataException) { invalid = e; }
-
-        foreach (var suffix in new[] { ".bak", ".tmp" })
+        foreach (var candidate in candidates)
         {
-            var candidate = path + suffix;
-            MarketLedger recovered;
-            try { recovered = Read(candidate); }
+            (MarketLedger Ledger, byte[]? Repaired) snapshot;
+            try { snapshot = Read(candidate); }
             catch (FileNotFoundException) { continue; }
-            catch (Exception e) when (e is JsonException or InvalidDataException) { invalid ??= e; continue; }
-
-            var stage = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
-            try
+            catch (EmptyLedgerException) { unreadable.Add(candidate); continue; }
+            catch (Exception e) when (e is JsonException or InvalidDataException)
             {
-                File.Copy(candidate, stage);
-                if (missing) File.Move(stage, path);
-                else File.Replace(stage, path, path + ".unreadable-" + Guid.NewGuid().ToString("N"));
+                unreadable.Add(candidate);
+                invalid ??= e;
+                continue;
             }
-            finally { File.Delete(stage); }
-            return (recovered, $"Market records restored from {Path.GetFileName(candidate)}.");
+            if (candidate == path && snapshot.Repaired == null) return (snapshot.Ledger, "");
+            Install(path, stage =>
+            {
+                if (snapshot.Repaired is {} repaired) File.WriteAllBytes(stage, repaired);
+                else File.Copy(candidate, stage);
+            });
+            return (snapshot.Ledger, $"Market records recovered from {Path.GetFileName(candidate)}.");
         }
-        if (invalid != null) throw new InvalidDataException("No readable market ledger or recovery copy. " + invalid.Message, invalid);
-        return (MarketLedger.Empty, "");
+        if (invalid != null && !allowFresh)
+            throw new InvalidDataException("No complete local market ledger found. " + invalid.Message, invalid);
+        if (unreadable.Count == 0) return (MarketLedger.Empty, "");
+        // A later normal save rotates the .bak file, so preserve that copy too.
+        if (unreadable.Contains(path + ".bak"))
+            File.Copy(path + ".bak", path + ".unreadable-" + Guid.NewGuid().ToString("N"));
+        Install(path, stage => File.WriteAllText(stage, JsonSerializer.Serialize(MarketLedger.Empty)));
+        return (MarketLedger.Empty, "Local market tracking restarted. Previous files preserved.");
+    }
+
+    private static void Install(string path, Action<string> prepare)
+    {
+        var stage = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            prepare(stage);
+            if (File.Exists(path)) File.Replace(stage, path, path + ".unreadable-" + Guid.NewGuid().ToString("N"));
+            else File.Move(stage, path);
+        }
+        finally { File.Delete(stage); }
     }
 
     internal static void Save(string path, MarketLedger ledger)
