@@ -28,12 +28,13 @@ public sealed partial class Plugin
         {
             collectionCharacter = Player.ContentId;keyboundCollectionRefreshItems.Clear();
             collectionReadyAt = now.AddSeconds(15);
-            nextCollectionGroup = 0; priorityCollectionTurn = 0; nextPriorityCollection = 0;
+            nextOrdinaryQuest = 0; nextCollectionGroup = 0; priorityCollectionTurn = 0; nextPriorityCollection = 0;
             return;
         }
         if (now < collectionReadyAt) return;
         if (collectionGroups is null) return;
         if (collectionGroups.Length == 0) return;
+        ObserveCompletedOrdinaryQuests(actor, now);
         var segmentIndex = nextCollectionGroup++ % collectionGroups.Length;
         // Interleave saved adventure quests with the full catalogue. A seasonal
         // quest must not wait for every historical festival segment to cycle.
@@ -92,6 +93,24 @@ public sealed partial class Plugin
                 group[0].Quest is null?null:group.Select(x=>x.Quest!).ToArray(),
                 group[0].Category=="quest"&&QuestManager.Instance()!=null?known.Where(id=>QuestManager.Instance()->IsQuestAccepted(id)).ToArray():null)));
         collectionStatus = $"{group[0].Category}: {unlocked.Count}/{group.Length} unlocked · {obtained.Count} reward items held";
+    }
+
+    private void ObserveCompletedOrdinaryQuests(Actor actor, DateTimeOffset now)
+    {
+        if (ordinaryQuestGroups.Length == 0) return;
+        var group = ordinaryQuestGroups[nextOrdinaryQuest];
+        nextOrdinaryQuest = (nextOrdinaryQuest + 1) % ordinaryQuestGroups.Length;
+        var completed = group.Where(id => QuestManager.IsQuestComplete(id)).ToArray();
+        if (completed.Length == 0) return;
+
+        // Stable segment IDs allow each positive observation to be compared with
+        // its previous snapshot, even after new quests are added to the game.
+        var segment = 489 + (int)((group[0] & 0xffff) / 128);
+        var observation = new SyncEvent(Guid.NewGuid().ToString("N"), "collection.observed", now, actor, null,
+            Collection: new("quest", completed, completed, [], segment));
+        RefreshObservationIndex();
+        if (observations.LastDiscovery(observation)?.Collection?.Unlocked.SequenceEqual(completed) == true) return;
+        KeepDiscovery(observation);
     }
 
     private static unsafe bool? ReadSubmarineRepair(int index)

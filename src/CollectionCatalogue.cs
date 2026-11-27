@@ -9,6 +9,9 @@ public sealed partial class Plugin
     private IEnumerator<Lumina.Excel.Sheets.CharaMakeCustomize>? catalogueHair;
     private readonly List<CatalogueEntry> catalogueSeasonal = [];
     private readonly Dictionary<uint, HashSet<uint>> catalogueHairLinks = [];
+    private readonly List<uint> ordinaryQuestIds = [];
+    private uint[][] ordinaryQuestGroups = [];
+    private int nextOrdinaryQuest;
     private DateTimeOffset catalogueRetry;
     private void PrepareCollectionCatalogue(DateTimeOffset now)
     {
@@ -59,6 +62,10 @@ public sealed partial class Plugin
             {
                 hairstyleUnlocks = catalogueHairLinks.ToDictionary(x => x.Key, x => x.Value.ToArray());
                 collectionGroups = catalogueBase.Concat(catalogueSeasonal.OrderBy(x => x.Id).Chunk(8)).ToArray();
+                var existing = catalogueBase.SelectMany(group => group).Where(entry => entry.Category == "quest").Select(entry => entry.Id).ToHashSet();
+                ordinaryQuestGroups = ordinaryQuestIds.Where(id => !existing.Contains(id)).Order()
+                    .GroupBy(id => (id & 0xffff) / 128).Select(group => group.ToArray()).ToArray();
+                ordinaryQuestIds.Clear();
                 catalogueSeasonal.Clear(); catalogueHairLinks.Clear(); catalogueBase = null;
                 collectionStatus = "Collection catalogue ready."; return;
             }
@@ -66,7 +73,11 @@ public sealed partial class Plugin
     }
     private void AddCatalogueQuest(Lumina.Excel.Sheets.Quest q)
     {
-                if(q.Festival.RowId==0)return;
+                if(q.Festival.RowId==0)
+                {
+                    if(!q.IsRepeatable && q.RepeatIntervalType==0 && !string.IsNullOrWhiteSpace(q.Name.ToString())) ordinaryQuestIds.Add(q.RowId);
+                    return;
+                }
                 var name=q.Name.ToString();var festival=EventQuestPolicy.FestivalLabel(q.Festival.RowId,q.Festival.Value.Name.ToString());
                 if(string.IsNullOrWhiteSpace(name)||name.Length>100||name.Any(char.IsControl)||
                    string.IsNullOrWhiteSpace(festival)||festival.Length>100||festival.Any(char.IsControl))return;
