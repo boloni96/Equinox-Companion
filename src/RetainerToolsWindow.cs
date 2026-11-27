@@ -11,7 +11,11 @@ public sealed partial class Plugin
     private sealed class RetainerToolsWindow(Plugin p):Window("Retainer tools · Equinox###EquinoxRetainerTools",ImGuiWindowFlags.AlwaysAutoResize|ImGuiWindowFlags.NoDecoration|ImGuiWindowFlags.NoSavedSettings|ImGuiWindowFlags.NoFocusOnAppearing)
     {
         public override void Draw()=>p.MeasureWindow(WindowName,DrawMeasuredContent);
-        private void DrawMeasuredContent()=>p.DrawRetainerTools();
+        private void DrawMeasuredContent()
+        {
+            p.DrawRetainerTools();
+            p.DrawRetainerGilTotal();
+        }
         public override void OnClose()=>p.MeasureWindow(WindowName,OnCloseMeasured,"OnClose");
         private void OnCloseMeasured(){p.retrievalPickItems=false;}
         public override unsafe void PreDraw()=>p.MeasureWindow(WindowName,PreDrawMeasured,"PreDraw");

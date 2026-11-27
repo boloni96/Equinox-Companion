@@ -1,6 +1,5 @@
 using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Bindings.ImGui;
-using System.Numerics;
 using Dalamud.Game.Addon.Lifecycle;
 using Dalamud.Game.Addon.Lifecycle.AddonArgTypes;
 using FFXIVClientStructs.FFXIV.Client.Game;
@@ -11,9 +10,9 @@ namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
     private ulong? displayedRetainerGil;
-    private string retainerGilHeader = "";
+    private string retainerGilLabel = "";
 
-    private unsafe void DrawRetainerGilHeader()
+    private unsafe void DrawRetainerGilTotal()
     {
         if (!config.EnableRetriever || !Player.IsLoaded || !Conditions[ConditionFlag.OccupiedSummoningBell]) return;
         var list = SellerAddon("RetainerList");
@@ -32,17 +31,10 @@ public sealed partial class Plugin
         if (displayedRetainerGil != total)
         {
             displayedRetainerGil = total;
-            retainerGilHeader = "Total gil: " + total.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+            retainerGilLabel = "Total gil: " + total.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
         }
 
-        var scale = list->Scale;
-        var fontSize = 16f * scale;
-        var size = ImGui.CalcTextSize(retainerGilHeader) * (fontSize / ImGui.GetFontSize());
-        var center = ImGui.GetMainViewport().Pos + new Vector2(list->X + list->RootNode->Width * scale / 2, list->Y + 20 * scale);
-        var at = center - size / 2;
-        var draw = ImGui.GetBackgroundDrawList();
-        draw.AddText(ImGui.GetFont(), fontSize, at + Vector2.One, 0xff202020, retainerGilHeader);
-        draw.AddText(ImGui.GetFont(), fontSize, at, 0xffb5e5ff, retainerGilHeader);
+        ImGui.TextUnformatted(retainerGilLabel);
     }
 
     private bool retainerGilRunning;private RetrieverPort? retainerGilPort;
