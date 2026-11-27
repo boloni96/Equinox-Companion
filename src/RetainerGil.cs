@@ -1,3 +1,6 @@
+using Dalamud.Game.ClientState.Conditions;
+using Dalamud.Bindings.ImGui;
+using System.Numerics;
 using Dalamud.Game.Addon.Lifecycle;
 using Dalamud.Game.Addon.Lifecycle.AddonArgTypes;
 using FFXIVClientStructs.FFXIV.Client.Game;
@@ -7,6 +10,41 @@ using FFXIVClientStructs.FFXIV.Component.GUI;
 namespace EquinoxCompanion;
 public sealed partial class Plugin
 {
+    private ulong? displayedRetainerGil;
+    private string retainerGilHeader = "";
+
+    private unsafe void DrawRetainerGilHeader()
+    {
+        if (!config.EnableRetriever || !Player.IsLoaded || !Conditions[ConditionFlag.OccupiedSummoningBell]) return;
+        var list = SellerAddon("RetainerList");
+        var manager = RetainerManager.Instance();
+        if (list == null || list->RootNode == null || manager == null || !manager->IsReady) return;
+        var count = manager->GetRetainerCount();
+        if (count is 0 or > 10) return;
+
+        ulong total = 0;
+        for (uint index = 0; index < count; index++)
+        {
+            var retainer = manager->GetRetainerBySortedIndex(index);
+            if (retainer == null || retainer->RetainerId == 0) return;
+            total += retainer->Gil;
+        }
+        if (displayedRetainerGil != total)
+        {
+            displayedRetainerGil = total;
+            retainerGilHeader = "Total gil: " + total.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        var scale = list->Scale;
+        var fontSize = 16f * scale;
+        var size = ImGui.CalcTextSize(retainerGilHeader) * (fontSize / ImGui.GetFontSize());
+        var center = ImGui.GetMainViewport().Pos + new Vector2(list->X + list->RootNode->Width * scale / 2, list->Y + 20 * scale);
+        var at = center - size / 2;
+        var draw = ImGui.GetBackgroundDrawList();
+        draw.AddText(ImGui.GetFont(), fontSize, at + Vector2.One, 0xff202020, retainerGilHeader);
+        draw.AddText(ImGui.GetFont(), fontSize, at, 0xffb5e5ff, retainerGilHeader);
+    }
+
     private bool retainerGilRunning;private RetrieverPort? retainerGilPort;
     private ulong[] retainerGilTargets=[];private int retainerGilIndex,retainerGilStage;
     private uint retainerGilBefore,retainerGilAmount;private ulong retainerGilTotal;
