@@ -18,7 +18,7 @@ public sealed partial class Plugin
     [Dalamud.IoC.PluginService] internal static IMarketBoard MarketBoard { get; private set; }=null!;
     private SellerRun sellerRun=null!;
     private MarketLedger marketLedger=MarketLedger.Empty;
-    private Task<MarketLedger>? marketLoad;
+    private Task<(MarketLedger Ledger, string Notice)>? marketLoad;
     private LatestSnapshotWriter<MarketLedger> marketWriter=null!;
     private bool marketDirty,marketLoadFailed,marketHooksEnabled,marketBuddyLocked;
     private DateTimeOffset marketSaveAt,marketPollAt,manualEditorAt,manualCompareAt;
@@ -45,23 +45,21 @@ public sealed partial class Plugin
     {
         config.Seller??=new();config.MarketJournal??=new();
         config.Seller.MinimumPrices??=[];config.Seller.ExcludedItems??=[];config.Seller.SelectedRetainers??=[];
-        marketWriter=new(ledger=>{
-            var target=MarketDataPath;Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-            var temp=target+".tmp";File.WriteAllText(temp,System.Text.Json.JsonSerializer.Serialize(ledger));
-            if(File.Exists(target))File.Copy(target,target+".bak",true);
-            File.Move(temp,target,true);
-        });
-        marketLoad=Task.Run(()=>{
-            var ledger=File.Exists(MarketDataPath)?System.Text.Json.JsonSerializer.Deserialize<MarketLedger>(File.ReadAllText(MarketDataPath))??throw new IOException("Empty market ledger"):MarketLedger.Empty;
-            if(ledger.Retainers==null||ledger.Income==null||ledger.Prices==null||ledger.Retainers.Any(x=>x.Stock==null))throw new IOException("Incomplete market ledger; original file preserved");
-            return ledger;
-        });
+        marketWriter=new(ledger=>MarketLedgerFile.Save(MarketDataPath,ledger));
+        LoadMarketLedger();
         sellerAutoRetainerPause=new(new SellerAutoRetainerPort());
         sellerRun=new(new SellerPort(this));
         InitializeMarketWindows();
         // Market hooks are installed only while the optional tool is enabled.
         if(config.Seller.Enabled)EnableMarketHooks();
     }
+    private void LoadMarketLedger()
+    {
+        if (marketLoad != null) return;
+        var path = MarketDataPath;
+        marketLoad = Task.Run(() => MarketLedgerFile.Load(path));
+    }
+
     private unsafe void EnableMarketHooks()
     {
         if(marketHooksEnabled)return;
@@ -385,7 +383,8 @@ public sealed partial class Plugin
     private unsafe void StartSeller(bool apply)
     {
         if(retainerGilRunning||organizeRunning||retrievalRun.Running||chestRunning){sellerNotice="Finish the retainer/chest transfer first.";return;}
-        if(!config.Seller.Enabled||!marketHooksEnabled||marketLoad!=null||marketLoadFailed){sellerNotice="Enable Market and wait for its saved records first.";return;}
+        if(marketLoadFailed){sellerNotice="Retry loading the market records first.";return;}
+        if(!config.Seller.Enabled||!marketHooksEnabled||marketLoad!=null){sellerNotice="Enable Market and wait for its saved records first.";return;}
         if(sellerResultHook?.IsEnabled!=true){sellerNotice=sellerLiveError.Length>0?sellerLiveError:"Live comparison confirmation is unavailable. Toggle Market & Seller off and on to retry.";return;}
         if(sellerRun.Running||SellerAddon("RetainerSell")!=null){sellerNotice="Close the current item editor before starting a run.";return;}
         if(!Player.IsLoaded||Player.HomeWorld.RowId!=Player.CurrentWorld.RowId){sellerNotice="Use your home world’s summoning bell.";return;}
@@ -407,8 +406,15 @@ public sealed partial class Plugin
     {
         UpdateSellerAutoRetainer(now);
         if(marketLoad is {IsCompleted:true}) {
-            if(marketLoad.IsCompletedSuccessfully)marketLedger=marketLoad.Result;
-            else {marketLoadFailed=true;marketDataError="Saved market data could not be read. Existing file kept; tracking is paused.";Log.Error(marketLoad.Exception!,marketDataError);}
+            if(marketLoad.IsCompletedSuccessfully)
+            {
+                var result=marketLoad.Result;
+                marketLedger=result.Ledger;
+                marketLoadFailed=false;
+                sellerNotice=result.Notice;
+                if(result.Notice.Length>0)marketFileStatus=result.Notice;
+            }
+            else {marketLoadFailed=true;marketDataError="Market tracking paused. "+marketLoad.Exception!.InnerException?.Message;Log.Error(marketLoad.Exception!,marketDataError);}
             marketLoad=null;
         }
         if(marketDirty&&now>=marketSaveAt&&!marketLoadFailed){marketWriter.Enqueue(marketLedger);marketDirty=false;}

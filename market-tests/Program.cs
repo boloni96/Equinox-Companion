@@ -2,6 +2,23 @@ using EquinoxCompanion;
 using System.Text.Json;
 var now=DateTimeOffset.Parse("2026-10-25T10:00:00Z");var tests=0;
 void Check(string name,bool ok){if(!ok)throw new Exception("FAIL "+name);tests++;Console.WriteLine("PASS "+name);}
+var ledgerDir = Directory.CreateTempSubdirectory("market-ledger-test");
+try
+{
+    var path = Path.Combine(ledgerDir.FullName,"market-ledger.json");
+    var sample = MarketLedger.Empty with { Prices = [new(now,1,"Retainer",1,"Item",false,100,110,"Checked","Test")] };
+    MarketLedgerFile.Save(path,sample);
+    MarketLedgerFile.Save(path,MarketLedger.Empty);
+    File.WriteAllText(path,"truncated");
+    var restored=MarketLedgerFile.Load(path);
+    Check("Restores readable backup with sale price history",restored.Ledger.Prices.Single().After==110);
+    Check("Preserves unreadable primary",File.ReadAllText(Directory.GetFiles(ledgerDir.FullName,"*.unreadable-*").Single())=="truncated");
+    Check("Restored primary opens normally",MarketLedgerFile.Load(path).Notice.Length==0);
+    File.WriteAllText(path,"invalid primary");File.WriteAllText(path+".bak","invalid backup");
+    var paused=false;try{MarketLedgerFile.Load(path);}catch(InvalidDataException){paused=true;}
+    Check("Unreadable primary and backup stay intact",paused&&File.ReadAllText(path)=="invalid primary"&&File.ReadAllText(path+".bak")=="invalid backup");
+}
+finally { ledgerDir.Delete(true); }
 SellerComparison Compare(long[] prices,bool hq=false)=>new(10,20,now,true,prices.Select((p,i)=>new SellerOffer((ulong)(i+10),p,hq,99)).ToArray(),false,[]);
 SellerDecision Price(SellerComparison? c,SellerSettings? s=null,int old=300000,bool hq=false)=>SellerPricing.Decide(10,20,hq,old,c,new HashSet<ulong>{1,2},s??new(),now);
 Check("100k outlier uses 250k",Price(Compare([100000,250000,260000])).Price==249999);

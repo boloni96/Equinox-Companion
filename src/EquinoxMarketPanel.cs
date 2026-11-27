@@ -74,11 +74,18 @@ public sealed partial class Plugin
         return new(SellerStatus.Unknown,null,why,"None");
     }
 
+    private void DrawMarketFileStatus()
+    {
+        if (marketDataError.Length > 0) ImGui.TextWrapped(marketDataError);
+        if (marketLoadFailed && marketLoad == null && ImGui.SmallButton("Retry loading market records"))
+            LoadMarketLedger();
+    }
+
     private void DrawEquinoxSeller()
     {
         if(!config.Seller.Enabled)return;
         if(marketLoad!=null)ImGui.TextDisabled("Loading saved market records…");
-        if(marketDataError.Length>0)ImGui.TextWrapped(marketDataError);
+        DrawMarketFileStatus();
         ImGui.BeginDisabled(sellerRun.Running);
         ImGui.SetNextItemWidth(Math.Min(180,ImGui.GetContentRegionAvail().X));ImGui.Combo("##sellerScope",ref sellerScope,"Current retainer\0Selected retainers\0All retainers\0");
         if(sellerScope==1 && ImGui.CollapsingHeader("Choose retainers"))foreach(var r in ReadSellerRetainers()){
@@ -297,7 +304,7 @@ public sealed partial class Plugin
     {
         if(!config.Seller.Enabled)return;
         if(config.SyncEnabled&&config.SharedRoster is {MarketProjectionVersion:0}){ImGui.TextDisabled("Paired Market needs Journal / Worker 7.11.243.");MarketHelp("Update both Cloudflare deployments. Existing local records stay available; no re-pairing is needed.");}
-        if(marketDataError.Length>0)ImGui.TextWrapped(marketDataError);
+        DrawMarketFileStatus();
         if(ImGui.BeginTabBar("EquinoxMarketPages",ImGuiTabBarFlags.FittingPolicyScroll)){
             void Tab(string label,Action body){
                 var select=label=="Settings"&&openMarketSettings||label=="Selling"&&openMarketSelling;
