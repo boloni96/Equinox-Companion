@@ -9,8 +9,11 @@ public sealed partial class Plugin
 {
     private sealed record CatalogueEntry(string Category, uint Id, uint ItemId, EventQuestDefinition? Quest = null);
     private CatalogueEntry[][]? collectionGroups;
-    private byte[] lastOrchestrionUnlocks = [];
-    private DateTimeOffset nextOrchestrionRefresh;
+    private readonly Dictionary<string, byte[]> lastUnlockFlags = [];
+    private readonly Dictionary<string, int> watchedUnlockGroups = [];
+    private readonly string[] watchedUnlockCategories = ["orchestrion", "mount", "minion"];
+    private int nextUnlockCategory;
+    private bool ranPriorityUnlock;
     private int nextCollectionGroup;
     private int priorityCollectionTurn;
     private int nextPriorityCollection;
@@ -28,8 +31,9 @@ public sealed partial class Plugin
         if (!SyncValidation.ActorReady(actor) || state == null || !state->PlayerState.IsLoaded) return;
         if (collectionCharacter != Player.ContentId)
         {
-            lastOrchestrionUnlocks = [];
-            nextOrchestrionRefresh = default;
+            lastUnlockFlags.Clear();
+            nextUnlockCategory = 0;
+            ranPriorityUnlock = false;
             collectionCharacter = Player.ContentId;keyboundCollectionRefreshItems.Clear();
             collectionReadyAt = now.AddSeconds(15);
             nextOrdinaryQuest = 0; nextCollectionGroup = 0; priorityCollectionTurn = 0; nextPriorityCollection = 0;
@@ -39,34 +43,50 @@ public sealed partial class Plugin
         if (collectionGroups is null) return;
         if (collectionGroups.Length == 0) return;
         ObserveCompletedOrdinaryQuests(actor, now);
-        var segmentIndex = nextCollectionGroup++ % collectionGroups.Length;
-        // Interleave saved adventure quests with the full catalogue. A seasonal
-        // quest must not wait for every historical festival segment to cycle.
-        var watched = config.CachedAdventures.SelectMany(b => b.Stops).SelectMany(s => s.Tasks)
-            .Where(t => t.Rule?.Kind == "event").SelectMany(t => t.Rule?.Quests ?? [])
-            .Append(71004u).ToHashSet(); // All Saints' Wake 2026 final quest, game sheet.
-        var priority = collectionGroups.Select((g, i) => (g, i))
-            .Where(x => x.g.Any(e => e.Category == "quest" && watched.Contains(e.Id) || e.Category == "framerkit" && e.ItemId == 51997)).Select(x => x.i).ToArray();
-        if (priority.Length > 0 && priorityCollectionTurn++ % 2 == 0)
-        {
-            nextCollectionGroup--;
-            segmentIndex = priority[nextPriorityCollection++ % priority.Length];
-        }
+        var segmentIndex = -1;
         var refreshRequested = keyboundCollectionRefreshItems.Count > 0;
         if(refreshRequested){
             var requested=Array.FindIndex(collectionGroups,g=>g.Any(e=>keyboundCollectionRefreshItems.Contains(e.ItemId)));
             if(requested>=0){segmentIndex=requested;foreach(var entry in collectionGroups[requested])keyboundCollectionRefreshItems.Remove(entry.ItemId);}
             else keyboundCollectionRefreshItems.Clear();
         }
-        // Check the small unlock bitset each collection tick. Read individual
-        // unlocks through the game API only when a normal or changed group is due.
-        var rollFlags = state->PlayerState.UnlockedOrchestrionRolls;
-        if (collectionGroups[segmentIndex][0].Category != "orchestrion" &&
-            !refreshRequested && now >= nextOrchestrionRefresh &&
-            !rollFlags.SequenceEqual(lastOrchestrionUnlocks))
+        ReadOnlySpan<byte> UnlockFlags(string category) => category switch
         {
-            var rollGroup = Array.FindIndex(collectionGroups, entries => entries[0].Category == "orchestrion");
-            if (rollGroup >= 0) segmentIndex = rollGroup;
+            "mount" => state->PlayerState.UnlockedMounts,
+            "minion" => state->UnlockedCompanions,
+            _ => state->PlayerState.UnlockedOrchestrionRolls
+        };
+
+        // Share collection ticks with ordinary scans, even while rewards are being learned in succession.
+        if (segmentIndex < 0 && !ranPriorityUnlock)
+        {
+            for (var i = 0; i < watchedUnlockCategories.Length; i++)
+            {
+                var index = (nextUnlockCategory + i) % watchedUnlockCategories.Length;
+                var category = watchedUnlockCategories[index];
+                if (!watchedUnlockGroups.TryGetValue(category, out var groupIndex)) continue;
+                if (lastUnlockFlags.TryGetValue(category, out var previous) && UnlockFlags(category).SequenceEqual(previous)) continue;
+                segmentIndex = groupIndex;
+                nextUnlockCategory = (index + 1) % watchedUnlockCategories.Length;
+                break;
+            }
+        }
+        ranPriorityUnlock = segmentIndex >= 0;
+        if (segmentIndex < 0)
+        {
+            segmentIndex = nextCollectionGroup++ % collectionGroups.Length;
+            // Interleave saved adventure quests with the full catalogue. A seasonal
+            // quest must not wait for every historical festival segment to cycle.
+            var watched = config.CachedAdventures.SelectMany(b => b.Stops).SelectMany(s => s.Tasks)
+                .Where(t => t.Rule?.Kind == "event").SelectMany(t => t.Rule?.Quests ?? [])
+                .Append(71004u).ToHashSet(); // All Saints' Wake 2026 final quest, game sheet.
+            var priority = collectionGroups.Select((g, i) => (g, i))
+                .Where(x => x.g.Any(e => e.Category == "quest" && watched.Contains(e.Id) || e.Category == "framerkit" && e.ItemId == 51997)).Select(x => x.i).ToArray();
+            if (priority.Length > 0 && priorityCollectionTurn++ % 2 == 0)
+            {
+                nextCollectionGroup--;
+                segmentIndex = priority[nextPriorityCollection++ % priority.Length];
+            }
         }
         var group = collectionGroups[segmentIndex];
         var unlocked = new List<uint>(); var obtained = new List<uint>(); var known = new List<uint>();
@@ -107,11 +127,8 @@ public sealed partial class Plugin
                 group[0].Quest is null?0:segmentIndex+1,
                 group[0].Quest is null?null:group.Select(x=>x.Quest!).ToArray(),
                 group[0].Category=="quest"&&QuestManager.Instance()!=null?known.Where(id=>QuestManager.Instance()->IsQuestAccepted(id)).ToArray():null)));
-        if (group[0].Category == "orchestrion")
-        {
-            lastOrchestrionUnlocks = rollFlags.ToArray();
-            nextOrchestrionRefresh = now.AddSeconds(15);
-        }
+        if (watchedUnlockGroups.ContainsKey(group[0].Category))
+            lastUnlockFlags[group[0].Category] = UnlockFlags(group[0].Category).ToArray();
         collectionStatus = $"{group[0].Category}: {unlocked.Count}/{group.Length} unlocked · {obtained.Count} reward items held";
     }
 

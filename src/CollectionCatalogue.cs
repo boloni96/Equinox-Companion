@@ -62,6 +62,11 @@ public sealed partial class Plugin
             {
                 hairstyleUnlocks = catalogueHairLinks.ToDictionary(x => x.Key, x => x.Value.ToArray());
                 collectionGroups = catalogueBase.Concat(catalogueSeasonal.OrderBy(x => x.Id).Chunk(8)).ToArray();
+                foreach (var category in watchedUnlockCategories)
+                {
+                    var index = Array.FindIndex(collectionGroups, group => group[0].Category == category);
+                    if (index >= 0) watchedUnlockGroups[category] = index;
+                }
                 var existing = catalogueBase.SelectMany(group => group).Where(entry => entry.Category == "quest").Select(entry => entry.Id).ToHashSet();
                 ordinaryQuestGroups = ordinaryQuestIds.Where(id => !existing.Contains(id)).Order()
                     .GroupBy(id => (id & 0xffff) / 128).Select(group => group.ToArray()).ToArray();
